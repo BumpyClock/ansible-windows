@@ -1,14 +1,12 @@
 using Microsoft.UI.Xaml;
 using System.Diagnostics;
-using DictationPoc.Services;
-using Microsoft.UI.Dispatching;
+using DictationPoc.Core;
 
 namespace DictationPoc;
 
 public partial class App : Application
 {
     internal MainWindow? Window { get; private set; }
-    internal DictationController Controller { get; private set; } = null!;
 
     public App()
     {
@@ -20,15 +18,21 @@ public partial class App : Application
     {
         try
         {
-            Controller = new DictationController(DispatcherQueue.GetForCurrentThread());
-            Window = new MainWindow();
+            var paths = AppPaths.Create(AppContext.BaseDirectory,
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LocalVoice"));
+            var session = new DictationSession(
+                directory => new NativeAudioEngine(paths.NativeLibrary, paths.ModelCatalog, directory),
+                new WaveInCaptureFactory(), new AudioInputReader(), new UsageStore(paths.Usage), paths.ModelsDirectory);
+            Window = new MainWindow(session, paths);
             Window.Activate();
         }
         catch (Exception error)
         {
             try
             {
-                File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "startup-error.log"), error.ToString());
+                var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LocalVoice");
+                Directory.CreateDirectory(directory);
+                File.WriteAllText(Path.Combine(directory, "startup-error.log"), error.ToString());
             }
             catch (Exception logError) when (logError is IOException or UnauthorizedAccessException)
             {

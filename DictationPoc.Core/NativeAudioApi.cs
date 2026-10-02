@@ -6,38 +6,9 @@ namespace DictationPoc.Core;
 internal static partial class NativeAudioApi
 {
     private const string Library = "audiocpp";
-    private static readonly object Gate = new();
-    private static nint _library;
-    private static string? _path;
+    private static readonly NativeModule Module = new(new NativeModuleLoader());
 
-    public static void Initialize(string path)
-    {
-        lock (Gate)
-        {
-            path = Path.GetFullPath(path);
-            if (_library != 0)
-            {
-                if (!string.Equals(_path, path, StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new InvalidOperationException("One audio.cpp native library version can be used per application process.");
-                }
-                return;
-            }
-            if (!File.Exists(path))
-            {
-                throw new FileNotFoundException("Build the native backend with tools\\Build-AudioNative.ps1, then publish the app.", path);
-            }
-            _library = NativeLibrary.Load(path);
-            NativeLibrary.SetDllImportResolver(typeof(NativeAudioApi).Assembly,
-                (name, _, _) => name == Library ? _library : 0);
-            _path = path;
-            var version = AbiVersion();
-            if (version >> 16 != 0 || (version & 0xFFFF) < 0x0200)
-            {
-                throw new NotSupportedException("This application requires the audio.cpp C ABI 0.2 or newer in major version 0.");
-            }
-        }
-    }
+    public static void Initialize(string path) => Module.Initialize(path);
 
     public static void Check(int status, string operation)
     {
@@ -65,8 +36,6 @@ internal static partial class NativeAudioApi
         public int Threads;
     }
 
-    [LibraryImport(Library, EntryPoint = "audiocpp_abi_version")]
-    internal static partial uint AbiVersion();
     [LibraryImport(Library, EntryPoint = "audiocpp_build_version")]
     internal static partial nint BuildVersion();
     [LibraryImport(Library, EntryPoint = "audiocpp_last_error")]
@@ -111,6 +80,15 @@ internal static partial class NativeAudioApi
     internal static unsafe partial int SetAudio(nint request, float* samples, nuint frames, int sampleRate, int channels);
     [LibraryImport(Library, EntryPoint = "audiocpp_result_text")]
     internal static partial int ResultText(nint result, out nint text, out nint language);
+    [LibraryImport(Library, EntryPoint = "audiocpp_result_segment_count")]
+    internal static partial nuint SegmentCount(nint result);
+    [LibraryImport(Library, EntryPoint = "audiocpp_result_segment")]
+    internal static partial int Segment(nint result, nuint index, nint start, nint end, nint confidence, out nint text);
+    [LibraryImport(Library, EntryPoint = "audiocpp_result_speaker_turn_count")]
+    internal static partial nuint SpeakerTurnCount(nint result);
+    [LibraryImport(Library, EntryPoint = "audiocpp_result_speaker_turn")]
+    internal static partial int SpeakerTurn(nint result, nuint index, nint start, nint end,
+        nint speakerId, nint confidence, out nint text);
     [LibraryImport(Library, EntryPoint = "audiocpp_result_free")]
     internal static partial void ResultFree(nint result);
     [LibraryImport(Library, EntryPoint = "audiocpp_stream_policy")]

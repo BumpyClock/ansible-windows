@@ -6,6 +6,7 @@
     <Nullable>enable</Nullable>
     <IsAotCompatible>true</IsAotCompatible>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Platforms>AnyCPU;x64</Platforms>
   </PropertyGroup>
 
 </Project>

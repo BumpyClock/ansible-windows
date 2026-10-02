@@ -18,14 +18,16 @@ public sealed class NativeEngineTests
         var models = await engine.ConnectAsync(timeout.Token);
         var model = Assert.Single(models, model => model.Id == "moonshine-tiny");
         var recording = Path.Combine(root, ".runtime", "validation", "sample_16k.wav");
-        var text = await engine.TranscribeFileAsync(model, recording, null, null, timeout.Token);
-        Assert.Contains("Mother Nature", text, StringComparison.OrdinalIgnoreCase);
+        var input = new AudioInputReader();
+        var decoded = await input.ReadRecordingAsync(recording, timeout.Token);
+        var result = await engine.TranscribeAsync(model, decoded, null, null, timeout.Token);
+        Assert.Contains("Mother Nature", result.SpeechText!, StringComparison.OrdinalIgnoreCase);
         var audio = Channel.CreateUnbounded<byte[]>();
-        await audio.Writer.WriteAsync(PcmWave.Read16kMono(recording), timeout.Token);
+        await audio.Writer.WriteAsync(await input.ReadReplayAsync(recording, timeout.Token), timeout.Token);
         audio.Writer.Complete();
         var live = await engine.StreamAsync(model, audio.Reader, null, null, timeout.Token);
-        Assert.Contains("Mother Nature", live, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(text, live);
+        Assert.Contains("Mother Nature", live.SpeechText!, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(result.SpeechText, live.SpeechText);
     }
 
     private static string FindWorkspace()

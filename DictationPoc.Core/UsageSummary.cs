@@ -13,7 +13,8 @@ public sealed record UsageSummary(
     int CurrentStreak,
     int LongestStreak,
     IReadOnlyList<ModelUsage> Models,
-    IReadOnlyDictionary<DateOnly, int> Activity)
+    IReadOnlyDictionary<DateOnly, int> Activity,
+    int UnknownWordSessions)
 {
     public int Sessions => DictationSessions + FileSessions;
 
@@ -22,9 +23,9 @@ public sealed record UsageSummary(
     {
         var records = entries.ToArray();
         var dictations = records.Where(entry => entry.Source == UsageSource.Dictation).ToArray();
-        var dictatedWords = dictations.Sum(entry => (long)entry.Words);
-        var fileWords = records.Where(entry => entry.Source == UsageSource.File).Sum(entry => (long)entry.Words);
-        var recordingSeconds = dictations.Sum(entry => entry.RecordingSeconds);
+        var dictatedWords = dictations.Sum(entry => (long)(entry.Words ?? 0));
+        var fileWords = records.Where(entry => entry.Source == UsageSource.File).Sum(entry => (long)(entry.Words ?? 0));
+        var recordingSeconds = dictations.Where(entry => entry.Words.HasValue).Sum(entry => entry.RecordingSeconds);
         var activity = records.GroupBy(entry =>
                 DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(entry.CompletedAt, timeZone).DateTime))
             .ToDictionary(group => group.Key, group => group.Count());
@@ -45,7 +46,7 @@ public sealed record UsageSummary(
             previous = date;
         }
         var models = records.GroupBy(entry => entry.ModelId, StringComparer.Ordinal)
-            .Select(group => new ModelUsage(group.Key, group.Count(), group.Sum(entry => (long)entry.Words)))
+            .Select(group => new ModelUsage(group.Key, group.Count(), group.Sum(entry => (long)(entry.Words ?? 0))))
             .OrderByDescending(model => model.Sessions)
             .ThenBy(model => model.ModelId, StringComparer.Ordinal)
             .ToArray();
@@ -53,6 +54,6 @@ public sealed record UsageSummary(
             dictatedWords + fileWords, dictatedWords, fileWords, dictations.Length,
             records.Length - dictations.Length, recordingSeconds,
             recordingSeconds > 0 ? dictatedWords * 60.0 / recordingSeconds : null,
-            currentStreak, longestStreak, models, activity);
+            currentStreak, longestStreak, models, activity, records.Count(entry => entry.Words is null));
     }
 }

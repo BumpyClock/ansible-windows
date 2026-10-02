@@ -1,96 +1,119 @@
-using DictationPoc.Services;
+using System.Diagnostics;
+using DictationPoc.Core;
 using Microsoft.UI;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 
 namespace DictationPoc;
 
 public sealed partial class MainWindow : Window
 {
-    private readonly DictationController _controller;
+    private readonly DictationSession _session;
     private readonly InsightsPage _insights;
     private readonly DictationPage _dictation;
     private readonly MainPage _settings;
+    private readonly UiSessionObserver _observer;
     private FloatingDictationWindow? _floating;
     private bool _initialized;
     private bool _closed;
+    private bool _allowClose;
+    private bool _closing;
     private bool _popupFailed;
 
-    public MainWindow()
+    internal MainWindow(DictationSession session, AppPaths paths)
     {
         InitializeComponent();
-        _controller = ((App)Application.Current).Controller;
-        _insights = new InsightsPage();
-        _dictation = new DictationPage();
-        _settings = new MainPage();
+        _session = session;
+        _insights = new InsightsPage(session, Navigate);
+        _dictation = new DictationPage(session);
+        _settings = new MainPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this));
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
         AppWindow.TitleBar.ButtonBackgroundColor = Colors.Transparent;
         AppWindow.TitleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
-        var area = Microsoft.UI.Windowing.DisplayArea.GetFromWindowId(
-            AppWindow.Id, Microsoft.UI.Windowing.DisplayAreaFallback.Nearest).WorkArea;
+        var area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Nearest).WorkArea;
         AppWindow.Resize(new Windows.Graphics.SizeInt32(Math.Min(1700, area.Width - 60), Math.Min(1100, area.Height - 60)));
-        _controller.Changed += ControllerChanged;
         MainContent.Loaded += Initialize;
+        AppWindow.Closing += CloseRequested;
         Closed += WindowClosed;
         Navigate("insights");
+        _observer = new UiSessionObserver(session, DispatcherQueue, SessionChanged);
     }
 
     private async void Initialize(object sender, RoutedEventArgs args)
     {
         if (_initialized) { return; }
         _initialized = true;
-        await _controller.InitializeAsync();
+        try { await _session.InitializeAsync(); }
+        catch (Exception error) { _session.ReportUiError(error); }
     }
 
     private void NavigateClicked(object sender, RoutedEventArgs args) => Navigate((string)((Button)sender).Tag);
 
-    internal void Navigate(string page)
+    private void Navigate(string page)
     {
         MainContent.Content = page switch { "settings" => _settings, "dictation" => _dictation, _ => _insights };
         foreach (var button in new[] { InsightsNav, DictationNav, SettingsNav })
         {
             button.Background = (string)button.Tag == page
-                ? (Brush)Application.Current.Resources["SelectionBrush"]
-                : new SolidColorBrush(Colors.Transparent);
+                ? (Brush)Application.Current.Resources["SelectionBrush"] : new SolidColorBrush(Colors.Transparent);
             AutomationProperties.SetHelpText(button, (string)button.Tag == page ? "Current page" : "");
         }
     }
 
-    private void ControllerChanged()
+    private void SessionChanged(SessionSnapshot state)
     {
         if (_closed) { return; }
-        SidebarStatus.Text = _controller.Phase == DictationPhase.Disconnected
+        SidebarStatus.Text = state.Phase == DictationPhase.Disconnected
             ? "Open Settings to load the native backend."
-            : $"{_controller.Models.Count} models available / native CPU";
-        if (!_controller.IsLiveOperation) { _popupFailed = false; }
-        if (_controller.IsLiveOperation && _floating is null && !_popupFailed)
+            : state.Phase is DictationPhase.Closing or DictationPhase.Closed
+                ? "Releasing owned native resources."
+                : $"{state.Models.Count} models available / native CPU";
+        if (!state.IsLiveOperation) { _popupFailed = false; }
+        if (state.IsLiveOperation && _floating is null && !_popupFailed)
         {
             try
             {
-                _floating = new FloatingDictationWindow(_controller, this);
+                _floating = new FloatingDictationWindow(_session, this);
                 _floating.Closed += (_, _) => _floating = null;
             }
             catch (Exception error)
             {
                 _popupFailed = true;
-                _controller.Fail(new InvalidOperationException("The floating preview could not be opened.", error));
+                _session.ReportUiError(new InvalidOperationException("The floating preview could not be opened.", error));
             }
         }
-        if (_controller.IsLiveOperation)
+        if (state.IsLiveOperation) { _floating?.ShowPreview(); }
+    }
+
+    private async void CloseRequested(AppWindow sender, AppWindowClosingEventArgs args)
+    {
+        if (_allowClose) { return; }
+        args.Cancel = true;
+        if (_closing) { return; }
+        _closing = true;
+        try
         {
-            _floating?.ShowPreview();
+            await _session.CloseAsync();
+            _allowClose = true;
+            _floating?.Close();
+            Close();
+        }
+        catch (Exception error)
+        {
+            Debug.WriteLine($"Local Voice: native shutdown needs recovery: {error.Message}");
+            _closing = false;
         }
     }
 
-    private async void WindowClosed(object sender, WindowEventArgs args)
+    private void WindowClosed(object sender, WindowEventArgs args)
     {
         _closed = true;
-        _controller.Changed -= ControllerChanged;
-        await _controller.ShutdownAsync();
-        _floating?.Close();
+        _observer.Dispose();
+        AppWindow.Closing -= CloseRequested;
     }
 }

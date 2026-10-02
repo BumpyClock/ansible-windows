@@ -109,6 +109,17 @@ public sealed class UsageTests
         Assert.Equal(2, AudioMeter.CountWords("  Hello,\nworld. "));
     }
 
+    [Fact]
+    public void UnknownSpeechContentDoesNotBecomeZeroPaceOrAnnotatedWords()
+    {
+        var entry = Entry(2, "vibevoice", UsageSource.Dictation, 0, 30) with { Words = null };
+        var summary = UsageSummary.Create([entry], new DateOnly(2026, 10, 2), TimeZoneInfo.Utc);
+        Assert.Equal(1, summary.DictationSessions);
+        Assert.Equal(1, summary.UnknownWordSessions);
+        Assert.Null(summary.WordsPerMinute);
+        Assert.Equal(0, summary.TotalWords);
+    }
+
     private static UsageEntry Entry(int day, string model, UsageSource source, int words, double seconds) => new()
     {
         Id = Guid.NewGuid(),

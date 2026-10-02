@@ -6,12 +6,12 @@ namespace DictationPoc.Tests;
 public sealed class WaveAudioTests
 {
     [Fact]
-    public void KeepsStereoFramesAndSampleRateForNativeFileRecognition()
+    public async Task KeepsStereoFramesAndSampleRateForNativeFileRecognition()
     {
         var path = WriteWave(1, 2, 48000, 16, [0, 128, 255, 127, 0, 0, 0, 64]);
         try
         {
-            var audio = WaveAudio.Read(path);
+            var audio = await new AudioInputReader().ReadRecordingAsync(path, CancellationToken.None);
             Assert.Equal(2, audio.Channels);
             Assert.Equal(48000, audio.SampleRate);
             Assert.Equal([-1f, 32767 / 32768f, 0f, 0.5f], audio.Samples);
@@ -20,23 +20,25 @@ public sealed class WaveAudioTests
     }
 
     [Fact]
-    public void ReadsUnsignedPcm8WithoutChangingSilence()
+    public async Task ReadsUnsignedPcm8WithoutChangingSilence()
     {
         var path = WriteWave(1, 1, 16000, 8, [0, 128, 255, 128]);
         try
         {
-            Assert.Equal([-1f, 0f, 127 / 128f, 0f], WaveAudio.Read(path).Samples);
+            var audio = await new AudioInputReader().ReadRecordingAsync(path, CancellationToken.None);
+            Assert.Equal([-1f, 0f, 127 / 128f, 0f], audio.Samples);
         }
         finally { File.Delete(path); }
     }
 
     [Fact]
-    public void RejectsNonFiniteFloatingPointAudio()
+    public async Task RejectsNonFiniteFloatingPointAudio()
     {
         var path = WriteWave(3, 1, 16000, 32, BitConverter.GetBytes(float.NaN));
         try
         {
-            var error = Assert.Throws<InvalidDataException>(() => WaveAudio.Read(path));
+            var error = await Assert.ThrowsAsync<InvalidDataException>(
+                () => new AudioInputReader().ReadRecordingAsync(path, CancellationToken.None));
             Assert.Contains("non-finite", error.Message);
         }
         finally { File.Delete(path); }

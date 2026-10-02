@@ -5,7 +5,7 @@ using System.Threading.Channels;
 
 namespace DictationPoc.Core;
 
-public sealed class NativeAudioEngine : IAsyncDisposable
+public sealed class NativeAudioEngine : IRecognitionEngine
 {
     private readonly string _libraryPath;
     private readonly string _catalogPath;
@@ -15,9 +15,12 @@ public sealed class NativeAudioEngine : IAsyncDisposable
     private NativeAudioHandle? _registry;
     private NativeAudioHandle? _model;
     private NativeAudioHandle? _session;
-    private string? _loadedPath;
-    private string? _mode;
+    private readonly NativeModelIntegrity _integrity = new();
+    private NativeModelInventory? _inventory;
+    private FileStream? _modelLease;
+    private string? _loadedId;
     private bool _languageOption;
+    private bool _streamStartAttempted;
     private bool _disposed;
 
     public NativeAudioEngine(string libraryPath, string catalogPath, string modelsDirectory, int threads = 4, int memoryHeadroomMB = 512)
@@ -38,66 +41,101 @@ public sealed class NativeAudioEngine : IAsyncDisposable
 
     public async Task<IReadOnlyList<AudioModel>> ConnectAsync(CancellationToken cancellationToken)
     {
-        var models = await NativeModelCatalog.ReadAsync(_catalogPath, ModelsDirectory, cancellationToken);
+        var inventory = await NativeModelCatalog.ReadAsync(_catalogPath, ModelsDirectory, cancellationToken);
         await RunExclusiveAsync(() =>
         {
-            NativeAudioApi.Initialize(_libraryPath);
-            Version = Marshal.PtrToStringUTF8(NativeAudioApi.BuildVersion())
-                ?? throw new InvalidDataException("The native library returned no build version.");
             ReleaseModel();
             _registry?.Dispose();
-            NativeAudioApi.Check(NativeAudioApi.RegistryCreate(0, out var pointer), "create the model registry");
-            _registry = new NativeAudioHandle(pointer, NativeHandleKind.Registry);
-            var families = new HashSet<string>(StringComparer.Ordinal);
-            for (nuint index = 0; index < NativeAudioApi.FamilyCount(pointer); index++)
+            _registry = null;
+            _inventory = null;
+            try
             {
-                NativeAudioApi.Check(NativeAudioApi.Family(pointer, index, out var family), "inspect compiled model families");
-                families.Add(Marshal.PtrToStringUTF8(family) ?? "");
-            }
-            foreach (var model in models)
-            {
-                if (model.Family is null || !families.Contains(model.Family))
+                NativeOperation.Step(cancellationToken, () => NativeAudioApi.Initialize(_libraryPath));
+                Version = Marshal.PtrToStringUTF8(NativeAudioApi.BuildVersion())
+                    ?? throw new InvalidDataException("The native library returned no build version.");
+                NativeOperation.Step(cancellationToken, () =>
                 {
-                    throw new NotSupportedException($"The native DLL does not include '{model.Family}'. Rebuild the ASR integration.");
+                    NativeAudioApi.Check(NativeAudioApi.RegistryCreate(0, out var pointer), "create the model registry");
+                    _registry = new NativeAudioHandle(pointer, NativeHandleKind.Registry);
+                });
+                var families = new HashSet<string>(StringComparer.Ordinal);
+                var count = NativeAudioApi.FamilyCount(_registry!.DangerousGetHandle());
+                for (nuint index = 0; index < count; index++)
+                {
+                    NativeOperation.Step(cancellationToken, () =>
+                    {
+                        NativeAudioApi.Check(NativeAudioApi.Family(_registry.DangerousGetHandle(), index, out var family),
+                            "inspect compiled model families");
+                        families.Add(Marshal.PtrToStringUTF8(family) ?? "");
+                    });
                 }
+                foreach (var model in inventory.Models)
+                {
+                    if (model.Family is null || !families.Contains(model.Family))
+                        throw new NotSupportedException($"The native DLL does not include '{model.Family}'. Rebuild the ASR integration.");
+                }
+                cancellationToken.ThrowIfCancellationRequested();
+                _inventory = inventory;
+                return true;
             }
-            return true;
+            catch
+            {
+                _registry?.Dispose();
+                _registry = null;
+                throw;
+            }
         }, cancellationToken);
-        return models;
+        return inventory.Models;
     }
 
-    public Task<string> TranscribeFileAsync(
-        AudioModel model, string path, string? language,
-        IProgress<TranscriptUpdate>? progress, CancellationToken cancellationToken) =>
-        RunExclusiveAsync(() =>
+    public async Task<RecognitionResult> TranscribeAsync(
+        AudioModel model, WaveAudio audio, string? language,
+        IProgress<TranscriptUpdate>? progress, CancellationToken cancellationToken)
+    {
+        var result = await RunExclusiveAsync(() => NativeOperation.Run(() =>
         {
-            EnsureSession(model, "offline");
-            var audio = WaveAudio.Read(path);
-            using var request = CreateRequest(language);
-            SetRequestAudio(request, audio);
+            var bytes = NativeMemory.ValidateAudio(audio, cancellationToken);
+            EnsureSession(model, "offline", bytes, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
-            NativeAudioApi.Check(NativeAudioApi.SessionRun(_session!.DangerousGetHandle(), request.DangerousGetHandle(), out var result),
+            using var request = CreateRequest(language, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            NativeOperation.Step(cancellationToken, () => SetRequestAudio(request, audio));
+            NativeAudioApi.Check(NativeAudioApi.SessionRun(_session!.DangerousGetHandle(), request.DangerousGetHandle(), out var pointer),
                 "transcribe the recording");
-            using var owned = new NativeAudioHandle(result, NativeHandleKind.Result);
+            using var owned = new NativeAudioHandle(pointer, NativeHandleKind.Result);
             cancellationToken.ThrowIfCancellationRequested();
-            var text = ReadText(result, false)!;
-            progress?.Report(new TranscriptUpdate(text, true));
-            return text;
-        }, cancellationToken);
+            return ReadResult(pointer, model.Family!, cancellationToken);
+        }, CleanupOperation), cancellationToken);
+        progress?.Report(new TranscriptUpdate(result.DisplayText, true));
+        return result;
+    }
 
-    public Task<string> StreamAsync(
+    public async Task<RecognitionResult> StreamAsync(
         AudioModel model, ChannelReader<byte[]> audio, string? language,
-        IProgress<TranscriptUpdate>? progress, CancellationToken cancellationToken, Action? onReady = null) =>
-        RunExclusiveAsync(() => StreamCore(model, audio, language, progress, cancellationToken, onReady), cancellationToken);
+        IProgress<TranscriptUpdate>? progress, CancellationToken cancellationToken, Action? onReady = null)
+    {
+        ArgumentNullException.ThrowIfNull(audio);
+        var result = await RunExclusiveAsync(() => NativeOperation.Run(
+            () => StreamCore(model, audio, language, progress, cancellationToken, onReady), CleanupOperation), cancellationToken);
+        progress?.Report(new TranscriptUpdate(result.DisplayText, true));
+        return result;
+    }
 
-    private string StreamCore(
+    private RecognitionResult StreamCore(
         AudioModel model, ChannelReader<byte[]> audio, string? language,
         IProgress<TranscriptUpdate>? progress, CancellationToken token, Action? onReady)
     {
-        EnsureSession(model, "streaming");
-        using var request = CreateRequest(language);
+        EnsureSession(model, "streaming", NativeMemory.MaximumStreamFrames * sizeof(float), token);
+        token.ThrowIfCancellationRequested();
+        using var request = CreateRequest(language, token);
+        token.ThrowIfCancellationRequested();
         var session = _session!.DangerousGetHandle();
-        NativeAudioApi.Check(NativeAudioApi.StreamPolicy(session, 0, 0, out var frames, out var seconds), "read the streaming cadence");
+        long frames = 0;
+        double seconds = 0;
+        NativeOperation.Step(token, () => NativeAudioApi.Check(
+            NativeAudioApi.StreamPolicy(session, 0, 0, out frames, out seconds), "read the streaming cadence"));
+        if (!double.IsFinite(seconds) || seconds < 0 || frames < 0 || seconds > 30 || frames > 16000 * 30)
+            throw new InvalidDataException("The model requests an unsupported streaming chunk size.");
         var preferred = seconds > 0 ? checked((int)Math.Round(seconds * 16000)) : checked((int)frames);
         if (preferred <= 0)
         {
@@ -110,71 +148,49 @@ public sealed class NativeAudioEngine : IAsyncDisposable
         var buffer = new byte[preferred * 2];
         var used = 0;
         long offset = 0;
+        long receivedFrames = 0;
         var transcript = new StringBuilder();
-        var completed = false;
-        Exception? failure = null;
-        SetStreamingAudioContract(request);
-        NativeAudioApi.Check(NativeAudioApi.StreamStart(session, request.DangerousGetHandle()), "start native dictation");
-        try
+        NativeOperation.Step(token, () => SetStreamingAudioContract(request));
+        NativeOperation.Step(token, () =>
         {
-            token.ThrowIfCancellationRequested();
-            onReady?.Invoke();
-            while (audio.WaitToReadAsync(token).AsTask().GetAwaiter().GetResult())
+            _streamStartAttempted = true;
+            NativeAudioApi.Check(NativeAudioApi.StreamStart(session, request.DangerousGetHandle()), "start native dictation");
+        });
+        onReady?.Invoke();
+        while (audio.WaitToReadAsync(token).AsTask().GetAwaiter().GetResult())
+        {
+            while (audio.TryRead(out var packet))
             {
-                while (audio.TryRead(out var packet))
+                token.ThrowIfCancellationRequested();
+                if (packet is null || packet.Length == 0 || packet.Length % 2 != 0)
+                    throw new InvalidDataException("Dictation requires complete PCM16 samples.");
+                receivedFrames = checked(receivedFrames + packet.Length / 2);
+                if (receivedFrames > NativeMemory.MaximumStreamFrames)
+                    throw new InvalidDataException("Dictation audio exceeds the five-minute limit.");
+                var index = 0;
+                while (index < packet.Length)
                 {
-                    if (packet.Length == 0 || packet.Length % 2 != 0)
+                    token.ThrowIfCancellationRequested();
+                    var count = Math.Min(buffer.Length - used, packet.Length - index);
+                    packet.AsSpan(index, count).CopyTo(buffer.AsSpan(used));
+                    used += count;
+                    index += count;
+                    if (used == buffer.Length)
                     {
-                        throw new InvalidDataException("Dictation requires complete PCM16 samples.");
-                    }
-                    var index = 0;
-                    while (index < packet.Length)
-                    {
-                        var count = Math.Min(buffer.Length - used, packet.Length - index);
-                        packet.AsSpan(index, count).CopyTo(buffer.AsSpan(used));
-                        used += count;
-                        index += count;
-                        if (used == buffer.Length)
-                        {
-                            Push(session, buffer.AsSpan(0, used), offset, transcript, progress, token);
-                            offset += used / 2;
-                            used = 0;
-                        }
+                        Push(session, buffer.AsSpan(0, used), offset, transcript, progress, token);
+                        offset += used / 2;
+                        used = 0;
                     }
                 }
             }
-            if (used > 0)
-            {
-                Push(session, buffer.AsSpan(0, used), offset, transcript, progress, token);
-            }
-            token.ThrowIfCancellationRequested();
-            NativeAudioApi.Check(NativeAudioApi.StreamFinish(session, out var result), "finish native dictation");
-            using var owned = new NativeAudioHandle(result, NativeHandleKind.Result);
-            token.ThrowIfCancellationRequested();
-            var text = ReadText(result, false)!;
-            completed = true;
-            progress?.Report(new TranscriptUpdate(text, true));
-            return text;
         }
-        catch (Exception error)
-        {
-            failure = error;
-            throw;
-        }
-        finally
-        {
-            if (!completed)
-            {
-                try
-                {
-                    NativeAudioApi.Check(NativeAudioApi.StreamReset(session), "reset the interrupted dictation session");
-                }
-                catch (Exception resetError) when (failure is not null)
-                {
-                    throw new AggregateException("Dictation and native cleanup failed.", failure, resetError);
-                }
-            }
-        }
+        if (used > 0)
+            Push(session, buffer.AsSpan(0, used), offset, transcript, progress, token);
+        token.ThrowIfCancellationRequested();
+        NativeAudioApi.Check(NativeAudioApi.StreamFinish(session, out var result), "finish native dictation");
+        using var owned = new NativeAudioHandle(result, NativeHandleKind.Result);
+        token.ThrowIfCancellationRequested();
+        return ReadResult(result, model.Family!, token);
     }
 
     private static unsafe void Push(
@@ -196,8 +212,10 @@ public sealed class NativeAudioEngine : IAsyncDisposable
                     "process a dictation audio chunk");
                 AppendEvent(streamEvent, transcript, progress);
             }
+            token.ThrowIfCancellationRequested();
             while (true)
             {
+                token.ThrowIfCancellationRequested();
                 NativeAudioApi.Check(NativeAudioApi.StreamNextEvent(session, out var streamEvent), "read queued transcript events");
                 if (streamEvent == 0)
                 {
@@ -238,66 +256,108 @@ public sealed class NativeAudioEngine : IAsyncDisposable
         return Marshal.PtrToStringUTF8(text) ?? throw new InvalidDataException("The native transcript pointer is null.");
     }
 
-    private void EnsureSession(AudioModel model, string mode)
+    private static RecognitionResult ReadResult(nint result, string family, CancellationToken token)
     {
-        if (_registry is null || model.ModelPath is null || model.Family is null)
+        var text = ReadText(result, false)!;
+        List<string> segments = [];
+        List<string> turns = [];
+        var segmentCount = NativeAudioApi.SegmentCount(result);
+        var turnCount = NativeAudioApi.SpeakerTurnCount(result);
+        if (segmentCount > 100000 || turnCount > 100000)
+            throw new InvalidDataException("The native transcript has too many speech metadata entries.");
+        for (nuint index = 0; index < segmentCount; index++)
         {
-            throw new InvalidOperationException("Connect the native backend and choose an installed model first.");
+            token.ThrowIfCancellationRequested();
+            NativeAudioApi.Check(NativeAudioApi.Segment(result, index, 0, 0, 0, out var piece), "read speech segments");
+            segments.Add(Marshal.PtrToStringUTF8(piece)
+                ?? throw new InvalidDataException("The native speech segment pointer is null."));
         }
-        if (_loadedPath != model.ModelPath)
+        for (nuint index = 0; index < turnCount; index++)
+        {
+            token.ThrowIfCancellationRequested();
+            NativeAudioApi.Check(NativeAudioApi.SpeakerTurn(result, index, 0, 0, 0, 0, out var piece), "read speaker turns");
+            turns.Add(Marshal.PtrToStringUTF8(piece)
+                ?? throw new InvalidDataException("The native speaker turn pointer is null."));
+        }
+        token.ThrowIfCancellationRequested();
+        return NativeTranscript.Normalize(family, text, segments, turns);
+    }
+
+    private void EnsureSession(AudioModel model, string mode, long decodedBytes, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        if (_registry is null || _inventory is null)
+            throw new InvalidOperationException("Connect the native backend and choose an installed model first.");
+        var admitted = _inventory.Models.FirstOrDefault(candidate => candidate.Id == model.Id);
+        if (admitted is null || admitted != model || model.ModelPath is null || model.Family is null)
+            throw new InvalidDataException("Recognition requires an unchanged model selection from the connected catalog.");
+        var entry = _inventory.Entries[model.Id];
+        if (_loadedId != model.Id)
         {
             ReleaseModel();
-            NativeMemory.CheckModelBudget(model.ModelPath, _headroom);
+            NativeOperation.Step(token, () => NativeMemory.CheckBudget(entry.Bytes, decodedBytes, _headroom, resident: false));
+            _modelLease = _integrity.OpenVerified(model.ModelPath, entry, token);
+            token.ThrowIfCancellationRequested();
             var family = Marshal.StringToCoTaskMemUTF8(model.Family);
             try
             {
                 var config = new NativeAudioApi.ModelConfig { Family = family };
-                NativeAudioApi.Check(NativeAudioApi.ModelLoad(_registry.DangerousGetHandle(), model.ModelPath, in config, 0, out var pointer),
-                    $"load {model.Id}");
-                _model = new NativeAudioHandle(pointer, NativeHandleKind.Model);
-                _loadedPath = model.ModelPath;
-                _languageOption = false;
-                for (nuint index = 0; index < NativeAudioApi.OptionCount(pointer, 0); index++)
+                NativeOperation.Step(token, () =>
                 {
-                    NativeAudioApi.Check(NativeAudioApi.Option(pointer, 0, index, out var name, 0, 0, 0, 0, 0, 0), "inspect recognition options");
-                    _languageOption |= Marshal.PtrToStringUTF8(name) == "language";
+                    NativeAudioApi.Check(NativeAudioApi.ModelLoad(_registry.DangerousGetHandle(), model.ModelPath, in config, 0, out var pointer),
+                        $"load {model.Id}");
+                    _model = new NativeAudioHandle(pointer, NativeHandleKind.Model);
+                });
+                _languageOption = false;
+                nuint count = 0;
+                NativeOperation.Step(token, () => count = NativeAudioApi.OptionCount(_model!.DangerousGetHandle(), 0));
+                for (nuint index = 0; index < count; index++)
+                {
+                    NativeOperation.Step(token, () =>
+                    {
+                        NativeAudioApi.Check(NativeAudioApi.Option(_model!.DangerousGetHandle(), 0, index, out var name, 0, 0, 0, 0, 0, 0),
+                            "inspect recognition options");
+                        _languageOption |= Marshal.PtrToStringUTF8(name) == "language";
+                    });
                 }
+                _loadedId = model.Id;
             }
             finally
             {
                 Marshal.FreeCoTaskMem(family);
             }
         }
-        if (_session is not null && _mode == mode)
+        NativeOperation.Step(token, () => NativeMemory.CheckBudget(entry.Bytes, decodedBytes, _headroom, resident: true));
+        NativeOperation.Step(token, () =>
         {
-            return;
-        }
-        _session?.Dispose();
-        _session = null;
-        _mode = null;
-        if (NativeAudioApi.Supports(_model!.DangerousGetHandle(), "asr", mode) == 0)
-        {
-            throw new NotSupportedException($"{model.Id} does not support {mode} speech recognition.");
-        }
+            if (NativeAudioApi.Supports(_model!.DangerousGetHandle(), "asr", mode) == 0)
+                throw new NotSupportedException($"{model.Id} does not support {mode} speech recognition.");
+        });
         var backend = new NativeAudioApi.BackendConfig { Threads = _threads };
-        NativeAudioApi.Check(NativeAudioApi.SessionCreate(_model.DangerousGetHandle(), "asr", mode, in backend, 0, out var session),
-            "create the native recognition session");
-        _session = new NativeAudioHandle(session, NativeHandleKind.Session);
-        _mode = mode;
+        NativeOperation.Step(token, () =>
+        {
+            NativeAudioApi.Check(NativeAudioApi.SessionCreate(_model!.DangerousGetHandle(), "asr", mode, in backend, 0, out var session),
+                "create the native recognition session");
+            _session = new NativeAudioHandle(session, NativeHandleKind.Session);
+        });
     }
 
-    private NativeAudioHandle CreateRequest(string? language)
+    private NativeAudioHandle CreateRequest(string? language, CancellationToken token)
     {
+        token.ThrowIfCancellationRequested();
         var request = new NativeAudioHandle(NativeAudioApi.RequestCreate(), NativeHandleKind.Request);
         try
         {
-            NativeAudioApi.Check(NativeAudioApi.SetText(request.DangerousGetHandle(), "", null), "initialize recognition input");
+            NativeOperation.Step(token, () =>
+                NativeAudioApi.Check(NativeAudioApi.SetText(request.DangerousGetHandle(), "", null), "initialize recognition input"));
             if (!string.IsNullOrWhiteSpace(language))
             {
-                NativeAudioApi.Check(NativeAudioApi.SetTextLanguage(request.DangerousGetHandle(), language.Trim()), "set the transcript language");
+                NativeOperation.Step(token, () =>
+                    NativeAudioApi.Check(NativeAudioApi.SetTextLanguage(request.DangerousGetHandle(), language.Trim()), "set the transcript language"));
                 if (_languageOption)
                 {
-                    NativeAudioApi.Check(NativeAudioApi.SetOption(request.DangerousGetHandle(), "language", language.Trim()), "set the recognition language");
+                    NativeOperation.Step(token, () =>
+                        NativeAudioApi.Check(NativeAudioApi.SetOption(request.DangerousGetHandle(), "language", language.Trim()), "set the recognition language"));
                 }
             }
             return request;
@@ -308,7 +368,6 @@ public sealed class NativeAudioEngine : IAsyncDisposable
             throw;
         }
     }
-
     private static unsafe void SetRequestAudio(NativeAudioHandle request, WaveAudio audio)
     {
         fixed (float* samples = audio.Samples)
@@ -337,14 +396,30 @@ public sealed class NativeAudioEngine : IAsyncDisposable
         }
     }
 
+    private void CleanupOperation(bool success)
+    {
+        var session = _session;
+        _session = null;
+        var reset = _streamStartAttempted;
+        _streamStartAttempted = false;
+        NativeOperation.Cleanup(success,
+            reset && session is not null
+                ? () => NativeAudioApi.Check(NativeAudioApi.StreamReset(session.DangerousGetHandle()), "reset the dictation session")
+                : null,
+            () => session?.Dispose(), ReleaseModel);
+    }
+
     private void ReleaseModel()
     {
         _session?.Dispose();
         _session = null;
+        _streamStartAttempted = false;
         _model?.Dispose();
         _model = null;
-        _loadedPath = null;
-        _mode = null;
+        _modelLease?.Dispose();
+        _modelLease = null;
+        _loadedId = null;
+        _languageOption = false;
     }
 
     public async ValueTask DisposeAsync()

@@ -1,6 +1,5 @@
 using System.Globalization;
 using DictationPoc.Core;
-using DictationPoc.Services;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -13,42 +12,54 @@ namespace DictationPoc;
 
 public sealed partial class InsightsPage : Page
 {
-    private readonly DictationController _controller;
+    private readonly DictationSession _session;
+    private readonly Action<string> _navigate;
+    private SessionSnapshot _state;
+    private UiSessionObserver? _observer;
+    private UsageDocument? _usage;
+    private IReadOnlyList<AudioModel>? _models;
 
-    public InsightsPage()
+    internal InsightsPage(DictationSession session, Action<string> navigate)
     {
         InitializeComponent();
-        _controller = ((App)Application.Current).Controller;
-        Loaded += (_, _) =>
+        _session = session;
+        _navigate = navigate;
+        _state = session.State;
+        Loaded += (_, _) => _observer = new UiSessionObserver(session, DispatcherQueue, state =>
         {
-            _controller.Changed += RenderState;
-            _controller.UsageChanged += RenderUsage;
+            _state = state;
             RenderState();
-            RenderUsage();
-        };
-        Unloaded += (_, _) =>
-        {
-            _controller.Changed -= RenderState;
-            _controller.UsageChanged -= RenderUsage;
-        };
+            if (!ReferenceEquals(_usage, state.Usage) || !ReferenceEquals(_models, state.Models) || state.UsageError is not null)
+            {
+                _usage = state.Usage;
+                _models = state.Models;
+                RenderUsage();
+            }
+        });
+        Unloaded += (_, _) => { _observer?.Dispose(); _observer = null; };
     }
 
-    private void RenderState() => StartButton.IsEnabled = _controller.CanStart;
+    private void RenderState() => StartButton.IsEnabled = _state.CanStart;
 
     private void RenderUsage()
     {
-        UsageErrorBar.IsOpen = _controller.UsageError is not null;
-        UsageErrorBar.Visibility = _controller.UsageError is null ? Visibility.Collapsed : Visibility.Visible;
+        UsageErrorBar.IsOpen = _state.UsageError is not null;
+        UsageErrorBar.Visibility = _state.UsageError is null ? Visibility.Collapsed : Visibility.Visible;
         UsageErrorBar.Title = "Usage statistics unavailable";
-        UsageErrorBar.Message = _controller.UsageError ?? "";
-        if (_controller.Usage is null) { return; }
+        UsageErrorBar.Message = _state.UsageError ?? "";
+        if (_state.Usage is null) { return; }
         var summary = UsageSummary.Create(
-            _controller.Usage.Entries, DateOnly.FromDateTime(DateTime.Today), TimeZoneInfo.Local);
-        IntroText.Text = _controller.Usage.Enabled
+            _state.Usage.Entries, DateOnly.FromDateTime(DateTime.Today), TimeZoneInfo.Local);
+        IntroText.Text = _state.Usage.Enabled
             ? "Your activity, measured on this device. No audio or transcript history is saved."
             : "Local usage collection is paused. Previously saved counts remain visible.";
+        if (summary.UnknownWordSessions > 0)
+        {
+            IntroText.Text += $" Word totals exclude {summary.UnknownWordSessions} sessions without authoritative speech content.";
+        }
         PaceText.Text = summary.WordsPerMinute?.ToString("N0", CultureInfo.CurrentCulture) ?? "--";
-        PaceCaption.Text = summary.RecordingSeconds > 0 ? $"{summary.RecordingSeconds / 60:N1} recorded min" : "No dictations yet";
+        PaceCaption.Text = summary.RecordingSeconds > 0 ? $"{summary.RecordingSeconds / 60:N1} measured min" :
+            summary.DictationSessions > 0 ? "Awaiting speech counts" : "No dictations yet";
         SessionsText.Text = summary.Sessions.ToString("N0");
         DictationsText.Text = $"{summary.DictationSessions:N0} dictations";
         VerificationsText.Text = $"{summary.FileSessions:N0} file verifications";
@@ -94,7 +105,7 @@ public sealed partial class InsightsPage : Page
             : $"{summary.Models.Count} models used / {summary.Sessions:N0} completed sessions";
         foreach (var model in summary.Models.Take(5))
         {
-            var label = _controller.Models.FirstOrDefault(candidate => candidate.Id == model.ModelId)?.DisplayName ?? model.ModelId;
+            var label = _state.Models.FirstOrDefault(candidate => candidate.Id == model.ModelId)?.DisplayName ?? model.ModelId;
             var stack = new StackPanel { Spacing = 7 };
             var row = new Grid();
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -222,6 +233,10 @@ public sealed partial class InsightsPage : Page
         Grid.SetRow(ActivityCard, narrow ? 1 : 0);
     }
 
-    private async void StartClicked(object sender, RoutedEventArgs args) => await _controller.StartDictationAsync();
-    private void VerifyClicked(object sender, RoutedEventArgs args) => ((App)Application.Current).Window!.Navigate("settings");
+    private async void StartClicked(object sender, RoutedEventArgs args)
+    {
+        try { await _session.StartDictationAsync(); }
+        catch (Exception error) { _session.ReportUiError(error); }
+    }
+    private void VerifyClicked(object sender, RoutedEventArgs args) => _navigate("settings");
 }

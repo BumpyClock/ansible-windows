@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Text;
 using System.Threading.Channels;
 using DictationPoc.Core;
 
@@ -24,25 +23,28 @@ try
             models.FirstOrDefault() ?? throw new InvalidDataException("No ASR models are installed.");
     Console.WriteLine($"Native DLL={Path.GetFullPath(args[0])}; available models={string.Join(", ", models.Select(model => model.Id))}");
     Console.WriteLine($"Selected model={model.Id}; mode={model.Mode ?? "not reported"}; family={model.Family}; path={model.ModelPath}");
-    var pcm = ReadPcmWave(args[3]);
+    IAudioInputReader input = new AudioInputReader();
+    var decoded = await input.ReadRecordingAsync(args[3], timeout.Token);
 
     stage = $"WAV transcription ({model.Id})";
     Console.WriteLine($"Attempting {stage}; timeout=180 seconds.");
     clock.Restart();
     timeout.CancelAfter(TimeSpan.FromMinutes(3));
-    var transcript = await engine.TranscribeFileAsync(
-        model, args[3], null, null, timeout.Token);
-    if (string.IsNullOrWhiteSpace(transcript))
+    var transcript = await engine.TranscribeAsync(
+        model, decoded, null, null, timeout.Token);
+    if (string.IsNullOrWhiteSpace(transcript.DisplayText))
     {
         throw new InvalidDataException("The native engine returned no speech for the validation recording.");
     }
-    Console.WriteLine($"WAV transcription completed in {clock.Elapsed.TotalMilliseconds:F0} ms: {transcript}");
+    Console.WriteLine($"WAV transcription completed in {clock.Elapsed.TotalMilliseconds:F0} ms: {transcript.DisplayText}");
+    Console.WriteLine($"Spoken words={transcript.SpokenWords?.ToString() ?? "unknown"}");
     if (model.Mode == "offline" || fileOnly)
     {
         return 0;
     }
 
     stage = $"live stream ({model.Id})";
+    var pcm = await input.ReadReplayAsync(args[3], timeout.Token);
     Console.WriteLine($"Attempting {stage}; timeout=180 seconds.");
     var audio = Channel.CreateBounded<byte[]>(8);
     var uploadFinished = false;
@@ -57,6 +59,7 @@ try
                 Interlocked.Increment(ref previewsDuringUpload);
             }
         }), timeout.Token);
+    Exception? primaryFailure = null;
     try
     {
         for (var offset = 0; offset < pcm.Length; offset += 1280)
@@ -74,19 +77,29 @@ try
         Volatile.Write(ref uploadFinished, true);
         audio.Writer.Complete();
         var liveTranscript = await streaming;
-        if (string.IsNullOrWhiteSpace(liveTranscript))
+        if (string.IsNullOrWhiteSpace(liveTranscript.DisplayText))
         {
             throw new InvalidDataException("The native live stream returned no speech.");
         }
         Console.WriteLine($"Live stream completed in {clock.Elapsed.TotalMilliseconds:F0} ms; previews during upload={previewsDuringUpload}");
-        Console.WriteLine(liveTranscript);
+        Console.WriteLine(liveTranscript.DisplayText);
+        Console.WriteLine($"Spoken words={liveTranscript.SpokenWords?.ToString() ?? "unknown"}");
+    }
+    catch (Exception error)
+    {
+        primaryFailure = error;
+        throw;
     }
     finally
     {
         audio.Writer.TryComplete();
         timeout.Cancel();
         try { await streaming; }
-        catch { /* The original failure is reported below. */ }
+        catch (Exception cleanupError) when (primaryFailure is not null)
+        {
+            if (!ReferenceEquals(primaryFailure, cleanupError) && cleanupError is not OperationCanceledException)
+                throw new AggregateException("Probe input and native recognition cleanup failed.", primaryFailure, cleanupError);
+        }
     }
     return 0;
 }
@@ -94,55 +107,6 @@ catch (Exception error)
 {
     Console.Error.WriteLine($"{stage} failed after {clock.Elapsed.TotalMilliseconds:F0} ms: {error.GetType().Name}: {error.Message}");
     return 1;
-}
-
-static byte[] ReadPcmWave(string path)
-{
-    using var reader = new BinaryReader(File.OpenRead(path), Encoding.ASCII);
-    if (Encoding.ASCII.GetString(reader.ReadBytes(4)) != "RIFF")
-    {
-        throw new InvalidDataException("Expected a RIFF WAV recording.");
-    }
-    reader.ReadUInt32();
-    if (Encoding.ASCII.GetString(reader.ReadBytes(4)) != "WAVE")
-    {
-        throw new InvalidDataException("Expected a WAV recording.");
-    }
-    var validFormat = false;
-    while (reader.BaseStream.Position + 8 <= reader.BaseStream.Length)
-    {
-        var id = Encoding.ASCII.GetString(reader.ReadBytes(4));
-        var size = reader.ReadUInt32();
-        var next = reader.BaseStream.Position + size + (size & 1);
-        if (next > reader.BaseStream.Length)
-        {
-            throw new InvalidDataException("Truncated WAV chunk.");
-        }
-        if (id == "fmt ")
-        {
-            if (size < 16)
-            {
-                throw new InvalidDataException("Invalid WAV format.");
-            }
-            var format = reader.ReadUInt16();
-            var channels = reader.ReadUInt16();
-            var rate = reader.ReadUInt32();
-            reader.ReadUInt32();
-            reader.ReadUInt16();
-            var bits = reader.ReadUInt16();
-            validFormat = format == 1 && channels == 1 && rate == 16000 && bits == 16;
-        }
-        else if (id == "data")
-        {
-            if (!validFormat || size % 2 != 0)
-            {
-                throw new InvalidDataException("The live probe requires 16 kHz mono PCM16 WAV.");
-            }
-            return reader.ReadBytes(checked((int)size));
-        }
-        reader.BaseStream.Position = next;
-    }
-    throw new InvalidDataException("WAV recording has no audio data.");
 }
 
 internal sealed class InlineProgress<T>(Action<T> report) : IProgress<T>

@@ -25,10 +25,15 @@ scrolling history. The panel labels WAV replay separately from microphone captur
 through streaming models or transcribes it through offline models. This exercises
 the native backend and floating panel without recording ambient microphone audio.
 
-Statistics persist in `usage.json` beside the app executable. Only dates, model
-IDs, word counts, session type, and durations are stored. No audio or transcript
-content is persisted. Disable collection in Settings without deleting prior
-counts. Failed and cancelled sessions are not counted.
+Statistics persist per user in `%LOCALAPPDATA%\LocalVoice\usage.json`.
+Only dates, model IDs, authoritative speech-word counts, session type, and
+durations are stored. Speaker annotations are not speech content. If native
+speech content cannot be established, its count is unknown and excluded from
+word totals and pace, not silently replaced with zero. Audio and transcript
+content are never persisted. Disable collection without deleting prior counts.
+Failed and cancelled sessions are not counted. Existing prototype statistics
+beside older executables remain untouched; the foundation does not dual-write
+or silently import that development data.
 
 Native inference runs asynchronously, but a blocking native kernel cannot be
 forcibly interrupted. Cancel stops capture and waits for the current native step
@@ -69,12 +74,13 @@ From this folder:
 ```
 
 The setup script installs models only. The native build produces
-`.runtime\native\audiocpp.dll` and its OpenMP dependency, `vcomp140.dll`.
+`.runtime\native\audiocpp.dll`, stages its required app-local MSVC/OpenMP
+dependencies, and records their import closure and redistributable notices.
 Then publish and launch the app:
 
 ```powershell
 .\tools\Publish-Poc.ps1
-.\DictationPoc\bin\Release\net10.0-windows10.0.26100.0\win-x64\publish\DictationPoc.exe
+.\DictationPoc\bin\x64\Release\net10.0-windows10.0.26100.0\win-x64\publish\DictationPoc.exe
 ```
 
 Select **Start dictation**, speak, then select **Finish dictation**.
@@ -133,12 +139,19 @@ or 13.09 GiB. Downloads do not require an inference process to run.
 Reopen the app or probe after installing new models so the native engine reads
 the updated installed catalog. No service restart or model registration is needed.
 
-Native initialization reads the installed catalog and exposes each model's
-family, mode, and local file path.
+Native initialization discovers installed catalog entries. Before loading a
+model, admission verifies the pinned SHA-256 off the UI thread. Verification is
+cached only while Windows file identity and metadata are unchanged; a resident
+read lease prevents modification or replacement. Merely finding a file or
+matching its length does not establish verified model identity.
 `-Models` on setup installs a subset without removing other files. Select the
 exact model ID in the app or probe. Failed requests do not select another model.
 
 ### CPU and memory limits
+
+The qualified native x64 build requires AVX2, FMA, F16C, BMI1/BMI2, and OS-enabled
+AVX state. Initialization checks eligibility before reaching native kernels.
+Other architectures and CPU profiles require their own build and qualification.
 
 The native harness uses CPU inference, four threads, and 512 MB of memory
 headroom. Models load lazily; keep at most one model resident.
@@ -161,10 +174,17 @@ preview before a short recording ends. Memory errors, unsupported operations,
 and operation timeouts surface directly; model availability is not a CPU
 real-time guarantee.
 
-WAV recognition passes a local file path to `NativeAudioEngine`. Live recognition
-feeds PCM chunks through a bounded channel to the native streaming API.
-The producer watches consumer completion so native failures cannot leave capture
-blocked on a full queue.
+One `AudioInputReader` owns RIFF validation for offline recognition, live replay,
+and the probe. It rejects malformed or duplicate mandatory chunks, unsupported
+formats, non-finite samples, recordings longer than five minutes, files larger
+than 100 MiB, and decoded float payloads larger than 64 MiB. Reading and chunked
+decoding are cancellable and run off the UI thread.
+
+WAV recognition receives bounded decoded audio. Live recognition feeds PCM
+chunks through an operation-owned bounded channel. Memory admission includes
+decoded input, native copying/resampling, model/workspace estimates, and reserve
+headroom. This remains a conservative admission estimate, not a measured
+guarantee against every native allocator peak.
 Successful WAV recognition does not qualify a model's native streaming path.
 
 ### Observed native model behavior
@@ -222,14 +242,57 @@ dotnet run --project .\DictationPoc.Probe -- `
 The probe uses a blank language hint and a separate three-minute limit for each
 recognition operation. It reports the attempted model, stage, elapsed time, and
 failure message. `--file-only` skips live recognition; offline models always do.
-Run model probes sequentially in separate processes. Cancellation requests a
-native abort; allow the probe process to exit before starting another model.
+Run model probes sequentially in separate processes. Cancellation prevents
+additional preparation work and waits for a currently executing native call;
+it cannot force-abort that call. Allow the probe to exit before another run.
+
+## Foundation ownership
+
+`App` composes paths and concrete dependencies explicitly. Pages receive the
+shared session; they do not retrieve services through a global application
+locator. The composition root supplies per-user storage and native resource
+paths. Development publishing emits `runtime-settings.json` with the installed
+model directory. `-ModelsDirectory` overrides it; `-CleanDeployment` omits
+development settings and defaults the application to the user's local model
+folder. The app never searches ancestor directories for production resources.
+
+`DictationSession` owns one current operation: its cancellation, capture,
+producer, inference, identity, and outcome. Startup, reconnection and preference
+writes are also tracked work. Immutable versioned snapshots feed the UI through
+one dispatcher adapter. Late callbacks cannot restore state or open capture
+after cancellation/closing.
+
+The main window intercepts the close request, rejects new work, and joins owned
+work before allowing the last window to close. Failed capture teardown retains
+native headers, device and callback roots. Unreleased resources block new work;
+a close retry attempts recovery instead of pretending the app is idle.
+
+The native engine validates the ABI before publishing a module, checks
+cancellation between preparation stages, and resets or invalidates operation
+state before reuse. Model weights may stay resident, but a completed operation
+does not retain its transcript or decoding state.
+
+Deterministic engine/capture/input/store doubles cover lifecycle and failure
+contracts without loading model weights. The separately tagged native
+integration test uses the real DLL and public sample.
+
+```powershell
+dotnet test .\DictationPoc.Tests\DictationPoc.Tests.csproj --filter Category!=NativeIntegration
+dotnet test .\DictationPoc.Tests\DictationPoc.Tests.csproj --filter Category=NativeIntegration
+.\tools\Publish-Poc.ps1 -OutputDirectory .\.runtime\foundation-app
+```
+
+Publishing verifies native PE import closure and required WinUI `.pri`/`.xbf`
+resources. Clean-machine Windows qualification and physical microphone-driver
+fault behavior still require their respective environments; a build is not
+evidence that those external conditions passed.
 
 ## Deliberate boundaries
 
 - ARM64 backend qualification remains separate. Only x64 is validated here.
-- No global hotkey, floating overlay, automatic target-app insertion, or LLM cleanup.
-- WAV files only, up to 100 MB. Operations time out after five minutes.
+- No global hotkey, automatic target-app insertion, or LLM cleanup.
+- A floating live-preview window is included.
+- WAV files only, within the duration and decoded-memory limits above. Operations time out after five minutes.
 - No audio/history persistence, cloud transcription, telemetry, or model auto-downloads inside the UI.
 - Models and runtime binaries are separate from the NativeAOT application.
 

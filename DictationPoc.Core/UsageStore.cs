@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace DictationPoc.Core;
 
-public sealed class UsageStore(string path)
+public sealed class UsageStore(string path) : IUsageStore
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
 
@@ -16,12 +16,13 @@ public sealed class UsageStore(string path)
         }
         await using var file = new FileStream(Path, FileMode.Open, FileAccess.Read, FileShare.Read);
         var document = await JsonSerializer.DeserializeAsync(file, UsageJsonContext.Default.UsageDocument, cancellationToken);
-        if (document is null || document.SchemaVersion != 1 || document.Entries is null)
+        if (document is null || document.SchemaVersion != 2 || document.Entries is null)
         {
             throw new InvalidDataException("The local usage file has an unsupported or invalid format.");
         }
         foreach (var entry in document.Entries)
         {
+            if (entry is null) { throw new InvalidDataException("The local usage file contains an empty session."); }
             entry.Validate();
         }
         if (document.Entries.Select(entry => entry.Id).Distinct().Count() != document.Entries.Count)
@@ -38,7 +39,7 @@ public sealed class UsageStore(string path)
         {
             if (document.Enabled && document.Entries.All(existing => existing.Id != entry.Id))
             {
-                document.Entries.Add(entry);
+                return document with { Entries = document.Entries.Append(entry).ToArray() };
             }
             return document;
         }, cancellationToken);

@@ -1,4 +1,4 @@
-using DictationPoc.Services;
+using DictationPoc.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Windows.ApplicationModel.DataTransfer;
@@ -8,29 +8,31 @@ namespace DictationPoc;
 
 public sealed partial class MainPage : Page
 {
-    private readonly DictationController _controller;
+    private readonly DictationSession _session;
+    private readonly AppPaths _paths;
+    private readonly Func<nint> _windowHandle;
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMilliseconds(200) };
+    private UiSessionObserver? _observer;
+    private SessionSnapshot _state;
     private bool _rendering;
-    private IReadOnlyList<Core.AudioModel>? _renderedModels;
+    private bool _picking;
+    private IReadOnlyList<AudioModel>? _renderedModels;
 
-    public MainPage()
+    internal MainPage(DictationSession session, AppPaths paths, Func<nint> windowHandle)
     {
         InitializeComponent();
-        _controller = ((App)Application.Current).Controller;
-        _timer.Tick += (_, _) => DetailsText.Text = $"{_controller.Words} words / {_controller.Elapsed:mm\\:ss}";
+        _session = session;
+        _paths = paths;
+        _windowHandle = windowHandle;
+        _state = session.State;
+        _timer.Tick += (_, _) => DetailsText.Text =
+            $"{(_state.Words is { } words ? $"{words} spoken words" : "Word count pending")} / {_session.Elapsed:mm\\:ss}";
         Loaded += (_, _) =>
         {
-            _controller.Changed += Render;
-            _controller.UsageChanged += Render;
+            _observer = new UiSessionObserver(session, DispatcherQueue, state => { _state = state; Render(); });
             _timer.Start();
-            Render();
         };
-        Unloaded += (_, _) =>
-        {
-            _controller.Changed -= Render;
-            _controller.UsageChanged -= Render;
-            _timer.Stop();
-        };
+        Unloaded += (_, _) => { _observer?.Dispose(); _observer = null; _timer.Stop(); };
     }
 
     private void Render()
@@ -38,98 +40,92 @@ public sealed partial class MainPage : Page
         _rendering = true;
         try
         {
-            if (!ReferenceEquals(_renderedModels, _controller.Models))
+            if (!ReferenceEquals(_renderedModels, _state.Models))
             {
-                ModelBox.ItemsSource = _controller.Models.Select(model => model.DisplayName ?? model.Id).ToArray();
-                _renderedModels = _controller.Models;
+                ModelBox.ItemsSource = _state.Models.Select(model => model.DisplayName ?? model.Id).ToArray();
+                _renderedModels = _state.Models;
             }
-            ModelBox.SelectedIndex = _controller.SelectedIndex;
-            if (ModelsFolderBox.Text != _controller.ModelsDirectory && !ModelsFolderBox.FocusState.HasFlag(FocusState.Keyboard))
-            {
-                ModelsFolderBox.Text = _controller.ModelsDirectory;
-            }
-            var idle = _controller.IsIdle;
+            ModelBox.SelectedIndex = _state.SelectedIndex;
+            if (ModelsFolderBox.FocusState == FocusState.Unfocused) { ModelsFolderBox.Text = _state.ModelsDirectory; }
+            var idle = _state.IsIdle && !_picking;
             ModelsFolderBox.IsEnabled = idle;
             ConnectButton.IsEnabled = idle;
-            ModelBox.IsEnabled = _controller.Phase == DictationPhase.Ready;
+            ModelBox.IsEnabled = _state.Phase == DictationPhase.Ready && !_picking;
             LanguageBox.IsEnabled = ModelBox.IsEnabled;
-            BackendText.Text = _controller.Phase == DictationPhase.Disconnected
-                ? "Build the native DLL and install verified models, then load this folder."
-                : $"audio.cpp {_controller.BackendVersion} / C ABI 0.2 / CPU / {_controller.Models.Count} models";
-            ModelNote.Text = _controller.SelectedModel?.Mode == "offline"
+            if (LanguageBox.FocusState == FocusState.Unfocused) { LanguageBox.Text = _state.Language; }
+            BackendText.Text = _state.Phase == DictationPhase.Disconnected
+                ? "Build the native DLL and install pinned models, then load this folder."
+                : $"audio.cpp {_state.BackendVersion} / native CPU / {_state.Models.Count} installed models";
+            ModelNote.Text = _state.SelectedModel?.Mode == "offline"
                 ? "Offline model: verify a WAV recording. Large models require enough free memory."
-                : _controller.SelectedModel?.Preview == "final-only"
-                    ? "This model accepts live audio but returns text after Finish. No preview is simulated."
-                    : "Live preview is model-dependent. WAV replay requires 16 kHz mono PCM16.";
-            RecordButton.Content = _controller.CanFinish && !_controller.IsReplay ? "Finish dictation" : "Start dictation";
-            RecordButton.IsEnabled = _controller.CanStart || _controller.CanFinish && !_controller.IsReplay;
-            FileButton.IsEnabled = _controller.Phase == DictationPhase.Ready;
-            ReplayButton.IsEnabled = _controller.CanStart;
-            SampleButton.IsEnabled = _controller.Phase == DictationPhase.Ready;
-            CancelButton.IsEnabled = _controller.CanCancel;
-            CopyButton.IsEnabled = idle && !string.IsNullOrWhiteSpace(_controller.Transcript);
-            if (TranscriptBox.Text != _controller.Transcript) { TranscriptBox.Text = _controller.Transcript; }
-            StatusInfo.Severity = _controller.Notice.Kind switch
+                : _state.SelectedModel?.Preview == "final-only"
+                    ? "This model accepts live audio but returns text after Finish."
+                    : "Live preview is model-dependent. Replay requires bounded 16 kHz mono PCM16.";
+            RecordButton.Content = _state.CanFinish ? "Finish dictation" : "Start dictation";
+            RecordButton.IsEnabled = !_picking && (_state.CanStart || _state.CanFinish);
+            FileButton.IsEnabled = ModelBox.IsEnabled;
+            ReplayButton.IsEnabled = !_picking && _state.CanStart;
+            SampleButton.IsEnabled = ModelBox.IsEnabled;
+            CancelButton.IsEnabled = _state.CanCancel;
+            CopyButton.IsEnabled = (_state.IsIdle || _state.Phase == DictationPhase.RecoveryRequired) &&
+                !string.IsNullOrWhiteSpace(_state.Transcript);
+            if (TranscriptBox.Text != _state.Transcript) { TranscriptBox.Text = _state.Transcript; }
+            StatusInfo.Severity = _state.Notice.Kind switch
             {
                 NoticeKind.Success => InfoBarSeverity.Success,
                 NoticeKind.Warning => InfoBarSeverity.Warning,
                 NoticeKind.Error => InfoBarSeverity.Error,
                 _ => InfoBarSeverity.Informational
             };
-            StatusInfo.Title = _controller.Notice.Title;
-            StatusInfo.Message = _controller.Notice.Message;
-            UsageToggle.IsOn = _controller.Usage?.Enabled == true;
-            UsageToggle.IsEnabled = _controller.Usage is not null;
-            UsagePathText.Text = Path.Combine(AppContext.BaseDirectory, "usage.json");
+            StatusInfo.Title = _state.Notice.Title;
+            StatusInfo.Message = _state.Notice.Message;
+            UsageToggle.IsOn = _state.Usage?.Enabled == true;
+            UsageToggle.IsEnabled = idle && _state.Usage is not null;
+            UsagePathText.Text = _session.UsagePath;
         }
         finally { _rendering = false; }
     }
 
-    private async void ConnectClicked(object sender, RoutedEventArgs args) => await _controller.ConnectAsync(ModelsFolderBox.Text);
+    private async void ConnectClicked(object sender, RoutedEventArgs args) =>
+        await RunCommandAsync(() => _session.ConnectAsync(ModelsFolderBox.Text));
     private void ModelChanged(object sender, SelectionChangedEventArgs args)
     {
-        if (!_rendering && ModelBox.SelectedIndex >= 0) { _controller.SelectModel(ModelBox.SelectedIndex); }
+        if (_rendering || ModelBox.SelectedIndex < 0) { return; }
+        try { _session.SelectModel(ModelBox.SelectedIndex); }
+        catch (Exception error) { _session.ReportUiError(error); }
     }
     private void LanguageChanged(object sender, TextChangedEventArgs args)
     {
-        if (!_rendering && LanguageBox is not null) { _controller.Language = LanguageBox.Text; }
+        if (_rendering || LanguageBox is null) { return; }
+        try { _session.SetLanguage(LanguageBox.Text); }
+        catch (Exception error) { _session.ReportUiError(error); }
     }
-    private async void RecordClicked(object sender, RoutedEventArgs args)
-    {
-        if (_controller.CanFinish) { await _controller.FinishAsync(); }
-        else { await _controller.StartDictationAsync(); }
-    }
-    private async void CancelClicked(object sender, RoutedEventArgs args) => await _controller.CancelAsync();
+    private async void RecordClicked(object sender, RoutedEventArgs args) =>
+        await RunCommandAsync(() => _state.CanFinish ? _session.FinishAsync() : _session.StartDictationAsync());
+    private async void CancelClicked(object sender, RoutedEventArgs args) => await RunCommandAsync(_session.CancelAsync);
     private async void FileClicked(object sender, RoutedEventArgs args) => await PickAndRunAsync(false);
     private async void ReplayClicked(object sender, RoutedEventArgs args) => await PickAndRunAsync(true);
-    private async void SampleClicked(object sender, RoutedEventArgs args)
-    {
-        var path = Path.Combine(AppContext.BaseDirectory, "validation-sample.wav");
-        if (!File.Exists(path))
-        {
-            _controller.Fail(new FileNotFoundException("The public validation sample is missing from the app package."));
-            return;
-        }
-        if (_controller.SelectedModel?.Mode == "streaming") { await _controller.ReplayAsync(path); }
-        else { await _controller.TranscribeFileAsync(path); }
-    }
+    private async void SampleClicked(object sender, RoutedEventArgs args) => await RunCommandAsync(() =>
+        _state.SelectedModel?.Mode == "streaming" ? _session.ReplayAsync(_paths.PublicSample) : _session.TranscribeFileAsync(_paths.PublicSample));
 
     private async Task PickAndRunAsync(bool replay)
     {
+        _picking = true;
+        Render();
         try
         {
             var picker = new FileOpenPicker();
             picker.FileTypeFilter.Add(".wav");
-            WinRT.Interop.InitializeWithWindow.Initialize(
-                picker, WinRT.Interop.WindowNative.GetWindowHandle(((App)Application.Current).Window!));
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, _windowHandle());
             var file = await picker.PickSingleFileAsync();
             if (file is not null)
             {
-                if (replay) { await _controller.ReplayAsync(file.Path); }
-                else { await _controller.TranscribeFileAsync(file.Path); }
+                if (replay) { await _session.ReplayAsync(file.Path); }
+                else { await _session.TranscribeFileAsync(file.Path); }
             }
         }
-        catch (Exception error) { _controller.Fail(error); }
+        catch (Exception error) { _session.ReportUiError(error); }
+        finally { _picking = false; Render(); }
     }
 
     private void CopyClicked(object sender, RoutedEventArgs args)
@@ -137,15 +133,21 @@ public sealed partial class MainPage : Page
         try
         {
             var data = new DataPackage();
-            data.SetText(_controller.Transcript);
+            data.SetText(_state.Transcript);
             Clipboard.SetContent(data);
-            _controller.Notify(NoticeKind.Success, "Copied", "The transcript is on the clipboard.");
+            _session.Notify(NoticeKind.Success, "Copied", "The transcript is on the clipboard.");
         }
-        catch (Exception error) { _controller.Fail(error); }
+        catch (Exception error) { _session.ReportUiError(error); }
     }
 
     private async void UsageToggled(object sender, RoutedEventArgs args)
     {
-        if (!_rendering) { await _controller.SetUsageEnabledAsync(UsageToggle.IsOn); }
+        if (!_rendering) { await RunCommandAsync(() => _session.SetUsageEnabledAsync(UsageToggle.IsOn)); }
+    }
+
+    private async Task RunCommandAsync(Func<Task> command)
+    {
+        try { await command(); }
+        catch (Exception error) { _session.ReportUiError(error); }
     }
 }

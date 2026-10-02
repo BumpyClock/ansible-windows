@@ -1,5 +1,4 @@
 using DictationPoc.Core;
-using DictationPoc.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Windows.ApplicationModel.DataTransfer;
@@ -8,16 +7,19 @@ namespace DictationPoc;
 
 public sealed partial class DictationPage : Page
 {
-    private readonly DictationController _controller;
+    private readonly DictationSession _session;
+    private SessionSnapshot _state;
+    private UiSessionObserver? _observer;
     private IReadOnlyList<AudioModel>? _models;
     private bool _rendering;
 
-    public DictationPage()
+    internal DictationPage(DictationSession session)
     {
         InitializeComponent();
-        _controller = ((App)Application.Current).Controller;
-        Loaded += (_, _) => { _controller.Changed += Render; Render(); };
-        Unloaded += (_, _) => _controller.Changed -= Render;
+        _session = session;
+        _state = session.State;
+        Loaded += (_, _) => _observer = new UiSessionObserver(session, DispatcherQueue, state => { _state = state; Render(); });
+        Unloaded += (_, _) => { _observer?.Dispose(); _observer = null; };
     }
 
     private void Render()
@@ -25,55 +27,66 @@ public sealed partial class DictationPage : Page
         _rendering = true;
         try
         {
-            if (!ReferenceEquals(_models, _controller.Models))
+            if (!ReferenceEquals(_models, _state.Models))
             {
-                ModelBox.ItemsSource = _controller.Models.Select(model => model.DisplayName ?? model.Id).ToArray();
-                _models = _controller.Models;
+                ModelBox.ItemsSource = _state.Models.Select(model => model.DisplayName ?? model.Id).ToArray();
+                _models = _state.Models;
             }
-            ModelBox.SelectedIndex = _controller.SelectedIndex;
-            ModelBox.IsEnabled = _controller.Phase == DictationPhase.Ready;
-            RecordButton.IsEnabled = _controller.CanStart || _controller.CanFinish && !_controller.IsReplay;
-            RecordButton.Content = _controller.CanFinish && !_controller.IsReplay ? "Finish dictation" : "Start dictation";
-            CancelButton.IsEnabled = _controller.CanCancel;
-            CopyButton.IsEnabled = _controller.IsIdle && !string.IsNullOrWhiteSpace(_controller.Transcript);
-            ModelNote.Text = _controller.SelectedModel?.Mode == "offline"
+            ModelBox.SelectedIndex = _state.SelectedIndex;
+            ModelBox.IsEnabled = _state.Phase == DictationPhase.Ready;
+            RecordButton.IsEnabled = _state.CanStart || _state.CanFinish;
+            RecordButton.Content = _state.CanFinish ? "Finish dictation" : "Start dictation";
+            CancelButton.IsEnabled = _state.CanCancel;
+            CopyButton.IsEnabled = (_state.IsIdle || _state.Phase == DictationPhase.RecoveryRequired) &&
+                !string.IsNullOrWhiteSpace(_state.Transcript);
+            ModelNote.Text = _state.SelectedModel?.Mode == "offline"
                 ? "This model is for file transcription. Open Settings + verification to test it."
-                : _controller.SelectedModel?.Preview == "final-only"
-                    ? "This adapter returns text after Finish. The waveform still shows your real microphone input."
+                : _state.SelectedModel?.Preview == "final-only"
+                    ? "Text appears after Finish. The waveform still shows actual microphone input."
                     : "Live transcript timing depends on the model and your hardware.";
-            StatusInfo.Title = _controller.Notice.Title;
-            StatusInfo.Message = _controller.Notice.Message;
-            StatusInfo.Severity = _controller.Notice.Kind switch
+            StatusInfo.Title = _state.Notice.Title;
+            StatusInfo.Message = _state.Notice.Message;
+            StatusInfo.Severity = _state.Notice.Kind switch
             {
                 NoticeKind.Success => InfoBarSeverity.Success,
                 NoticeKind.Warning => InfoBarSeverity.Warning,
                 NoticeKind.Error => InfoBarSeverity.Error,
                 _ => InfoBarSeverity.Informational
             };
-            if (TranscriptBox.Text != _controller.Transcript) { TranscriptBox.Text = _controller.Transcript; }
+            if (TranscriptBox.Text != _state.Transcript) { TranscriptBox.Text = _state.Transcript; }
         }
         finally { _rendering = false; }
     }
 
     private void ModelChanged(object sender, SelectionChangedEventArgs args)
     {
-        if (!_rendering && ModelBox.SelectedIndex >= 0) { _controller.SelectModel(ModelBox.SelectedIndex); }
+        if (_rendering || ModelBox.SelectedIndex < 0) { return; }
+        try { _session.SelectModel(ModelBox.SelectedIndex); }
+        catch (Exception error) { _session.ReportUiError(error); }
     }
     private async void RecordClicked(object sender, RoutedEventArgs args)
     {
-        if (_controller.CanFinish) { await _controller.FinishAsync(); }
-        else { await _controller.StartDictationAsync(); }
+        try
+        {
+            if (_state.CanFinish) { await _session.FinishAsync(); }
+            else { await _session.StartDictationAsync(); }
+        }
+        catch (Exception error) { _session.ReportUiError(error); }
     }
-    private async void CancelClicked(object sender, RoutedEventArgs args) => await _controller.CancelAsync();
+    private async void CancelClicked(object sender, RoutedEventArgs args)
+    {
+        try { await _session.CancelAsync(); }
+        catch (Exception error) { _session.ReportUiError(error); }
+    }
     private void CopyClicked(object sender, RoutedEventArgs args)
     {
         try
         {
             var package = new DataPackage();
-            package.SetText(_controller.Transcript);
+            package.SetText(_state.Transcript);
             Clipboard.SetContent(package);
-            _controller.Notify(NoticeKind.Success, "Copied", "The transcript is ready to paste.");
+            _session.Notify(NoticeKind.Success, "Copied", "The transcript is ready to paste.");
         }
-        catch (Exception error) { _controller.Fail(error); }
+        catch (Exception error) { _session.ReportUiError(error); }
     }
 }

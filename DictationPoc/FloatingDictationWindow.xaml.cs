@@ -1,5 +1,5 @@
 using System.Runtime.InteropServices;
-using DictationPoc.Services;
+using DictationPoc.Core;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
@@ -10,7 +10,9 @@ namespace DictationPoc;
 
 public sealed partial class FloatingDictationWindow : Window
 {
-    private readonly DictationController _controller;
+    private readonly DictationSession _session;
+    private SessionSnapshot _state;
+    private readonly UiSessionObserver _observer;
     private readonly MainWindow _owner;
     private readonly List<Rectangle> _bars = [];
     private readonly double[] _levels = new double[44];
@@ -20,10 +22,11 @@ public sealed partial class FloatingDictationWindow : Window
     private bool _visible;
     private bool _reducedMotion;
 
-    internal FloatingDictationWindow(DictationController controller, MainWindow owner)
+    internal FloatingDictationWindow(DictationSession session, MainWindow owner)
     {
         InitializeComponent();
-        _controller = controller;
+        _session = session;
+        _state = session.State;
         _owner = owner;
         var presenter = OverlappedPresenter.Create();
         presenter.IsAlwaysOnTop = true;
@@ -49,15 +52,13 @@ public sealed partial class FloatingDictationWindow : Window
             _bars.Add(bar);
             WaveBars.Children.Add(bar);
         }
-        _timer.Tick += (_, _) => DurationText.Text = _controller.Elapsed.ToString(@"mm\:ss");
-        _controller.Changed += Render;
-        _controller.AudioLevel += UpdateWaveform;
+        _timer.Tick += (_, _) => DurationText.Text = _session.Elapsed.ToString(@"mm\:ss");
+        _observer = new UiSessionObserver(session, DispatcherQueue, state => { _state = state; Render(); }, UpdateWaveform);
         Closed += (_, _) =>
         {
             _closed = true;
             _timer.Stop();
-            _controller.Changed -= Render;
-            _controller.AudioLevel -= UpdateWaveform;
+            _observer.Dispose();
         };
         Render();
     }
@@ -82,31 +83,32 @@ public sealed partial class FloatingDictationWindow : Window
     private void Render()
     {
         if (_closed) { return; }
-        StateText.Text = _controller.Phase switch
+        StateText.Text = _state.Phase switch
         {
             DictationPhase.Preparing => "Preparing model",
-            DictationPhase.Recording => _controller.IsReplay ? "Live verification" : "Listening",
+            DictationPhase.Recording => _state.IsReplay ? "Live verification" : "Listening",
             DictationPhase.Finishing => "Finishing transcript",
             DictationPhase.Cancelling => "Waiting for native cancellation",
-            _ => _controller.Notice.Kind == NoticeKind.Error ? "Recognition failed" : "Transcript ready"
+            DictationPhase.Closing => "Releasing native resources",
+            _ => _state.Notice.Kind == NoticeKind.Error ? "Recognition failed" : "Transcript ready"
         };
-        ModelText.Text = _controller.SelectedModel?.DisplayName ?? "Native audio.cpp";
-        ModeText.Text = _controller.IsReplay ? "WAV REPLAY / LOCAL" : "MICROPHONE / LOCAL";
-        if (PreviewText.Text != _controller.Transcript)
+        ModelText.Text = _state.SelectedModel?.DisplayName ?? "Native audio.cpp";
+        ModeText.Text = _state.IsReplay ? "WAV REPLAY / LOCAL" : "MICROPHONE / LOCAL";
+        if (PreviewText.Text != _state.Transcript)
         {
-            PreviewText.Text = _controller.Transcript;
+            PreviewText.Text = _state.Transcript;
             PreviewText.Select(PreviewText.Text.Length, 0);
         }
-        PreviewText.PlaceholderText = _controller.Notice.Kind == NoticeKind.Error
+        PreviewText.PlaceholderText = _state.Notice.Kind == NoticeKind.Error
             ? "Recognition failed. The app shows the error details."
-            : _controller.SelectedModel?.Preview == "final-only"
+            : _state.SelectedModel?.Preview == "final-only"
             ? "This model returns text after Finish."
-            : _controller.Phase == DictationPhase.Preparing ? "Loading the native model before capturing audio..." : "Waiting for actual model output...";
-        FinishButton.IsEnabled = _controller.CanFinish && !_controller.IsReplay;
-        FinishButton.Visibility = _controller.IsLiveOperation ? Visibility.Visible : Visibility.Collapsed;
-        CancelButton.Content = _controller.IsLiveOperation ? "Cancel" : "Dismiss";
-        CancelButton.IsEnabled = _controller.CanCancel || _controller.IsIdle;
-        if (_controller.IsIdle) { _timer.Stop(); }
+            : _state.Phase == DictationPhase.Preparing ? "Loading the native model before capturing audio..." : "Waiting for actual model output...";
+        FinishButton.IsEnabled = _state.CanFinish;
+        FinishButton.Visibility = _state.IsLiveOperation ? Visibility.Visible : Visibility.Collapsed;
+        CancelButton.Content = _state.IsLiveOperation ? "Cancel" : "Dismiss";
+        CancelButton.IsEnabled = _state.CanCancel || _state.IsIdle || _state.Phase == DictationPhase.RecoveryRequired;
+        if (!_state.IsLiveOperation) { _timer.Stop(); }
     }
 
     private void UpdateWaveform(double level)
@@ -125,11 +127,19 @@ public sealed partial class FloatingDictationWindow : Window
         for (var index = 0; index < _bars.Count; index++) { _bars[index].Height = 2 + _levels[index] * 40; }
     }
 
-    private async void FinishClicked(object sender, RoutedEventArgs args) => await _controller.FinishAsync();
+    private async void FinishClicked(object sender, RoutedEventArgs args)
+    {
+        try { await _session.FinishAsync(); }
+        catch (Exception error) { _session.ReportUiError(error); }
+    }
     private async void CancelClicked(object sender, RoutedEventArgs args)
     {
-        if (_controller.IsLiveOperation) { await _controller.CancelAsync(); }
-        else { AppWindow.Hide(); _visible = false; }
+        try
+        {
+            if (_state.IsLiveOperation) { await _session.CancelAsync(); }
+            else { AppWindow.Hide(); _visible = false; }
+        }
+        catch (Exception error) { _session.ReportUiError(error); }
     }
 
     [LibraryImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
