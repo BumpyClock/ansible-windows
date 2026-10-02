@@ -295,7 +295,7 @@ public sealed class NativeAudioEngine : IRecognitionEngine
         if (_loadedId != model.Id)
         {
             ReleaseModel();
-            NativeOperation.Step(token, () => NativeMemory.CheckBudget(entry.Bytes, decodedBytes, _headroom, resident: false));
+            NativeOperation.Step(token, () => NativeMemory.CheckBudget(entry.Bytes, decodedBytes, _headroom));
             _modelLease = _integrity.OpenVerified(model.ModelPath, entry, token);
             token.ThrowIfCancellationRequested();
             var family = Marshal.StringToCoTaskMemUTF8(model.Family);
@@ -327,7 +327,6 @@ public sealed class NativeAudioEngine : IRecognitionEngine
                 Marshal.FreeCoTaskMem(family);
             }
         }
-        NativeOperation.Step(token, () => NativeMemory.CheckBudget(entry.Bytes, decodedBytes, _headroom, resident: true));
         NativeOperation.Step(token, () =>
         {
             if (NativeAudioApi.Supports(_model!.DangerousGetHandle(), "asr", mode) == 0)
@@ -336,6 +335,9 @@ public sealed class NativeAudioEngine : IRecognitionEngine
         var backend = new NativeAudioApi.BackendConfig { Threads = _threads };
         NativeOperation.Step(token, () =>
         {
+            // A cached model handle does not retain session-owned execution weights.
+            NativeMemory.CheckBudget(entry.Bytes, decodedBytes, _headroom);
+            token.ThrowIfCancellationRequested();
             NativeAudioApi.Check(NativeAudioApi.SessionCreate(_model!.DangerousGetHandle(), "asr", mode, in backend, 0, out var session),
                 "create the native recognition session");
             _session = new NativeAudioHandle(session, NativeHandleKind.Session);

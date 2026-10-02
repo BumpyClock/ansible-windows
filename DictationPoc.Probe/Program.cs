@@ -2,9 +2,31 @@ using System.Diagnostics;
 using System.Threading.Channels;
 using DictationPoc.Core;
 
+if (args is ["--cpu-check"])
+{
+    try
+    {
+        var features = NativeCpu.ReadFeatures();
+        Console.WriteLine($"Hardware and OS features: {features}");
+        Console.WriteLine(
+            $"Managed intrinsic availability (not hardware eligibility): " +
+            $"AVX2={System.Runtime.Intrinsics.X86.Avx2.IsSupported}, " +
+            $"FMA={System.Runtime.Intrinsics.X86.Fma.IsSupported}, " +
+            $"BMI1={System.Runtime.Intrinsics.X86.Bmi1.IsSupported}, BMI2={System.Runtime.Intrinsics.X86.Bmi2.IsSupported}");
+        NativeCpu.Validate(features);
+        Console.WriteLine("Native CPU eligibility: supported.");
+        return 0;
+    }
+    catch (PlatformNotSupportedException error)
+    {
+        Console.Error.WriteLine(error.Message);
+        return 1;
+    }
+}
+
 if (args.Length is < 4 or > 6 || args.Length == 6 && (args[5] != "--file-only" || args[4] == "--file-only"))
 {
-    Console.Error.WriteLine("Usage: DictationPoc.Probe <native-dll> <models-directory> <catalog-json> <16k-mono-PCM16.wav> [model-id] [--file-only]");
+    Console.Error.WriteLine("Usage: DictationPoc.Probe --cpu-check | <native-dll> <models-directory> <catalog-json> <16k-mono-PCM16.wav> [model-id] [--file-only]");
     return 2;
 }
 

@@ -30,17 +30,17 @@ internal static partial class NativeMemory
         return bytes;
     }
 
-    internal static long EstimateRequired(long modelBytes, long decodedBytes, int headroomMegabytes, bool resident)
+    internal static long EstimateRequired(long modelBytes, long decodedBytes, int headroomMegabytes)
     {
         if (modelBytes <= 0 || decodedBytes is < 0 or > MaximumDecodedBytes || headroomMegabytes < 0)
             throw new ArgumentOutOfRangeException(nameof(modelBytes));
         // Admission estimate, not an allocator guarantee: weights, decoded/native copies, resampling and graph workspace.
-        return checked((resident ? 0 : (long)Math.Ceiling(modelBytes * 1.15)) +
+        return checked((long)Math.Ceiling(modelBytes * 1.15) +
             3 * decodedBytes + MaximumStreamFrames * (sizeof(float) + sizeof(short)) +
             (512L + headroomMegabytes) * 1024 * 1024);
     }
 
-    public static void CheckBudget(long modelBytes, long decodedBytes, int headroomMegabytes, bool resident)
+    public static void CheckBudget(long modelBytes, long decodedBytes, int headroomMegabytes)
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -51,13 +51,19 @@ internal static partial class NativeMemory
         {
             throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), "Cannot inspect available memory before loading a model.");
         }
-        var required = EstimateRequired(modelBytes, decodedBytes, headroomMegabytes, resident);
-        if (status.AvailablePhysical < (ulong)required || status.AvailablePageFile < (ulong)required)
+        CheckBudget(modelBytes, decodedBytes, headroomMegabytes, status.AvailablePhysical, status.AvailablePageFile);
+    }
+
+    internal static void CheckBudget(
+        long modelBytes, long decodedBytes, int headroomMegabytes, ulong availablePhysical, ulong availableCommit)
+    {
+        var required = EstimateRequired(modelBytes, decodedBytes, headroomMegabytes);
+        if (availablePhysical < (ulong)required || availableCommit < (ulong)required)
         {
             throw new InvalidOperationException(
                 $"This operation needs an estimated {required / (1024.0 * 1024 * 1024):F1} GiB of available memory, including audio, workspace and headroom. " +
-                $"Windows reports {status.AvailablePhysical / (1024.0 * 1024 * 1024):F1} GiB physical and " +
-                $"{status.AvailablePageFile / (1024.0 * 1024 * 1024):F1} GiB commit capacity available. " +
+                $"Windows reports {availablePhysical / (1024.0 * 1024 * 1024):F1} GiB physical and " +
+                $"{availableCommit / (1024.0 * 1024 * 1024):F1} GiB commit capacity available. " +
                 "Free memory or choose a smaller model; the app does not force a load or silently change models.");
         }
     }

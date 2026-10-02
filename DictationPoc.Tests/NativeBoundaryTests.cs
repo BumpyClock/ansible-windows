@@ -207,33 +207,58 @@ public sealed class NativeBoundaryTests
     }
 
     [Fact]
-    public void MemoryAdmissionAccountsForInputCopiesEvenWithResidentWeights()
+    public void MemoryAdmissionAlwaysIncludesWeightsAlongsideInputCopies()
     {
-        var small = NativeMemory.EstimateRequired(60_000_000, 1024, 512, resident: false);
-        var large = NativeMemory.EstimateRequired(60_000_000, NativeMemory.MaximumDecodedBytes, 512, resident: false);
-        var resident = NativeMemory.EstimateRequired(60_000_000, NativeMemory.MaximumDecodedBytes, 512, resident: true);
+        var small = NativeMemory.EstimateRequired(60_000_000, 1024, 512);
+        var large = NativeMemory.EstimateRequired(60_000_000, NativeMemory.MaximumDecodedBytes, 512);
+        Assert.Equal(1_171_544_896, small);
         Assert.Equal(3 * (NativeMemory.MaximumDecodedBytes - 1024), large - small);
-        Assert.Equal(69_000_000, large - resident);
-        Assert.True(resident > 1024L * 1024 * 1024);
     }
 
-    [Theory]
-    [InlineData(false, true, true, true, true)]
-    [InlineData(true, false, true, true, true)]
-    [InlineData(true, true, false, true, true)]
-    [InlineData(true, true, true, false, true)]
-    [InlineData(true, true, true, true, false)]
-    public void UnsupportedCpuIsRejectedBeforeNativeLoading(bool windows, bool x64, bool avx2, bool fma, bool f16c)
+    [Fact]
+    public void SuccessfulCleanupCannotExemptTheSameModelsNextSessionFromWeightAdmission()
     {
-        var error = Assert.Throws<PlatformNotSupportedException>(() => NativeCpu.Validate(windows, x64, avx2, fma, f16c));
-        Assert.Contains("AVX2, FMA, F16C", error.Message);
+        const ulong fullBudget = 1_171_544_896;
+        const ulong weightFreeBudget = 1_102_544_896;
+        var available = fullBudget;
+        var cachedModel = new object();
+        var selectedModel = cachedModel;
+        var created = 0;
+        var active = false;
+        var resets = 0;
+        var invalidations = 0;
+
+        bool CreateSession()
+        {
+            Assert.Same(cachedModel, selectedModel);
+            NativeMemory.CheckBudget(60_000_000, 1024, 512, available, available);
+            created++;
+            active = true;
+            return true;
+        }
+
+        void Cleanup(bool success) => NativeOperation.Cleanup(success,
+            active ? () => resets++ : null, () => active = false, () => invalidations++);
+
+        Assert.True(NativeOperation.Run(CreateSession, Cleanup));
+        Assert.False(active);
+        Assert.Equal(1, resets);
+        Assert.Equal(0, invalidations);
+        available = weightFreeBudget;
+
+        var error = Assert.Throws<InvalidOperationException>(() => NativeOperation.Run(CreateSession, Cleanup));
+        Assert.Contains("available memory", error.Message);
+        Assert.Equal(1, created);
+        Assert.False(active);
+        Assert.Equal(1, resets);
+        Assert.Equal(1, invalidations);
     }
 
     [Theory]
-    [InlineData(false, true)]
-    [InlineData(true, false)]
-    public void CompilerScalarInstructionRequirementsAreAlsoChecked(bool bmi1, bool bmi2) =>
-        Assert.Throws<PlatformNotSupportedException>(() => NativeCpu.Validate(true, true, true, true, true, bmi1, bmi2));
+    [InlineData(1_171_544_895UL, 1_171_544_896UL)]
+    [InlineData(1_171_544_896UL, 1_171_544_895UL)]
+    public void SessionAdmissionRequiresBothPhysicalMemoryAndCommitCapacity(ulong physical, ulong commit) =>
+        Assert.Throws<InvalidOperationException>(() => NativeMemory.CheckBudget(60_000_000, 1024, 512, physical, commit));
 
     private sealed class ModuleLoader : INativeModuleLoader
     {
