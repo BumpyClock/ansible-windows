@@ -4,12 +4,15 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="Local Dictation">
-    <Grid Background="{ThemeResource CanvasBrush}">
+    <Window.SystemBackdrop>
+        <MicaBackdrop />
+    </Window.SystemBackdrop>
+    <Grid Background="Transparent">
         <Grid.RowDefinitions>
             <RowDefinition Height="48" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
-        <TitleBar x:Name="AppTitleBar" Title="Local Dictation" Height="48">
+        <TitleBar x:Name="AppTitleBar" Title="Local Dictation" Height="48" Background="Transparent">
             <TitleBar.IconSource>
                 <FontIconSource Glyph="&#xE720;" />
             </TitleBar.IconSource>
@@ -72,7 +75,7 @@
                     </StackPanel>
                 </Border>
             </Grid>
-            <Border Grid.Column="1" Background="{ThemeResource SurfaceBrush}"
+            <Border Grid.Column="1" Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource BorderBrush}" BorderThickness="1" CornerRadius="24">
                 <ContentControl x:Name="MainContent" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
             </Border>

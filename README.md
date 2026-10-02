@@ -6,6 +6,11 @@ The native WinUI shell includes **Insights**, **Dictation**, and
 **Settings + verification**. Its light neutral surfaces and teal accents follow
 the supplied visual direction without copying another product's branding.
 
+The main window uses the native Mica system backdrop. The main content container
+uses WinUI's in-app acrylic resource, while the transient preview uses a desktop
+acrylic backdrop. Transparent root surfaces keep these materials visible; WinUI
+owns their system fallback behavior.
+
 Insights uses completed local sessions only. It shows recognized words, recorded
 dictation pace, model usage, and a daily activity calendar. It does not invent
 correction counts, accuracy scores, rankings, or leaderboard data. Pace uses
