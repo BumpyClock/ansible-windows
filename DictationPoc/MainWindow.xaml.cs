@@ -59,8 +59,8 @@ public sealed partial class MainWindow : Window
         MainContent.Content = page switch { "settings" => _settings, "dictation" => _dictation, _ => _insights };
         foreach (var button in new[] { InsightsNav, DictationNav, SettingsNav })
         {
-            button.Background = (string)button.Tag == page
-                ? (Brush)Application.Current.Resources["SelectionBrush"] : new SolidColorBrush(Colors.Transparent);
+            button.Style = (Style)Application.Current.Resources[
+                (string)button.Tag == page ? "SelectedNavigationButtonStyle" : "NavigationButtonStyle"];
             AutomationProperties.SetHelpText(button, (string)button.Tag == page ? "Current page" : "");
         }
     }

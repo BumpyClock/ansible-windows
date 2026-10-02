@@ -1,12 +1,10 @@
 using System.Globalization;
 using DictationPoc.Core;
-using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Windows.Foundation;
-using Windows.UI;
 
 namespace DictationPoc;
 
@@ -25,17 +23,22 @@ public sealed partial class InsightsPage : Page
         _session = session;
         _navigate = navigate;
         _state = session.State;
-        Loaded += (_, _) => _observer = new UiSessionObserver(session, DispatcherQueue, state =>
+        Loaded += (_, _) =>
         {
-            _state = state;
-            RenderState();
-            if (!ReferenceEquals(_usage, state.Usage) || !ReferenceEquals(_models, state.Models) || state.UsageError is not null)
+            _usage = null;
+            _models = null;
+            _observer = new UiSessionObserver(session, DispatcherQueue, state =>
             {
-                _usage = state.Usage;
-                _models = state.Models;
-                RenderUsage();
-            }
-        });
+                _state = state;
+                RenderState();
+                if (!ReferenceEquals(_usage, state.Usage) || !ReferenceEquals(_models, state.Models) || state.UsageError is not null)
+                {
+                    _usage = state.Usage;
+                    _models = state.Models;
+                    RenderUsage();
+                }
+            });
+        };
         Unloaded += (_, _) => { _observer?.Dispose(); _observer = null; };
     }
 
@@ -118,9 +121,7 @@ public sealed partial class InsightsPage : Page
             var bar = new ProgressBar
             {
                 Minimum = 0, Maximum = summary.Sessions, Value = model.Sessions,
-                Foreground = (Brush)Application.Current.Resources["AccentBrush"],
-                Background = (Brush)Application.Current.Resources["InactiveChartBrush"],
-                Height = 8
+                Style = (Style)Application.Current.Resources["ModelUsageProgressStyle"]
             };
             AutomationProperties.SetName(bar, $"{label}: {model.Sessions} sessions, {model.Words} recognized words");
             stack.Children.Add(row);
@@ -133,7 +134,7 @@ public sealed partial class InsightsPage : Page
             {
                 Text = "Your model comparisons will appear here.",
                 TextWrapping = TextWrapping.Wrap,
-                Foreground = (Brush)Application.Current.Resources["SecondaryTextBrush"],
+                Style = (Style)Application.Current.Resources["SecondaryTextStyle"],
                 Margin = new Thickness(0, 32, 0, 32)
             });
         }
@@ -176,17 +177,17 @@ public sealed partial class InsightsPage : Page
             {
                 var day = date.AddDays(row);
                 var count = summary.Activity.GetValueOrDefault(day);
-                var color = count switch
+                var styleKey = day > today ? "ActivityFutureCellStyle" : count switch
                 {
-                    0 => Color.FromArgb(255, 209, 206, 196),
-                    1 => Color.FromArgb(255, 205, 235, 229),
-                    2 => Color.FromArgb(255, 121, 193, 183),
-                    _ => Color.FromArgb(255, 24, 92, 94)
+                    0 => "ActivityEmptyCellStyle",
+                    1 => "ActivityLowCellStyle",
+                    2 => "ActivityMediumCellStyle",
+                    _ => "ActivityHighCellStyle"
                 };
                 var cell = new Border
                 {
-                    Background = new SolidColorBrush(color), CornerRadius = new CornerRadius(3),
-                    Margin = new Thickness(2), Opacity = day > today ? 0.35 : 1
+                    Style = (Style)Application.Current.Resources[styleKey], CornerRadius = new CornerRadius(3),
+                    Margin = new Thickness(2)
                 };
                 ToolTipService.SetToolTip(cell, $"{day:MMM d, yyyy}: {count} completed sessions");
                 Grid.SetRow(cell, row + 1);

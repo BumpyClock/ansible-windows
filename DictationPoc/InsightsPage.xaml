@@ -92,8 +92,8 @@
                         <StackPanel Orientation="Horizontal" Spacing="5">
                             <TextBlock Text="Less" FontSize="11" Foreground="{ThemeResource SecondaryTextBrush}" Margin="0,0,6,0" />
                             <Border Width="14" Height="14" CornerRadius="3" Background="{ThemeResource InactiveChartBrush}" />
-                            <Border Width="14" Height="14" CornerRadius="3" Background="#CDEBE5" />
-                            <Border Width="14" Height="14" CornerRadius="3" Background="#79C1B7" />
+                            <Border Width="14" Height="14" CornerRadius="3" Background="{ThemeResource ActivityLowBrush}" />
+                            <Border Width="14" Height="14" CornerRadius="3" Background="{ThemeResource ActivityMediumBrush}" />
                             <Border Width="14" Height="14" CornerRadius="3" Background="{ThemeResource AccentBrush}" />
                             <TextBlock Text="More" FontSize="11" Foreground="{ThemeResource SecondaryTextBrush}" Margin="6,0,0,0" />
                         </StackPanel>

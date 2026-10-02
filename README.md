@@ -10,6 +10,10 @@ The main window uses the native Mica system backdrop. The main content container
 uses WinUI's in-app acrylic resource, while the transient preview uses a desktop
 acrylic backdrop. Transparent root surfaces keep these materials visible; WinUI
 owns their system fallback behavior.
+Semantic color and chart tokens have Light, Dark, and HighContrast definitions.
+The app follows the system theme instead of forcing Light. Dynamic navigation,
+model bars, activity cells, and preview waveform use theme-resource styles so
+they do not cache brushes from a previous theme.
 
 Insights uses completed local sessions only. It shows recognized words, recorded
 dictation pace, model usage, and a daily activity calendar. It does not invent

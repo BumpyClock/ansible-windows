@@ -46,7 +46,7 @@ public sealed partial class FloatingDictationWindow : Window
             var bar = new Rectangle
             {
                 Width = 5, Height = 2, RadiusX = 2.5, RadiusY = 2.5,
-                Fill = (Brush)Application.Current.Resources["AccentBrush"],
+                Style = (Style)Application.Current.Resources["PreviewWaveformBarStyle"],
                 VerticalAlignment = VerticalAlignment.Center
             };
             _bars.Add(bar);

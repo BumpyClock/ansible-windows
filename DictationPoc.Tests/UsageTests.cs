@@ -120,6 +120,18 @@ public sealed class UsageTests
         Assert.Equal(0, summary.TotalWords);
     }
 
+    [Fact]
+    public void RevisitedUsageCanChangeStreakWithoutChangingItsRecords()
+    {
+        var entries = new[] { Entry(1, "moonshine", UsageSource.Dictation, 8, 4) };
+        var beforeMidnight = UsageSummary.Create(entries, new DateOnly(2026, 10, 2), TimeZoneInfo.Utc);
+        var nextDay = UsageSummary.Create(entries, new DateOnly(2026, 10, 3), TimeZoneInfo.Utc);
+        Assert.Equal(1, beforeMidnight.CurrentStreak);
+        Assert.Equal(0, nextDay.CurrentStreak);
+        Assert.Equal(beforeMidnight.TotalWords, nextDay.TotalWords);
+        Assert.Equal(beforeMidnight.Sessions, nextDay.Sessions);
+    }
+
     private static UsageEntry Entry(int day, string model, UsageSource source, int words, double seconds) => new()
     {
         Id = Guid.NewGuid(),
