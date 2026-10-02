@@ -64,6 +64,12 @@ public sealed class DictationSession
     public Task<SessionOutcome> TranscribeFileAsync(string path) => Begin(SessionActivity.File, path);
     public Task<SessionOutcome> SetUsageEnabledAsync(bool enabled) =>
         Begin(SessionActivity.Preferences, preference: enabled);
+    public Task<SessionOutcome> MaintainModelsAsync(
+        Func<CancellationToken, Task> maintenance, string? directory = null)
+    {
+        ArgumentNullException.ThrowIfNull(maintenance);
+        return Begin(SessionActivity.ModelMaintenance, directory ?? State.ModelsDirectory, maintenance: maintenance);
+    }
 
     public void SelectModel(int index)
     {
@@ -112,7 +118,8 @@ public sealed class DictationSession
     public void ReportUiError(Exception error) => Notify(NoticeKind.Error, "Operation failed", error.Message);
 
     private Task<SessionOutcome> Begin(
-        SessionActivity activity, string? path = null, bool initializeUsage = false, bool? preference = null)
+        SessionActivity activity, string? path = null, bool initializeUsage = false, bool? preference = null,
+        Func<CancellationToken, Task>? maintenance = null)
     {
         Operation operation;
         SessionSnapshot state;
@@ -129,6 +136,7 @@ public sealed class DictationSession
                 }
             }
             operation = new Operation(activity, model, _state.Language, path, initializeUsage, preference, _timeout, _time);
+            operation.Maintenance = maintenance;
             _operation = operation;
             _lastElapsed = TimeSpan.Zero;
             state = SetState(_state with
@@ -139,10 +147,11 @@ public sealed class DictationSession
                     SessionActivity.Connecting => DictationPhase.Connecting,
                     SessionActivity.File => DictationPhase.Transcribing,
                     SessionActivity.Preferences => DictationPhase.UpdatingPreferences,
+                    SessionActivity.ModelMaintenance => DictationPhase.MaintainingModels,
                     _ => DictationPhase.Preparing
                 },
-                Transcript = activity is SessionActivity.Connecting or SessionActivity.Preferences ? _state.Transcript : "",
-                Result = activity is SessionActivity.Connecting or SessionActivity.Preferences ? _state.Result : null,
+                Transcript = activity is SessionActivity.Connecting or SessionActivity.Preferences or SessionActivity.ModelMaintenance ? _state.Transcript : "",
+                Result = activity is SessionActivity.Connecting or SessionActivity.Preferences or SessionActivity.ModelMaintenance ? _state.Result : null,
                 Notice = new(NoticeKind.Information, "Preparing operation",
                     "New work is admitted only when the current session has released its resources.")
             });
@@ -163,6 +172,7 @@ public sealed class DictationSession
             {
                 case SessionActivity.Connecting: await ConnectCoreAsync(operation); break;
                 case SessionActivity.Preferences: await UpdatePreferenceAsync(operation); break;
+                case SessionActivity.ModelMaintenance: await MaintainModelsCoreAsync(operation); break;
                 case SessionActivity.File: await RecognizeFileAsync(operation); break;
                 default: await RecognizeLiveAsync(operation); break;
             }
@@ -218,7 +228,10 @@ public sealed class DictationSession
                 SessionOutcomeKind.Failed => new(NoticeKind.Error, "Operation failed", errorResult?.Message ?? "The operation failed."),
                 _ when operation.UsageWarning is not null => new(NoticeKind.Warning, "Transcript ready; statistics unavailable", operation.UsageWarning),
                 _ when operation.Result is not null => new(NoticeKind.Success, "Transcript ready", "Recognition completed and owned resources were released."),
-                _ when operation.Activity == SessionActivity.Connecting => new(NoticeKind.Success, "Native backend ready", $"{_state.Models.Count} installed models; one resident model at a time."),
+                _ when operation.Activity is SessionActivity.Connecting or SessionActivity.ModelMaintenance && _engine is null =>
+                    new(NoticeKind.Information, "No models installed", "Open Models to download verified weights. Recognition stays disconnected."),
+                _ when operation.Activity is SessionActivity.Connecting or SessionActivity.ModelMaintenance =>
+                    new(NoticeKind.Success, "Native backend ready", $"{_state.Models.Count} installed models; one resident model at a time."),
                 _ => new(NoticeKind.Success, "Preference saved", "Local collection preferences were updated.")
             };
             state = SetState(_state with
@@ -254,33 +267,73 @@ public sealed class DictationSession
         operation.Candidate = candidate;
         var models = await candidate.ConnectAsync(operation.Token);
         operation.Token.ThrowIfCancellationRequested();
+        var modelsDirectory = candidate.ModelsDirectory;
+        var backendVersion = candidate.Version;
         IRecognitionEngine? previous;
+        SessionSnapshot detached;
         lock (_gate)
         {
             EnsureCurrent(operation);
             previous = _engine;
             operation.Previous = previous;
             _engine = null;
+            detached = SetState(_state with { Models = [], SelectedIndex = -1, BackendVersion = "" });
         }
+        Publish(detached);
         if (previous is not null)
         {
             await previous.DisposeAsync();
             operation.Previous = null;
         }
         operation.Token.ThrowIfCancellationRequested();
+        if (models.Count == 0)
+        {
+            await candidate.DisposeAsync();
+            operation.Candidate = null;
+        }
         SessionSnapshot state;
         lock (_gate)
         {
             EnsureCurrent(operation);
-            _engine = candidate;
+            _engine = models.Count == 0 ? null : candidate;
             operation.Candidate = null;
             state = SetState(_state with
             {
-                Models = Array.AsReadOnly(models.ToArray()), SelectedIndex = models.Count == 0 ? -1 : 0,
-                ModelsDirectory = candidate.ModelsDirectory, BackendVersion = candidate.Version
+                Models = Array.AsReadOnly(models.ToArray()),
+                SelectedIndex = models.Count == 0 ? -1 : Math.Max(0,
+                    models.ToList().FindIndex(model => model.Id == operation.Model?.Id)),
+                ModelsDirectory = modelsDirectory, BackendVersion = backendVersion
             });
         }
         Publish(state);
+    }
+
+    private async Task MaintainModelsCoreAsync(Operation operation)
+    {
+        SessionSnapshot state;
+        lock (_gate)
+        {
+            EnsureCurrent(operation);
+            operation.Previous = _engine;
+            _engine = null;
+            state = SetState(_state with
+            {
+                Models = [], SelectedIndex = -1, BackendVersion = "",
+                ModelsDirectory = Path.GetFullPath(operation.Path!),
+                Notice = new(NoticeKind.Information, "Maintaining models",
+                    "Releasing the resident model before changing installed files.")
+            });
+        }
+        Publish(state);
+        if (operation.Previous is not null)
+        {
+            await operation.Previous.DisposeAsync();
+            operation.Previous = null;
+        }
+        operation.Token.ThrowIfCancellationRequested();
+        await operation.Maintenance!(operation.Token);
+        operation.Token.ThrowIfCancellationRequested();
+        await ConnectCoreAsync(operation);
     }
 
     private async Task UpdatePreferenceAsync(Operation operation)
@@ -666,6 +719,7 @@ public sealed class DictationSession
         public string? Path { get; }
         public bool InitializeUsage { get; }
         public bool? Preference { get; }
+        public Func<CancellationToken, Task>? Maintenance { get; set; }
         public CancellationTokenSource Cancellation { get; }
         public CancellationToken Token => Cancellation.Token;
         public bool CancellationRequested => Volatile.Read(ref _cancellationRequested) != 0;

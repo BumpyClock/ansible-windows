@@ -15,6 +15,7 @@ public sealed partial class MainWindow : Window
     private readonly InsightsPage _insights;
     private readonly DictationPage _dictation;
     private readonly MainPage _settings;
+    private readonly ModelManagementPage _models;
     private readonly UiSessionObserver _observer;
     private FloatingDictationWindow? _floating;
     private bool _initialized;
@@ -23,13 +24,14 @@ public sealed partial class MainWindow : Window
     private bool _closing;
     private bool _popupFailed;
 
-    internal MainWindow(DictationSession session, AppPaths paths)
+    internal MainWindow(DictationSession session, AppPaths paths, HttpClient modelDownloads)
     {
         InitializeComponent();
         _session = session;
         _insights = new InsightsPage(session, Navigate);
         _dictation = new DictationPage(session);
         _settings = new MainPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this));
+        _models = new ModelManagementPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this), modelDownloads);
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
@@ -48,7 +50,12 @@ public sealed partial class MainWindow : Window
     {
         if (_initialized) { return; }
         _initialized = true;
-        try { await _session.InitializeAsync(); }
+        try
+        {
+            await _session.InitializeAsync();
+            if (_session.State.Phase == DictationPhase.Disconnected && _session.State.Models.Count == 0)
+                Navigate("models");
+        }
         catch (Exception error) { _session.ReportUiError(error); }
     }
 
@@ -56,8 +63,8 @@ public sealed partial class MainWindow : Window
 
     private void Navigate(string page)
     {
-        MainContent.Content = page switch { "settings" => _settings, "dictation" => _dictation, _ => _insights };
-        foreach (var button in new[] { InsightsNav, DictationNav, SettingsNav })
+        MainContent.Content = page switch { "settings" => _settings, "dictation" => _dictation, "models" => _models, _ => _insights };
+        foreach (var button in new[] { InsightsNav, DictationNav, SettingsNav, ModelsNav })
         {
             button.Style = (Style)Application.Current.Resources[
                 (string)button.Tag == page ? "SelectedNavigationButtonStyle" : "NavigationButtonStyle"];
@@ -69,7 +76,7 @@ public sealed partial class MainWindow : Window
     {
         if (_closed) { return; }
         SidebarStatus.Text = state.Phase == DictationPhase.Disconnected
-            ? "Open Settings to load the native backend."
+            ? "Open Speech models to download or verify local weights."
             : state.Phase is DictationPhase.Closing or DictationPhase.Closed
                 ? "Releasing owned native resources."
                 : $"{state.Models.Count} models available / native CPU";
@@ -98,7 +105,7 @@ public sealed partial class MainWindow : Window
         _closing = true;
         try
         {
-            await _session.CloseAsync();
+            await Task.WhenAll(_session.CloseAsync(), _models.DisposeAsync().AsTask());
             _allowClose = true;
             _floating?.Close();
             Close();

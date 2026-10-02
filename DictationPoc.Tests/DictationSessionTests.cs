@@ -312,6 +312,185 @@ public sealed class DictationSessionTests
 
     private static readonly AudioModel Model = new() { Id = "test", Family = "test", Mode = "streaming" };
 
+    [Fact]
+    public async Task EmptyConnectionClearsSelectionAndRemainsDisconnected()
+    {
+        var connects = 0;
+        var engine = new FakeEngine
+        {
+            Connecting = _ => Task.FromResult<IReadOnlyList<AudioModel>>(++connects == 1 ? [Model] : [])
+        };
+        var session = Create(engine);
+        await session.InitializeAsync();
+        Assert.NotNull(session.State.SelectedModel);
+        await session.ConnectAsync("empty");
+        Assert.Equal(DictationPhase.Disconnected, session.State.Phase);
+        Assert.Empty(session.State.Models);
+        Assert.Equal(-1, session.State.SelectedIndex);
+        Assert.Null(session.State.SelectedModel);
+        Assert.False(session.State.CanStart);
+        await session.CloseAsync();
+    }
+
+    [Fact]
+    public async Task MaintenanceReleasesNativeOwnerBeforeMutationAndReconnects()
+    {
+        var previous = new FakeEngine();
+        var replacement = new FakeEngine();
+        var engines = new Queue<IRecognitionEngine>([previous, replacement]);
+        var session = new DictationSession(_ => engines.Dequeue(), new FakeCaptureFactory(),
+            new FakeInput(), new FakeUsageStore(), "models");
+        await session.InitializeAsync();
+        var outcome = await session.MaintainModelsAsync(_ =>
+        {
+            Assert.Equal(1, previous.Disposals);
+            Assert.Equal(DictationPhase.MaintainingModels, session.State.Phase);
+            Assert.Empty(session.State.Models);
+            Assert.Null(session.State.SelectedModel);
+            return Task.CompletedTask;
+        });
+        Assert.Equal(SessionOutcomeKind.Completed, outcome.Kind);
+        Assert.Equal(DictationPhase.Ready, session.State.Phase);
+        Assert.NotNull(session.State.SelectedModel);
+        await session.CloseAsync();
+        Assert.Equal(1, replacement.Disposals);
+    }
+
+    [Fact]
+    public async Task MaintenanceRemovingLastModelDoesNotFabricateReady()
+    {
+        var previous = new FakeEngine();
+        var empty = new FakeEngine { Connecting = _ => Task.FromResult<IReadOnlyList<AudioModel>>([]) };
+        var engines = new Queue<IRecognitionEngine>([previous, empty]);
+        var session = new DictationSession(_ => engines.Dequeue(), new FakeCaptureFactory(),
+            new FakeInput(), new FakeUsageStore(), "models");
+        await session.InitializeAsync();
+        await session.MaintainModelsAsync(_ => Task.CompletedTask);
+        Assert.Equal(DictationPhase.Disconnected, session.State.Phase);
+        Assert.Null(session.State.SelectedModel);
+        Assert.Empty(session.State.Models);
+        Assert.Equal(1, previous.Disposals);
+        Assert.Equal(1, empty.Disposals);
+        await session.CloseAsync();
+    }
+
+    [Fact]
+    public async Task CaptureAndMaintenanceCannotAcquireTheSameIdleSlot()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var capture = new FakeCaptureFactory();
+        var session = Create(new FakeEngine(), capture);
+        await session.InitializeAsync();
+        var maintenance = session.MaintainModelsAsync(async token =>
+        {
+            entered.SetResult();
+            await release.Task.WaitAsync(token);
+        });
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => session.StartDictationAsync());
+        Assert.Equal(0, capture.Starts);
+        release.SetResult();
+        await maintenance;
+        var recording = session.StartDictationAsync();
+        await WaitForStateAsync(session, DictationPhase.Recording);
+        var invoked = false;
+        await Assert.ThrowsAsync<InvalidOperationException>(() => session.MaintainModelsAsync(_ =>
+        {
+            invoked = true;
+            return Task.CompletedTask;
+        }));
+        Assert.False(invoked);
+        await session.CancelAsync();
+        await recording;
+        await session.CloseAsync();
+    }
+
+    [Fact]
+    public async Task FailedMaintenanceLeavesNoStaleNativeSelection()
+    {
+        var engine = new FakeEngine();
+        var session = Create(engine);
+        await session.InitializeAsync();
+        var outcome = await session.MaintainModelsAsync(_ => throw new IOException("owned mutation failed"));
+        Assert.Equal(SessionOutcomeKind.Failed, outcome.Kind);
+        Assert.Equal(DictationPhase.Disconnected, session.State.Phase);
+        Assert.Empty(session.State.Models);
+        Assert.Null(session.State.SelectedModel);
+        Assert.Equal(1, engine.Disposals);
+        await session.CloseAsync();
+    }
+
+    [Fact]
+    public async Task ReconnectionCleanupFailureClearsTheDetachedSelection()
+    {
+        var previous = new FakeEngine { FailDisposal = true };
+        var empty = new FakeEngine { Connecting = _ => Task.FromResult<IReadOnlyList<AudioModel>>([]) };
+        var engines = new Queue<IRecognitionEngine>([previous, empty]);
+        var session = new DictationSession(_ => engines.Dequeue(), new FakeCaptureFactory(),
+            new FakeInput(), new FakeUsageStore(), "models");
+        await session.InitializeAsync();
+        var outcome = await session.ConnectAsync("empty");
+        Assert.Equal(SessionOutcomeKind.Failed, outcome.Kind);
+        Assert.Equal(DictationPhase.RecoveryRequired, session.State.Phase);
+        Assert.Empty(session.State.Models);
+        Assert.Null(session.State.SelectedModel);
+        previous.FailDisposal = false;
+        await session.CloseAsync();
+    }
+
+    [Fact]
+    public async Task CancelledEmptyReconnectCannotRestoreTheDetachedSelection()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var previous = new FakeEngine();
+        var empty = new FakeEngine
+        {
+            Connecting = _ => Task.FromResult<IReadOnlyList<AudioModel>>([]),
+            Disposing = async () => { entered.TrySetResult(); await release.Task; }
+        };
+        var engines = new Queue<IRecognitionEngine>([previous, empty]);
+        var session = new DictationSession(_ => engines.Dequeue(), new FakeCaptureFactory(),
+            new FakeInput(), new FakeUsageStore(), "models");
+        await session.InitializeAsync();
+        var reconnect = session.ConnectAsync("empty");
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await session.CancelAsync();
+        release.SetResult();
+        Assert.Equal(SessionOutcomeKind.Cancelled, (await reconnect).Kind);
+        Assert.Equal(DictationPhase.Disconnected, session.State.Phase);
+        Assert.Empty(session.State.Models);
+        Assert.Null(session.State.SelectedModel);
+        await session.CloseAsync();
+    }
+
+    [Fact]
+    public async Task RejectedFolderMaintenanceCannotWritePreferences()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "LocalVoiceFolderTest", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var paths = DictationPoc.AppPaths.Create(directory, Path.Combine(directory, "user"));
+            var original = Path.Combine(directory, "original");
+            await paths.SaveModelsDirectoryAsync(original, CancellationToken.None);
+            var session = Create(new FakeEngine());
+            await session.InitializeAsync();
+            var recording = session.StartDictationAsync();
+            await WaitForStateAsync(session, DictationPhase.Recording);
+            await Assert.ThrowsAsync<InvalidOperationException>(() => session.MaintainModelsAsync(
+                token => paths.SaveModelsDirectoryAsync(Path.Combine(directory, "new"), token),
+                Path.Combine(directory, "new")));
+            Assert.Equal(original, DictationPoc.AppPaths.Create(directory, Path.Combine(directory, "user")).ModelsDirectory);
+            Assert.Equal(DictationPhase.Recording, session.State.Phase);
+            await session.CancelAsync();
+            await recording;
+            await session.CloseAsync();
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
     private static DictationSession Create(
         FakeEngine engine, FakeCaptureFactory? capture = null,
         FakeUsageStore? usage = null, FakeInput? input = null) =>
@@ -338,11 +517,13 @@ public sealed class DictationSessionTests
         public string Version => "test";
         public RecognitionResult Result { get; init; } = new("hello world", "hello world");
         public Func<CancellationToken, Task<IReadOnlyList<AudioModel>>>? Connecting { get; init; }
+        public Func<Task>? Disposing { get; init; }
         public Func<AudioModel, ChannelReader<byte[]>, CancellationToken, Action?, Task<RecognitionResult>>? Streaming { get; init; }
         public TaskCompletionSource ConnectEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource StreamEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource StreamCompleted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public int Disposals;
+        public bool FailDisposal { get; set; }
         public int StreamStarts;
         public int FinishedStreams;
         public IProgress<TranscriptUpdate>? LastProgress;
@@ -369,7 +550,12 @@ public sealed class DictationSessionTests
             StreamCompleted.TrySetResult();
             return Result;
         }
-        public ValueTask DisposeAsync() { Disposals++; return ValueTask.CompletedTask; }
+        public async ValueTask DisposeAsync()
+        {
+            Disposals++;
+            if (FailDisposal) { throw new IOException("native read lease still owned"); }
+            if (Disposing is not null) { await Disposing(); }
+        }
     }
 
     private sealed class FakeCaptureFactory : IAudioCaptureFactory

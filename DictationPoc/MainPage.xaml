@@ -16,7 +16,7 @@
                                TextWrapping="Wrap" Foreground="{ThemeResource SecondaryTextBrush}" />
                     <Grid ColumnSpacing="12">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                        <TextBox x:Name="ModelsFolderBox" Header="Verified model folder" />
+                        <TextBox x:Name="ModelsFolderBox" Header="Model folder (change in Speech models)" IsReadOnly="True" />
                         <Button x:Name="ConnectButton" Grid.Column="1" Content="Load models" Click="ConnectClicked"
                                 VerticalAlignment="Bottom" MinHeight="36" />
                     </Grid>

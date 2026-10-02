@@ -3,15 +3,15 @@ using System.Text.Json.Serialization;
 
 namespace DictationPoc.Core;
 
-internal sealed record NativeModelCatalog
+public sealed record NativeModelCatalog
 {
     [JsonPropertyName("schema_version")]
     public int SchemaVersion { get; init; }
     [JsonPropertyName("models")]
     public required List<NativeModelEntry> Models { get; init; }
 
-    public static async Task<NativeModelInventory> ReadAsync(
-        string catalogPath, string directory, CancellationToken cancellationToken)
+    public static async Task<IReadOnlyList<NativeModelEntry>> LoadAsync(
+        string catalogPath, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         using var stream = File.OpenRead(catalogPath);
@@ -32,22 +32,41 @@ internal sealed record NativeModelCatalog
         {
             throw new InvalidDataException("The native model catalog is invalid.");
         }
-        directory = Path.GetFullPath(directory);
-        List<AudioModel> models = [];
+        ValidateEntries(catalog.Models);
+        return catalog.Models.AsReadOnly();
+    }
+
+    internal static void ValidateEntries(IReadOnlyList<NativeModelEntry> models)
+    {
         var entries = new Dictionary<string, NativeModelEntry>(StringComparer.OrdinalIgnoreCase);
         var filenames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var entry in catalog.Models)
+        foreach (var entry in models)
         {
-            cancellationToken.ThrowIfCancellationRequested();
             if (entry is null || !IsIdentifier(entry.Id) || !IsIdentifier(entry.Family) ||
                 !IsFilename(entry.Filename) || entry.Bytes <= 0 ||
                 entry.Mode is not "offline" and not "streaming" ||
                 entry.Preview is not (null or "final-only" or "live" or "buffered") ||
                 entry.Sha256 is null || entry.Sha256.Length != 64 || !entry.Sha256.All(char.IsAsciiHexDigit) ||
-                !entries.TryAdd(entry.Id, entry) || !filenames.Add(entry.Filename))
+                string.Equals(entry.Filename, ".localvoice-models.lock", StringComparison.OrdinalIgnoreCase) ||
+                !entries.TryAdd(entry.Id, entry) || !filenames.Add(entry.Filename) ||
+                !filenames.Add(entry.Filename + ".partial") || !filenames.Add(entry.Filename + ".partial.json"))
             {
                 throw new InvalidDataException("The native model catalog contains an invalid entry.");
             }
+            if (entry.Repo is not null || entry.Revision is not null || entry.RemoteFile is not null)
+                _ = entry.DownloadUri;
+        }
+    }
+
+    internal static async Task<NativeModelInventory> ReadAsync(
+        string catalogPath, string directory, CancellationToken cancellationToken)
+    {
+        var definitions = await LoadAsync(catalogPath, cancellationToken);
+        directory = Path.GetFullPath(directory);
+        List<AudioModel> models = [];
+        foreach (var entry in definitions)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
             var path = Path.Combine(directory, entry.Filename);
             if (!File.Exists(path))
             {
@@ -55,7 +74,7 @@ internal sealed record NativeModelCatalog
             }
             if (new FileInfo(path).Length != entry.Bytes)
             {
-                throw new InvalidDataException($"Model '{entry.Id}' has an unexpected size. Re-run the verified model setup.");
+                continue;
             }
             models.Add(new AudioModel
             {
@@ -63,11 +82,8 @@ internal sealed record NativeModelCatalog
                 ModelPath = path, Preview = entry.Preview, DisplayName = entry.DisplayName
             });
         }
-        if (models.Count == 0)
-        {
-            throw new FileNotFoundException("No models are installed in this folder. Run tools\\Setup-AudioBackend.ps1.");
-        }
-        return new NativeModelInventory(models.AsReadOnly(), entries);
+        return new NativeModelInventory(models.AsReadOnly(),
+            definitions.ToDictionary(entry => entry.Id, StringComparer.OrdinalIgnoreCase));
     }
 
     private static bool IsIdentifier(string? value) => !string.IsNullOrWhiteSpace(value) &&
@@ -89,7 +105,7 @@ internal sealed record NativeModelCatalog
 internal sealed record NativeModelInventory(
     IReadOnlyList<AudioModel> Models, IReadOnlyDictionary<string, NativeModelEntry> Entries);
 
-internal sealed record NativeModelEntry
+public sealed record NativeModelEntry
 {
     [JsonPropertyName("id")] public required string Id { get; init; }
     [JsonPropertyName("family")] public required string Family { get; init; }
@@ -99,6 +115,35 @@ internal sealed record NativeModelEntry
     [JsonPropertyName("sha256")] public required string Sha256 { get; init; }
     [JsonPropertyName("preview")] public string? Preview { get; init; }
     [JsonPropertyName("display_name")] public string? DisplayName { get; init; }
+    [JsonPropertyName("repo")] public string? Repo { get; init; }
+    [JsonPropertyName("revision")] public string? Revision { get; init; }
+    [JsonPropertyName("remote_file")] public string? RemoteFile { get; init; }
+    [JsonPropertyName("license")] public string? License { get; init; }
+    [JsonPropertyName("description")] public string? Description { get; init; }
+    [JsonPropertyName("languages")] public string? Languages { get; init; }
+    [JsonPropertyName("precision")] public string? Precision { get; init; }
+    [JsonPropertyName("license_notes")] public string? LicenseNotes { get; init; }
+
+    [JsonIgnore]
+    public long EstimatedMemoryBytes => NativeMemory.EstimateRequired(
+        Bytes, Mode == "streaming" ? NativeMemory.MaximumStreamFrames * sizeof(float) : 0, 512);
+
+    [JsonIgnore]
+    public Uri DownloadUri
+    {
+        get
+        {
+            if (Repo is null || Repo.Split('/') is not [var owner, var repository] ||
+                !SafeSegment(owner) || !SafeSegment(repository) ||
+                Revision is null || Revision.Length != 40 || !Revision.All(char.IsAsciiHexDigit) ||
+                RemoteFile is null || !RemoteFile.Split('/').All(SafeSegment))
+                throw new InvalidDataException($"Model '{Id}' has no valid pinned download location.");
+            return new Uri($"https://huggingface.co/{Repo}/resolve/{Revision}/{string.Join("/", RemoteFile.Split('/').Select(Uri.EscapeDataString))}");
+        }
+    }
+
+    private static bool SafeSegment(string value) => value.Length > 0 && value is not "." and not ".." &&
+        value.All(character => char.IsAsciiLetterOrDigit(character) || character is '-' or '_' or '.');
 }
 
 [JsonSourceGenerationOptions(AllowDuplicateProperties = false)]

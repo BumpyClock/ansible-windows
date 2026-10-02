@@ -3,10 +3,10 @@ namespace DictationPoc.Core;
 public enum DictationPhase
 {
     Disconnected, Connecting, Ready, Preparing, Recording, Finishing,
-    Transcribing, Cancelling, UpdatingPreferences, RecoveryRequired, Closing, Closed
+    Transcribing, Cancelling, UpdatingPreferences, MaintainingModels, RecoveryRequired, Closing, Closed
 }
 
-public enum SessionActivity { None, Connecting, Dictation, Replay, File, Preferences }
+public enum SessionActivity { None, Connecting, Dictation, Replay, File, Preferences, ModelMaintenance }
 public enum NoticeKind { Information, Success, Warning, Error }
 public enum SessionOutcomeKind { Completed, Cancelled, TimedOut, Failed }
 public sealed record SessionNotice(NoticeKind Kind, string Title, string Message);

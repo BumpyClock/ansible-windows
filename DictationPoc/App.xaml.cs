@@ -22,7 +22,7 @@ public partial class App : Application
             var session = new DictationSession(
                 directory => new NativeAudioEngine(paths.NativeLibrary, paths.ModelCatalog, directory),
                 new WaveInCaptureFactory(), new AudioInputReader(), new UsageStore(paths.Usage), paths.ModelsDirectory);
-            Window = new MainWindow(session, paths);
+            Window = new MainWindow(session, paths, ModelDownloadManager.CreateHttpClient());
             Window.Activate();
         }
         catch (Exception error)

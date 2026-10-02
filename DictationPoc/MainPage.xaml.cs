@@ -46,7 +46,7 @@ public sealed partial class MainPage : Page
                 _renderedModels = _state.Models;
             }
             ModelBox.SelectedIndex = _state.SelectedIndex;
-            if (ModelsFolderBox.FocusState == FocusState.Unfocused) { ModelsFolderBox.Text = _state.ModelsDirectory; }
+            ModelsFolderBox.Text = _state.ModelsDirectory;
             var idle = _state.IsIdle && !_picking;
             ModelsFolderBox.IsEnabled = idle;
             ConnectButton.IsEnabled = idle;
@@ -54,7 +54,7 @@ public sealed partial class MainPage : Page
             LanguageBox.IsEnabled = ModelBox.IsEnabled;
             if (LanguageBox.FocusState == FocusState.Unfocused) { LanguageBox.Text = _state.Language; }
             BackendText.Text = _state.Phase == DictationPhase.Disconnected
-                ? "Build the native DLL and install pinned models, then load this folder."
+                ? "Open Speech models to download verified weights or choose a model folder."
                 : $"audio.cpp {_state.BackendVersion} / native CPU / {_state.Models.Count} installed models";
             ModelNote.Text = _state.SelectedModel?.Mode == "offline"
                 ? "Offline model: verify a WAV recording. Large models require enough free memory."
@@ -87,7 +87,7 @@ public sealed partial class MainPage : Page
     }
 
     private async void ConnectClicked(object sender, RoutedEventArgs args) =>
-        await RunCommandAsync(() => _session.ConnectAsync(ModelsFolderBox.Text));
+        await RunCommandAsync(() => _session.ConnectAsync(_state.ModelsDirectory));
     private void ModelChanged(object sender, SelectionChangedEventArgs args)
     {
         if (_rendering || ModelBox.SelectedIndex < 0) { return; }

@@ -60,6 +60,12 @@
                             <TextBlock Text="Settings + verification" VerticalAlignment="Center" TextWrapping="Wrap" />
                         </StackPanel>
                     </Button>
+                    <Button x:Name="ModelsNav" Tag="models" Click="NavigateClicked" Style="{StaticResource NavigationButtonStyle}">
+                        <StackPanel Orientation="Horizontal" Spacing="14">
+                            <FontIcon Glyph="&#xE896;" FontSize="19" />
+                            <TextBlock Text="Speech models" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
                 <Border Grid.Row="2" Background="{ThemeResource SurfaceBrush}" BorderBrush="{ThemeResource BorderBrush}"
                         BorderThickness="1" CornerRadius="12" Padding="16" Margin="8,16,8,0">

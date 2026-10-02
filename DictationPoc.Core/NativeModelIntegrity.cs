@@ -25,27 +25,10 @@ internal sealed partial class NativeModelIntegrity
                 cached.Identity != identity || !string.Equals(cached.Sha256, entry.Sha256, StringComparison.OrdinalIgnoreCase))
             {
                 _cache.Remove(path);
-                using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-                var buffer = ArrayPool<byte>.Shared.Rent(128 * 1024);
-                try
-                {
-                    int count;
-                    while ((count = stream.Read(buffer)) != 0)
-                    {
-                        token.ThrowIfCancellationRequested();
-                        hash.AppendData(buffer, 0, count);
-                    }
-                    token.ThrowIfCancellationRequested();
-                    if (!string.Equals(Convert.ToHexString(hash.GetHashAndReset()), entry.Sha256, StringComparison.OrdinalIgnoreCase))
-                        throw new InvalidDataException($"Model '{entry.Id}' failed SHA-256 verification. Re-run the verified model setup.");
-                    if (ReadIdentity(stream) != identity)
-                        throw new IOException("The model changed during integrity verification.");
-                    _cache[path] = new VerifiedIdentity(identity, entry.Sha256);
-                }
-                finally
-                {
-                    ArrayPool<byte>.Shared.Return(buffer, clearArray: true);
-                }
+                Verify(stream, entry, token);
+                if (ReadIdentity(stream) != identity)
+                    throw new IOException("The model changed during integrity verification.");
+                _cache[path] = new VerifiedIdentity(identity, entry.Sha256);
             }
             token.ThrowIfCancellationRequested();
             stream.Position = 0;
@@ -58,7 +41,29 @@ internal sealed partial class NativeModelIntegrity
         }
     }
 
-    private static void RejectLinks(string path)
+    internal static void Verify(FileStream stream, NativeModelEntry entry, CancellationToken token)
+    {
+        if (stream.Length != entry.Bytes)
+            throw new InvalidDataException($"Model '{entry.Id}' has an unexpected size.");
+        stream.Position = 0;
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        var buffer = ArrayPool<byte>.Shared.Rent(128 * 1024);
+        try
+        {
+            int count;
+            while ((count = stream.Read(buffer)) != 0)
+            {
+                token.ThrowIfCancellationRequested();
+                hash.AppendData(buffer, 0, count);
+            }
+            token.ThrowIfCancellationRequested();
+            if (!string.Equals(Convert.ToHexString(hash.GetHashAndReset()), entry.Sha256, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException($"Model '{entry.Id}' failed SHA-256 verification.");
+        }
+        finally { ArrayPool<byte>.Shared.Return(buffer, clearArray: true); }
+    }
+
+    internal static void RejectLinks(string path)
     {
         for (var current = path; current is not null; current = Path.GetDirectoryName(current))
         {

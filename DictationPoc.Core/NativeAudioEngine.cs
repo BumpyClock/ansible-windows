@@ -39,6 +39,31 @@ public sealed class NativeAudioEngine : IRecognitionEngine
     public string ModelsDirectory { get; }
     public string Version { get; private set; } = "";
 
+    public static Task<IReadOnlySet<string>> GetSupportedFamiliesAsync(
+        string libraryPath, CancellationToken cancellationToken = default) =>
+        Task.Run<IReadOnlySet<string>>(() =>
+        {
+            NativeOperation.Step(cancellationToken, () => NativeAudioApi.Initialize(Path.GetFullPath(libraryPath)));
+            NativeAudioApi.Check(NativeAudioApi.RegistryCreate(0, out var pointer), "inspect the compiled model registry");
+            using var registry = new NativeAudioHandle(pointer, NativeHandleKind.Registry);
+            return ReadFamilies(registry, cancellationToken);
+        }, cancellationToken);
+
+    private static HashSet<string> ReadFamilies(NativeAudioHandle registry, CancellationToken token)
+    {
+        var families = new HashSet<string>(StringComparer.Ordinal);
+        var count = NativeAudioApi.FamilyCount(registry.DangerousGetHandle());
+        for (nuint index = 0; index < count; index++)
+        {
+            token.ThrowIfCancellationRequested();
+            NativeAudioApi.Check(NativeAudioApi.Family(registry.DangerousGetHandle(), index, out var family),
+                "inspect compiled model families");
+            families.Add(Marshal.PtrToStringUTF8(family) ?? throw new InvalidDataException("A compiled model family has no name."));
+        }
+        token.ThrowIfCancellationRequested();
+        return families;
+    }
+
     public async Task<IReadOnlyList<AudioModel>> ConnectAsync(CancellationToken cancellationToken)
     {
         var inventory = await NativeModelCatalog.ReadAsync(_catalogPath, ModelsDirectory, cancellationToken);
@@ -58,17 +83,7 @@ public sealed class NativeAudioEngine : IRecognitionEngine
                     NativeAudioApi.Check(NativeAudioApi.RegistryCreate(0, out var pointer), "create the model registry");
                     _registry = new NativeAudioHandle(pointer, NativeHandleKind.Registry);
                 });
-                var families = new HashSet<string>(StringComparer.Ordinal);
-                var count = NativeAudioApi.FamilyCount(_registry!.DangerousGetHandle());
-                for (nuint index = 0; index < count; index++)
-                {
-                    NativeOperation.Step(cancellationToken, () =>
-                    {
-                        NativeAudioApi.Check(NativeAudioApi.Family(_registry.DangerousGetHandle(), index, out var family),
-                            "inspect compiled model families");
-                        families.Add(Marshal.PtrToStringUTF8(family) ?? "");
-                    });
-                }
+                var families = ReadFamilies(_registry!, cancellationToken);
                 foreach (var model in inventory.Models)
                 {
                     if (model.Family is null || !families.Contains(model.Family))
