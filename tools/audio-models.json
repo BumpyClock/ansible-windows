@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "models": [
+    {
+      "id": "moonshine-tiny",
+      "display_name": "Moonshine Streaming Tiny Q8",
+      "family": "moonshine_asr",
+      "mode": "streaming",
+      "preview": "final-only",
+      "repo": "audio-cpp/audio.cpp-gguf",
+      "revision": "351dbab8d8534675ee29440bb402e348b09e55e2",
+      "remote_file": "Moonshine-Streaming-GGUF/moonshine-streaming-tiny-q8_0.gguf",
+      "filename": "moonshine-streaming-tiny-q8_0.gguf",
+      "bytes": 60408448,
+      "sha256": "b1409ca065d9d8472773b2801ce8bab772720d8f850779180f687871e63b7ba2",
+      "license": "MIT"
+    },
+    {
+      "id": "vibevoice-streaming-1.5b-q4",
+      "display_name": "VibeVoice ASR Streaming 1.5B Q4_K",
+      "family": "vibevoice_asr_streaming",
+      "mode": "streaming",
+      "preview": "live",
+      "repo": "christopherthompson81/VibeVoice-ASR-Streaming-1.5B-GGUF",
+      "revision": "ff96151102990984d6d0e951e62751bdb2ff9243",
+      "remote_file": "vibevoice-asr-streaming-1.5b-q4_k.gguf",
+      "filename": "vibevoice-asr-streaming-1.5b-q4_k.gguf",
+      "bytes": 2117525248,
+      "sha256": "2a2d8abf2d4f7d3a127b34002895b3c9fa7a97ccf5e175c90071c1224fb771cb",
+      "license": "MIT"
+    },
+    {
+      "id": "vibevoice-asr-7b-q8",
+      "display_name": "VibeVoice ASR 7B Q8 (WAV only)",
+      "family": "vibevoice_asr",
+      "mode": "offline",
+      "preview": "final-only",
+      "repo": "audio-cpp/audio.cpp-gguf",
+      "revision": "351dbab8d8534675ee29440bb402e348b09e55e2",
+      "remote_file": "VibeVoice-ASR-GGUF/vibevoice-asr-q8_0.gguf",
+      "filename": "vibevoice-asr-q8_0.gguf",
+      "bytes": 9858644224,
+      "sha256": "71a821bcfe36370b906feae84b413572599d30c766f114a9505fd2716efe12af",
+      "license": "MIT"
+    },
+    {
+      "id": "qwen3-asr-0.6b-q8",
+      "display_name": "Qwen3-ASR 0.6B Q8",
+      "family": "qwen3_asr",
+      "mode": "streaming",
+      "preview": "buffered",
+      "repo": "audio-cpp/audio.cpp-gguf",
+      "revision": "351dbab8d8534675ee29440bb402e348b09e55e2",
+      "remote_file": "Qwen3-ASR-0.6B-GGUF/qwen3-asr-0.6b-q8_0.gguf",
+      "filename": "qwen3-asr-0.6b-q8_0.gguf",
+      "bytes": 1151272416,
+      "sha256": "6c44ec2fb4cee513892d7863c1fcc3ea6b699ffa4d899b0ef4ab19956d9544f7",
+      "license": "Apache-2.0"
+    },
+    {
+      "id": "nemotron-asr-0.6b-q8",
+      "display_name": "Nemotron 3.5 ASR Streaming 0.6B Q8",
+      "family": "nemotron_asr",
+      "mode": "streaming",
+      "preview": "live",
+      "repo": "audio-cpp/audio.cpp-gguf",
+      "revision": "351dbab8d8534675ee29440bb402e348b09e55e2",
+      "remote_file": "Nemotron-3.5-ASR-Streaming-0.6B-GGUF/nemotron-3.5-asr-streaming-0.6b-q8_0.gguf",
+      "filename": "nemotron-3.5-asr-streaming-0.6b-q8_0.gguf",
+      "bytes": 930625888,
+      "sha256": "c58b62c1bdd6c5d7b14b08126c5bd16c1289fee6e0d6ac0761dbd3aa6d714935",
+      "license": "OpenMDW-1.1"
+    }
+  ]
+}

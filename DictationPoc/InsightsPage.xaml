@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page x:Class="DictationPoc.InsightsPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Padding="28" Spacing="18">
+            <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <TextBlock Text="Insights" FontSize="28" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <Button x:Name="StartButton" Grid.Column="1" Content="New dictation" Click="StartClicked"
+                        Style="{StaticResource AccentButtonStyle}" MinHeight="40" />
+            </Grid>
+            <Grid BorderBrush="{ThemeResource BorderBrush}" BorderThickness="0,0,0,1">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <Border BorderBrush="{ThemeResource AccentBrush}" BorderThickness="0,0,0,2" Padding="0,12,0,14">
+                    <TextBlock Text="Your usage" FontSize="15" FontWeight="SemiBold" />
+                </Border>
+                <HyperlinkButton Grid.Column="2" Content="Verify models" Click="VerifyClicked" VerticalAlignment="Center" />
+            </Grid>
+            <InfoBar x:Name="UsageErrorBar" IsOpen="False" IsClosable="False" Severity="Warning" Visibility="Collapsed" />
+            <TextBlock x:Name="IntroText" Text="Your activity, measured on this device. No audio or transcript history is saved."
+                       TextWrapping="Wrap" Foreground="{ThemeResource SecondaryTextBrush}" />
+
+            <Grid x:Name="SummaryGrid" ColumnSpacing="18" RowSpacing="18" SizeChanged="LayoutChanged">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="1.5*" /></Grid.ColumnDefinitions>
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                <Border x:Name="PaceCard" Style="{StaticResource MetricCardStyle}">
+                    <StackPanel Spacing="8">
+                        <TextBlock x:Name="PaceText" Text="--" FontSize="34" FontWeight="SemiBold" />
+                        <TextBlock Text="WORDS PER MINUTE" FontSize="11" CharacterSpacing="70"
+                                   Foreground="{ThemeResource SecondaryTextBrush}" />
+                        <Grid Width="160" Height="100" HorizontalAlignment="Center" Margin="0,4,0,0">
+                            <Path Stroke="{ThemeResource InactiveChartBrush}" StrokeThickness="12"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" Data="M12,78 A68,68 0 0 1 148,78" />
+                            <Path x:Name="PaceArc" Stroke="{ThemeResource AccentBrush}" StrokeThickness="12"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                            <StackPanel VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="0,0,0,12" Spacing="4">
+                                <TextBlock Text="Your average" FontSize="12" Foreground="{ThemeResource SecondaryTextBrush}" HorizontalAlignment="Center" />
+                                <TextBlock x:Name="PaceCaption" Text="No dictations yet" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+                <Border x:Name="SessionsCard" Grid.Column="1" Style="{StaticResource MetricCardStyle}">
+                    <StackPanel Spacing="14">
+                        <TextBlock x:Name="SessionsText" Text="0" FontSize="34" FontWeight="SemiBold" />
+                        <TextBlock Text="COMPLETED SESSIONS" FontSize="11" CharacterSpacing="70" Foreground="{ThemeResource SecondaryTextBrush}" />
+                        <Border Height="1" Background="{ThemeResource InactiveChartBrush}" Margin="0,6" />
+                        <TextBlock x:Name="DictationsText" Text="0 dictations" FontSize="15" />
+                        <TextBlock x:Name="VerificationsText" Text="0 file verifications" FontSize="15" />
+                        <TextBlock Text="Cancelled and failed attempts are excluded." FontSize="11" TextWrapping="Wrap"
+                                   Foreground="{ThemeResource SecondaryTextBrush}" />
+                    </StackPanel>
+                </Border>
+                <Border x:Name="WordsCard" Grid.Column="2" Style="{StaticResource MetricCardStyle}">
+                    <StackPanel Spacing="14">
+                        <TextBlock x:Name="TotalWordsText" Text="0" FontSize="34" FontWeight="SemiBold" />
+                        <TextBlock Text="RECOGNIZED WORDS" FontSize="11" CharacterSpacing="70" Foreground="{ThemeResource SecondaryTextBrush}" />
+                        <Border Height="1" Background="{ThemeResource InactiveChartBrush}" Margin="0,6" />
+                        <TextBlock x:Name="WordsCaption" Text="Start a dictation to see your voice add up." FontSize="15" TextWrapping="Wrap" />
+                        <Grid x:Name="WordsShareBar" Height="12" Margin="0,8,0,0" ColumnSpacing="5">
+                            <Grid.ColumnDefinitions><ColumnDefinition x:Name="DictationShare" Width="*" /><ColumnDefinition x:Name="FileShare" Width="*" /></Grid.ColumnDefinitions>
+                            <Border Background="{ThemeResource AccentBrush}" CornerRadius="4" />
+                            <Border Grid.Column="1" Background="{ThemeResource AccentSoftBrush}" CornerRadius="4" />
+                        </Grid>
+                        <TextBlock x:Name="WordsSplitText" Text="No recognized words yet" FontSize="11"
+                                   Foreground="{ThemeResource SecondaryTextBrush}" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <Grid x:Name="DetailGrid" ColumnSpacing="18" RowSpacing="18">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="1.2*" /></Grid.ColumnDefinitions>
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                <Border x:Name="ModelsCard" Style="{StaticResource MetricCardStyle}">
+                    <StackPanel Spacing="20">
+                        <TextBlock Text="Model usage" FontSize="24" FontWeight="SemiBold" />
+                        <TextBlock x:Name="ModelsCaption" Text="A useful comparison starts with actual sessions." FontSize="12"
+                                   TextWrapping="Wrap" Foreground="{ThemeResource SecondaryTextBrush}" />
+                        <StackPanel x:Name="ModelRows" Spacing="16" MinHeight="160" />
+                    </StackPanel>
+                </Border>
+                <Border x:Name="ActivityCard" Grid.Column="1" Style="{StaticResource MetricCardStyle}">
+                    <StackPanel Spacing="18">
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                            <TextBlock x:Name="StreakText" Text="0 day streak" FontSize="24" FontWeight="SemiBold" />
+                            <TextBlock x:Name="LongestText" Grid.Column="1" Text="BEST: 0 DAYS" FontSize="10"
+                                       VerticalAlignment="Center" Foreground="{ThemeResource SecondaryTextBrush}" Margin="12,0,0,0" />
+                        </Grid>
+                        <Grid x:Name="HeatmapGrid" MinHeight="180" AutomationProperties.Name="Local session activity calendar" />
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <TextBlock Text="Less" FontSize="11" Foreground="{ThemeResource SecondaryTextBrush}" Margin="0,0,6,0" />
+                            <Border Width="14" Height="14" CornerRadius="3" Background="{ThemeResource InactiveChartBrush}" />
+                            <Border Width="14" Height="14" CornerRadius="3" Background="#CDEBE5" />
+                            <Border Width="14" Height="14" CornerRadius="3" Background="#79C1B7" />
+                            <Border Width="14" Height="14" CornerRadius="3" Background="{ThemeResource AccentBrush}" />
+                            <TextBlock Text="More" FontSize="11" Foreground="{ThemeResource SecondaryTextBrush}" Margin="6,0,0,0" />
+                        </StackPanel>
+                        <TextBlock x:Name="ActivityCaption" Text="No activity recorded yet." FontSize="11" TextWrapping="Wrap"
+                                   Foreground="{ThemeResource SecondaryTextBrush}" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+            <TextBlock Text="Private by default. These are local counts, not a leaderboard or a speech-accuracy score."
+                       TextWrapping="Wrap" FontSize="12" Foreground="{ThemeResource SecondaryTextBrush}" />
+        </StackPanel>
+    </ScrollViewer>
+</Page>

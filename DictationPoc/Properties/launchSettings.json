@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "DictationPoc (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "DictationPoc (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

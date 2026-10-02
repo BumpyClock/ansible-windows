@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="DictationPoc.Core/DictationPoc.Core.csproj" />
+  <Project Path="DictationPoc.Probe/DictationPoc.Probe.csproj" />
+  <Project Path="DictationPoc.Tests/DictationPoc.Tests.csproj" />
+  <Project Path="DictationPoc/DictationPoc.csproj" />
+</Solution>
