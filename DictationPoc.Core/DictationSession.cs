@@ -349,8 +349,15 @@ public sealed class DictationSession
 
     private async Task ReleaseOperationAsync(Operation operation, List<Exception> errors)
     {
+        Task? stop;
+        lock (_gate)
+        {
+            operation.ControlsSealed = true;
+            stop = operation.StopWork;
+        }
         operation.Cancellation.Cancel();
         operation.Pipe?.Writer.TryComplete();
+        await ObserveAsync(stop, operation.Token, errors);
         if (operation.Capture is not null)
         {
             if (operation.LevelHandler is not null) { operation.Capture.LevelChanged -= operation.LevelHandler; }
@@ -408,8 +415,7 @@ public sealed class DictationSession
             });
         }
         Publish(state);
-        try { if (operation.Capture is not null) { await operation.Capture.StopAsync(); } }
-        catch (Exception error) { operation.CommandError = error; operation.RequestCancellation(); }
+        await StopCaptureAsync(operation);
     }
 
     public async Task CancelAsync()
@@ -431,11 +437,7 @@ public sealed class DictationSession
         }
         operation?.RequestCancellation();
         if (state is not null) { Publish(state); }
-        if (operation?.Capture is not null)
-        {
-            try { await operation.Capture.StopAsync(); }
-            catch (Exception error) { operation.CommandError = error; }
-        }
+        if (operation is not null) { await StopCaptureAsync(operation); }
     }
 
     public Task CloseAsync()
@@ -463,7 +465,11 @@ public sealed class DictationSession
         {
             Operation? operation;
             lock (_gate) { operation = _operation; }
-            if (operation is not null) { await operation.Completion.Task; }
+            if (operation is not null)
+            {
+                _ = StopCaptureAsync(operation);
+                await operation.Completion.Task;
+            }
             Operation? recovery;
             lock (_gate) { recovery = _recovery; }
             if (recovery?.Capture is not null)
@@ -514,6 +520,36 @@ public sealed class DictationSession
         try { await task; }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         catch (Exception error) { AddError(errors, error); }
+    }
+
+    private Task StopCaptureAsync(Operation operation)
+    {
+        TaskCompletionSource completion;
+        lock (_gate)
+        {
+            if (!ReferenceEquals(_operation, operation) || operation.Capture is null) { return Task.CompletedTask; }
+            if (operation.ControlsSealed) { return operation.Completion.Task; }
+            if (operation.StopWork is not null) { return operation.StopWork; }
+            completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            operation.StopWork = completion.Task;
+        }
+        _ = CompleteStopAsync(operation, completion);
+        return completion.Task;
+    }
+
+    private static async Task CompleteStopAsync(Operation operation, TaskCompletionSource completion)
+    {
+        try
+        {
+            await operation.Capture!.StopAsync();
+            completion.TrySetResult();
+        }
+        catch (Exception error)
+        {
+            operation.CommandError = error;
+            operation.RequestCancellation();
+            completion.TrySetException(error);
+        }
     }
 
     private static void AddError(List<Exception> errors, Exception error)
@@ -641,6 +677,8 @@ public sealed class DictationSession
         public Action<double>? LevelHandler { get; set; }
         public Channel<byte[]>? Pipe { get; set; }
         public Task? Producer { get; set; }
+        public Task? StopWork { get; set; }
+        public bool ControlsSealed { get; set; }
         public Task<RecognitionResult>? Inference { get; set; }
         public RecognitionResult? Result { get; set; }
         public bool HasFinal { get; set; }

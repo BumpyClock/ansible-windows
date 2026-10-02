@@ -243,6 +243,73 @@ public sealed class DictationSessionTests
         await session.CloseAsync();
     }
 
+    [Fact]
+    public async Task DelayedFinishFailureCannotBePublishedOrCountedAsSuccess()
+    {
+        var stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var source = new FakeCapture();
+        source.Stopping = () =>
+        {
+            source.Packets.Writer.TryComplete();
+            source.ReleaseOwnership();
+            return stopped.Task;
+        };
+        var usage = new FakeUsageStore();
+        var engine = new FakeEngine();
+        var session = Create(engine,
+            new FakeCaptureFactory { Starting = _ => Task.FromResult<IAudioCapture>(source) }, usage);
+        await session.InitializeAsync();
+        var recording = session.StartDictationAsync();
+        await WaitForStateAsync(session, DictationPhase.Recording);
+        var finish = session.FinishAsync();
+        await engine.StreamCompleted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.False(recording.IsCompleted);
+        Assert.Empty(usage.Document.Entries);
+        stopped.SetException(new IOException("original stop attempt failed"));
+        await Assert.ThrowsAsync<IOException>(() => finish);
+        Assert.Equal(SessionOutcomeKind.Failed, (await recording).Kind);
+        Assert.Empty(usage.Document.Entries);
+        Assert.Equal(DictationPhase.Ready, session.State.Phase);
+        await session.CloseAsync();
+    }
+
+    [Fact]
+    public async Task CloseStopsCaptureBeforeWaitingForABlockedNativeStep()
+    {
+        var kernel = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var source = new FakeCapture();
+        source.Stopping = () =>
+        {
+            source.Packets.Writer.TryComplete();
+            stopped.TrySetResult();
+            return Task.CompletedTask;
+        };
+        var engine = new FakeEngine
+        {
+            Streaming = async (_, _, token, ready) =>
+            {
+                ready?.Invoke();
+                await kernel.Task;
+                token.ThrowIfCancellationRequested();
+                return new("ignored", "ignored");
+            }
+        };
+        var session = Create(engine,
+            new FakeCaptureFactory { Starting = _ => Task.FromResult<IAudioCapture>(source) });
+        await session.InitializeAsync();
+        var recording = session.StartDictationAsync();
+        await WaitForStateAsync(session, DictationPhase.Recording);
+        var close = session.CloseAsync();
+        await stopped.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.False(close.IsCompleted);
+        kernel.SetResult();
+        Assert.Equal(SessionOutcomeKind.Cancelled, (await recording).Kind);
+        await close;
+        Assert.True(source.IsReleased);
+        Assert.Equal(DictationPhase.Closed, session.State.Phase);
+    }
+
     private static readonly AudioModel Model = new() { Id = "test", Family = "test", Mode = "streaming" };
 
     private static DictationSession Create(
@@ -274,6 +341,7 @@ public sealed class DictationSessionTests
         public Func<AudioModel, ChannelReader<byte[]>, CancellationToken, Action?, Task<RecognitionResult>>? Streaming { get; init; }
         public TaskCompletionSource ConnectEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource StreamEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource StreamCompleted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public int Disposals;
         public int StreamStarts;
         public int FinishedStreams;
@@ -298,6 +366,7 @@ public sealed class DictationSessionTests
             await foreach (var _ in audio.ReadAllAsync(token)) { }
             token.ThrowIfCancellationRequested();
             FinishedStreams++;
+            StreamCompleted.TrySetResult();
             return Result;
         }
         public ValueTask DisposeAsync() { Disposals++; return ValueTask.CompletedTask; }
@@ -326,11 +395,19 @@ public sealed class DictationSessionTests
         public bool IsReleased { get; private set; }
         public bool FailDisposal { get; set; }
         public int Disposals;
+        public Func<Task>? Stopping { get; set; }
         public event Action<double>? LevelChanged { add { } remove { } }
-        public Task StopAsync() { Packets.Writer.TryComplete(); return Task.CompletedTask; }
+        public Task StopAsync()
+        {
+            if (Stopping is not null) { return Stopping(); }
+            Packets.Writer.TryComplete();
+            return Task.CompletedTask;
+        }
+        public void ReleaseOwnership() => IsReleased = true;
         public async ValueTask DisposeAsync()
         {
             Disposals++;
+            if (IsReleased) { return; }
             await StopAsync();
             if (FailDisposal) { throw new IOException("driver still owns capture"); }
             IsReleased = true;
