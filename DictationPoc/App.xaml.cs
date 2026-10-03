@@ -7,6 +7,7 @@ namespace DictationPoc;
 public partial class App : Application
 {
     internal MainWindow? Window { get; private set; }
+    private static string LocalDataDirectory => Windows.Storage.ApplicationData.Current.LocalFolder.Path;
 
     public App()
     {
@@ -17,8 +18,7 @@ public partial class App : Application
     {
         try
         {
-            var paths = AppPaths.Create(AppContext.BaseDirectory,
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LocalVoice"));
+            var paths = AppPaths.Create(AppContext.BaseDirectory, LocalDataDirectory);
             var session = new DictationSession(
                 directory => new NativeAudioEngine(paths.NativeLibrary, paths.ModelCatalog, directory),
                 new WaveInCaptureFactory(), new AudioInputReader(), new UsageStore(paths.Usage), paths.ModelsDirectory);
@@ -29,7 +29,7 @@ public partial class App : Application
         {
             try
             {
-                var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LocalVoice");
+                var directory = LocalDataDirectory;
                 Directory.CreateDirectory(directory);
                 File.WriteAllText(Path.Combine(directory, "startup-error.log"), error.ToString());
             }

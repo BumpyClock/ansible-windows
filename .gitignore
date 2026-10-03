@@ -4,3 +4,9 @@
 .runtime/
 *.user
 *.msix
+*.msixupload
+*.msixbundle
+*.appxupload
+*.appxbundle
+*.pfx
+*.cer

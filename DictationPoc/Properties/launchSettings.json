@@ -1,7 +1,9 @@
 {
   "profiles": {
-    "DictationPoc (Unpackaged)": {
-      "commandName": "Project"
+    "DictationPoc (Packaged)": {
+      "commandName": "MsixPackage",
+      "alwaysReinstallApp": false,
+      "nativeDebugging": false
     }
   }
 }

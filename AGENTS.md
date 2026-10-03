@@ -25,7 +25,7 @@ The code map below describes the current layout, not required module boundaries.
 
 ## Current implementation
 
-- The app targets .NET 10 and uses an unpackaged, self-contained Windows App SDK deployment.
+- The app targets .NET 10 and uses single-project MSIX with self-contained .NET NativeAOT and Windows App SDK deployment.
 - The build scripts target Windows x64 and CPU inference. ARM64 and GPU support require separate qualification.
 - Recognition runs in-process through the audio.cpp C ABI, using `audiocpp.dll`.
 - The native build pins audio.cpp v0.9.0. Upstream support does not imply support in this compiled backend.
@@ -73,11 +73,14 @@ Default setup installs only `moonshine-tiny`.
 Use `-Models <model-id>` for another catalog entry.
 Do not install every model for routine checks; `-Models all` downloads large weights.
 
-Publish after changes to the WinUI app, native interop, or deployment:
+Build and verify an unsigned NativeAOT MSIX after changes to the WinUI app, native interop, or deployment:
 
 ```powershell
 .\tools\Publish-Poc.ps1
 ```
+
+The package uses a development identity until the project is associated with the Microsoft Store.
+Use the packaged Visual Studio launch profile for development; signing, certificate trust, installation, and Store submission are separate operations.
 
 Use the native probe instructions in `README.md` when changing model integration or streaming behavior.
 Run model probes sequentially and wait for each process to exit.

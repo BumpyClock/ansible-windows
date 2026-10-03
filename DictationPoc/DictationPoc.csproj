@@ -14,9 +14,13 @@
     <WinUISDKReferences>false</WinUISDKReferences>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsPackageType>MSIX</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
-    <EnableMsixTooling>false</EnableMsixTooling>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <AppxPackageSigningEnabled>false</AppxPackageSigningEnabled>
+    <AppxAutoIncrementPackageRevision>false</AppxAutoIncrementPackageRevision>
+    <AppxBundle>Never</AppxBundle>
+    <PublishProfile>win-x64</PublishProfile>
     <EnableWinAppRunSupport>false</EnableWinAppRunSupport>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <PublishAot>true</PublishAot>
@@ -70,18 +74,7 @@
   <Target Name="RequireQualifiedDeployment" BeforeTargets="PrepareForBuild">
     <Error Condition="'$(RuntimeIdentifier)' != 'win-x64' or '$(Platform)' != 'x64' or '$(PlatformTarget)' != 'x64'"
            Text="Only the Windows x64 CPU deployment is qualified. x86 and ARM64 require separate native builds and qualification." />
-    <Error Condition="'$(WindowsPackageType)' != 'None' or '$(SelfContained)' != 'true' or '$(PublishAot)' != 'true'"
-           Text="Use the unpackaged, self-contained NativeAOT deployment path." />
-  </Target>
-
-  <!-- NativeAOT publishing omits the XAML compiler's build-output resources. -->
-  <Target Name="PublishWinUIResources" AfterTargets="Publish">
-    <ItemGroup>
-      <WinUIResource Include="$(TargetDir)$(AssemblyName).pri" />
-      <WinUIResource Include="$(TargetDir)**\*.xbf" />
-    </ItemGroup>
-    <Copy SourceFiles="@(WinUIResource)"
-          DestinationFiles="@(WinUIResource->'$(PublishDir)%(RecursiveDir)%(Filename)%(Extension)')"
-          SkipUnchangedFiles="true" />
+    <Error Condition="'$(WindowsPackageType)' != 'MSIX' or '$(EnableMsixTooling)' != 'true' or '$(WindowsAppSDKSelfContained)' != 'true' or '$(SelfContained)' != 'true' or '$(PublishAot)' != 'true'"
+           Text="Use the packaged, self-contained NativeAOT deployment path." />
   </Target>
 </Project>
