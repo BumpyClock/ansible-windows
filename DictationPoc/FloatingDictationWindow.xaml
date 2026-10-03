@@ -6,41 +6,37 @@
     <Window.SystemBackdrop>
         <DesktopAcrylicBackdrop />
     </Window.SystemBackdrop>
-    <Border Background="Transparent" BorderBrush="{ThemeResource BorderBrush}"
-            BorderThickness="1" CornerRadius="18" Padding="20">
-        <StackPanel Spacing="14">
-            <Grid ColumnSpacing="12">
-                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                <StackPanel x:Name="DragRegion" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                    <FontIcon Glyph="&#xE720;" FontSize="17" Foreground="{ThemeResource AccentBrush}" />
-                    <StackPanel Spacing="2">
-                        <TextBlock x:Name="StateText" Text="Preparing model" FontSize="14" FontWeight="SemiBold"
-                                   AutomationProperties.LiveSetting="Polite" />
-                        <TextBlock x:Name="ModelText" FontSize="11" Foreground="{ThemeResource SecondaryTextBrush}"
-                                   MaxWidth="350" TextTrimming="CharacterEllipsis" />
-                    </StackPanel>
-                </StackPanel>
-                <TextBlock x:Name="DurationText" Grid.Column="1" Text="00:00" FontFamily="Consolas"
-                           FontSize="14" VerticalAlignment="Center" />
-            </Grid>
-            <Grid Height="54" Background="{ThemeResource MetricSurfaceBrush}" CornerRadius="10">
-                <StackPanel x:Name="WaveBars" Orientation="Horizontal" Spacing="4"
-                            HorizontalAlignment="Center" VerticalAlignment="Center"
-                            AutomationProperties.Name="Real audio level history" />
-            </Grid>
-            <TextBox x:Name="PreviewText" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap"
-                     FontSize="15" MinHeight="70" MaxHeight="110" Background="Transparent" BorderThickness="0"
-                     PlaceholderText="Waiting for actual model output..."
-                     AutomationProperties.Name="Floating live transcription preview"
-                     ScrollViewer.VerticalScrollBarVisibility="Auto" />
-            <Grid ColumnSpacing="10">
-                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                <TextBlock x:Name="ModeText" Text="ON-DEVICE" FontSize="10" CharacterSpacing="70"
-                           VerticalAlignment="Center" Foreground="{ThemeResource SecondaryTextBrush}" />
-                <Button x:Name="FinishButton" Grid.Column="1" Content="Finish" Click="FinishClicked"
-                        Style="{StaticResource AccentButtonStyle}" MinHeight="36" />
-                <Button x:Name="CancelButton" Grid.Column="2" Content="Cancel" Click="CancelClicked" MinHeight="36" />
-            </Grid>
+    <Button x:Name="PreviewRoot" IsTabStop="False" Click="DismissPreviewClicked"
+            HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+            Loaded="PreviewLoaded" SizeChanged="PreviewSizeChanged" ActualThemeChanged="ThemeChanged">
+        <Button.Resources>
+            <Style x:Key="CompactWaveformBarStyle" TargetType="Rectangle">
+                <Setter Property="Fill" Value="{ThemeResource PrimaryTextBrush}" />
+            </Style>
+        </Button.Resources>
+        <Button.Template>
+            <ControlTemplate TargetType="Button">
+                <ContentPresenter Content="{TemplateBinding Content}" />
+            </ControlTemplate>
+        </Button.Template>
+        <Button.ContextFlyout>
+            <MenuFlyout>
+                <MenuFlyoutItem x:Name="DismissPreviewItem" Text="Dismiss preview" Click="DismissPreviewClicked" />
+            </MenuFlyout>
+        </Button.ContextFlyout>
+        <StackPanel Spacing="8">
+            <Border x:Name="RibbonViewport" Height="24" Visibility="Collapsed">
+                <TextBlock x:Name="RibbonText" FontSize="16" LineHeight="24"
+                           LineStackingStrategy="BlockLineHeight" TextWrapping="NoWrap"
+                           HorizontalAlignment="Center" TextAlignment="Center" IsHitTestVisible="False"
+                           Foreground="{ThemeResource PrimaryTextBrush}" AutomationProperties.LiveSetting="Polite" />
+            </Border>
+            <Border x:Name="PillBorder" Width="160" Background="Transparent"
+                    BorderBrush="{ThemeResource PrimaryTextBrush}" BorderThickness="2"
+                    CornerRadius="28" Padding="14" HorizontalAlignment="Center">
+                <StackPanel x:Name="WaveBars" Orientation="Horizontal" Spacing="3" Height="24"
+                            HorizontalAlignment="Center" AutomationProperties.Name="Real audio energy history" />
+            </Border>
         </StackPanel>
-    </Border>
+    </Button>
 </Window>

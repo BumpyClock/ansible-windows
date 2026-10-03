@@ -106,13 +106,14 @@ public sealed partial class MainWindow : Window
         try
         {
             await Task.WhenAll(_session.CloseAsync(), _models.DisposeAsync().AsTask());
+            if (_floating is not null) { await _floating.ClosePreviewAsync(); }
             _allowClose = true;
-            _floating?.Close();
             Close();
         }
         catch (Exception error)
         {
             Debug.WriteLine($"Local Voice: native shutdown needs recovery: {error.Message}");
+            SidebarStatus.Text = $"Close failed. {error.Message} Try closing the window again.";
             _closing = false;
         }
     }

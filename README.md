@@ -2,34 +2,47 @@
 
 ## Desktop experience
 
-The native WinUI shell includes **Insights**, **Dictation**, and
+The native WinUI shell includes **Insights**, **Dictation**, **Speech models**, and
 **Settings + verification**. Its light neutral surfaces and teal accents follow
 the supplied visual direction without copying another product's branding.
 
 The main window uses the native Mica system backdrop. The main content container
-uses WinUI's in-app acrylic resource, while the transient preview uses a desktop
-acrylic backdrop. Transparent root surfaces keep these materials visible; WinUI
-owns their system fallback behavior.
+uses WinUI's in-app acrylic resource. The transient preview clips a native host
+backdrop and tint to a rounded waveform pill, without a rectangular window frame.
+High Contrast and disabled system effects use solid semantic colors instead.
 Semantic color and chart tokens have Light, Dark, and HighContrast definitions.
 The app follows the system theme instead of forcing Light. Dynamic navigation,
-model bars, activity cells, and preview waveform use theme-resource styles so
-they do not cache brushes from a previous theme.
+model bars, activity cells, and preview glyphs use theme-resource styles. The native
+waveform surface updates its colors when the system theme changes.
 
 Insights uses completed local sessions only. It shows recognized words, recorded
 dictation pace, model usage, and a daily activity calendar. It does not invent
 correction counts, accuracy scores, rankings, or leaderboard data. Pace uses
 microphone recording time, including pauses; file verification is excluded.
 
-During dictation, a topmost, non-activating floating panel shows audio energy
-history from actual PCM samples and transcript events from the model. It provides
-Finish and Cancel controls. Reduced-motion mode shows a level meter rather than
-scrolling history. The panel labels WAV replay separately from microphone capture.
+During dictation, a topmost, non-activating waveform pill shows audio energy
+history from actual PCM samples. For models with incremental recognition, the
+latest six words float above and outside the pill. New words reveal left-to-right,
+with transparent fades at the text edges. Existing words keep visual continuity
+instead of restarting the full line's entrance animation. Final-only models do not
+simulate streaming text.
+The pill contains no command buttons, timer, model label, or status heading;
+Finish and Cancel remain in the main window. Reduced-motion mode disables text
+animation and shows a level meter instead of scrolling history. High Contrast
+disables the edge fades.
+Successful previews hide after four seconds. After warnings or errors, the preview
+remains until dismissed by tapping or right-clicking the idle pill.
+The preview's accessible description distinguishes WAV replay from microphone capture.
+Native desktop composition renders the waveform. A separate layered window
+renders per-pixel glyph alpha above it; WinUI shapes the text in a hidden source
+window. Glyph pixels and transcript content remain in memory. Window shutdown
+joins the preview's owned composition queue before closing the main window.
 
 **Verify public sample** in Settings replays the bundled, public validation WAV
 through streaming models or transcribes it through offline models. This exercises
 the native backend and floating panel without recording ambient microphone audio.
 
-Statistics persist per user in `%LOCALAPPDATA%\LocalVoice\usage.json`.
+Statistics persist per user in the package's `LocalState\usage.json`.
 Only dates, model IDs, authoritative speech-word counts, session type, and
 durations are stored. Speaker annotations are not speech content. If native
 speech content cannot be established, its count is unknown and excluded from
@@ -54,21 +67,23 @@ proof, not the production dictation application.
 - Default microphone capture, final transcription, and live preview for models
   that emit partial text during capture.
 - WAV recording transcription, including streamed decoding where the model supports it.
-- Model selection from the installed, pinned ASR catalog.
+- Model selection, downloads, and management from the pinned ASR catalog.
 - Cancellation, microphone level, elapsed time, and explicit connection/inference errors.
 - Final-text copying. Transcript and microphone audio remain in memory.
 - Direct native inference. No HTTP service, listener, or audio upload is required.
 
-The UI uses native controls and the Windows theme. It adds no custom animations.
+The UI uses native controls and the Windows theme. The floating preview adds only
+a brief word-arrival animation, respecting the system's reduced-motion setting.
 Microphone capture uses the Windows `waveIn` API with source-generated P/Invoke,
 16 kHz mono PCM16, and a bounded queue. The POC stops with an error rather than
 dropping audio when the consumer cannot keep up.
 
 ## Run
 
-Requirements: Windows x64, .NET 10 SDK, and Visual Studio with the Desktop
-development with C++ workload for NativeAOT publishing. The app is unpackaged and
-self-contained for the Windows App SDK; Developer Mode is not required.
+Requirements: Windows x64, .NET 10 SDK, and Visual Studio 2026 with the Desktop
+development with C++ workload and single-project MSIX tools. The app is packaged
+as MSIX and includes its NativeAOT executable, Windows App SDK runtime, and native
+inference dependencies. Users do not need to install .NET separately.
 
 From this folder:
 
@@ -80,12 +95,29 @@ From this folder:
 The setup script installs models only. The native build produces
 `.runtime\native\audiocpp.dll`, stages its required app-local MSVC/OpenMP
 dependencies, and records their import closure and redistributable notices.
-Then publish and launch the app:
+Then build and verify an unsigned NativeAOT package:
 
 ```powershell
 .\tools\Publish-Poc.ps1
-.\DictationPoc\bin\x64\Release\net10.0-windows10.0.26100.0\win-x64\publish\DictationPoc.exe
 ```
+
+The default output is
+`DictationPoc\bin\AppPackages\DictationPoc_1.0.0.0_x64_Test\DictationPoc_1.0.0.0_x64.msix`.
+`-OutputDirectory` changes the parent package directory. Packaging does not
+install the app, create certificates, change certificate trust, or enable
+Developer Mode. It never bundles downloaded models or development model paths.
+
+For development, open `DictationPoc.slnx` in Visual Studio, set `DictationPoc`
+as the startup project, select x64 and the **DictationPoc (Packaged)** launch
+profile, and run it. Packaged development deployment requires Windows Developer
+Mode. Enable that setting yourself if needed. Normal builds and F5 deployment
+use managed code for debugging; creating a Release MSIX compiles NativeAOT.
+Do not run the executable from its build folder as an unpackaged app.
+
+To sideload the generated MSIX, sign it with a code-signing certificate whose
+subject matches `Package.appxmanifest`'s `Identity.Publisher`, and trust that
+certificate on the test machine. Signing and trust are separate, explicit steps.
+The default unsigned MSIX cannot be installed by double-clicking it.
 
 Select **Start dictation**, speak, then select **Finish dictation**.
 The first recognition can take longer while model
@@ -114,9 +146,82 @@ Models and native build outputs live in `.runtime`.
 Interrupted downloads remain as `.partial` files and resume on the next setup
 run. Only complete, verified files become installed models.
 The setup script does not retrieve server packages or overwrite native binaries.
-The native engine loads models on demand.
+The native engine loads models on demand. A new packaged installation has no
+weights until you download a model or choose an existing model folder.
+
+## Microsoft Store preparation
+
+`DictationPoc\Package.appxmanifest` currently uses the development identity
+`BumpyClock.LocalVoice.Development` with publisher `CN=BumpyClock`. This is not
+a reserved Store identity.
+
+When ready, use Visual Studio's **Package & Publish > Associate App with the
+Store** on `DictationPoc`. Association supplies the exact package name, publisher,
+and publisher display name from Partner Center. Then use **Create App Packages**
+for Microsoft Store distribution in Release/x64 and upload the resulting Store
+package. Keep the fourth version component zero for Store submissions and
+increase the version for updates. The command-line publishing script intentionally
+builds a local unsigned MSIX, not a Store submission.
+
+The package declares `runFullTrust` for the desktop/native application,
+`microphone` for capture, and `internetClient` for user-requested model downloads.
+Explain the full-trust requirement in the Store submission. Prepare the listing,
+privacy policy, screenshots, license disclosures, and Windows App Certification
+Kit results before submission. The current native backend requires
+AVX2/FMA/F16C/BMI1/BMI2; document that CPU requirement and qualify clean-machine
+installation and recognition separately. Packaging alone does not establish
+Store certification or production readiness.
+
+See Microsoft's [single-project MSIX guide](https://learn.microsoft.com/windows/apps/windows-app-sdk/single-project-msix),
+[product identity requirements](https://learn.microsoft.com/windows/apps/publish/view-app-identity-details),
+and [MSIX signing guide](https://learn.microsoft.com/windows/msix/package/signing-package-overview).
 
 ## Model catalog and controls
+
+Open **Speech models** to choose weights without a command-line setup step.
+An app with no installed models opens this page and remains disconnected until
+weights are installed. The catalog comes from `tools\audio-models.json`; the
+packaged copy is the same catalog, not a second model registry. The page shows
+compiled-backend support, languages, precision, input mode, preview behavior,
+license notes, pinned source revision, exact size, and SHA-256.
+
+Select **Download** explicitly. The app does not automatically retrieve large
+weights. Transfers and hashing run outside recognition ownership, so dictation
+can continue with an existing model during a download. Progress shows transferred
+bytes and the measured transfer rate. **Pause** retains the partial file and its
+resume metadata. **Resume** and **Retry download** use validated byte ranges and
+strong ETags when provided. HTTP responses and reads each have a 30-second
+deadline; model transfers do not inherit the five-minute recognition deadline.
+The app rejects mismatched ranges, validators, encodings, lengths, and hashes
+rather than restarting or overwriting weights silently.
+
+Only an exact-length, SHA-256-verified `.partial` can reach **ReadyToInstall**.
+A read lease keeps these staged weights unchanged. Installation promotes the
+file atomically and refreshes the native inventory while recognition is idle.
+If a recording is active when a transfer completes, the model waits for
+**Install verified model**; the app does not cancel the recording. Partial
+files are never native model inventory entries. Downloads require free disk
+space for the remaining weights plus 64 MiB of reserve. Errors remain visible
+and no alternate model is selected silently.
+
+**Choose folder** saves the selected directory in the package's
+`LocalState\model-settings.json`. A fresh installation defaults to
+`LocalState\models`. `LocalState` is Windows' per-user package data folder,
+normally `%LOCALAPPDATA%\Packages\<package-family-name>\LocalState`.
+Package updates preserve this data; uninstalling the package removes its local
+data, including models in the default folder. Changing folders does not move
+or delete existing weights. Model folders explicitly chosen outside package
+storage remain outside that uninstall lifecycle.
+Older unpackaged `%LOCALAPPDATA%\LocalVoice` data and `.runtime\models` remain
+untouched. Choose `.runtime\models` explicitly to reuse development weights.
+**Verify installed files** checks exact lengths and hashes without downloading.
+**Remove file** and **Discard partial download** each require confirmation.
+Removal releases the native resident model first; installation and removal are
+rejected while recognition owns the session. Discarding a partial file does not
+remove a complete installed model. Removing the last model returns the session
+to Disconnected with no stale model selection. App close cancels and joins
+transfers alongside native shutdown. Only model files are transferred over the
+network, never audio, transcripts, or analytics.
 
 `tools\audio-models.json` pins each public repository revision, filename, exact
 byte length, SHA-256, license, and model ID. Available IDs:
@@ -132,7 +237,7 @@ byte length, SHA-256, license, and model ID. Available IDs:
 - `nemotron-asr-0.6b-q8`: Nemotron 3.5 ASR Streaming 0.6B Q8,
   930,625,888 bytes, OpenMDW-1.1. The adapter supports incremental recognition.
 
-Install all five models:
+The command-line setup remains available. To explicitly install all five models:
 
 ```powershell
 .\tools\Setup-AudioBackend.ps1 -Models all
@@ -254,11 +359,11 @@ it cannot force-abort that call. Allow the probe to exit before another run.
 
 `App` composes paths and concrete dependencies explicitly. Pages receive the
 shared session; they do not retrieve services through a global application
-locator. The composition root supplies per-user storage and native resource
-paths. Development publishing emits `runtime-settings.json` with the installed
-model directory. `-ModelsDirectory` overrides it; `-CleanDeployment` omits
-development settings and defaults the application to the user's local model
-folder. The app never searches ancestor directories for production resources.
+locator. The composition root supplies installation resource paths and per-user
+storage through `ApplicationData.Current.LocalFolder`. Packages default to the
+user's package-local model folder and contain no `runtime-settings.json` or
+machine-specific model paths. The app never searches ancestor directories for
+production resources.
 
 `DictationSession` owns one current operation: its cancellation, capture,
 producer, inference, identity, and outcome. Startup, reconnection and preference
@@ -283,11 +388,12 @@ integration test uses the real DLL and public sample.
 ```powershell
 dotnet test .\DictationPoc.Tests\DictationPoc.Tests.csproj --filter Category!=NativeIntegration
 dotnet test .\DictationPoc.Tests\DictationPoc.Tests.csproj --filter Category=NativeIntegration
-.\tools\Publish-Poc.ps1 -OutputDirectory .\.runtime\foundation-app
+.\tools\Publish-Poc.ps1 -OutputDirectory .\.runtime\packages
 ```
 
-Publishing verifies native PE import closure and required WinUI `.pri`/`.xbf`
-resources. Clean-machine Windows qualification and physical microphone-driver
+Publishing inspects the actual MSIX for its identity, native x64 executable,
+native PE import closure, notices, and compiled XAML embedded in `resources.pri`.
+Clean-machine Windows qualification and physical microphone-driver
 fault behavior still require their respective environments; a build is not
 evidence that those external conditions passed.
 
@@ -298,7 +404,7 @@ evidence that those external conditions passed.
 - A floating live-preview window is included.
 - WAV files only, within the duration and decoded-memory limits above. Operations time out after five minutes.
 - No audio/history persistence, cloud transcription, telemetry, or model auto-downloads inside the UI.
-- Models and runtime binaries are separate from the NativeAOT application.
+- Model weights are downloaded separately; runtime binaries ship inside the MSIX.
 
 audio.cpp is Apache-2.0 licensed. Catalog entries record each model's license.
 Model licenses are independent of the runtime. Preserve the upstream notices
