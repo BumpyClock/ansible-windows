@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Windows.Storage;
 
 namespace DictationPoc;
 
@@ -17,12 +18,18 @@ public sealed partial class MainWindow : Window
     private readonly MainPage _settings;
     private readonly ModelManagementPage _models;
     private readonly UiSessionObserver _observer;
+    private GlobalDictationHotkey? _hotkey;
+    private HotkeyChoice _configuredHotkey = GlobalDictationHotkey.Default;
     private FloatingDictationWindow? _floating;
     private bool _initialized;
     private bool _closed;
     private bool _allowClose;
     private bool _closing;
     private bool _popupFailed;
+    private bool _capturingTarget;
+    private readonly CancellationTokenSource _deliveryCancellation = new();
+    private Task<(bool available, CapturedTextTarget? target, string reason)>? _captureTask;
+    private Task? _deliveryTask;
 
     internal MainWindow(DictationSession session, AppPaths paths, HttpClient modelDownloads)
     {
@@ -30,7 +37,8 @@ public sealed partial class MainWindow : Window
         _session = session;
         _insights = new InsightsPage(session, Navigate);
         _dictation = new DictationPage(session);
-        _settings = new MainPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this));
+        _settings = new MainPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this),
+            () => _configuredHotkey, ChangeHotkey);
         _models = new ModelManagementPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this), modelDownloads);
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
@@ -55,6 +63,24 @@ public sealed partial class MainWindow : Window
             await _session.InitializeAsync();
             if (_session.State.Phase == DictationPhase.Disconnected && _session.State.Models.Count == 0)
                 Navigate("models");
+            try
+            {
+                var values = ApplicationData.Current.LocalSettings.Values;
+                string? preferenceWarning = null;
+                if (values.TryGetValue("dictationHotkey", out var stored))
+                {
+                    if (stored is not int value || !GlobalDictationHotkey.TryFromValue(value, out _configuredHotkey))
+                    {
+                        _configuredHotkey = GlobalDictationHotkey.Default;
+                        preferenceWarning = "The saved shortcut is not supported. Ctrl + Alt + D is active; choose a shortcut in Settings.";
+                    }
+                }
+                _hotkey = new GlobalDictationHotkey(WinRT.Interop.WindowNative.GetWindowHandle(this),
+                    _configuredHotkey, HotkeyPressed);
+                if (preferenceWarning is not null)
+                    _session.Notify(NoticeKind.Warning, "Shortcut reset", preferenceWarning);
+            }
+            catch (Exception error) { _session.Notify(NoticeKind.Error, "Shortcut unavailable", error.Message); }
         }
         catch (Exception error) { _session.ReportUiError(error); }
     }
@@ -69,6 +95,27 @@ public sealed partial class MainWindow : Window
             button.Style = (Style)Application.Current.Resources[
                 (string)button.Tag == page ? "SelectedNavigationButtonStyle" : "NavigationButtonStyle"];
             AutomationProperties.SetHelpText(button, (string)button.Tag == page ? "Current page" : "");
+        }
+    }
+
+    private void ChangeHotkey(HotkeyChoice choice)
+    {
+        if (_hotkey is null)
+            _hotkey = new GlobalDictationHotkey(WinRT.Interop.WindowNative.GetWindowHandle(this),
+                choice, HotkeyPressed);
+        else
+            _hotkey.Change(choice);
+        _configuredHotkey = choice;
+        try
+        {
+            ApplicationData.Current.LocalSettings.Values["dictationHotkey"] = (int)choice;
+            _session.Notify(NoticeKind.Success, "Shortcut updated",
+                $"Use {_hotkey.CurrentOption.DisplayText} to start and finish dictation in another app.");
+        }
+        catch (Exception error)
+        {
+            _session.Notify(NoticeKind.Warning, "Shortcut not saved",
+                $"The shortcut works until this app closes, but its preference could not be saved: {error.Message}");
         }
     }
 
@@ -97,15 +144,100 @@ public sealed partial class MainWindow : Window
         if (state.IsLiveOperation) { _floating?.ShowPreview(); }
     }
 
+    private async void HotkeyPressed()
+    {
+        if (_closed || _closing || _capturingTarget) { return; }
+        try
+        {
+            if (_session.State.CanFinish)
+            {
+                await _session.FinishAsync();
+                return;
+            }
+            if (_deliveryTask is { IsCompleted: false }) { return; }
+            if (!_session.State.CanStart)
+            {
+                if (_session.State.IsIdle)
+                    _session.Notify(NoticeKind.Warning, "Dictation unavailable", "Choose a streaming speech model before using the shortcut.");
+                return;
+            }
+            _capturingTarget = true;
+            var windowHandle = WinRT.Interop.WindowNative.GetWindowHandle(this);
+            _captureTask = Task.Run(() =>
+            {
+                var available = WindowsTextTarget.TryCapture(windowHandle, out var target, out var reason);
+                return (available, target, reason);
+            });
+            var capture = await _captureTask;
+            if (_closing || _closed) { return; }
+            if (!capture.available)
+            {
+                _session.Notify(NoticeKind.Warning, "No insertion target", capture.reason);
+                return;
+            }
+            _deliveryTask = DeliverAsync(_session.StartDictationAsync(), capture.target!);
+        }
+        catch (Exception error) { _session.ReportUiError(error); }
+        finally
+        {
+            _capturingTarget = false;
+            if (_captureTask?.IsCompleted == true) { _captureTask = null; }
+        }
+    }
+
+    private async Task DeliverAsync(Task<SessionOutcome> operation, CapturedTextTarget target)
+    {
+        try
+        {
+            var outcome = await operation;
+            if (_closing || _closed || outcome.Kind != SessionOutcomeKind.Completed) { return; }
+            var text = DictationDeliveryPolicy.SpeechForInsertion(outcome);
+            if (text is null)
+            {
+                _session.Notify(NoticeKind.Warning, "No speech to insert",
+                    "The model did not return authoritative speech text. Use Copy transcript if text is visible.");
+                return;
+            }
+            if (!ReferenceEquals(_session.State.Result, outcome.Result)) { return; }
+            TextInsertionResult result;
+            try
+            {
+                result = await Task.Run(() => WindowsTextTarget.Insert(target, text, _deliveryCancellation.Token, () =>
+                {
+                    var current = _session.State;
+                    return current.IsIdle && ReferenceEquals(current.Result, outcome.Result);
+                }));
+            }
+            catch (Exception error)
+            {
+                if (!_closing && !_closed)
+                    _session.Notify(NoticeKind.Warning, "Text not inserted",
+                        $"Windows could not verify or reach the original field: {error.Message}. Use Copy transcript instead.");
+                return;
+            }
+            if (_closing || _closed || !ReferenceEquals(_session.State.Result, outcome.Result)) { return; }
+            _session.Notify(result.Sent ? NoticeKind.Success : NoticeKind.Warning,
+                result.Sent ? "Text sent" : "Text not inserted", result.Message);
+        }
+        catch (Exception error) { _session.ReportUiError(error); }
+    }
+
     private async void CloseRequested(AppWindow sender, AppWindowClosingEventArgs args)
     {
         if (_allowClose) { return; }
         args.Cancel = true;
         if (_closing) { return; }
         _closing = true;
+        _deliveryCancellation.Cancel();
         try
         {
             await Task.WhenAll(_session.CloseAsync(), _models.DisposeAsync().AsTask());
+            if (_captureTask is { } capture)
+            {
+                try { await capture; }
+                catch (Exception error) { Debug.WriteLine($"Local Voice: target inspection failed during close: {error.Message}"); }
+            }
+            if (_deliveryTask is not null) { await _deliveryTask; }
             if (_floating is not null) { await _floating.ClosePreviewAsync(); }
             _allowClose = true;
             Close();
@@ -121,6 +253,8 @@ public sealed partial class MainWindow : Window
     private void WindowClosed(object sender, WindowEventArgs args)
     {
         _closed = true;
+        _hotkey?.Dispose();
+        _deliveryCancellation.Dispose();
         _observer.Dispose();
         AppWindow.Closing -= CloseRequested;
     }

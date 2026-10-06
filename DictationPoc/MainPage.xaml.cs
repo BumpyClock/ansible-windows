@@ -11,6 +11,8 @@ public sealed partial class MainPage : Page
     private readonly DictationSession _session;
     private readonly AppPaths _paths;
     private readonly Func<nint> _windowHandle;
+    private readonly Func<HotkeyChoice> _currentHotkey;
+    private readonly Action<HotkeyChoice> _changeHotkey;
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMilliseconds(200) };
     private UiSessionObserver? _observer;
     private SessionSnapshot _state;
@@ -18,13 +20,20 @@ public sealed partial class MainPage : Page
     private bool _picking;
     private IReadOnlyList<AudioModel>? _renderedModels;
 
-    internal MainPage(DictationSession session, AppPaths paths, Func<nint> windowHandle)
+    internal MainPage(DictationSession session, AppPaths paths, Func<nint> windowHandle,
+        Func<HotkeyChoice> currentHotkey, Action<HotkeyChoice> changeHotkey)
     {
         InitializeComponent();
         _session = session;
         _paths = paths;
         _windowHandle = windowHandle;
+        _currentHotkey = currentHotkey;
+        _changeHotkey = changeHotkey;
         _state = session.State;
+        _rendering = true;
+        HotkeyBox.ItemsSource = GlobalDictationHotkey.Options.Select(option => option.DisplayText).ToArray();
+        HotkeyBox.SelectedIndex = HotkeyIndex(_currentHotkey());
+        _rendering = false;
         _timer.Tick += (_, _) => DetailsText.Text =
             $"{(_state.Words is { } words ? $"{words} spoken words" : "Word count pending")} / {_session.Elapsed:mm\\:ss}";
         Loaded += (_, _) =>
@@ -82,6 +91,7 @@ public sealed partial class MainPage : Page
             UsageToggle.IsOn = _state.Usage?.Enabled == true;
             UsageToggle.IsEnabled = idle && _state.Usage is not null;
             UsagePathText.Text = _session.UsagePath;
+            HotkeyBox.SelectedIndex = HotkeyIndex(_currentHotkey());
         }
         finally { _rendering = false; }
     }
@@ -143,6 +153,28 @@ public sealed partial class MainPage : Page
     private async void UsageToggled(object sender, RoutedEventArgs args)
     {
         if (!_rendering) { await RunCommandAsync(() => _session.SetUsageEnabledAsync(UsageToggle.IsOn)); }
+    }
+
+    private void HotkeyChanged(object sender, SelectionChangedEventArgs args)
+    {
+        if (_rendering || HotkeyBox.SelectedIndex < 0) { return; }
+        try { _changeHotkey(GlobalDictationHotkey.Options[HotkeyBox.SelectedIndex].Choice); }
+        catch (Exception error)
+        {
+            _rendering = true;
+            try { HotkeyBox.SelectedIndex = HotkeyIndex(_currentHotkey()); }
+            finally { _rendering = false; }
+            _session.Notify(NoticeKind.Error, "Shortcut unavailable", error.Message);
+        }
+    }
+
+    private static int HotkeyIndex(HotkeyChoice choice)
+    {
+        for (var index = 0; index < GlobalDictationHotkey.Options.Count; index++)
+        {
+            if (GlobalDictationHotkey.Options[index].Choice == choice) { return index; }
+        }
+        throw new ArgumentOutOfRangeException(nameof(choice));
     }
 
     private async Task RunCommandAsync(Func<Task> command)

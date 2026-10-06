@@ -69,7 +69,9 @@ proof, not the production dictation application.
 - WAV recording transcription, including streamed decoding where the model supports it.
 - Model selection, downloads, and management from the pinned ASR catalog.
 - Cancellation, microphone level, elapsed time, and explicit connection/inference errors.
-- Final-text copying. Transcript and microphone audio remain in memory.
+- Direct typing of completed microphone dictation into the original window
+  while its focused native handle still matches; final-text copying remains available.
+  Transcript and microphone audio remain in memory.
 - Direct native inference. No HTTP service, listener, or audio upload is required.
 
 The UI uses native controls and the Windows theme. The floating preview adds only
@@ -121,10 +123,29 @@ subject matches `Package.appxmanifest`'s `Identity.Publisher`, and trust that
 certificate on the test machine. Signing and trust are separate, explicit steps.
 The default unsigned MSIX cannot be installed by double-clicking it.
 
-Select **Start dictation**, speak, then select **Finish dictation**.
-The first recognition can take longer while model
-graphs are prepared. **Cancel** aborts the operation and retains visible partial
-text. **Copy text** copies the completed result or retained text after an error.
+For insertion into another app, focus its editable text field and press the
+global dictation shortcut shown in **Settings + verification**. Speak, then
+press the shortcut again to finish. The app sends final authoritative speech
+text as Unicode keyboard input without changing the clipboard or activating
+another window. It checks that the original window and focused native handle
+still match. When Windows UI Automation provides a field identity, it also
+checks that identity. Some rich editors do not expose one: moving between
+fields inside the same window may then go undetected, so check the destination
+before using the text. Known password and read-only fields are rejected. If
+focus moves or recognition fails, use **Copy transcript** in the main window
+instead. Some target apps may not accept simulated Unicode input, and Windows
+cannot confirm that typed events were accepted. Elevated apps and the secure
+desktop are unsupported.
+
+The default shortcut is **Ctrl + Alt + D**. Choose a different shortcut in
+**Settings + verification** if it conflicts with another app; registration
+errors appear in the app rather than silently selecting another shortcut.
+
+The main-window **Start dictation** and **Finish dictation** buttons remain
+available for manual transcription without automatic insertion. The first
+recognition can take longer while model graphs are prepared. **Cancel** aborts
+the operation and retains visible partial text. **Copy transcript** copies the
+completed result or retained text after an error.
 No clipboard contents are read.
 
 Leave **Language hint** blank for Moonshine, which is English-only. Other model
@@ -398,7 +419,8 @@ evidence that those external conditions passed.
 ## Deliberate boundaries
 
 - ARM64 backend qualification remains separate. Only x64 is validated here.
-- No global hotkey, automatic target-app insertion, or LLM cleanup.
+- No LLM cleanup. Global shortcut insertion is limited to regular desktop
+  apps and cannot guarantee that a target accepted the simulated keystrokes.
 - A floating live-preview window is included.
 - WAV files only, within the duration and decoded-memory limits above. Operations time out after five minutes.
 - No audio/history persistence, cloud transcription, telemetry, or model auto-downloads inside the UI.

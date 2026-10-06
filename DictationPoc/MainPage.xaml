@@ -30,6 +30,17 @@
                     <TextBlock x:Name="BackendText" TextWrapping="Wrap" Foreground="{ThemeResource SecondaryTextBrush}" />
                 </StackPanel>
             </Border>
+            <Border Style="{StaticResource MetricCardStyle}">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="Insert into another app" FontSize="20" FontWeight="SemiBold" />
+                    <TextBlock Text="Focus a text field, press the shortcut to start dictation, then press it again to finish. The app checks the original window and, when available, the field's identity."
+                               TextWrapping="Wrap" Foreground="{ThemeResource SecondaryTextBrush}" />
+                    <ComboBox x:Name="HotkeyBox" Header="Global dictation shortcut" HorizontalAlignment="Stretch"
+                              SelectionChanged="HotkeyChanged" />
+                    <TextBlock Text="The shortcut does not change your clipboard. Some editors do not expose individual field identities; check where the text lands. Copy the transcript manually if typing is unavailable."
+                               TextWrapping="Wrap" Foreground="{ThemeResource SecondaryTextBrush}" />
+                </StackPanel>
+            </Border>
             <StackPanel Spacing="12">
                 <TextBlock Text="Verify recognition" FontSize="20" FontWeight="SemiBold" />
                 <TextBlock x:Name="ModelNote" TextWrapping="Wrap" Foreground="{ThemeResource SecondaryTextBrush}" />

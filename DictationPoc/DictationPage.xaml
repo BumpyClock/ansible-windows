@@ -30,7 +30,7 @@
             <TextBox x:Name="TranscriptBox" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True"
                      MinHeight="220" MaxHeight="360" FontSize="18" PlaceholderText="Your transcript appears here."
                      AutomationProperties.Name="Dictation transcript" ScrollViewer.VerticalScrollBarVisibility="Auto" />
-            <TextBlock Text="Audio stays on this device. Automatic insertion and global hotkeys are not enabled in this POC."
+            <TextBlock Text="Focus a text field in another app, then use the shortcut shown in Settings to start and finish dictation. If text cannot be sent, use Copy transcript instead. Audio stays on this device."
                        FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource SecondaryTextBrush}" />
         </StackPanel>
     </ScrollViewer>
