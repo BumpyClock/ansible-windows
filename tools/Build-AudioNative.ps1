@@ -106,6 +106,13 @@ function Test-NativeClosure {
                 Copy-Item -LiteralPath $_.FullName -Destination $target -Force
             }
         Copy-Item -LiteralPath (Join-Path $source "LICENSE") -Destination (Join-Path $output "audio.cpp-LICENSE") -Force
+        $sample = Join-Path $source "assets\resources\sample_16k.wav"
+        if (-not (Test-Path -LiteralPath $sample -PathType Leaf)) {
+            throw "The pinned audio.cpp source is missing its public validation sample."
+        }
+        $validation = Join-Path $runtime "validation"
+        New-Item -ItemType Directory -Force -Path $validation | Out-Null
+        Copy-Item -LiteralPath $sample -Destination (Join-Path $validation "sample_16k.wav") -Force
         [ordered]@{
             source_commit = "795c45fbde0a7d29c93b22199728ff5caaec02e5"
             architecture = "windows-x64-cpu"

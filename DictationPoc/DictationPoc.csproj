@@ -76,5 +76,7 @@
            Text="Only the Windows x64 CPU deployment is qualified. x86 and ARM64 require separate native builds and qualification." />
     <Error Condition="'$(WindowsPackageType)' != 'MSIX' or '$(EnableMsixTooling)' != 'true' or '$(WindowsAppSDKSelfContained)' != 'true' or '$(SelfContained)' != 'true' or '$(PublishAot)' != 'true'"
            Text="Use the packaged, self-contained NativeAOT deployment path." />
+    <Error Condition="!Exists('..\.runtime\native\audiocpp.dll') or !Exists('..\.runtime\native\audio.cpp-LICENSE') or !Exists('..\.runtime\native\native-runtime.json') or !Exists('..\.runtime\validation\sample_16k.wav')"
+           Text="Native runtime files or the public validation sample are missing. Run .\tools\Build-AudioNative.ps1 from the repository root before building DictationPoc." />
   </Target>
 </Project>

@@ -94,7 +94,9 @@ From this folder:
 
 The setup script installs models only. The native build produces
 `.runtime\native\audiocpp.dll`, stages its required app-local MSVC/OpenMP
-dependencies, and records their import closure and redistributable notices.
+dependencies, records their import closure and redistributable notices, and
+copies the public validation WAV from the pinned audio.cpp source. Run the native
+build before building or launching `DictationPoc` in Visual Studio.
 Then build and verify an unsigned NativeAOT package:
 
 ```powershell
@@ -324,10 +326,6 @@ wrapper. No HTTP fallback is used.
 
 ```powershell
 dotnet test .\DictationPoc.Tests\DictationPoc.Tests.csproj
-New-Item -ItemType Directory -Force .\.runtime\validation | Out-Null
-Invoke-WebRequest `
-  https://raw.githubusercontent.com/0xShug0/audio.cpp/v0.9.0/assets/resources/sample_16k.wav `
-  -OutFile .\.runtime\validation\sample_16k.wav
 dotnet run --project .\DictationPoc.Probe -- `
   .\.runtime\native\audiocpp.dll .\.runtime\models .\tools\audio-models.json `
   .\.runtime\validation\sample_16k.wav
