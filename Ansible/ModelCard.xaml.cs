@@ -80,7 +80,9 @@ public sealed partial class ModelCard : UserControl
         ApplyIcon();
     }
 
-    public void Update(ModelDownloadSnapshot snapshot, bool idle, bool managerIdle, bool managerBusy, bool active, bool canSelect)
+    // busyReason explains a Download or Resume that waits on another model operation.
+    public void Update(ModelDownloadSnapshot snapshot, bool idle, bool managerIdle, bool managerBusy, bool active, bool canSelect,
+        string busyReason = "Wait for the current model operation to finish.")
     {
         var entry = snapshot.Model;
         var state = snapshot.State;
@@ -88,10 +90,10 @@ public sealed partial class ModelCard : UserControl
 
         // Not installed and Installed have no state label; the Download, Use and Remove buttons already say it.
         var stateLabel = !snapshot.Supported ? "Unsupported" : active ? "In use" : StateLabel(state);
-        // Installed cards carry memory on this line; a paid download cost leaves the card once the model file exists.
+        // Installed cards carry behaviour and memory on this line; other cards carry them on the caption row below.
         var installed = snapshot.HasModelFile || active;
         var memory = FormatBytes(entry.EstimatedMemoryBytes);
-        var caption = !installed ? _behavior : _behavior.Length > 0 ? $"{_behavior} \u00B7 {memory}" : memory;
+        var caption = !installed ? "" : _behavior.Length > 0 ? $"{_behavior} \u00B7 {memory}" : memory;
         StateRun.Text = stateLabel ?? "";
         SeparatorRun.Text = stateLabel is not null && caption.Length > 0 ? " \u00B7 " : "";
         CaptionRun.Text = caption;
@@ -106,7 +108,8 @@ public sealed partial class ModelCard : UserControl
         CardBorder.BorderBrush = (Brush)Application.Current.Resources[active ? "AccentGraphicBrush" : "CardStrokeColorDefaultBrush"];
         CardBorder.BorderThickness = new Thickness(active ? 1.5 : 1);
 
-        StatsText.Text = installed ? "" : $"{FormatBytes(entry.Bytes)} download \u00B7 {memory} memory";
+        var sizes = $"{FormatBytes(entry.Bytes)} download \u00B7 {memory} memory";
+        StatsText.Text = installed ? "" : _behavior.Length > 0 ? $"{_behavior} \u00B7 {sizes}" : sizes;
         StatsText.Visibility = installed ? Visibility.Collapsed : Visibility.Visible;
 
         var showBar = state is ModelInstallState.Downloading or ModelInstallState.Paused or ModelInstallState.Verifying;
@@ -144,9 +147,12 @@ public sealed partial class ModelCard : UserControl
         PrimaryButton.Style = (Style)Application.Current.Resources[
             transferring || !PrimaryButton.IsEnabled ? "DefaultButtonStyle" : "AccentButtonStyle"];
         PrimaryHost.Visibility = !active && (transferring || !snapshot.HasModelFile) ? Visibility.Visible : Visibility.Collapsed;
-        // A disabled button shows no tooltip, so the host explains a wait on another model operation.
-        ToolTipService.SetToolTip(PrimaryHost, !transferring && !PrimaryButton.IsEnabled && managerBusy && snapshot.Supported
-            ? "Wait for the current model operation to finish." : null);
+        // A disabled button shows no tooltip, so the host explains a wait on another model operation. A Border has
+        // no automation peer, so the button carries the same help text for keyboard and Narrator users.
+        var waitReason = !transferring && !PrimaryButton.IsEnabled && managerBusy && snapshot.Supported ? busyReason : null;
+        ToolTipService.SetToolTip(PrimaryHost, waitReason);
+        AutomationProperties.SetHelpText(PrimaryHost, waitReason ?? "");
+        AutomationProperties.SetHelpText(PrimaryButton, waitReason ?? "");
         ToolTipService.SetToolTip(PrimaryButton, state == ModelInstallState.Downloading
             ? "Pause keeps partial files for Resume. Dictation can continue during downloads; installation waits until dictation finishes."
             : null);
@@ -165,8 +171,9 @@ public sealed partial class ModelCard : UserControl
         AutomationProperties.SetAutomationId(RemoveButton, _removeDiscardsPartial ? $"ModelDiscard_{ModelId}" : $"ModelRemove_{ModelId}");
         AutomationProperties.SetName(RemoveButton, _removeDiscardsPartial ? $"Discard partial download of {_name}" : $"Remove {_name}");
 
-        // Use appears only when it can be clicked; a disabled Use cannot explain itself.
-        UseButton.Visibility = snapshot.HasModelFile && !active && snapshot.Supported && canSelect
+        // Use appears only when it can be clicked; a disabled Use cannot explain itself. A card that is still
+        // downloading or verifying offers Pause or Stop only, so selection follows a finished install.
+        UseButton.Visibility = snapshot.HasModelFile && !active && snapshot.Supported && canSelect && !transferring
             ? Visibility.Visible : Visibility.Collapsed;
         ActionRow.Visibility = PrimaryHost.Visibility == Visibility.Visible || UseButton.Visibility == Visibility.Visible
             ? Visibility.Visible : Visibility.Collapsed;

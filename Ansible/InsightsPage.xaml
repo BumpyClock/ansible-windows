@@ -39,18 +39,25 @@
             <Grid x:Name="DetailGrid" ColumnSpacing="16" RowSpacing="16">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                 <Grid.RowDefinitions><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-                <Border x:Name="ModelsCard" Style="{StaticResource MetricCardStyle}">
+                <Border x:Name="ModelsCard" VerticalAlignment="Top" Style="{StaticResource MetricCardStyle}">
                     <StackPanel Spacing="16">
                         <TextBlock Text="Sessions by model" Style="{StaticResource BodyStrongTextBlockStyle}"
                                    ToolTipService.ToolTip="Up to five models, ranked by completed sessions." />
                         <StackPanel x:Name="ModelRows" Spacing="8" />
                     </StackPanel>
                 </Border>
-                <Border x:Name="ActivityCard" Grid.Column="1" Style="{StaticResource MetricCardStyle}">
+                <Border x:Name="ActivityCard" Grid.Column="1" VerticalAlignment="Top" Style="{StaticResource MetricCardStyle}">
                     <StackPanel Spacing="16">
-                        <TextBlock x:Name="StreakText" Text="0 day streak" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                        <Grid x:Name="HeatmapGrid" ColumnSpacing="4" RowSpacing="4" HorizontalAlignment="Center"
-                              AutomationProperties.Name="Local session activity calendar" />
+                        <Grid>
+                            <TextBlock Text="Activity" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                            <TextBlock x:Name="StreakText" Text="0 day streak" HorizontalAlignment="Right"
+                                       Style="{StaticResource BodyTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </Grid>
+                        <Grid x:Name="HeatmapHost" SizeChanged="HeatmapHostSizeChanged">
+                            <Grid x:Name="HeatmapGrid" ColumnSpacing="4" RowSpacing="4" HorizontalAlignment="Center"
+                                  AutomationProperties.Name="Local session activity calendar" />
+                        </Grid>
                     </StackPanel>
                 </Border>
             </Grid>

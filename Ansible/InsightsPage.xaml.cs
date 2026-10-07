@@ -14,6 +14,8 @@ public sealed partial class InsightsPage : Page
     private UsageDocument? _usage;
     private IReadOnlyList<AudioModel>? _models;
     private bool _collectUsage;
+    private UsageSummary? _summary;
+    private double _cellSize = 14;
 
     internal InsightsPage(DictationSession session)
     {
@@ -73,6 +75,7 @@ public sealed partial class InsightsPage : Page
             ? $"Best {summary.LongestStreak} {(summary.LongestStreak == 1 ? "day" : "days")}."
             : "Consecutive days with a completed session.");
         RenderModels(summary);
+        _summary = summary;
         RenderActivity(summary);
     }
 
@@ -111,11 +114,13 @@ public sealed partial class InsightsPage : Page
     private void RenderActivity(UsageSummary summary)
     {
         const int weeks = 13;
-        const double cellSize = 14;
+        const double labelColumn = 16;
+        var cellSize = _cellSize;
         HeatmapGrid.Children.Clear();
         HeatmapGrid.ColumnDefinitions.Clear();
         HeatmapGrid.RowDefinitions.Clear();
-        for (var column = 0; column <= weeks; column++)
+        HeatmapGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(labelColumn) });
+        for (var column = 0; column < weeks; column++)
         {
             HeatmapGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         }
@@ -181,6 +186,15 @@ public sealed partial class InsightsPage : Page
                 HeatmapGrid.Children.Add(cell);
             }
         }
+    }
+
+    private void HeatmapHostSizeChanged(object sender, SizeChangedEventArgs args)
+    {
+        // 13 week columns plus the label column are separated by 13 gaps of 4 DIPs.
+        var cell = Math.Clamp(Math.Floor((args.NewSize.Width - 16 - 13 * 4) / 13), 12, 22);
+        if (cell == _cellSize) { return; }
+        _cellSize = cell;
+        if (_summary is not null) { RenderActivity(_summary); }
     }
 
     private void LayoutChanged(object sender, SizeChangedEventArgs args)

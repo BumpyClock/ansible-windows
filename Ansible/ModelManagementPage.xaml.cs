@@ -134,18 +134,22 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
             attention ? state.Notice.Title : "";
         StatusInfo.Message = _error ?? (catalogMissing ? "Open Model folder, then Verify installed files to retry opening the catalog." :
             attention ? state.Notice.Message : "");
+        // A closed InfoBar stays Visible and still takes stack spacing, which pushes the cards below other pages.
+        StatusInfo.Visibility = StatusInfo.IsOpen ? Visibility.Visible : Visibility.Collapsed;
 
         if (_manager is null) { return; }
         // Selecting an installed model does not depend on the download manager.
         var canSelect = state.Phase == DictationPhase.Ready;
         var activeId = state.SelectedModel?.Id;
         var snapshots = new Dictionary<ModelCard, ModelDownloadSnapshot>();
+        foreach (var card in _cardList) { snapshots[card] = _manager.Get(card.ModelId); }
+        // A card that waits is never the one transferring, so any verifying card is another card.
+        var busyReason = snapshots.Values.Any(snapshot => snapshot.State == ModelInstallState.Verifying)
+            ? "Wait for the current verification to finish." : "Wait for the current model operation to finish.";
         foreach (var card in _cardList)
         {
-            var snapshot = _manager.Get(card.ModelId);
-            snapshots[card] = snapshot;
-            card.Update(snapshot, idle, managerIdle, managerBusy,
-                active: activeId == card.ModelId, canSelect: canSelect);
+            card.Update(snapshots[card], idle, managerIdle, managerBusy,
+                active: activeId == card.ModelId, canSelect: canSelect, busyReason: busyReason);
         }
         // In use first, then installed, then not installed. OrderBy is stable, so catalog order holds within each group.
         _ordered = _cardList.OrderBy(card => card.ModelId == activeId ? 0 : snapshots[card].HasModelFile ? 1 : 2).ToArray();

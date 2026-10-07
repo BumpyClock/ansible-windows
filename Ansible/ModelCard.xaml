@@ -44,7 +44,7 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <Ellipse x:Name="StateDot" Width="7" Height="7" Margin="0,0,6,0" VerticalAlignment="Center" Visibility="Collapsed" />
-                        <!-- State, behaviour and (for installed cards) memory share one line; empty parts drop out. -->
+                        <!-- Installed cards: state, behaviour and memory share one line. Other cards: the state only. -->
                         <TextBlock x:Name="StateLineText" Grid.Column="1" TextWrapping="Wrap" VerticalAlignment="Center"
                                    Style="{StaticResource CaptionSecondaryStyle}">
                             <Run x:Name="StateRun" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}" /><Run x:Name="SeparatorRun" /><Run x:Name="CaptionRun" />
@@ -118,11 +118,12 @@
                 </Grid>
             </Grid>
 
-            <!-- Not-installed cards only; installed cards carry memory on the state line. Update sets the tooltip. -->
+            <!-- Not-installed cards only: behaviour, download size and memory on one row. Installed cards
+                 carry behaviour and memory on the state line. The caption row, bar and actions share the content edge. -->
             <TextBlock x:Name="StatsText" Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap" />
 
             <ProgressBar x:Name="DownloadProgress" Minimum="0" Maximum="100" Visibility="Collapsed"
-                         AutomationProperties.Name="Model download progress" />
+                         HorizontalAlignment="Stretch" AutomationProperties.Name="Model download progress" />
             <TextBlock x:Name="ProgressText" TextWrapping="Wrap" Visibility="Collapsed"
                        Style="{StaticResource CaptionSecondaryStyle}" />
 

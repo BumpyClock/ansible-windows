@@ -83,10 +83,12 @@ public sealed partial class MainPage : Page
     private void RenderDictionaryStatus()
     {
         SaveDictionaryButton.IsEnabled = _state.IsIdle && _dictionaryDirty;
-        DictionaryStatusText.Text = _dictionaryDirty ? "Unsaved changes"
-            : _state.SelectedModel is { SupportsCustomDictionary: false } ? "Not used by the selected model."
-            : "";
-        DictionaryStatusText.Visibility = DictionaryStatusText.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (_dictionaryDirty) { DictionaryStatusText.Text = "Unsaved changes"; return; }
+        // The saved dictionary is normalized to unique, non-empty entries joined by line feeds.
+        var entries = _state.Settings.CustomDictionary.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length;
+        var count = entries switch { 0 => "No entries", 1 => "1 entry", _ => $"{entries} entries" };
+        DictionaryStatusText.Text = _state.SelectedModel is { SupportsCustomDictionary: false }
+            ? $"{count} · Not used by the selected model." : count;
     }
 
     // Warnings and errors stay until dismissed. Success and information notices are shown once for a few

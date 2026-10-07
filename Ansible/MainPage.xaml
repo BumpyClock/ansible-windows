@@ -15,11 +15,15 @@
                     <Grid ColumnSpacing="16">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                         <TextBlock Text="Activation mode" VerticalAlignment="Center"
-                                   Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                   Style="{StaticResource BodyTextBlockStyle}" />
                         <RadioButtons x:Name="PushToTalkChoice" Grid.Column="1" VerticalAlignment="Center" MaxColumns="2"
                                       AutomationProperties.AutomationId="PushToTalkToggle"
                                       AutomationProperties.Name="Activation mode"
                                       SelectionChanged="DictationModeChanged">
+                            <!-- The template keeps an 8 DIP header margin even without a header, which pushes the radios below the label centre. -->
+                            <RadioButtons.Resources>
+                                <Thickness x:Key="RadioButtonsTopHeaderMargin">0</Thickness>
+                            </RadioButtons.Resources>
                             <x:String>Hold to talk</x:String>
                             <x:String>Press to start and stop</x:String>
                         </RadioButtons>
@@ -28,7 +32,7 @@
                     <Grid ColumnSpacing="16">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                         <TextBlock Text="Shortcut" VerticalAlignment="Center"
-                                   Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                   Style="{StaticResource BodyTextBlockStyle}" />
                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                             <!-- Read-only keycap. Focus or click records a new shortcut; Esc cancels. -->
                             <TextBox x:Name="HotkeyCaptureBox" VerticalAlignment="Center"
@@ -50,7 +54,7 @@
                     <Grid ColumnSpacing="16">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                         <TextBlock Text="Language hint" VerticalAlignment="Center"
-                                   Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                   Style="{StaticResource BodyTextBlockStyle}" />
                         <TextBox x:Name="LanguageBox" Grid.Column="1" Width="180" VerticalAlignment="Center"
                                  AutomationProperties.Name="Language hint" PlaceholderText="Model default"
                                  TextChanged="LanguageChanged" />
@@ -74,7 +78,7 @@
                                 Content="Save dictionary" Click="SaveDictionaryClicked" />
                         <TextBlock x:Name="DictionaryStatusText" Grid.Column="1" VerticalAlignment="Center"
                                    TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}"
-                                   Visibility="Collapsed" AutomationProperties.LiveSetting="Polite" />
+                                   AutomationProperties.LiveSetting="Polite" />
                     </Grid>
                 </StackPanel>
             </Border>
@@ -82,8 +86,11 @@
             <Border Style="{StaticResource CardStyle}">
                 <Grid x:Name="UsageRow" ColumnSpacing="16" Background="Transparent">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                    <TextBlock Text="Usage statistics" VerticalAlignment="Center"
-                               Style="{StaticResource BodyStrongTextBlockStyle}" />
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="Usage statistics" Style="{StaticResource BodyTextBlockStyle}" />
+                        <TextBlock Text="Session counts only. Never audio or text." TextWrapping="Wrap"
+                                   Style="{StaticResource CaptionSecondaryStyle}" />
+                    </StackPanel>
                     <!-- The template keeps a fixed 12 DIP column for the empty On/Off content; the negative margin aligns the switch with the other row controls. -->
                     <ToggleSwitch x:Name="UsageToggle" Grid.Column="1" VerticalAlignment="Center" Margin="0,0,-12,0"
                                   AutomationProperties.AutomationId="UsageToggle"
