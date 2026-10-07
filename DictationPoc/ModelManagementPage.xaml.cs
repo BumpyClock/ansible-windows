@@ -142,14 +142,17 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         RefreshButton.IsEnabled = _initialization is not { IsCompleted: false } && !managerBusy && !_dialogActive;
         FolderMenuButton.IsEnabled = !_dialogActive;
 
+        var opening = _manager is null && _initialization is { IsCompleted: false } && _error is null;
         var attention = state.Notice.Kind is NoticeKind.Warning or NoticeKind.Error;
         StatusInfo.Severity = _error is not null || state.Notice.Kind == NoticeKind.Error ? InfoBarSeverity.Error :
             state.Notice.Kind == NoticeKind.Warning ? InfoBarSeverity.Warning : InfoBarSeverity.Informational;
         StatusInfo.IsOpen = _error is not null || _manager is null || !state.IsIdle || attention;
         StatusInfo.Title = _error is not null ? "Model operation failed" :
+            opening ? "Opening model catalog" :
             _manager is null ? "Catalog unavailable" :
             attention || !state.IsIdle ? state.Notice.Title : "";
-        StatusInfo.Message = _error ?? (_manager is null ? "Open Model folder, then Verify installed files to retry opening the catalog." :
+        StatusInfo.Message = _error ?? (opening ? "Please wait while the model catalog opens." :
+            _manager is null ? "Open Model folder, then Verify installed files to retry opening the catalog." :
             attention || !state.IsIdle ? state.Notice.Message : "");
 
         if (_manager is null) { return; }

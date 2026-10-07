@@ -83,6 +83,7 @@ public sealed partial class ModelCard : UserControl
         StateText.Text = snapshot.Supported ? StateLabel(state) : "Unsupported by this compiled backend";
 
         var showBar = state is ModelInstallState.Downloading or ModelInstallState.Paused or ModelInstallState.Verifying;
+        DownloadProgress.IsIndeterminate = state == ModelInstallState.Verifying;
         DownloadProgress.Value = snapshot.Progress;
         DownloadProgress.Visibility = showBar ? Visibility.Visible : Visibility.Collapsed;
         AutomationProperties.SetName(DownloadProgress, state == ModelInstallState.Verifying
