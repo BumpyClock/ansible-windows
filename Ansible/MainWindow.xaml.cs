@@ -85,11 +85,17 @@ public sealed partial class MainWindow : Window
     private void Navigate(string page)
     {
         MainContent.Content = page switch { "settings" => _settings, "dictation" => _dictation, "models" => _models, _ => _insights };
-        foreach (var button in new[] { DictationNav, ModelsNav, InsightsNav, SettingsNav })
+        foreach (var (button, indicator) in new[]
         {
+            (DictationNav, DictationIndicator), (ModelsNav, ModelsIndicator),
+            (InsightsNav, InsightsIndicator), (SettingsNav, SettingsIndicator),
+        })
+        {
+            var selected = (string)button.Tag == page;
             button.Style = (Style)Application.Current.Resources[
-                (string)button.Tag == page ? "SelectedNavigationButtonStyle" : "NavigationButtonStyle"];
-            AutomationProperties.SetHelpText(button, (string)button.Tag == page ? "Current page" : "");
+                selected ? "SelectedNavigationButtonStyle" : "NavigationButtonStyle"];
+            indicator.Visibility = selected ? Visibility.Visible : Visibility.Collapsed;
+            AutomationProperties.SetHelpText(button, selected ? "Current page" : "");
         }
     }
 

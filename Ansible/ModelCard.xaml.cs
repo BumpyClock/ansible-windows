@@ -42,19 +42,18 @@ public sealed partial class ModelCard : UserControl
         _name = entry.DisplayName ?? entry.Id;
         NameText.Text = _name;
         AutomationProperties.SetName(NameText, _name);
-        VariantText.Text = $"\u00B7 {ModeLabel(entry.Mode)} \u00B7 {entry.Precision ?? "Precision not specified"}";
-        BehaviorText.Text = BehaviorLabel(entry);
-        LanguageText.Text = entry.Languages ?? "Languages not specified";
-        DownloadSizeText.Text = FormatBytes(entry.Bytes);
-        MemoryText.Text = FormatBytes(entry.EstimatedMemoryBytes);
-        LicenseText.Text = entry.License ?? "License not specified";
-        ToolTipService.SetToolTip(LicenseText, LicenseText.Text);
+        CaptionRun.Text = entry.Precision is { } precision ? $"{BehaviorLabel(entry)} \u00B7 {precision}" : BehaviorLabel(entry);
+        // The catalog mixes concrete values ("English") with caveat sentences; only concrete values stay on the card.
+        var languages = entry.Languages ?? "Languages not specified";
+        var concreteLanguages = entry.Languages is { } value && !value.TrimEnd().EndsWith('.');
+        LanguageText.Text = concreteLanguages ? languages : "";
+        LanguageText.Visibility = concreteLanguages ? Visibility.Visible : Visibility.Collapsed;
 
         DescriptionText.Text = entry.Description ?? "";
         AboutSection.Visibility = string.IsNullOrEmpty(entry.Description) ? Visibility.Collapsed : Visibility.Visible;
-        CapabilityText.Text = $"{BehaviorText.Text} " + (entry.SupportsCustomDictionary
+        CapabilityText.Text = (entry.SupportsCustomDictionary
             ? "Supports custom dictionary context hints."
-            : "Custom dictionary hints are not supported.") + $"\n{LanguageText.Text}";
+            : "Custom dictionary hints are not supported.") + $"\n{languages}";
         LicenseDetailText.Text = $"{entry.License ?? "License not specified"}\n{entry.LicenseNotes ?? ""}".TrimEnd();
         SourceText.Text = $"{entry.Repo}\nPinned revision {entry.Revision}\n{entry.RemoteFile}";
         ByteCountText.Text = $"{entry.Bytes:N0} bytes";
@@ -84,24 +83,30 @@ public sealed partial class ModelCard : UserControl
         var state = snapshot.State;
         _state = state;
 
-        StateText.Text = !snapshot.Supported ? "Unsupported" : active ? "In use" : StateLabel(state);
+        // Not installed has no state label; the Download button already says it.
+        var stateLabel = !snapshot.Supported ? "Unsupported" : active ? "In use" : StateLabel(state);
+        StateRun.Text = stateLabel ?? "";
+        SeparatorRun.Text = stateLabel is null ? "" : " \u00B7 ";
+        StateDot.Visibility = stateLabel is null ? Visibility.Collapsed : Visibility.Visible;
         _stateDotBrushKey = !snapshot.Supported || state == ModelInstallState.Failed ? "SystemFillColorCriticalBrush"
-            : state == ModelInstallState.NotInstalled ? "TextFillColorSecondaryBrush"
             : "AccentGraphicBrush";
         ApplyStateDot();
         CardBorder.BorderBrush = (Brush)Application.Current.Resources[active ? "AccentGraphicBrush" : "CardStrokeColorDefaultBrush"];
         CardBorder.BorderThickness = new Thickness(active ? 1.5 : 1);
 
+        // A paid download cost leaves the card once the model file exists.
+        StatsText.Text = snapshot.HasModelFile || active ? $"{FormatBytes(entry.EstimatedMemoryBytes)} memory"
+            : $"{FormatBytes(entry.Bytes)} download \u00B7 {FormatBytes(entry.EstimatedMemoryBytes)} memory";
+
         var showBar = state is ModelInstallState.Downloading or ModelInstallState.Paused or ModelInstallState.Verifying;
         DownloadProgress.Value = snapshot.Progress;
         DownloadProgress.Visibility = showBar ? Visibility.Visible : Visibility.Collapsed;
+        // Verifying shows the state and bar only.
         ProgressText.Text = state == ModelInstallState.ReadyToInstall
-            ? "Weights verified. Select Install verified model when dictation is idle."
-            : state == ModelInstallState.Verifying
-                ? "Checking exact length and SHA-256 before installation."
-                : $"{FormatBytes(snapshot.DownloadedBytes)} / {FormatBytes(entry.Bytes)}" +
-                  (snapshot.BytesPerSecond > 0 ? $" / {FormatBytes((long)snapshot.BytesPerSecond)}/s" : "");
-        ProgressText.Visibility = showBar || state == ModelInstallState.ReadyToInstall
+            ? "Verified. Install when dictation is idle."
+            : $"{FormatBytes(snapshot.DownloadedBytes)} / {FormatBytes(entry.Bytes)}" +
+              (snapshot.BytesPerSecond > 0 ? $" / {FormatBytes((long)snapshot.BytesPerSecond)}/s" : "");
+        ProgressText.Visibility = state is ModelInstallState.Downloading or ModelInstallState.Paused or ModelInstallState.ReadyToInstall
             ? Visibility.Visible : Visibility.Collapsed;
 
         ErrorInfo.Message = snapshot.Error ?? "";
@@ -110,6 +115,8 @@ public sealed partial class ModelCard : UserControl
         // One primary action per card. While a transfer runs the primary action stops it; an installed
         // file has no primary action here because Use or the in-use state covers it.
         var transferring = state is ModelInstallState.Downloading or ModelInstallState.Verifying;
+        // Accent marks a forward step only; Pause and Stop use the default style.
+        PrimaryButton.Style = (Style)Application.Current.Resources[transferring ? "DefaultButtonStyle" : "AccentButtonStyle"];
         PrimaryButton.Content = state switch
         {
             ModelInstallState.Downloading => "Pause",
@@ -142,14 +149,10 @@ public sealed partial class ModelCard : UserControl
         AutomationProperties.SetAutomationId(RemoveButton, _removeDiscardsPartial ? $"ModelDiscard_{ModelId}" : $"ModelRemove_{ModelId}");
         AutomationProperties.SetName(RemoveButton, _removeDiscardsPartial ? $"Discard partial download of {_name}" : $"Remove {_name}");
 
-        // The card cannot see the session phase, so a busy model manager takes precedence in the reason.
-        UseButtonHost.Visibility = snapshot.HasModelFile && !active && snapshot.Supported ? Visibility.Visible : Visibility.Collapsed;
-        UseButton.IsEnabled = canSelect;
-        var useReason = canSelect ? null
-            : managerIdle ? "Finish dictation first." : "Wait for the current model operation to finish.";
-        ToolTipService.SetToolTip(UseButtonHost, useReason);
-        AutomationProperties.SetHelpText(UseButton, useReason ?? "");
-        ActionRow.Visibility = PrimaryButton.Visibility == Visibility.Visible || UseButtonHost.Visibility == Visibility.Visible
+        // Use appears only when it can be clicked; a disabled Use cannot explain itself.
+        UseButton.Visibility = snapshot.HasModelFile && !active && snapshot.Supported && canSelect
+            ? Visibility.Visible : Visibility.Collapsed;
+        ActionRow.Visibility = PrimaryButton.Visibility == Visibility.Visible || UseButton.Visibility == Visibility.Visible
             ? Visibility.Visible : Visibility.Collapsed;
 
         LocationText.Text = snapshot.Path;
@@ -231,25 +234,18 @@ public sealed partial class ModelCard : UserControl
         (_removeDiscardsPartial ? DiscardRequested : RemoveRequested)?.Invoke(ModelId);
     private void UseClicked(object sender, RoutedEventArgs e) => UseRequested?.Invoke(ModelId);
 
-    private static string ModeLabel(string mode) => mode switch
-    {
-        "streaming" => "Streaming",
-        "offline" => "Offline",
-        _ => mode
-    };
-
     private static string BehaviorLabel(NativeModelEntry entry) =>
-        entry.Mode == "offline" ? "WAV transcription only. No microphone dictation." :
-        entry.Preview == "live" ? "Live transcript." :
-        entry.Preview == "buffered" ? "Buffered recognition. Text updates are not continuous." :
-        "Text after Finish dictation.";
+        entry.Mode == "offline" ? "WAV files only" :
+        entry.Preview == "live" ? "Live transcript" :
+        entry.Preview == "buffered" ? "Buffered text" :
+        "Text after you finish";
 
     internal static string FormatBytes(long bytes) => bytes >= 1024L * 1024 * 1024 ? $"{bytes / (1024.0 * 1024 * 1024):F2} GiB" :
         bytes >= 1024 * 1024 ? $"{bytes / (1024.0 * 1024):F1} MiB" : $"{bytes:N0} bytes";
 
-    private static string StateLabel(ModelInstallState state) => state switch
+    private static string? StateLabel(ModelInstallState state) => state switch
     {
-        ModelInstallState.NotInstalled => "Not installed",
+        ModelInstallState.NotInstalled => null,
         ModelInstallState.ReadyToInstall => "Ready to install",
         _ => state.ToString()
     };

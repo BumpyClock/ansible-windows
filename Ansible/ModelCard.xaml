@@ -38,11 +38,20 @@
                 </Border>
                 <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center">
                     <TextBlock x:Name="NameText" Style="{StaticResource BodyStrongTextBlockStyle}" TextWrapping="Wrap" />
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Ellipse x:Name="StateDot" Width="7" Height="7" VerticalAlignment="Center" />
-                        <TextBlock x:Name="StateText" Style="{StaticResource CaptionTextBlockStyle}" FontWeight="SemiBold" VerticalAlignment="Center" />
-                        <TextBlock x:Name="VariantText" VerticalAlignment="Center" Style="{StaticResource CaptionSecondaryStyle}" />
-                    </StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Ellipse x:Name="StateDot" Width="7" Height="7" Margin="0,0,6,0" VerticalAlignment="Center" Visibility="Collapsed" />
+                        <!-- State and caption share one line; the state runs stay empty when the Download button says it. -->
+                        <TextBlock Grid.Column="1" TextWrapping="Wrap" VerticalAlignment="Center"
+                                   Style="{StaticResource CaptionSecondaryStyle}">
+                            <Run x:Name="StateRun" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}" /><Run x:Name="SeparatorRun" /><Run x:Name="CaptionRun" />
+                        </TextBlock>
+                    </Grid>
+                    <TextBlock x:Name="LanguageText" TextWrapping="Wrap" Visibility="Collapsed"
+                               Style="{StaticResource CaptionSecondaryStyle}" />
                 </StackPanel>
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Top">
                     <Button x:Name="DetailsButton" Style="{StaticResource IconButtonStyle}"
@@ -58,10 +67,7 @@
                                 </Flyout.FlyoutPresenterStyle>
                                 <StackPanel Spacing="12">
                                     <StackPanel x:Name="AboutSection" Spacing="12">
-                                        <StackPanel Spacing="4">
-                                            <TextBlock Text="About" Style="{StaticResource DetailLabelStyle}" />
-                                            <TextBlock x:Name="DescriptionText" Style="{StaticResource BodyTextBlockStyle}" />
-                                        </StackPanel>
+                                        <TextBlock x:Name="DescriptionText" Style="{StaticResource BodyTextBlockStyle}" />
                                         <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
                                     </StackPanel>
                                     <StackPanel Spacing="4">
@@ -107,48 +113,20 @@
                 </StackPanel>
             </Grid>
 
-            <StackPanel Spacing="4">
-                <TextBlock x:Name="BehaviorText" Style="{StaticResource BodyTextBlockStyle}" TextWrapping="Wrap" />
-                <TextBlock x:Name="LanguageText" TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}" />
-            </StackPanel>
-
-            <Grid ColumnSpacing="24">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <StackPanel Spacing="4">
-                    <TextBlock Text="Download" Style="{StaticResource CaptionSecondaryStyle}" />
-                    <TextBlock x:Name="DownloadSizeText" Style="{StaticResource BodyTextBlockStyle}" />
-                </StackPanel>
-                <StackPanel Grid.Column="1" Spacing="4">
-                    <TextBlock Text="Memory" Style="{StaticResource CaptionSecondaryStyle}"
-                               ToolTipService.ToolTip="Admission estimate used before loading, not measured usage." />
-                    <TextBlock x:Name="MemoryText" Style="{StaticResource BodyTextBlockStyle}" />
-                </StackPanel>
-                <StackPanel Grid.Column="2" Spacing="4">
-                    <TextBlock Text="License" Style="{StaticResource CaptionSecondaryStyle}" />
-                    <TextBlock x:Name="LicenseText" Style="{StaticResource BodyTextBlockStyle}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
-                </StackPanel>
-            </Grid>
-
+            <TextBlock x:Name="StatsText" Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap"
+                       ToolTipService.ToolTip="Memory is the admission estimate used before loading, not measured usage." />
 
             <ProgressBar x:Name="DownloadProgress" Minimum="0" Maximum="100" Visibility="Collapsed"
                          AutomationProperties.Name="Model download progress" />
             <TextBlock x:Name="ProgressText" TextWrapping="Wrap" Visibility="Collapsed"
                        Style="{StaticResource CaptionSecondaryStyle}" />
 
-            <InfoBar x:Name="ErrorInfo" Severity="Error" IsOpen="False" IsClosable="False"
-                     Title="This model needs attention" />
+            <InfoBar x:Name="ErrorInfo" Severity="Error" IsOpen="False" IsClosable="False" />
 
             <StackPanel x:Name="ActionRow" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                <Button x:Name="PrimaryButton" Content="Download" MinHeight="36" Click="PrimaryClicked"
-                        Style="{StaticResource AccentButtonStyle}" />
-                <!-- Disabled buttons do not show tooltips, so the reason lives on this hit-testable host. -->
-                <Border x:Name="UseButtonHost" Background="Transparent" Visibility="Collapsed">
-                    <Button x:Name="UseButton" Content="Use" MinHeight="32" Click="UseClicked" />
-                </Border>
+                <!-- Update owns the style: accent for forward steps, default for Pause and Stop. -->
+                <Button x:Name="PrimaryButton" Content="Download" MinHeight="36" Click="PrimaryClicked" />
+                <Button x:Name="UseButton" Content="Use" MinHeight="32" Click="UseClicked" Visibility="Collapsed" />
             </StackPanel>
         </StackPanel>
     </Border>

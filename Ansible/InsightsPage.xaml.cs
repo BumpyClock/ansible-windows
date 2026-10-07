@@ -3,8 +3,6 @@ using Ansible.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
-using Windows.Foundation;
 
 namespace Ansible;
 
@@ -56,46 +54,32 @@ public sealed partial class InsightsPage : Page
             : "Usage collection is paused. Saved counts remain visible.";
         IntroText.Visibility = IntroText.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
         PaceText.Text = summary.WordsPerMinute?.ToString("N0", CultureInfo.CurrentCulture) ?? "--";
-        PaceCaption.Text = summary.RecordingSeconds > 0 ? $"{summary.RecordingSeconds / 60:N1} min recorded" :
-            summary.DictationSessions > 0 ? "Awaiting speech counts" : "No dictations yet";
-        SessionsText.Text = summary.Sessions.ToString("N0");
-        DictationsText.Text = $"{summary.DictationSessions:N0} dictations";
-        VerificationsText.Text = $"{summary.FileSessions:N0} file verifications";
+        SetCaption(PaceCaption, summary.RecordingSeconds > 0 ? $"{summary.RecordingSeconds / 60:N1} min recorded" : null);
+        SessionsText.Text = summary.DictationSessions.ToString("N0");
+        SetCaption(FilesText, summary.FileSessions > 0
+            ? $"{summary.FileSessions:N0} {(summary.FileSessions == 1 ? "file" : "files")} transcribed"
+            : null);
         TotalWordsText.Text = summary.TotalWords.ToString("N0");
-        WordsSplitText.Text = $"{summary.DictatedWords:N0} dictated / {summary.FileWords:N0} verified";
-        WordsCaveatText.Text = $"Excludes {summary.UnknownWordSessions} " +
-            $"{(summary.UnknownWordSessions == 1 ? "session" : "sessions")} with unknown word counts";
-        WordsCaveatText.Visibility = summary.UnknownWordSessions > 0 ? Visibility.Visible : Visibility.Collapsed;
-        WordsShareBar.Visibility =summary.TotalWords == 0 ? Visibility.Collapsed : Visibility.Visible;
-        DictationShare.Width = new GridLength(summary.DictatedWords, GridUnitType.Star);
-        FileShare.Width = new GridLength(summary.FileWords, GridUnitType.Star);
+        SetCaption(FileWordsText, summary.FileWords > 0 ? $"{summary.FileWords:N0} from files" : null);
+        ToolTipService.SetToolTip(TotalWordsText, summary.UnknownWordSessions > 0
+            ? $"Excludes {summary.UnknownWordSessions:N0} " +
+              $"{(summary.UnknownWordSessions == 1 ? "session" : "sessions")} with unknown word counts."
+            : "Excludes sessions with unknown word counts.");
         StreakText.Text = $"{summary.CurrentStreak} day streak";
-        LongestText.Text = $"Best: {summary.LongestStreak} {(summary.LongestStreak == 1 ? "day" : "days")}";
-        RenderPace(summary.WordsPerMinute);
+        SetCaption(LongestText, summary.LongestStreak > summary.CurrentStreak
+            ? $"Best {summary.LongestStreak} {(summary.LongestStreak == 1 ? "day" : "days")}"
+            : null);
         RenderModels(summary);
         RenderActivity(summary);
     }
 
-    private void RenderPace(double? pace)
+    private static void SetCaption(TextBlock caption, string? text)
     {
-        if (pace is null || pace <= 0)
-        {
-            PaceArc.Data = null;
-            return;
-        }
-        var ratio = Math.Clamp(pace.Value / 200, 0.001, 1);
-        var angle = Math.PI * (1 - ratio);
-        var figure = new PathFigure { StartPoint = new Point(12, 78) };
-        figure.Segments.Add(new ArcSegment
-        {
-            Point = new Point(80 + 68 * Math.Cos(angle), 78 - 68 * Math.Sin(angle)),
-            Size = new Size(68, 68), SweepDirection = SweepDirection.Clockwise
-        });
-        var geometry = new PathGeometry();
-        geometry.Figures.Add(figure);
-        PaceArc.Data = geometry;
-        ToolTipService.SetToolTip(PaceText, "Recognized dictation words divided by recorded microphone time, including pauses. Visual scale: 0 to 200 words per minute.");
+        caption.Text = text ?? "";
+        caption.Visibility = text is null ? Visibility.Collapsed : Visibility.Visible;
     }
+
+    private static Style AppStyle(string key) => (Style)Application.Current.Resources[key];
 
     private void RenderModels(UsageSummary summary)
     {
@@ -103,24 +87,18 @@ public sealed partial class InsightsPage : Page
         foreach (var model in summary.Models.Take(5))
         {
             var label = _state.Models.FirstOrDefault(candidate => candidate.Id == model.ModelId)?.DisplayName ?? model.ModelId;
-            var stack = new StackPanel { Spacing = 7 };
             var row = new Grid();
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            var name = new TextBlock { Text = label, FontSize = 13, TextWrapping = TextWrapping.Wrap };
-            var count = new TextBlock { Text = $"{model.Sessions:N0}", FontSize = 13, Margin = new Thickness(12, 0, 0, 0) };
+            var name = new TextBlock { Text = label, Style = AppStyle("BodyTextBlockStyle") };
+            var count = new TextBlock
+            {
+                Text = $"{model.Sessions:N0}", Style = AppStyle("BodyTextBlockStyle"), Margin = new Thickness(12, 0, 0, 0)
+            };
             Grid.SetColumn(count, 1);
             row.Children.Add(name);
             row.Children.Add(count);
-            var bar = new ProgressBar
-            {
-                Minimum = 0, Maximum = summary.Sessions, Value = model.Sessions,
-                Style = (Style)Application.Current.Resources["ModelUsageProgressStyle"]
-            };
-            AutomationProperties.SetName(bar, $"{label}: {model.Sessions} sessions, {model.Words} recognized words");
-            stack.Children.Add(row);
-            stack.Children.Add(bar);
-            ModelRows.Children.Add(stack);
+            ModelRows.Children.Add(row);
         }
         if (summary.Models.Count == 0)
         {
@@ -128,48 +106,63 @@ public sealed partial class InsightsPage : Page
             {
                 Text = "No completed sessions yet.",
                 TextWrapping = TextWrapping.Wrap,
-                Style = (Style)Application.Current.Resources["SecondaryTextStyle"],
-                Margin = new Thickness(0, 32, 0, 32)
+                Style = AppStyle("SecondaryTextStyle")
             });
         }
     }
 
     private void RenderActivity(UsageSummary summary)
     {
+        const int weeks = 13;
+        const double cellSize = 14;
         HeatmapGrid.Children.Clear();
         HeatmapGrid.ColumnDefinitions.Clear();
         HeatmapGrid.RowDefinitions.Clear();
-        HeatmapGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(27) });
-        for (var column = 0; column < 13; column++)
+        for (var column = 0; column <= weeks; column++)
         {
-            HeatmapGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            HeatmapGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         }
-        for (var row = 0; row < 8; row++)
+        HeatmapGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        for (var row = 0; row < 7; row++)
         {
-            HeatmapGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(24) });
+            HeatmapGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(cellSize) });
         }
         var today = DateOnly.FromDateTime(DateTime.Today);
         var start = today.AddDays(-84);
         start = start.AddDays(-(int)start.DayOfWeek);
-        var days = new[] { "S", "M", "T", "W", "T", "F", "S" };
-        for (var row = 0; row < 7; row++)
+        // Rows start on Sunday, so Monday, Wednesday, and Friday are rows 1, 3, and 5.
+        foreach (var (row, text) in new[] { (1, "M"), (3, "W"), (5, "F") })
         {
-            var label = new TextBlock { Text = days[row], FontSize = 10, VerticalAlignment = VerticalAlignment.Center };
+            var label = new TextBlock
+            {
+                Text = text, Style = AppStyle("CaptionSecondaryStyle"), VerticalAlignment = VerticalAlignment.Center,
+                LineStackingStrategy = LineStackingStrategy.BlockLineHeight, LineHeight = cellSize
+            };
             Grid.SetRow(label, row + 1);
             HeatmapGrid.Children.Add(label);
         }
-        for (var column = 0; column < 13; column++)
+        var monthColumns = Enumerable.Range(0, weeks)
+            .Where(column => column == 0 || start.AddDays(column * 7).Month != start.AddDays(column * 7 - 7).Month)
+            .ToList();
+        // Drop the first label when the next month begins too soon for both labels to fit.
+        if (monthColumns.Count > 1 && monthColumns[1] < 3) { monthColumns.RemoveAt(0); }
+        for (var index = 0; index < monthColumns.Count; index++)
         {
-            var date = start.AddDays(column * 7);
-            if (column == 0 || date.Month != date.AddDays(-7).Month)
+            var column = monthColumns[index];
+            var month = new TextBlock
             {
-                var month = new TextBlock { Text = date.ToString("MMM", CultureInfo.CurrentCulture), FontSize = 10 };
-                Grid.SetColumn(month, column + 1);
-                HeatmapGrid.Children.Add(month);
-            }
+                Text = start.AddDays(column * 7).ToString("MMM", CultureInfo.CurrentCulture),
+                Style = AppStyle("CaptionTextBlockStyle"), TextWrapping = TextWrapping.NoWrap
+            };
+            Grid.SetColumn(month, column + 1);
+            Grid.SetColumnSpan(month, (index + 1 < monthColumns.Count ? monthColumns[index + 1] : weeks) - column);
+            HeatmapGrid.Children.Add(month);
+        }
+        for (var column = 0; column < weeks; column++)
+        {
             for (var row = 0; row < 7; row++)
             {
-                var day = date.AddDays(row);
+                var day = start.AddDays(column * 7 + row);
                 var count = summary.Activity.GetValueOrDefault(day);
                 var styleKey = day > today ? "ActivityFutureCellStyle" : count switch
                 {
@@ -180,18 +173,17 @@ public sealed partial class InsightsPage : Page
                 };
                 var cell = new Border
                 {
-                    Style = (Style)Application.Current.Resources[styleKey], CornerRadius = new CornerRadius(3),
-                    Margin = new Thickness(2)
+                    Style = AppStyle(styleKey), Width = cellSize, Height = cellSize, CornerRadius = new CornerRadius(3)
                 };
-                ToolTipService.SetToolTip(cell, $"{day:MMM d, yyyy}: {count} completed sessions");
+                var description = $"{day.ToString("ddd d MMM", CultureInfo.CurrentCulture)}: " +
+                    $"{count} {(count == 1 ? "session" : "sessions")}";
+                ToolTipService.SetToolTip(cell, description);
+                AutomationProperties.SetName(cell, description);
                 Grid.SetRow(cell, row + 1);
                 Grid.SetColumn(cell, column + 1);
                 HeatmapGrid.Children.Add(cell);
             }
         }
-        ActivityCaption.Text = summary.Activity.Count == 0
-            ? "No activity recorded yet."
-            : $"Active on {summary.Activity.Count:N0} {(summary.Activity.Count == 1 ? "day" : "days")}.";
     }
 
     private void LayoutChanged(object sender, SizeChangedEventArgs args)
@@ -212,12 +204,10 @@ public sealed partial class InsightsPage : Page
         }
         else
         {
-            SummaryGrid.ColumnDefinitions.Add(new ColumnDefinition());
-            SummaryGrid.ColumnDefinitions.Add(new ColumnDefinition());
-            SummaryGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.5, GridUnitType.Star) });
+            for (var index = 0; index < 3; index++) { SummaryGrid.ColumnDefinitions.Add(new ColumnDefinition()); }
             SummaryGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             DetailGrid.ColumnDefinitions.Add(new ColumnDefinition());
-            DetailGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.2, GridUnitType.Star) });
+            DetailGrid.ColumnDefinitions.Add(new ColumnDefinition());
             DetailGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         }
         Grid.SetColumn(SessionsCard, narrow ? 0 : 1);

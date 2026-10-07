@@ -37,9 +37,11 @@ public sealed partial class MainPage : Page
         const string typingHelp = "Live models type recognition updates as they arrive. Held Ctrl, Alt, Shift or Win keys delay typing until released. Some editors cannot distinguish fields within the same window. Hold to talk finishes when you release the shortcut; otherwise press it again to finish. Check the destination before dictating, because Cancel cannot undo inserted text.";
         ToolTipService.SetToolTip(HotkeyCaptureBox, typingHelp);
         AutomationProperties.SetHelpText(HotkeyCaptureBox, typingHelp);
+        // TextBox handles pointer presses itself, so listen for handled presses to restart capture on click.
+        HotkeyCaptureBox.AddHandler(PointerPressedEvent, new PointerEventHandler((_, _) => StartShortcutCapture()), true);
         _rendering = true;
         HotkeyCaptureBox.Text = _state.Settings.Shortcut.DisplayText;
-        PushToTalkToggle.IsOn = _state.Settings.PushToTalk;
+        PushToTalkChoice.SelectedIndex = _state.Settings.PushToTalk ? 0 : 1;
         _rendering = false;
         Loaded += (_, _) =>
             _observer = new UiSessionObserver(session, DispatcherQueue, state => { _state = state; Render(); });
@@ -64,12 +66,12 @@ public sealed partial class MainPage : Page
             RenderNotice();
             UsageToggle.IsOn = _state.Settings.CollectUsage;
             UsageToggle.IsEnabled = idle;
-            ToolTipService.SetToolTip(UsageRow, _session.UsagePath);
+            ToolTipService.SetToolTip(UsageRow, $"Session dates, model, word counts, and timing. File: {_session.UsagePath}");
             AutomationProperties.SetHelpText(UsageToggle, _session.UsagePath);
             if (!_recordingShortcut) { HotkeyCaptureBox.Text = _state.Settings.Shortcut.DisplayText; }
-            ChangeShortcutButton.IsEnabled = idle;
-            PushToTalkToggle.IsEnabled = idle;
-            PushToTalkToggle.IsOn = _state.Settings.PushToTalk;
+            HotkeyCaptureBox.IsEnabled = idle;
+            PushToTalkChoice.IsEnabled = idle;
+            PushToTalkChoice.SelectedIndex = _state.Settings.PushToTalk ? 0 : 1;
         }
         finally { _rendering = false; }
     }
@@ -80,13 +82,9 @@ public sealed partial class MainPage : Page
     {
         SaveDictionaryButton.IsEnabled = _state.IsIdle && _dictionaryDirty;
         DictionaryStatusText.Text = _dictionaryDirty ? "Unsaved changes"
-            : _state.SelectedModel is not { } selected
-                ? "Choose a model to see whether dictionary hints are supported. Your list stays on this device."
-                : selected.SupportsCustomDictionary
-                    ? selected.Mode == "offline"
-                        ? $"{selected.DisplayName ?? selected.Id} uses the saved dictionary as context for WAV transcription."
-                        : $"{selected.DisplayName ?? selected.Id} uses the saved dictionary as context for file and streaming recognition."
-                    : $"{selected.DisplayName ?? selected.Id} does not support dictionary hints. Your list is kept for supported models.";
+            : _state.SelectedModel is { SupportsCustomDictionary: false } ? "Not used by the selected model."
+            : "";
+        DictionaryStatusText.Visibility = DictionaryStatusText.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     // Warnings and errors stay until dismissed. Success and information notices are shown once for a few
@@ -139,29 +137,41 @@ public sealed partial class MainPage : Page
         catch (Exception error) { _session.ReportUiError(error); Render(); }
     }
 
-    private void DictationModeChanged(object sender, RoutedEventArgs args)
+    private void DictationModeChanged(object sender, SelectionChangedEventArgs args)
     {
-        if (_rendering) { return; }
-        try { _changeMode(PushToTalkToggle.IsOn); }
+        if (_rendering || PushToTalkChoice.SelectedIndex < 0) { return; }
+        var pushToTalk = PushToTalkChoice.SelectedIndex == 0;
+        // RadioButtons can raise SelectionChanged after Render returns; ignore echoes of the current setting.
+        if (pushToTalk == _session.State.Settings.PushToTalk) { return; }
+        try { _changeMode(pushToTalk); }
         catch (Exception error) { _session.ReportUiError(error); Render(); }
     }
 
-    private void ChangeShortcutClicked(object sender, RoutedEventArgs args)
+    private void ShortcutGotFocus(object sender, RoutedEventArgs args) => StartShortcutCapture();
+
+    // Focus, click, or Enter on the shortcut box records a new shortcut.
+    private void StartShortcutCapture()
     {
+        if (_recordingShortcut || !HotkeyCaptureBox.IsEnabled) { return; }
         try
         {
             _captureShortcut(true);
             _recordingShortcut = true;
             _pendingShortcut = null;
             HotkeyCaptureBox.Text = "Press a shortcut; Esc cancels";
-            HotkeyCaptureBox.Focus(FocusState.Programmatic);
         }
         catch (Exception error) { _session.ReportUiError(error); }
     }
 
     private void ShortcutKeyDown(object sender, KeyRoutedEventArgs args)
     {
-        if (!_recordingShortcut) { return; }
+        if (!_recordingShortcut)
+        {
+            if (args.Key == VirtualKey.Enter) { args.Handled = true; StartShortcutCapture(); }
+            return;
+        }
+        // Tab is never a valid shortcut. Let it move focus; LostFocus ends the capture.
+        if (args.Key == VirtualKey.Tab) { return; }
         args.Handled = true;
         if (args.Key == VirtualKey.Escape) { EndShortcutCapture(); return; }
         if (args.Key is VirtualKey.Control or VirtualKey.Shift or VirtualKey.Menu or VirtualKey.LeftWindows or VirtualKey.RightWindows)

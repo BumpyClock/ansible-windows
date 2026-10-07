@@ -17,6 +17,8 @@ namespace Ansible;
 public sealed partial class DictationPage : Page
 {
     private static readonly TimeSpan CopiedDuration = TimeSpan.FromSeconds(2);
+    // Halo scale while listening at silence, so the recording state stays visible without input.
+    private const double RestInner = 1.12, RestOuter = 1.22;
 
     private readonly DictationSession _session;
     private readonly AppPaths _paths;
@@ -75,8 +77,6 @@ public sealed partial class DictationPage : Page
             var ready = _state.Phase == DictationPhase.Ready && _state.SelectedModel is not null && !_picking;
             FileButton.Visibility = _state.SelectedModel is null ? Visibility.Collapsed : Visibility.Visible;
             FileButton.IsEnabled = ready;
-            TranscribeItem.IsEnabled = ready;
-            ReplayItem.IsEnabled = ready && _state.CanStart;
             RenderRecordControl();
             RenderStatus();
             RenderClock();
@@ -84,7 +84,7 @@ public sealed partial class DictationPage : Page
             if (TranscriptBox.Text != _state.Transcript) { TranscriptBox.Text = _state.Transcript; }
             var empty = string.IsNullOrWhiteSpace(_state.Transcript);
             EmptyState.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
-            CopyButton.Visibility = empty ? Visibility.Collapsed : Visibility.Visible;
+            TranscriptHeader.Visibility = empty ? Visibility.Collapsed : Visibility.Visible;
             CopyButton.IsEnabled = _state.IsIdle || _state.Phase == DictationPhase.RecoveryRequired;
         }
         finally { _rendering = false; }
@@ -130,7 +130,7 @@ public sealed partial class DictationPage : Page
             DictationPhase.Recording when _state.IsReplay => ("Replaying WAV", "No microphone is open."),
             DictationPhase.Recording => ("Listening", preview switch
             {
-                "live" => "Text appears as you speak.",
+                "live" => "",
                 "buffered" => "Text arrives in chunks.",
                 _ => "Text appears after you finish."
             }),
@@ -144,6 +144,7 @@ public sealed partial class DictationPage : Page
         StatusTitle.Text = title;
         StatusDetail.Inlines.Clear();
         if (detail.Length > 0) { StatusDetail.Inlines.Add(new Run { Text = detail }); return; }
+        if (!(_state.Phase == DictationPhase.Ready && _state.CanStart)) { return; }
         StatusDetail.Inlines.Add(new Run { Text = settings.PushToTalk ? "Click the microphone, or hold " : "Click the microphone, or press " });
         StatusDetail.Inlines.Add(new Run { Text = settings.Shortcut.DisplayText, FontWeight = FontWeights.SemiBold });
         StatusDetail.Inlines.Add(new Run { Text = settings.PushToTalk ? " in any app and release to finish." : " in any app, then press it again to finish." });
@@ -158,6 +159,7 @@ public sealed partial class DictationPage : Page
         LiveRow.IsHitTestVisible = live;
         CancelButton.Visibility = live ? Visibility.Visible : Visibility.Collapsed;
         CancelButton.IsEnabled = live;
+        FinishButton.Visibility = _state.CanFinish ? Visibility.Visible : Visibility.Collapsed;
         if (!live && !completed) { return; }
         var text = _session.Elapsed.ToString(@"mm\:ss");
         if (_state.Words is { } words) { text += $"  ·  {words:N0} {(words == 1 ? "word" : "words")}"; }
@@ -227,8 +229,8 @@ public sealed partial class DictationPage : Page
     {
         InnerHalo.Opacity = 0.28;
         OuterHalo.Opacity = 0.12;
-        if (!_uiSettings.AnimationsEnabled) { SetHalo(1.15, 1.15); }
-        else if (_smoothedLevel == 0) { SetHalo(1, 1); }
+        if (!_uiSettings.AnimationsEnabled) { SetHalo(1.15, 1.25); }
+        else if (_smoothedLevel == 0) { SetHalo(RestInner, RestOuter); }
     }
 
     private void ResetHalos()
@@ -244,7 +246,7 @@ public sealed partial class DictationPage : Page
         if (_state.Phase != DictationPhase.Recording || _state.IsReplay || !_uiSettings.AnimationsEnabled) { return; }
         var target = FloatingPreviewPresentation.MeterLevel(raw);
         _smoothedLevel += (target - _smoothedLevel) * (target > _smoothedLevel ? 0.5 : 0.15);
-        SetHalo(1.0 + 0.6 * _smoothedLevel, 1.0 + 1.0 * _smoothedLevel);
+        SetHalo(RestInner + 0.5 * _smoothedLevel, RestOuter + 0.9 * _smoothedLevel);
     }
 
     private void ModelChanged(object sender, SelectionChangedEventArgs args)
@@ -267,10 +269,9 @@ public sealed partial class DictationPage : Page
         try { await _session.CancelAsync(); }
         catch (Exception error) { _session.ReportUiError(error); }
     }
-    private async void TranscribeClicked(object sender, RoutedEventArgs args) => await PickAndRunAsync(replay: false);
-    private async void ReplayClicked(object sender, RoutedEventArgs args) => await PickAndRunAsync(replay: true);
+    private async void TranscribeClicked(object sender, RoutedEventArgs args) => await PickAndRunAsync();
 
-    private async Task PickAndRunAsync(bool replay)
+    private async Task PickAndRunAsync()
     {
         if (_picking) { return; }
         _picking = true;
@@ -281,11 +282,7 @@ public sealed partial class DictationPage : Page
             picker.FileTypeFilter.Add(".wav");
             WinRT.Interop.InitializeWithWindow.Initialize(picker, _windowHandle());
             var file = await picker.PickSingleFileAsync();
-            if (file is not null)
-            {
-                if (replay) { await _session.ReplayAsync(file.Path); }
-                else { await _session.TranscribeFileAsync(file.Path); }
-            }
+            if (file is not null) { await _session.TranscribeFileAsync(file.Path); }
         }
         catch (Exception error) { _session.ReportUiError(error); }
         finally { _picking = false; Render(); }

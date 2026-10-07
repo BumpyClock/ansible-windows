@@ -67,6 +67,9 @@
                     <SolidColorBrush x:Key="PrimaryTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
+            <!-- Shared page layout. Page roots use these directly inside their ScrollViewer. -->
+            <x:Double x:Key="PageContentMaxWidth">1172</x:Double>
+            <Thickness x:Key="PagePadding">36,28,36,36</Thickness>
             <Style x:Key="ActivityEmptyCellStyle" TargetType="Border">
                 <Setter Property="Background" Value="{ThemeResource InactiveChartBrush}" />
             </Style>
@@ -88,17 +91,13 @@
                 <Setter Property="Background" Value="Transparent" />
                 <Setter Property="BorderThickness" Value="0" />
                 <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
-                <Setter Property="Padding" Value="16,12" />
-                <Setter Property="MinHeight" Value="48" />
-                <Setter Property="FontSize" Value="15" />
+                <Setter Property="Padding" Value="12,0" />
+                <Setter Property="MinHeight" Value="40" />
+                <Setter Property="FontSize" Value="14" />
+                <Setter Property="UseSystemFocusVisuals" Value="True" />
             </Style>
             <Style x:Key="SelectedNavigationButtonStyle" TargetType="Button" BasedOn="{StaticResource NavigationButtonStyle}">
                 <Setter Property="Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
-            </Style>
-            <Style x:Key="ModelUsageProgressStyle" TargetType="ProgressBar">
-                <Setter Property="Foreground" Value="{ThemeResource AccentGraphicBrush}" />
-                <Setter Property="Background" Value="{ThemeResource InactiveChartBrush}" />
-                <Setter Property="Height" Value="8" />
             </Style>
             <Style x:Key="SecondaryTextStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
                 <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
@@ -109,7 +108,16 @@
                 <Setter Property="TextWrapping" Value="Wrap" />
             </Style>
             <Style x:Key="SectionHeaderStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
-                <Setter Property="Margin" Value="4,8,0,0" />
+                <Setter Property="Margin" Value="0,12,0,4" />
+            </Style>
+            <!-- Read-only keyboard shortcut display. -->
+            <Style x:Key="KeycapStyle" TargetType="Border">
+                <Setter Property="Background" Value="{ThemeResource ControlFillColorDefaultBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource ControlStrokeColorDefaultBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
+                <Setter Property="Padding" Value="10,4" />
+                <Setter Property="MinHeight" Value="32" />
             </Style>
             <Style x:Key="CardStyle" TargetType="Border">
                 <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />

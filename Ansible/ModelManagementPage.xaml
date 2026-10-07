@@ -5,54 +5,46 @@
       xmlns:local="using:Ansible">
     <ScrollViewer HorizontalScrollBarVisibility="Disabled">
         <Grid>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" MaxWidth="1052" />
-            </Grid.ColumnDefinitions>
-            <StackPanel Padding="36,28,36,36" Spacing="20">
-                <Grid ColumnSpacing="16">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <StackPanel Spacing="4" VerticalAlignment="Center">
-                        <TextBlock Text="Speech models" Style="{StaticResource PageTitleStyle}" />
-                        <TextBlock Text="Download verified models. One model is resident at a time."
-                                   Style="{StaticResource PageSubtitleStyle}" />
+            <StackPanel MaxWidth="{StaticResource PageContentMaxWidth}" Padding="{StaticResource PagePadding}" Spacing="20">
+            <Grid ColumnSpacing="16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Speech models" Style="{StaticResource PageTitleStyle}" VerticalAlignment="Center" />
+                <Button x:Name="FolderMenuButton" Grid.Column="1" MinHeight="40" VerticalAlignment="Center"
+                        AutomationProperties.AutomationId="ModelFolderButton"
+                        AutomationProperties.Name="Model folder and verification">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE8B7;" FontSize="16" />
+                        <TextBlock Text="Model folder" />
                     </StackPanel>
-                    <Button x:Name="FolderMenuButton" Grid.Column="1" MinHeight="40" VerticalAlignment="Center"
-                            AutomationProperties.AutomationId="ModelFolderButton"
-                            AutomationProperties.Name="Model folder and verification">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon Glyph="&#xE8B7;" FontSize="16" />
-                            <TextBlock Text="Model folder" />
-                        </StackPanel>
-                        <Button.Flyout>
-                            <Flyout>
-                                <StackPanel Spacing="12" MaxWidth="380">
-                                    <TextBlock Text="Model folder" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                    <TextBlock x:Name="FolderText" TextWrapping="Wrap" IsTextSelectionEnabled="True"
-                                               Style="{StaticResource SecondaryTextStyle}" />
-                                    <StackPanel Orientation="Horizontal" Spacing="12">
-                                        <Button x:Name="FolderButton" Content="Choose folder" Click="ChooseFolderClicked"
-                                                MinHeight="40" AutomationProperties.AutomationId="ChooseModelFolder" />
-                                        <Button x:Name="RefreshButton" Content="Verify installed files" Click="RefreshClicked"
-                                                MinHeight="40" AutomationProperties.AutomationId="VerifyModelFiles" />
-                                    </StackPanel>
-                                    <TextBlock Text="Changing folders does not move or delete model files."
-                                               TextWrapping="Wrap" Style="{StaticResource SecondaryTextStyle}" />
-                                    <TextBlock x:Name="BackendText" Style="{StaticResource CaptionSecondaryStyle}" />
+                    <Button.Flyout>
+                        <Flyout>
+                            <StackPanel Spacing="12" MaxWidth="380">
+                                <TextBlock x:Name="FolderText" TextWrapping="Wrap" IsTextSelectionEnabled="True"
+                                           Style="{StaticResource SecondaryTextStyle}" />
+                                <StackPanel Orientation="Horizontal" Spacing="12">
+                                    <Button x:Name="FolderButton" Content="Choose folder" Click="ChooseFolderClicked"
+                                            MinHeight="40" AutomationProperties.AutomationId="ChooseModelFolder" />
+                                    <Button x:Name="RefreshButton" Content="Verify installed files" Click="RefreshClicked"
+                                            MinHeight="40" AutomationProperties.AutomationId="VerifyModelFiles" />
                                 </StackPanel>
-                            </Flyout>
-                        </Button.Flyout>
-                    </Button>
-                </Grid>
+                                <TextBlock Text="Changing folders does not move or delete model files."
+                                           TextWrapping="Wrap" Style="{StaticResource SecondaryTextStyle}" />
+                                <TextBlock x:Name="BackendText" Style="{StaticResource CaptionSecondaryStyle}" />
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
+            </Grid>
 
-                <InfoBar x:Name="StatusInfo" IsOpen="False" IsClosable="False" />
+            <InfoBar x:Name="StatusInfo" IsOpen="False" IsClosable="False" />
 
-                <local:StaggeredPanel x:Name="ModelsGrid" ColumnSpacing="16" RowSpacing="16"
-                      SizeChanged="OnModelsGridSizeChanged" />
+            <local:StaggeredPanel x:Name="ModelsGrid" ColumnSpacing="16" RowSpacing="16"
+                  SizeChanged="OnModelsGridSizeChanged" />
 
-            </StackPanel>
-        </Grid>
+        </StackPanel>
+    </Grid>
     </ScrollViewer>
 </Page>

@@ -9,11 +9,8 @@
         </Storyboard>
     </Page.Resources>
     <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-        <Grid>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" MaxWidth="1052" />
-            </Grid.ColumnDefinitions>
-            <StackPanel Padding="36,28,36,36" Spacing="20">
+            <Grid>
+                <StackPanel MaxWidth="{StaticResource PageContentMaxWidth}" Padding="{StaticResource PagePadding}" Spacing="20">
                 <TextBlock Text="Dictation" Style="{StaticResource PageTitleStyle}" />
 
                 <Border Style="{StaticResource CardStyle}" Padding="28,24">
@@ -55,6 +52,9 @@
                                         IsHitTestVisible="False">
                                 <TextBlock x:Name="LiveText" Text="00:00" Style="{StaticResource BodyStrongTextBlockStyle}"
                                            VerticalAlignment="Center" AutomationProperties.Name="Elapsed time and words" />
+                                <Button x:Name="FinishButton" Content="Finish" Click="RecordClicked" MinHeight="32"
+                                        VerticalAlignment="Center" Style="{StaticResource AccentButtonStyle}"
+                                        AutomationProperties.Name="Finish dictation" Visibility="Collapsed" />
                                 <Button x:Name="CancelButton" Content="Cancel" Click="CancelClicked" MinHeight="32"
                                         VerticalAlignment="Center" ToolTipService.ToolTip="Cancel (Esc)">
                                     <Button.KeyboardAccelerators>
@@ -71,46 +71,40 @@
                             </Grid.ColumnDefinitions>
                             <ComboBox x:Name="ModelBox" Header="Speech model" MinWidth="320" HorizontalAlignment="Left"
                                       SelectionChanged="ModelChanged" PlaceholderText="No installed models" />
-                            <DropDownButton x:Name="FileButton" Grid.Column="1" VerticalAlignment="Bottom" MinHeight="32"
-                                            AutomationProperties.Name="Transcribe a file">
+                            <Button x:Name="FileButton" Grid.Column="1" VerticalAlignment="Bottom" MinHeight="32"
+                                    Click="TranscribeClicked" AutomationProperties.Name="Transcribe a WAV file">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <FontIcon Glyph="&#xE8E5;" FontSize="14" />
-                                    <TextBlock Text="Transcribe file" />
+                                    <TextBlock Text="Transcribe WAV file…" />
                                 </StackPanel>
-                                <DropDownButton.Flyout>
-                                    <MenuFlyout Placement="BottomEdgeAlignedRight">
-                                        <MenuFlyoutItem x:Name="TranscribeItem" Text="Transcribe WAV file…" Click="TranscribeClicked" />
-                                        <MenuFlyoutItem x:Name="ReplayItem" Text="Replay WAV as live audio…" Click="ReplayClicked" />
-                                    </MenuFlyout>
-                                </DropDownButton.Flyout>
-                            </DropDownButton>
+                            </Button>
                         </Grid>
                     </Grid>
                 </Border>
 
                 <InfoBar x:Name="StatusInfo" IsOpen="False" IsClosable="True" Closing="StatusInfoClosing" />
 
-                <Border Style="{StaticResource CardStyle}" Padding="24,20,24,24" MinHeight="280">
-                    <Grid RowSpacing="12">
+                <Border x:Name="TranscriptCard" Style="{StaticResource CardStyle}" Padding="24,16,24,24" MinHeight="160">
+                    <Grid RowSpacing="8">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
-                        <Grid ColumnSpacing="12" MinHeight="32">
+                        <Grid x:Name="TranscriptHeader" ColumnSpacing="12" MinHeight="32" Visibility="Collapsed">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <TextBlock Text="Transcript" Style="{StaticResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" />
                             <Button x:Name="CopyButton" Grid.Column="1" Click="CopyClicked" MinHeight="32"
-                                    AutomationProperties.Name="Copy transcript" Visibility="Collapsed">
+                                    AutomationProperties.Name="Copy transcript">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <FontIcon Glyph="&#xE8C8;" FontSize="14" />
                                     <TextBlock x:Name="CopyLabel" Text="Copy" />
                                 </StackPanel>
                             </Button>
                         </Grid>
-                        <Grid Grid.Row="1" MinHeight="200">
+                        <Grid Grid.Row="1" MinHeight="96">
                             <TextBox x:Name="TranscriptBox" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True"
                                      MaxHeight="420" Style="{StaticResource TranscriptTextBoxStyle}"
                                      AutomationProperties.Name="Dictation transcript"
@@ -126,12 +120,12 @@
                             </TextBox>
                             <TextBlock x:Name="EmptyState" Text="Transcript appears here." HorizontalAlignment="Center"
                                        VerticalAlignment="Center" IsHitTestVisible="False"
-                                       Style="{StaticResource SecondaryTextStyle}" />
+                                       Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
                         </Grid>
                     </Grid>
                 </Border>
 
             </StackPanel>
-        </Grid>
+    </Grid>
     </ScrollViewer>
 </Page>
