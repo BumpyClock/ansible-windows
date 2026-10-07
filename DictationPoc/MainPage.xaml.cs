@@ -65,7 +65,7 @@ public sealed partial class MainPage : Page
         {
             EndShortcutCapture();
             _observer?.Dispose(); _observer = null; _timer.Stop();
-            _noticeTimer.Stop();
+            if (_noticeTimer.IsEnabled) { _noticeTimer.Stop(); StatusInfo.IsOpen = false; }
         };
     }
 

@@ -55,7 +55,7 @@ public sealed partial class DictationPage : Page
         {
             _observer?.Dispose(); _observer = null;
             _clock.Stop();
-            _noticeTimer.Stop();
+            if (_noticeTimer.IsEnabled) { _noticeTimer.Stop(); StatusInfo.IsOpen = false; }
             StopPulse();
         };
     }
