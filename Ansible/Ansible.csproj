@@ -1,0 +1,83 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>Ansible</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon Condition="Exists('Assets\AppIcon.ico')">Assets\AppIcon.ico</ApplicationIcon>
+    <Platforms>x64</Platforms>
+    <Platform Condition="'$(Platform)' == '' or '$(Platform)' == 'AnyCPU'">x64</Platform>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <UseWinUI>true</UseWinUI>
+    <WinUISDKReferences>false</WinUISDKReferences>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <WindowsPackageType>MSIX</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <AppxPackageSigningEnabled>false</AppxPackageSigningEnabled>
+    <AppxAutoIncrementPackageRevision>false</AppxAutoIncrementPackageRevision>
+    <AppxBundle>Never</AppxBundle>
+    <PublishProfile>win-x64</PublishProfile>
+    <EnableWinAppRunSupport>false</EnableWinAppRunSupport>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <PublishAot>true</PublishAot>
+    <SelfContained>true</SelfContained>
+    <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="Assets\SplashScreen.scale-200.png" />
+    <Content Include="Assets\LockScreenLogo.scale-200.png" />
+    <Content Include="Assets\Square150x150Logo.scale-200.png" />
+    <Content Include="Assets\Square44x44Logo.scale-200.png" />
+    <Content Include="Assets\Square44x44Logo.targetsize-24_altform-unplated.png" />
+    <Content Include="Assets\Square44x44Logo.targetsize-48_altform-lightunplated.png" />
+    <Content Include="Assets\StoreLogo.png" />
+    <Content Include="Assets\AppIcon.ico" />
+    <Content Include="Assets\Wide310x150Logo.scale-200.png" />
+    <Content Include="Assets\ModelIcons\**\*" />
+    <Content Update="Assets\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\tools\audio-models.json" Link="audio-models.json"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\.runtime\native\*.dll" Link="%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\.runtime\native\audio.cpp-LICENSE" Link="audio.cpp-LICENSE"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\.runtime\native\native-runtime.json" Link="native-runtime.json"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\.runtime\native\native-notices\**\*" Link="native-notices\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\.runtime\validation\sample_16k.wav" Link="validation-sample.wav"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Manifest Include="$(ApplicationManifest)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2705" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
+    <ProjectReference Include="..\Ansible.Core\Ansible.Core.csproj" />
+  </ItemGroup>
+
+  <!-- Publish Properties -->
+  <PropertyGroup>
+    <PublishReadyToRun Condition="'$(Configuration)' == 'Debug'">False</PublishReadyToRun>
+    <PublishReadyToRun>False</PublishReadyToRun>
+    <PublishTrimmed Condition="'$(Configuration)' == 'Debug'">False</PublishTrimmed>
+    <PublishTrimmed Condition="'$(Configuration)' != 'Debug'">True</PublishTrimmed>
+  </PropertyGroup>
+
+  <Target Name="RequireQualifiedDeployment" BeforeTargets="PrepareForBuild">
+    <Error Condition="'$(RuntimeIdentifier)' != 'win-x64' or '$(Platform)' != 'x64' or '$(PlatformTarget)' != 'x64'"
+           Text="Only the Windows x64 CPU deployment is qualified. x86 and ARM64 require separate native builds and qualification." />
+    <Error Condition="'$(WindowsPackageType)' != 'MSIX' or '$(EnableMsixTooling)' != 'true' or '$(WindowsAppSDKSelfContained)' != 'true' or '$(SelfContained)' != 'true' or '$(PublishAot)' != 'true'"
+           Text="Use the packaged, self-contained NativeAOT deployment path." />
+    <Error Condition="!Exists('..\.runtime\native\audiocpp.dll') or !Exists('..\.runtime\native\audio.cpp-LICENSE') or !Exists('..\.runtime\native\native-runtime.json') or !Exists('..\.runtime\validation\sample_16k.wav')"
+           Text="Native runtime files or the public validation sample are missing. Run .\tools\Build-AudioNative.ps1 from the repository root before building Ansible." />
+  </Target>
+</Project>
