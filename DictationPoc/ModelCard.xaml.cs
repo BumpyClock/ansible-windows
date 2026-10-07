@@ -5,7 +5,6 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.System;
-using Windows.Foundation;
 
 namespace DictationPoc;
 
@@ -17,6 +16,8 @@ public sealed partial class ModelCard : UserControl
     private Uri? _iconUri;
     private bool _iconFailureLogged;
     private string? _stateDotBrushKey;
+    private ModelInstallState _state;
+    private bool _removeDiscardsPartial;
 
     public ModelCard()
     {
@@ -50,24 +51,20 @@ public sealed partial class ModelCard : UserControl
         ToolTipService.SetToolTip(LicenseText, LicenseText.Text);
 
         DescriptionText.Text = entry.Description ?? "";
-        DescriptionText.Visibility = string.IsNullOrEmpty(entry.Description) ? Visibility.Collapsed : Visibility.Visible;
-        CapabilityText.Text = entry.SupportsCustomDictionary
+        AboutSection.Visibility = string.IsNullOrEmpty(entry.Description) ? Visibility.Collapsed : Visibility.Visible;
+        CapabilityText.Text = $"{BehaviorText.Text} " + (entry.SupportsCustomDictionary
             ? "Supports custom dictionary context hints."
-            : "Custom dictionary hints are not supported.";
+            : "Custom dictionary hints are not supported.") + $"\n{LanguageText.Text}";
         LicenseDetailText.Text = $"{entry.License ?? "License not specified"}\n{entry.LicenseNotes ?? ""}".TrimEnd();
         SourceText.Text = $"{entry.Repo}\nPinned revision {entry.Revision}\n{entry.RemoteFile}";
+        ByteCountText.Text = $"{entry.Bytes:N0} bytes";
+        HashText.Text = $"SHA-256 {entry.Sha256}";
 
         AutomationProperties.SetAutomationId(PrimaryButton, $"ModelPrimary_{entry.Id}");
-        AutomationProperties.SetAutomationId(PauseButton, $"ModelPause_{entry.Id}");
-        AutomationProperties.SetAutomationId(RemoveButton, $"ModelRemove_{entry.Id}");
-        AutomationProperties.SetAutomationId(DiscardButton, $"ModelDiscard_{entry.Id}");
-        AutomationProperties.SetAutomationId(DetailsButton, $"ModelDetails_{entry.Id}");
         AutomationProperties.SetAutomationId(UseButton, $"ModelUse_{entry.Id}");
+        AutomationProperties.SetAutomationId(DetailsButton, $"ModelDetails_{entry.Id}");
         AutomationProperties.SetName(UseButton, $"Use {_name}");
         AutomationProperties.SetName(DetailsButton, $"Details for {_name}");
-        AutomationProperties.SetName(PauseButton, $"Pause download of {_name}");
-        AutomationProperties.SetName(RemoveButton, $"Remove {_name}");
-        AutomationProperties.SetName(DiscardButton, $"Discard partial download of {_name}");
 
         _assetName = entry.Family switch
         {
@@ -85,6 +82,7 @@ public sealed partial class ModelCard : UserControl
     {
         var entry = snapshot.Model;
         var state = snapshot.State;
+        _state = state;
 
         StateText.Text = !snapshot.Supported ? "Unsupported" : active ? "In use" : StateLabel(state);
         _stateDotBrushKey = !snapshot.Supported || state == ModelInstallState.Failed ? "SystemFillColorCriticalBrush"
@@ -109,35 +107,52 @@ public sealed partial class ModelCard : UserControl
         ErrorInfo.Message = snapshot.Error ?? "";
         ErrorInfo.IsOpen = snapshot.Error is not null;
 
+        // One primary action per card. While a transfer runs the primary action stops it; an installed
+        // file has no primary action here because Use or the in-use state covers it.
+        var transferring = state is ModelInstallState.Downloading or ModelInstallState.Verifying;
         PrimaryButton.Content = state switch
         {
+            ModelInstallState.Downloading => "Pause",
+            ModelInstallState.Verifying => "Stop",
             ModelInstallState.ReadyToInstall => "Install verified model",
             ModelInstallState.Paused => "Resume",
             ModelInstallState.Failed => "Retry download",
             _ => "Download"
         };
-        PrimaryButton.IsEnabled = snapshot.Supported && (state == ModelInstallState.ReadyToInstall
+        PrimaryButton.IsEnabled = transferring ? managerBusy : snapshot.Supported && (state == ModelInstallState.ReadyToInstall
             ? idle
             : managerIdle && !snapshot.HasModelFile &&
               state is ModelInstallState.NotInstalled or ModelInstallState.Paused or ModelInstallState.Failed);
-        PrimaryButton.Visibility = snapshot.HasModelFile ? Visibility.Collapsed : Visibility.Visible;
-        AutomationProperties.SetName(PrimaryButton, $"{PrimaryButton.Content} {_name}");
+        PrimaryButton.Visibility = !active && (transferring || !snapshot.HasModelFile) ? Visibility.Visible : Visibility.Collapsed;
+        ToolTipService.SetToolTip(PrimaryButton, state == ModelInstallState.Downloading
+            ? "Pause keeps partial files for Resume. Dictation can continue during downloads; installation waits until dictation finishes."
+            : null);
+        AutomationProperties.SetName(PrimaryButton, state switch
+        {
+            ModelInstallState.Downloading => $"Pause download of {_name}",
+            ModelInstallState.Verifying => $"Stop verifying {_name}",
+            _ => $"{PrimaryButton.Content} {_name}"
+        });
 
-        PauseButton.IsEnabled = managerBusy && state is ModelInstallState.Downloading or ModelInstallState.Verifying;
-        PauseButton.Visibility = state is ModelInstallState.Downloading or ModelInstallState.Verifying
+        // An installed file takes precedence; after removal a leftover partial surfaces as Discard.
+        _removeDiscardsPartial = !snapshot.HasModelFile && snapshot.HasPartial;
+        RemoveButton.Visibility = snapshot.HasModelFile || snapshot.HasPartial ? Visibility.Visible : Visibility.Collapsed;
+        RemoveButton.IsEnabled = idle;
+        ToolTipService.SetToolTip(RemoveButton, _removeDiscardsPartial ? "Discard partial download" : "Remove model");
+        AutomationProperties.SetAutomationId(RemoveButton, _removeDiscardsPartial ? $"ModelDiscard_{ModelId}" : $"ModelRemove_{ModelId}");
+        AutomationProperties.SetName(RemoveButton, _removeDiscardsPartial ? $"Discard partial download of {_name}" : $"Remove {_name}");
+
+        // The card cannot see the session phase, so a busy model manager takes precedence in the reason.
+        UseButtonHost.Visibility = snapshot.HasModelFile && !active && snapshot.Supported ? Visibility.Visible : Visibility.Collapsed;
+        UseButton.IsEnabled = canSelect;
+        var useReason = canSelect ? null
+            : managerIdle ? "Finish dictation first." : "Wait for the current model operation to finish.";
+        ToolTipService.SetToolTip(UseButtonHost, useReason);
+        AutomationProperties.SetHelpText(UseButton, useReason ?? "");
+        ActionRow.Visibility = PrimaryButton.Visibility == Visibility.Visible || UseButtonHost.Visibility == Visibility.Visible
             ? Visibility.Visible : Visibility.Collapsed;
 
-        RemoveButton.IsEnabled = idle && snapshot.HasModelFile;
-        RemoveButton.Visibility = snapshot.HasModelFile ? Visibility.Visible : Visibility.Collapsed;
-
-        DiscardButton.IsEnabled = idle && snapshot.HasPartial;
-        DiscardButton.Visibility = snapshot.HasPartial ? Visibility.Visible : Visibility.Collapsed;
-
-        UseButton.Visibility = snapshot.HasModelFile && !active && snapshot.Supported ? Visibility.Visible : Visibility.Collapsed;
-        UseButton.IsEnabled = canSelect;
-
-        IntegrityText.Text = $"{entry.Id} / {entry.Family} / {entry.Precision ?? "Precision not specified"}\n" +
-            $"{entry.Bytes:N0} bytes\nSHA-256 {entry.Sha256}\n{snapshot.Path}";
+        LocationText.Text = snapshot.Path;
     }
 
     internal void DetachThemeEvents()
@@ -207,10 +222,13 @@ public sealed partial class ModelCard : UserControl
     private bool IsHighContrast() => (_themeSettings ??
         throw new InvalidOperationException("Initialize the model card before loading it.")).HighContrast;
 
-    private void PrimaryClicked(object sender, RoutedEventArgs e) => PrimaryRequested?.Invoke(ModelId);
-    private void PauseClicked(object sender, RoutedEventArgs e) => PauseRequested?.Invoke(ModelId);
-    private void RemoveClicked(object sender, RoutedEventArgs e) => RemoveRequested?.Invoke(ModelId);
-    private void DiscardClicked(object sender, RoutedEventArgs e) => DiscardRequested?.Invoke(ModelId);
+    private void PrimaryClicked(object sender, RoutedEventArgs e)
+    {
+        if (_state is ModelInstallState.Downloading or ModelInstallState.Verifying) { PauseRequested?.Invoke(ModelId); }
+        else { PrimaryRequested?.Invoke(ModelId); }
+    }
+    private void RemoveClicked(object sender, RoutedEventArgs e) =>
+        (_removeDiscardsPartial ? DiscardRequested : RemoveRequested)?.Invoke(ModelId);
     private void UseClicked(object sender, RoutedEventArgs e) => UseRequested?.Invoke(ModelId);
 
     private static string ModeLabel(string mode) => mode switch
@@ -226,7 +244,7 @@ public sealed partial class ModelCard : UserControl
         entry.Preview == "buffered" ? "Buffered recognition. Text updates are not continuous." :
         "Text after Finish dictation.";
 
-    private static string FormatBytes(long bytes) => bytes >= 1024L * 1024 * 1024 ? $"{bytes / (1024.0 * 1024 * 1024):F2} GiB" :
+    internal static string FormatBytes(long bytes) => bytes >= 1024L * 1024 * 1024 ? $"{bytes / (1024.0 * 1024 * 1024):F2} GiB" :
         bytes >= 1024 * 1024 ? $"{bytes / (1024.0 * 1024):F1} MiB" : $"{bytes:N0} bytes";
 
     private static string StateLabel(ModelInstallState state) => state switch
@@ -235,59 +253,4 @@ public sealed partial class ModelCard : UserControl
         ModelInstallState.ReadyToInstall => "Ready to install",
         _ => state.ToString()
     };
-}
-
-// Flow layout for the footer actions: keeps buttons on one row when they fit and reflows them onto
-// additional rows when the card is too narrow, so no action is clipped at the two-column width.
-// Measures to the widest row so HorizontalAlignment can right-align the buttons.
-public sealed partial class ActionWrapPanel : Panel
-{
-    public double HorizontalSpacing { get; set; }
-    public double VerticalSpacing { get; set; }
-
-    protected override Size MeasureOverride(Size availableSize)
-    {
-        var limit = double.IsInfinity(availableSize.Width) ? double.PositiveInfinity : availableSize.Width;
-        double x = 0, rowHeight = 0, totalHeight = 0, widest = 0;
-        foreach (var child in Children)
-        {
-            if (child.Visibility == Visibility.Collapsed) { continue; }
-            child.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-            var size = child.DesiredSize;
-            if (x > 0 && x + HorizontalSpacing + size.Width > limit)
-            {
-                totalHeight += rowHeight + VerticalSpacing;
-                widest = Math.Max(widest, x);
-                x = 0;
-                rowHeight = 0;
-            }
-            if (x > 0) { x += HorizontalSpacing; }
-            x += size.Width;
-            rowHeight = Math.Max(rowHeight, size.Height);
-        }
-        totalHeight += rowHeight;
-        widest = Math.Max(widest, x);
-        return new Size(Math.Min(widest, limit), totalHeight);
-    }
-
-    protected override Size ArrangeOverride(Size finalSize)
-    {
-        double x = 0, y = 0, rowHeight = 0;
-        foreach (var child in Children)
-        {
-            if (child.Visibility == Visibility.Collapsed) { continue; }
-            var size = child.DesiredSize;
-            if (x > 0 && x + HorizontalSpacing + size.Width > finalSize.Width)
-            {
-                y += rowHeight + VerticalSpacing;
-                x = 0;
-                rowHeight = 0;
-            }
-            if (x > 0) { x += HorizontalSpacing; }
-            child.Arrange(new Rect(x, y, size.Width, size.Height));
-            x += size.Width;
-            rowHeight = Math.Max(rowHeight, size.Height);
-        }
-        return finalSize;
-    }
 }

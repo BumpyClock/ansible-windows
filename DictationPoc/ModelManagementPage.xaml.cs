@@ -16,6 +16,8 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
     private readonly List<ModelCard> _cardList = [];
     private const double TwoColumnThreshold = 620;
     private int _columns;
+    private IReadOnlyList<ModelCard> _ordered = [];
+    private ModelCard[] _laidOut = [];
     private ModelDownloadManager? _manager;
     private ThemeSettings? _themeSettings;
     private UiSessionObserver? _observer;
@@ -74,7 +76,8 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
                     card.UseRequested += OnUseRequested;
                     _cardList.Add(card);
                 }
-                LayoutCards(ModelsGrid.ActualWidth >= TwoColumnThreshold ? 2 : 1);
+                _ordered = _cardList.ToArray();
+                LayoutCards(_ordered, ModelsGrid.ActualWidth >= TwoColumnThreshold ? 2 : 1);
             }
             await _manager.RefreshAsync(_lifetime.Token);
         }
@@ -89,30 +92,19 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
     }
 
     private void OnModelsGridSizeChanged(object sender, SizeChangedEventArgs args) =>
-        LayoutCards(args.NewSize.Width >= TwoColumnThreshold ? 2 : 1);
+        LayoutCards(_ordered, args.NewSize.Width >= TwoColumnThreshold ? 2 : 1);
 
-    // Owns intrinsic card sizing: a bounded Grid with Auto rows per pair so each card keeps its
-    // natural height (no equal-height sizing from the shortest card) and the catalog never exceeds
-    // two columns, collapsing to one when narrow.
-    private void LayoutCards(int columns)
+    // Children are re-added in display order so keyboard navigation follows the visual order; the
+    // StaggeredPanel packs cards of different heights into the shortest column.
+    private void LayoutCards(IReadOnlyList<ModelCard> cards, int columns)
     {
         if (columns < 1) { columns = 1; }
-        if (_columns == columns && ModelsGrid.Children.Count == _cardList.Count) { return; }
+        ModelsGrid.Columns = columns;
+        if (_columns == columns && _laidOut.SequenceEqual(cards)) { return; }
         _columns = columns;
-        ModelsGrid.ColumnDefinitions.Clear();
-        ModelsGrid.RowDefinitions.Clear();
-        for (var column = 0; column < columns; column++)
-            ModelsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        var rows = (_cardList.Count + columns - 1) / columns;
-        for (var row = 0; row < rows; row++)
-            ModelsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        for (var index = 0; index < _cardList.Count; index++)
-        {
-            var card = _cardList[index];
-            Grid.SetRow(card, index / columns);
-            Grid.SetColumn(card, index % columns);
-            if (index >= ModelsGrid.Children.Count) { ModelsGrid.Children.Add(card); }
-        }
+        _laidOut = cards.ToArray();
+        ModelsGrid.Children.Clear();
+        foreach (var card in cards) { ModelsGrid.Children.Add(card); }
     }
 
     private void Render()
@@ -126,24 +118,36 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         FolderButton.IsEnabled = idle;
         RefreshButton.IsEnabled = !managerBusy && !_dialogActive;
         FolderMenuButton.IsEnabled = !_dialogActive;
+        BackendText.Text = $"audio.cpp {state.BackendVersion} \u00B7 native CPU";
+        BackendText.Visibility = string.IsNullOrEmpty(state.BackendVersion) ? Visibility.Collapsed : Visibility.Visible;
 
+        // Warnings and errors only. A missing catalog counts only after initialization finishes, so the
+        // page does not flash "Catalog unavailable" while the catalog is still loading.
         var attention = state.Notice.Kind is NoticeKind.Warning or NoticeKind.Error;
-        StatusInfo.Severity = _error is not null || state.Notice.Kind == NoticeKind.Error ? InfoBarSeverity.Error :
-            state.Notice.Kind == NoticeKind.Warning ? InfoBarSeverity.Warning : InfoBarSeverity.Informational;
-        StatusInfo.IsOpen = _error is not null || _manager is null || !state.IsIdle || attention;
+        var catalogMissing = _manager is null && _initialization?.IsCompleted == true;
+        StatusInfo.Severity = _error is not null || catalogMissing || state.Notice.Kind == NoticeKind.Error
+            ? InfoBarSeverity.Error : InfoBarSeverity.Warning;
+        StatusInfo.IsOpen = _error is not null || catalogMissing || attention;
         StatusInfo.Title = _error is not null ? "Model operation failed" :
-            _manager is null ? "Catalog unavailable" :
-            attention || !state.IsIdle ? state.Notice.Title : "";
-        StatusInfo.Message = _error ?? (_manager is null ? "Open Model folder, then Verify installed files to retry opening the catalog." :
-            attention || !state.IsIdle ? state.Notice.Message : "");
+            catalogMissing ? "Catalog unavailable" :
+            attention ? state.Notice.Title : "";
+        StatusInfo.Message = _error ?? (catalogMissing ? "Open Model folder, then Verify installed files to retry opening the catalog." :
+            attention ? state.Notice.Message : "");
 
         if (_manager is null) { return; }
         var canSelect = state.Phase == DictationPhase.Ready && managerIdle;
+        var activeId = state.SelectedModel?.Id;
+        var snapshots = new Dictionary<ModelCard, ModelDownloadSnapshot>();
         foreach (var card in _cardList)
         {
-            card.Update(_manager.Get(card.ModelId), idle, managerIdle, managerBusy,
-                active: state.SelectedModel?.Id == card.ModelId, canSelect: canSelect);
+            var snapshot = _manager.Get(card.ModelId);
+            snapshots[card] = snapshot;
+            card.Update(snapshot, idle, managerIdle, managerBusy,
+                active: activeId == card.ModelId, canSelect: canSelect);
         }
+        // In use first, then installed, then not installed. OrderBy is stable, so catalog order holds within each group.
+        _ordered = _cardList.OrderBy(card => card.ModelId == activeId ? 0 : snapshots[card].HasModelFile ? 1 : 2).ToArray();
+        LayoutCards(_ordered, _columns);
     }
 
     private void OnUseRequested(string id)
@@ -212,15 +216,28 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         Render();
         try
         {
+            // RemoveAsync deletes only the model file; DiscardPartialAsync deletes only the partial weights.
+            var freed = partial ? selected.DownloadedBytes
+                : File.Exists(selected.Path) ? new FileInfo(selected.Path).Length : selected.Model.Bytes;
+            var content = new StackPanel { Spacing = 8 };
+            content.Children.Add(new TextBlock
+            {
+                Text = freed > 0 ? $"Frees {ModelCard.FormatBytes(freed)} on this device." : "Deletes the saved resume data.",
+                Style = (Style)Application.Current.Resources["BodyTextBlockStyle"]
+            });
+            content.Children.Add(new TextBlock
+            {
+                Text = partial ? "A complete model stays installed." : "You can download it again from this page.",
+                Style = (Style)Application.Current.Resources["CaptionSecondaryStyle"]
+            });
             var dialog = new ContentDialog
             {
                 XamlRoot = XamlRoot,
-                Title = partial ? "Discard partial download?" : "Remove model file?",
-                Content = $"{selected.Model.DisplayName ?? selected.Model.Id}\n{selected.Path}" +
-                    (partial ? "\nOnly its partial weights and resume metadata are deleted. A complete model stays installed." :
-                        "\nThe native model is released first. Download the weights again to restore recognition."),
-                PrimaryButtonText = partial ? "Discard partial" : "Remove file",
-                CloseButtonText = "Keep files",
+                Style = (Style)Application.Current.Resources["DefaultContentDialogStyle"],
+                Title = partial ? "Discard partial download?" : $"Remove {selected.Model.DisplayName ?? selected.Model.Id}?",
+                Content = content,
+                PrimaryButtonText = partial ? "Discard" : "Remove",
+                CloseButtonText = "Cancel",
                 DefaultButton = ContentDialogButton.Close
             };
             if (await dialog.ShowAsync() == ContentDialogResult.Primary)

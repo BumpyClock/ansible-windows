@@ -227,7 +227,6 @@ public sealed partial class FloatingDictationWindow : Window
             _pill.Configure(bounds.X + shape.Item1, bounds.Y + shape.Item2, pillWidth, pillHeight,
                 scale, foreground, PreviewRoot.ActualTheme == ElementTheme.Dark, _accessibility.HighContrast,
                 _settings.AdvancedEffectsEnabled);
-            _pill.SetRecording(_state.Phase == DictationPhase.Recording && !_state.IsReplay);
             _pill.UpdateLevels(_levels, !_reducedMotion);
         }
         finally { _sizing = false; }
@@ -306,19 +305,15 @@ public sealed partial class FloatingDictationWindow : Window
         private readonly Windows.UI.Composition.SpriteVisual _backdrop;
         private readonly Windows.UI.Composition.CompositionRoundedRectangleGeometry _backdropGeometry;
         private readonly List<Windows.UI.Composition.CompositionSpriteShape> _bars = [];
-        private readonly Windows.UI.Composition.CompositionSpriteShape _dot;
-        private readonly Windows.UI.Composition.CompositionEllipseGeometry _dotGeometry;
         private readonly Windows.UI.Composition.ImplicitAnimationCollection _barMotion;
         private readonly Windows.System.DispatcherQueueController? _queue;
         private readonly nint _handle;
         private readonly Action<Task> _retainCleanup;
-        private Windows.UI.Composition.CompositionColorBrush? _dotBrush;
         private bool _disposed;
-        private bool _recording;
         private bool _animated;
         private double _scale;
-        // Logical pixels. The dot sits left of the bar row and the group is centred in the pill.
-        private const double BarWidth = 3, BarGap = 3, DotDiameter = 8, DotGap = 10;
+        // Logical pixels. The bar row is centred in the pill.
+        private const double BarWidth = 3, BarGap = 3;
         private (int Width, int Height, double Scale, Windows.UI.Color Foreground, bool Dark, bool Contrast, bool Effects) _style;
 
         public NativeCompositionPill(nint owner, Action dismiss, Action<Task> retainCleanup)
@@ -364,9 +359,6 @@ public sealed partial class FloatingDictationWindow : Window
                 _geometry = _compositor.CreateRoundedRectangleGeometry();
                 _outline = _compositor.CreateSpriteShape(_geometry);
                 _visual.Shapes.Add(_outline);
-                _dotGeometry = _compositor.CreateEllipseGeometry();
-                _dot = _compositor.CreateSpriteShape(_dotGeometry);
-                _visual.Shapes.Add(_dot);
                 for (var index = 0; index < FloatingPreviewPresentation.WaveformBarCount; index++)
                 {
                     var geometry = _compositor.CreateRoundedRectangleGeometry();
@@ -432,20 +424,14 @@ public sealed partial class FloatingDictationWindow : Window
                 var barBrush = _compositor.CreateColorBrush(contrast ? foreground
                     : dark ? Windows.UI.Color.FromArgb(0xFF, 0x79, 0xCF, 0xC0)
                     : Windows.UI.Color.FromArgb(0xFF, 0x18, 0x5C, 0x5E));
-                _dotBrush = _compositor.CreateColorBrush(contrast ? foreground
-                    : dark ? Windows.UI.Color.FromArgb(0xFF, 0xFF, 0x99, 0xA4)
-                    : Windows.UI.Color.FromArgb(0xFF, 0xC4, 0x2B, 0x1C));
-                _dot.FillBrush = _recording ? _dotBrush : null;
                 var rowWidth = FloatingPreviewPresentation.WaveformBarCount * (BarWidth + BarGap) - BarGap;
-                var left = (width - (DotDiameter + DotGap + rowWidth) * scale) / 2;
+                var left = (width - rowWidth * scale) / 2;
                 var middle = height / 2f;
-                _dotGeometry.Radius = new Vector2((float)(DotDiameter / 2 * scale));
-                _dotGeometry.Center = new Vector2((float)(left + DotDiameter / 2 * scale), middle);
                 for (var index = 0; index < _bars.Count; index++)
                 {
                     _bars[index].FillBrush = barBrush;
                     _bars[index].Offset = new Vector2(
-                        (float)(left + (DotDiameter + DotGap + index * (BarWidth + BarGap)) * scale), middle);
+                        (float)(left + index * (BarWidth + BarGap) * scale), middle);
                     ((Windows.UI.Composition.CompositionRoundedRectangleGeometry)_bars[index].Geometry).CornerRadius =
                         new Vector2((float)(BarWidth / 2 * scale));
                 }
@@ -469,13 +455,6 @@ public sealed partial class FloatingDictationWindow : Window
                 geometry.Size = new Vector2((float)(BarWidth * _scale), height);
                 geometry.Offset = new Vector2(0, -height / 2);
             }
-        }
-
-        public void SetRecording(bool recording)
-        {
-            if (_disposed || _recording == recording) { return; }
-            _recording = recording;
-            _dot.FillBrush = recording ? _dotBrush : null;
         }
 
         public void SetAccessibleText(string text) => NativeOverlayWindow.SetAccessibleText(_handle, text);

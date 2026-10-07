@@ -40,22 +40,10 @@
                     </StackPanel>
                 </StackPanel>
                 <StackPanel Grid.Row="1" Spacing="8">
-                    <Button x:Name="InsightsNav" Tag="insights" Click="NavigateClicked" Style="{StaticResource NavigationButtonStyle}">
-                        <StackPanel Orientation="Horizontal" Spacing="16">
-                            <FontIcon Glyph="&#xE9D9;" FontSize="19" />
-                            <TextBlock Text="Insights" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
                     <Button x:Name="DictationNav" Tag="dictation" Click="NavigateClicked" Style="{StaticResource NavigationButtonStyle}">
                         <StackPanel Orientation="Horizontal" Spacing="16">
                             <FontIcon Glyph="&#xE720;" FontSize="19" />
                             <TextBlock Text="Dictation" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
-                    <Button x:Name="SettingsNav" Tag="settings" Click="NavigateClicked" Style="{StaticResource NavigationButtonStyle}">
-                        <StackPanel Orientation="Horizontal" Spacing="16">
-                            <FontIcon Glyph="&#xE713;" FontSize="19" />
-                            <TextBlock Text="Settings" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
                     <Button x:Name="ModelsNav" Tag="models" Click="NavigateClicked" Style="{StaticResource NavigationButtonStyle}">
@@ -64,10 +52,19 @@
                             <TextBlock Text="Speech models" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
+                    <Button x:Name="InsightsNav" Tag="insights" Click="NavigateClicked" Style="{StaticResource NavigationButtonStyle}">
+                        <StackPanel Orientation="Horizontal" Spacing="16">
+                            <FontIcon Glyph="&#xE9D9;" FontSize="19" />
+                            <TextBlock Text="Insights" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
-                <TextBlock x:Name="SidebarStatus" Grid.Row="2" Text="Preparing speech models"
-                           Margin="12,16,12,0" Style="{StaticResource CaptionSecondaryStyle}"
-                           AutomationProperties.LiveSetting="Polite" />
+                <Button x:Name="SettingsNav" Tag="settings" Grid.Row="2" Margin="0,8,0,8" Click="NavigateClicked" Style="{StaticResource NavigationButtonStyle}">
+                    <StackPanel Orientation="Horizontal" Spacing="16">
+                        <FontIcon Glyph="&#xE713;" FontSize="19" />
+                        <TextBlock Text="Settings" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
             </Grid>
             <Border Grid.Column="1" Background="{ThemeResource LayerFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"

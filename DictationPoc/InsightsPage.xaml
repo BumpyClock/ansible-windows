@@ -8,20 +8,7 @@
                 <ColumnDefinition Width="*" MaxWidth="1252" />
             </Grid.ColumnDefinitions>
             <StackPanel Padding="36,28,36,36" Spacing="20">
-                <Grid>
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                    <StackPanel Spacing="4" VerticalAlignment="Center">
-                        <TextBlock Text="Insights" Style="{StaticResource PageTitleStyle}" />
-                        <TextBlock Text="Local usage statistics. Nothing leaves this device." Style="{StaticResource PageSubtitleStyle}" />
-                    </StackPanel>
-                    <Button x:Name="StartButton" Grid.Column="1" Click="StartClicked" VerticalAlignment="Center"
-                            Style="{StaticResource AccentButtonStyle}" MinHeight="36">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon Glyph="&#xE720;" FontSize="14" />
-                            <TextBlock Text="New dictation" />
-                        </StackPanel>
-                    </Button>
-                </Grid>
+                <TextBlock Text="Insights" Style="{StaticResource PageTitleStyle}" />
                 <InfoBar x:Name="UsageErrorBar" IsOpen="False" IsClosable="False" Severity="Warning" Visibility="Collapsed" />
                 <TextBlock x:Name="IntroText" Visibility="Collapsed" TextWrapping="Wrap"
                            Style="{StaticResource SecondaryTextStyle}" />
@@ -46,7 +33,8 @@
                     </Border>
                     <Border x:Name="SessionsCard" Grid.Column="1" Style="{StaticResource MetricCardStyle}">
                         <StackPanel Spacing="16">
-                            <TextBlock x:Name="SessionsText" Text="0" Style="{StaticResource TitleTextBlockStyle}" />
+                            <TextBlock x:Name="SessionsText" Text="0" Style="{StaticResource TitleTextBlockStyle}"
+                                       ToolTipService.ToolTip="Only completed sessions count." />
                             <TextBlock Text="Completed sessions" Style="{StaticResource CaptionSecondaryStyle}" />
                             <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" Margin="0,8" />
                             <TextBlock x:Name="DictationsText" Text="0 dictations" Style="{StaticResource BodyTextBlockStyle}" />
@@ -55,7 +43,8 @@
                     </Border>
                     <Border x:Name="WordsCard" Grid.Column="2" Style="{StaticResource MetricCardStyle}">
                         <StackPanel Spacing="16">
-                            <TextBlock x:Name="TotalWordsText" Text="0" Style="{StaticResource TitleTextBlockStyle}" />
+                            <TextBlock x:Name="TotalWordsText" Text="0" Style="{StaticResource TitleTextBlockStyle}"
+                                       ToolTipService.ToolTip="Excludes sessions with unknown word counts." />
                             <TextBlock Text="Recognized words" Style="{StaticResource CaptionSecondaryStyle}" />
                             <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" Margin="0,8" />
                             <Grid x:Name="WordsShareBar" Height="12" Margin="0,8,0,0" ColumnSpacing="4">
@@ -64,6 +53,8 @@
                                 <Border Grid.Column="1" Background="{ThemeResource AccentSoftBrush}" CornerRadius="4" />
                             </Grid>
                             <TextBlock x:Name="WordsSplitText" Text="No recognized words yet"
+                                       Style="{StaticResource CaptionSecondaryStyle}" />
+                            <TextBlock x:Name="WordsCaveatText" Visibility="Collapsed" TextWrapping="Wrap"
                                        Style="{StaticResource CaptionSecondaryStyle}" />
                         </StackPanel>
                     </Border>
@@ -74,7 +65,8 @@
                     <Grid.RowDefinitions><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                     <Border x:Name="ModelsCard" Style="{StaticResource MetricCardStyle}">
                         <StackPanel Spacing="16">
-                            <TextBlock Text="Sessions by model" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                            <TextBlock Text="Sessions by model" Style="{StaticResource BodyStrongTextBlockStyle}"
+                                       ToolTipService.ToolTip="Up to five models, ranked by completed sessions." />
                             <StackPanel x:Name="ModelRows" Spacing="16" MinHeight="160" />
                         </StackPanel>
                     </Border>
@@ -100,19 +92,6 @@
                         </StackPanel>
                     </Border>
                 </Grid>
-                <Expander Header="About these numbers" AutomationProperties.AutomationId="InsightsHelp"
-                          HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                    <StackPanel Spacing="12">
-                        <TextBlock Text="Only completed sessions count. Word totals exclude sessions with unknown word counts."
-                                   TextWrapping="Wrap" />
-                        <TextBlock Text="Pace uses microphone recording time, including pauses. File verification is excluded."
-                                   TextWrapping="Wrap" />
-                        <TextBlock Text="Model usage shows up to five models, ranked by completed sessions."
-                                   TextWrapping="Wrap" />
-                        <TextBlock Text="Counts stay on this device. Audio and transcript history are not saved."
-                                   TextWrapping="Wrap" />
-                    </StackPanel>
-                </Expander>
             </StackPanel>
         </Grid>
     </ScrollViewer>

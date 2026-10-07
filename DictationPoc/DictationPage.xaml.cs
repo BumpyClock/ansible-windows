@@ -1,54 +1,52 @@
 using DictationPoc.Core;
+using Microsoft.UI.Text;
+using System.Numerics;
+using Microsoft.UI.Composition;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
-using Microsoft.UI.Text;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Documents;
+using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Shapes;
 using Windows.ApplicationModel.DataTransfer;
+using Windows.Storage.Pickers;
 using Windows.UI.ViewManagement;
 
 namespace DictationPoc;
 
 public sealed partial class DictationPage : Page
 {
-    private const int LevelBarCount = 24;
     private static readonly TimeSpan CopiedDuration = TimeSpan.FromSeconds(2);
 
     private readonly DictationSession _session;
+    private readonly AppPaths _paths;
+    private readonly Func<nint> _windowHandle;
     private readonly UISettings _uiSettings = new();
     private readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromMilliseconds(250) };
     private readonly DispatcherTimer _copiedTimer = new() { Interval = CopiedDuration };
-    private readonly List<Rectangle> _levelBars = [];
-    private readonly double[] _levels = new double[LevelBarCount];
     private SessionSnapshot _state;
     private UiSessionObserver? _observer;
     private IReadOnlyList<AudioModel>? _models;
     private SessionNotice? _dismissedNotice;
-    private bool _pulsing;
+    private Visual? _innerVisual;
+    private Visual? _outerVisual;
+    private double _smoothedLevel;
+    private bool _spinning;
     private bool _rendering;
+    private bool _picking;
 
-    internal DictationPage(DictationSession session)
+    internal DictationPage(DictationSession session, AppPaths paths, Func<nint> windowHandle)
     {
         InitializeComponent();
         _session = session;
+        _paths = paths;
+        _windowHandle = windowHandle;
         _state = session.State;
-        for (var index = 0; index < LevelBarCount; index++)
-        {
-            var bar = new Rectangle
-            {
-                Width = 3, Height = 3, RadiusX = 1.5, RadiusY = 1.5,
-                VerticalAlignment = VerticalAlignment.Center,
-                Style = (Style)Application.Current.Resources["PreviewWaveformBarStyle"]
-            };
-            _levelBars.Add(bar);
-            LevelBars.Children.Add(bar);
-        }
         _clock.Tick += (_, _) => RenderClock();
         _copiedTimer.Tick += (_, _) => { _copiedTimer.Stop(); CopyLabel.Text = "Copy"; };
         Loaded += (_, _) =>
         {
-            _observer = new UiSessionObserver(session, DispatcherQueue, state => { _state = state; Render(); }, UpdateLevel);
+            _observer = new UiSessionObserver(session, DispatcherQueue, state => { _state = state; Render(); }, OnLevel);
             _clock.Start();
         };
         Unloaded += (_, _) =>
@@ -56,7 +54,8 @@ public sealed partial class DictationPage : Page
             _observer?.Dispose(); _observer = null;
             _clock.Stop();
             if (_copiedTimer.IsEnabled) { _copiedTimer.Stop(); CopyLabel.Text = "Copy"; }
-            StopPulse();
+            StopSpin();
+            ResetHalos();
         };
     }
 
@@ -71,50 +70,48 @@ public sealed partial class DictationPage : Page
                 _models = _state.Models;
             }
             ModelBox.SelectedIndex = _state.SelectedIndex;
-            ModelBox.IsEnabled = _state.Phase == DictationPhase.Ready;
+            ModelBox.IsEnabled = _state.Phase == DictationPhase.Ready && !_picking;
+            ToolTipService.SetToolTip(ModelBox, ModelBox.IsEnabled ? ModelHint() : "Finish the current operation to change the model.");
+            var ready = _state.Phase == DictationPhase.Ready && _state.SelectedModel is not null && !_picking;
+            FileButton.Visibility = _state.SelectedModel is null ? Visibility.Collapsed : Visibility.Visible;
+            FileButton.IsEnabled = ready;
+            TranscribeItem.IsEnabled = ready;
+            ReplayItem.IsEnabled = ready && _state.CanStart;
             RenderRecordControl();
             RenderStatus();
             RenderClock();
             RenderNotice();
-            ModelNote.Text = _state.SelectedModel?.Mode == "offline"
-                ? "File transcription only. Use Recognition tools in Settings."
-                : _state.SelectedModel?.Preview == "final-only"
-                    ? "Text appears after you finish."
-                    : _state.SelectedModel?.Preview == "buffered"
-                        ? "Buffered recognition. Text arrives in chunks."
-                        : "";
-            ModelNote.Visibility = ModelNote.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
-            CancelButton.IsEnabled = _state.CanCancel;
-            CancelButton.Visibility = _state.CanCancel ? Visibility.Visible : Visibility.Collapsed;
-            CopyButton.IsEnabled = (_state.IsIdle || _state.Phase == DictationPhase.RecoveryRequired) &&
-                !string.IsNullOrWhiteSpace(_state.Transcript);
             if (TranscriptBox.Text != _state.Transcript) { TranscriptBox.Text = _state.Transcript; }
             var empty = string.IsNullOrWhiteSpace(_state.Transcript);
             EmptyState.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
-            EmptyHint.Text = _state.Phase == DictationPhase.Recording
-                ? _state.SelectedModel?.Preview == "live"
-                    ? "Listening. Text appears as the model recognizes speech."
-                    : "Listening. Text appears after you finish."
-                : "Recognized text appears here. Transcripts stay in memory on this device.";
+            CopyButton.Visibility = empty ? Visibility.Collapsed : Visibility.Visible;
+            CopyButton.IsEnabled = _state.IsIdle || _state.Phase == DictationPhase.RecoveryRequired;
         }
         finally { _rendering = false; }
     }
+
+    private string? ModelHint() => _state.SelectedModel switch
+    {
+        { Mode: "offline" } => "Transcribes WAV files. No microphone dictation.",
+        { Preview: "final-only" } => "Text appears after you finish.",
+        { Preview: "buffered" } => "Text arrives in chunks while you speak.",
+        { Preview: "live" } => "Text appears as you speak.",
+        _ => null
+    };
 
     private void RenderRecordControl()
     {
         var busy = _state.Phase is DictationPhase.Connecting or DictationPhase.Preparing or DictationPhase.Finishing
             or DictationPhase.Transcribing or DictationPhase.Cancelling or DictationPhase.MaintainingModels
             or DictationPhase.Closing;
-        BusyRing.IsActive = busy;
-        RecordButton.IsEnabled = _state.CanStart || _state.CanFinish;
-        RecordGlyph.Glyph = _state.CanFinish ? "" : "";
+        RecordButton.IsEnabled = !_picking && (_state.CanStart || _state.CanFinish);
+        RecordGlyph.Glyph = "";
         var label = _state.CanFinish ? "Finish dictation" : "Start dictation";
         AutomationProperties.SetName(RecordButton, label);
         ToolTipService.SetToolTip(RecordButton, label);
-        var recording = _state.Phase == DictationPhase.Recording;
-        if (recording && _uiSettings.AnimationsEnabled) { StartPulse(); }
-        else { StopPulse(); }
-        if (!recording) { Array.Clear(_levels); PaintLevels(); }
+        if (busy) { StartSpin(); } else { StopSpin(); }
+        if (_state.Phase == DictationPhase.Recording && !_state.IsReplay) { ShowHalos(); }
+        else { ResetHalos(); }
     }
 
     private void RenderStatus()
@@ -128,8 +125,7 @@ public sealed partial class DictationPage : Page
             DictationPhase.Connecting => ("Loading models", "Opening the native backend."),
             DictationPhase.Ready when _state.CanStart => ("Ready to dictate", ""),
             DictationPhase.Ready when _state.SelectedModel is null => ("Choose a speech model", "Pick an installed model to begin."),
-            DictationPhase.Ready => ("File transcription only",
-                "This model does not take microphone input. Choose a streaming model to dictate."),
+            DictationPhase.Ready => ("File transcription only", "Choose a WAV file, or pick a streaming model to dictate."),
             DictationPhase.Preparing => ("Preparing", "Loading the model before audio starts."),
             DictationPhase.Recording when _state.IsReplay => ("Replaying WAV", "No microphone is open."),
             DictationPhase.Recording => ("Listening", preview switch
@@ -153,19 +149,19 @@ public sealed partial class DictationPage : Page
         StatusDetail.Inlines.Add(new Run { Text = settings.PushToTalk ? " in any app and release to finish." : " in any app, then press it again to finish." });
     }
 
+    // The live row keeps its height in every state so starting a dictation does not shift the layout.
     private void RenderClock()
     {
-        var live = _state.Activity is SessionActivity.Dictation or SessionActivity.Replay &&
-            _state.Phase is DictationPhase.Preparing or DictationPhase.Recording or DictationPhase.Finishing;
+        var live = _state.CanCancel;
         var completed = _state.IsIdle && _state.Result is not null;
-        LiveRow.Visibility = live || completed ? Visibility.Visible : Visibility.Collapsed;
-        if (LiveRow.Visibility == Visibility.Collapsed) { return; }
-        ElapsedText.Text = _session.Elapsed.ToString(@"mm\:ss");
-        WordsText.Text = _state.Words is { } words
-            ? $"{words:N0} {(words == 1 ? "word" : "words")}"
-            : live ? "Counting words" : "Word count unknown";
-        LevelBars.Visibility = _state.Phase == DictationPhase.Recording && !_state.IsReplay
-            ? Visibility.Visible : Visibility.Collapsed;
+        LiveRow.Opacity = live || completed ? 1 : 0;
+        LiveRow.IsHitTestVisible = live;
+        CancelButton.Visibility = live ? Visibility.Visible : Visibility.Collapsed;
+        CancelButton.IsEnabled = live;
+        if (!live && !completed) { return; }
+        var text = _session.Elapsed.ToString(@"mm\:ss");
+        if (_state.Words is { } words) { text += $"  ·  {words:N0} {(words == 1 ? "word" : "words")}"; }
+        LiveText.Text = text;
     }
 
     // Only warnings and errors interrupt. Success and information are already reflected by the hero status,
@@ -186,37 +182,69 @@ public sealed partial class DictationPage : Page
         if (args.Reason == InfoBarCloseReason.CloseButton) { _dismissedNotice = _state.Notice; }
     }
 
-    private void StartPulse()
+    // The ring is a thin arc that rotates around the button. With animations off it stays as a static arc.
+    private void StartSpin()
     {
-        if (_pulsing) { return; }
-        _pulsing = true;
-        PulseStoryboard.Begin();
+        SpinRing.Opacity = 1;
+        if (_spinning || !_uiSettings.AnimationsEnabled) { return; }
+        _spinning = true;
+        SpinStoryboard.Begin();
     }
 
-    private void StopPulse()
+    private void StopSpin()
     {
-        if (!_pulsing) { return; }
-        _pulsing = false;
-        PulseStoryboard.Stop();
-        PulseRing.Opacity = 0;
+        SpinRing.Opacity = 0;
+        if (!_spinning) { return; }
+        _spinning = false;
+        SpinStoryboard.Stop();
     }
 
-    private void UpdateLevel(double level)
+    // Halo scale uses Composition implicit animations, so each level update glides over 90 ms instead of stepping.
+    private Visual HaloVisual(Ellipse halo, ref Visual? cache)
     {
-        if (_state.Phase != DictationPhase.Recording || _state.IsReplay) { return; }
-        level = FloatingPreviewPresentation.MeterLevel(level);
-        if (!_uiSettings.AnimationsEnabled) { Array.Fill(_levels, level); }
-        else
-        {
-            Array.Copy(_levels, 1, _levels, 0, _levels.Length - 1);
-            _levels[^1] = level;
-        }
-        PaintLevels();
+        if (cache is not null) { return cache; }
+        var visual = ElementCompositionPreview.GetElementVisual(halo);
+        var compositor = visual.Compositor;
+        var glide = compositor.CreateVector3KeyFrameAnimation();
+        glide.Target = "Scale";
+        glide.InsertExpressionKeyFrame(1f, "this.FinalValue");
+        glide.Duration = TimeSpan.FromMilliseconds(90);
+        var implicitAnimations = compositor.CreateImplicitAnimationCollection();
+        implicitAnimations["Scale"] = glide;
+        visual.ImplicitAnimations = implicitAnimations;
+        visual.CenterPoint = new Vector3((float)halo.Width / 2, (float)halo.Height / 2, 0);
+        cache = visual;
+        return visual;
     }
 
-    private void PaintLevels()
+    private void SetHalo(double inner, double outer)
     {
-        for (var index = 0; index < _levelBars.Count; index++) { _levelBars[index].Height = 3 + _levels[index] * 25; }
+        HaloVisual(InnerHalo, ref _innerVisual).Scale = new Vector3((float)inner, (float)inner, 1);
+        HaloVisual(OuterHalo, ref _outerVisual).Scale = new Vector3((float)outer, (float)outer, 1);
+    }
+
+    private void ShowHalos()
+    {
+        InnerHalo.Opacity = 0.28;
+        OuterHalo.Opacity = 0.12;
+        if (!_uiSettings.AnimationsEnabled) { SetHalo(1.15, 1.15); }
+        else if (_smoothedLevel == 0) { SetHalo(1, 1); }
+    }
+
+    private void ResetHalos()
+    {
+        _smoothedLevel = 0;
+        InnerHalo.Opacity = 0;
+        OuterHalo.Opacity = 0;
+        SetHalo(1, 1);
+    }
+
+    private void OnLevel(double raw)
+    {
+        if (_state.Phase != DictationPhase.Recording || _state.IsReplay || !_uiSettings.AnimationsEnabled) { return; }
+        var target = FloatingPreviewPresentation.MeterLevel(raw);
+        _smoothedLevel += (target - _smoothedLevel) * (target > _smoothedLevel ? 0.5 : 0.15);
+        SetHalo(1.0 + 0.6 * _smoothedLevel, 1.0 + 1.0 * _smoothedLevel);
     }
 
     private void ModelChanged(object sender, SelectionChangedEventArgs args)
@@ -239,6 +267,30 @@ public sealed partial class DictationPage : Page
         try { await _session.CancelAsync(); }
         catch (Exception error) { _session.ReportUiError(error); }
     }
+    private async void TranscribeClicked(object sender, RoutedEventArgs args) => await PickAndRunAsync(replay: false);
+    private async void ReplayClicked(object sender, RoutedEventArgs args) => await PickAndRunAsync(replay: true);
+
+    private async Task PickAndRunAsync(bool replay)
+    {
+        if (_picking) { return; }
+        _picking = true;
+        Render();
+        try
+        {
+            var picker = new FileOpenPicker();
+            picker.FileTypeFilter.Add(".wav");
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, _windowHandle());
+            var file = await picker.PickSingleFileAsync();
+            if (file is not null)
+            {
+                if (replay) { await _session.ReplayAsync(file.Path); }
+                else { await _session.TranscribeFileAsync(file.Path); }
+            }
+        }
+        catch (Exception error) { _session.ReportUiError(error); }
+        finally { _picking = false; Render(); }
+    }
+
     private void CopyClicked(object sender, RoutedEventArgs args)
     {
         try

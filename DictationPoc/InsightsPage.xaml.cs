@@ -29,7 +29,6 @@ public sealed partial class InsightsPage : Page
             _observer = new UiSessionObserver(session, DispatcherQueue, state =>
             {
                 _state = state;
-                RenderState();
                 if (!ReferenceEquals(_usage, state.Usage) || !ReferenceEquals(_models, state.Models) ||
                     _collectUsage != state.Settings.CollectUsage || state.UsageError is not null)
                 {
@@ -43,8 +42,6 @@ public sealed partial class InsightsPage : Page
         Unloaded += (_, _) => { _observer?.Dispose(); _observer = null; };
     }
 
-    private void RenderState() => StartButton.IsEnabled = _state.CanStart;
-
     private void RenderUsage()
     {
         UsageErrorBar.IsOpen = _state.UsageError is not null;
@@ -57,12 +54,6 @@ public sealed partial class InsightsPage : Page
         IntroText.Text = _state.Settings.CollectUsage
             ? ""
             : "Usage collection is paused. Saved counts remain visible.";
-        if (summary.UnknownWordSessions > 0)
-        {
-            if (IntroText.Text.Length > 0) { IntroText.Text += " "; }
-            IntroText.Text += $"Word totals exclude {summary.UnknownWordSessions} " +
-                $"{(summary.UnknownWordSessions == 1 ? "session" : "sessions")} with unknown word counts.";
-        }
         IntroText.Visibility = IntroText.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
         PaceText.Text = summary.WordsPerMinute?.ToString("N0", CultureInfo.CurrentCulture) ?? "--";
         PaceCaption.Text = summary.RecordingSeconds > 0 ? $"{summary.RecordingSeconds / 60:N1} min recorded" :
@@ -72,7 +63,10 @@ public sealed partial class InsightsPage : Page
         VerificationsText.Text = $"{summary.FileSessions:N0} file verifications";
         TotalWordsText.Text = summary.TotalWords.ToString("N0");
         WordsSplitText.Text = $"{summary.DictatedWords:N0} dictated / {summary.FileWords:N0} verified";
-        WordsShareBar.Visibility = summary.TotalWords == 0 ? Visibility.Collapsed : Visibility.Visible;
+        WordsCaveatText.Text = $"Excludes {summary.UnknownWordSessions} " +
+            $"{(summary.UnknownWordSessions == 1 ? "session" : "sessions")} with unknown word counts";
+        WordsCaveatText.Visibility = summary.UnknownWordSessions > 0 ? Visibility.Visible : Visibility.Collapsed;
+        WordsShareBar.Visibility =summary.TotalWords == 0 ? Visibility.Collapsed : Visibility.Visible;
         DictationShare.Width = new GridLength(summary.DictatedWords, GridUnitType.Star);
         FileShare.Width = new GridLength(summary.FileWords, GridUnitType.Star);
         StreakText.Text = $"{summary.CurrentStreak} day streak";
@@ -232,11 +226,5 @@ public sealed partial class InsightsPage : Page
         Grid.SetRow(WordsCard, narrow ? 2 : 0);
         Grid.SetColumn(ActivityCard, narrow ? 0 : 1);
         Grid.SetRow(ActivityCard, narrow ? 1 : 0);
-    }
-
-    private async void StartClicked(object sender, RoutedEventArgs args)
-    {
-        try { await _session.StartDictationAsync(); }
-        catch (Exception error) { _session.ReportUiError(error); }
     }
 }

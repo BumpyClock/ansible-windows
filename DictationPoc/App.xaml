@@ -103,9 +103,6 @@
             <Style x:Key="SecondaryTextStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
                 <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
             </Style>
-            <Style x:Key="PreviewWaveformBarStyle" TargetType="Rectangle">
-                <Setter Property="Fill" Value="{ThemeResource AccentGraphicBrush}" />
-            </Style>
             <Style x:Key="PageTitleStyle" TargetType="TextBlock" BasedOn="{StaticResource TitleTextBlockStyle}" />
             <Style x:Key="PageSubtitleStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
                 <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />

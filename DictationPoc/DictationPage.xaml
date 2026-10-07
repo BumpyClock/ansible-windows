@@ -3,13 +3,9 @@
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Page.Resources>
-        <Storyboard x:Name="PulseStoryboard" RepeatBehavior="Forever">
-            <DoubleAnimation Storyboard.TargetName="PulseScale" Storyboard.TargetProperty="ScaleX"
-                             From="1" To="1.45" Duration="0:0:1.6" />
-            <DoubleAnimation Storyboard.TargetName="PulseScale" Storyboard.TargetProperty="ScaleY"
-                             From="1" To="1.45" Duration="0:0:1.6" />
-            <DoubleAnimation Storyboard.TargetName="PulseRing" Storyboard.TargetProperty="Opacity"
-                             From="0.45" To="0" Duration="0:0:1.6" />
+        <Storyboard x:Name="SpinStoryboard">
+            <DoubleAnimation Storyboard.TargetName="SpinRotate" Storyboard.TargetProperty="Angle"
+                             From="0" To="360" Duration="0:0:1.2" RepeatBehavior="Forever" />
         </Storyboard>
     </Page.Resources>
     <ScrollViewer HorizontalScrollBarVisibility="Disabled">
@@ -31,16 +27,20 @@
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
-                        <Grid Width="112" Height="112" VerticalAlignment="Center">
-                            <Ellipse x:Name="PulseRing" Width="72" Height="72" Fill="{ThemeResource AccentGraphicBrush}"
-                                     Opacity="0" IsHitTestVisible="False" RenderTransformOrigin="0.5,0.5">
+                        <Grid Width="112" Height="112" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Ellipse x:Name="OuterHalo" Width="72" Height="72" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                     Fill="{ThemeResource AccentGraphicBrush}" Opacity="0" IsHitTestVisible="False" />
+                            <Ellipse x:Name="InnerHalo" Width="72" Height="72" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                     Fill="{ThemeResource AccentGraphicBrush}" Opacity="0" IsHitTestVisible="False" />
+                            <Ellipse x:Name="SpinRing" Width="84" Height="84" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                     Stroke="{ThemeResource AccentGraphicBrush}" StrokeThickness="2" StrokeDashArray="32,97"
+                                     StrokeStartLineCap="Round" StrokeEndLineCap="Round" Opacity="0" IsHitTestVisible="False">
                                 <Ellipse.RenderTransform>
-                                    <ScaleTransform x:Name="PulseScale" />
+                                    <RotateTransform x:Name="SpinRotate" CenterX="42" CenterY="42" />
                                 </Ellipse.RenderTransform>
                             </Ellipse>
-                            <ProgressRing x:Name="BusyRing" Width="88" Height="88" IsActive="False"
-                                          Foreground="{ThemeResource AccentGraphicBrush}" IsHitTestVisible="False" />
-                            <Button x:Name="RecordButton" Style="{StaticResource RecordButtonStyle}" Click="RecordClicked"
+                            <Button x:Name="RecordButton" Width="72" Height="72" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    Style="{StaticResource RecordButtonStyle}" Click="RecordClicked"
                                     AutomationProperties.Name="Start dictation" ToolTipService.ToolTip="Start dictation">
                                 <FontIcon x:Name="RecordGlyph" Glyph="&#xE720;" FontSize="26" />
                             </Button>
@@ -51,20 +51,17 @@
                                        AutomationProperties.LiveSetting="Polite" />
                             <TextBlock x:Name="StatusDetail" Text="" TextWrapping="Wrap"
                                        Style="{StaticResource SecondaryTextStyle}" />
-                            <Grid x:Name="LiveRow" Margin="0,8,0,0" ColumnSpacing="16" Visibility="Collapsed">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock x:Name="ElapsedText" Text="00:00" Style="{StaticResource BodyStrongTextBlockStyle}"
-                                           VerticalAlignment="Center" AutomationProperties.Name="Elapsed time" />
-                                <TextBlock x:Name="WordsText" Grid.Column="1" Text="Word count pending"
-                                           VerticalAlignment="Center" Style="{StaticResource CaptionSecondaryStyle}" />
-                                <StackPanel x:Name="LevelBars" Grid.Column="2" Orientation="Horizontal" Spacing="3"
-                                            Height="28" HorizontalAlignment="Left" VerticalAlignment="Center"
-                                            AutomationProperties.Name="Microphone level history" />
-                            </Grid>
+                            <StackPanel x:Name="LiveRow" Orientation="Horizontal" Spacing="16" Height="32" Opacity="0"
+                                        IsHitTestVisible="False">
+                                <TextBlock x:Name="LiveText" Text="00:00" Style="{StaticResource BodyStrongTextBlockStyle}"
+                                           VerticalAlignment="Center" AutomationProperties.Name="Elapsed time and words" />
+                                <Button x:Name="CancelButton" Content="Cancel" Click="CancelClicked" MinHeight="32"
+                                        VerticalAlignment="Center" ToolTipService.ToolTip="Cancel (Esc)">
+                                    <Button.KeyboardAccelerators>
+                                        <KeyboardAccelerator Key="Escape" />
+                                    </Button.KeyboardAccelerators>
+                                </Button>
+                            </StackPanel>
                         </StackPanel>
 
                         <Grid Grid.Row="1" Grid.ColumnSpan="2" ColumnSpacing="12">
@@ -72,14 +69,21 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                                <ComboBox x:Name="ModelBox" Header="Speech model" MinWidth="320" SelectionChanged="ModelChanged"
-                                          PlaceholderText="No installed models" />
-                                <TextBlock x:Name="ModelNote" TextWrapping="Wrap" VerticalAlignment="Bottom" MaxWidth="360"
-                                           Margin="0,0,0,8" Visibility="Collapsed" Style="{StaticResource CaptionSecondaryStyle}" />
-                            </StackPanel>
-                            <Button x:Name="CancelButton" Grid.Column="1" Content="Cancel" Click="CancelClicked"
-                                    VerticalAlignment="Bottom" MinHeight="32" />
+                            <ComboBox x:Name="ModelBox" Header="Speech model" MinWidth="320" HorizontalAlignment="Left"
+                                      SelectionChanged="ModelChanged" PlaceholderText="No installed models" />
+                            <DropDownButton x:Name="FileButton" Grid.Column="1" VerticalAlignment="Bottom" MinHeight="32"
+                                            AutomationProperties.Name="Transcribe a file">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE8E5;" FontSize="14" />
+                                    <TextBlock Text="Transcribe file" />
+                                </StackPanel>
+                                <DropDownButton.Flyout>
+                                    <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                        <MenuFlyoutItem x:Name="TranscribeItem" Text="Transcribe WAV file…" Click="TranscribeClicked" />
+                                        <MenuFlyoutItem x:Name="ReplayItem" Text="Replay WAV as live audio…" Click="ReplayClicked" />
+                                    </MenuFlyout>
+                                </DropDownButton.Flyout>
+                            </DropDownButton>
                         </Grid>
                     </Grid>
                 </Border>
@@ -92,14 +96,14 @@
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
-                        <Grid ColumnSpacing="12">
+                        <Grid ColumnSpacing="12" MinHeight="32">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <TextBlock Text="Transcript" Style="{StaticResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" />
                             <Button x:Name="CopyButton" Grid.Column="1" Click="CopyClicked" MinHeight="32"
-                                    AutomationProperties.Name="Copy transcript">
+                                    AutomationProperties.Name="Copy transcript" Visibility="Collapsed">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <FontIcon Glyph="&#xE8C8;" FontSize="14" />
                                     <TextBlock x:Name="CopyLabel" Text="Copy" />
@@ -120,14 +124,9 @@
                                     <Thickness x:Key="TextControlBorderThemeThicknessFocused">0</Thickness>
                                 </TextBox.Resources>
                             </TextBox>
-                            <StackPanel x:Name="EmptyState" Spacing="8" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                        IsHitTestVisible="False" MaxWidth="360">
-                                <FontIcon Glyph="&#xE8D2;" FontSize="28" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                <TextBlock Text="Nothing transcribed yet" Style="{StaticResource BodyStrongTextBlockStyle}" HorizontalAlignment="Center" />
-                                <TextBlock x:Name="EmptyHint" TextWrapping="Wrap" TextAlignment="Center"
-                                           Text="Recognized text appears here. Transcripts stay in memory on this device."
-                                           Style="{StaticResource CaptionSecondaryStyle}" />
-                            </StackPanel>
+                            <TextBlock x:Name="EmptyState" Text="Transcript appears here." HorizontalAlignment="Center"
+                                       VerticalAlignment="Center" IsHitTestVisible="False"
+                                       Style="{StaticResource SecondaryTextStyle}" />
                         </Grid>
                     </Grid>
                 </Border>

@@ -39,7 +39,7 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
         _session = session;
         _insights = new InsightsPage(session);
-        _dictation = new DictationPage(session);
+        _dictation = new DictationPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this));
         _settings = new MainPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this),
             ChangeHotkey, ChangeDictationMode, CaptureShortcut);
         _models = new ModelManagementPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this), modelDownloads);
@@ -49,11 +49,13 @@ public sealed partial class MainWindow : Window
         AppWindow.TitleBar.ButtonBackgroundColor = Colors.Transparent;
         AppWindow.TitleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
         var area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Nearest).WorkArea;
-        AppWindow.Resize(new Windows.Graphics.SizeInt32(Math.Min(1700, area.Width - 60), Math.Min(1100, area.Height - 60)));
+        var size = new Windows.Graphics.SizeInt32(Math.Min(1700, area.Width - 60), Math.Min(1100, area.Height - 60));
+        AppWindow.Resize(size);
+        AppWindow.Move(new Windows.Graphics.PointInt32(area.X + (area.Width - size.Width) / 2, area.Y + (area.Height - size.Height) / 2));
         MainContent.Loaded += Initialize;
         AppWindow.Closing += CloseRequested;
         Closed += WindowClosed;
-        Navigate("insights");
+        Navigate("dictation");
         _observer = new UiSessionObserver(session, DispatcherQueue, SessionChanged);
     }
 
@@ -83,7 +85,7 @@ public sealed partial class MainWindow : Window
     private void Navigate(string page)
     {
         MainContent.Content = page switch { "settings" => _settings, "dictation" => _dictation, "models" => _models, _ => _insights };
-        foreach (var button in new[] { InsightsNav, DictationNav, SettingsNav, ModelsNav })
+        foreach (var button in new[] { DictationNav, ModelsNav, InsightsNav, SettingsNav })
         {
             button.Style = (Style)Application.Current.Resources[
                 (string)button.Tag == page ? "SelectedNavigationButtonStyle" : "NavigationButtonStyle"];
@@ -124,12 +126,6 @@ public sealed partial class MainWindow : Window
     private void SessionChanged(SessionSnapshot state)
     {
         if (_closed) { return; }
-        SidebarStatus.Text = state.Phase == DictationPhase.Disconnected
-            ? "Choose a model in Speech models."
-            : state.Notice.Title;
-        SidebarStatus.Visibility = state.Phase == DictationPhase.Ready &&
-            state.Notice.Kind is not (NoticeKind.Warning or NoticeKind.Error)
-                ? Visibility.Collapsed : Visibility.Visible;
         var showWaveform = state.Phase is DictationPhase.Preparing or DictationPhase.Recording &&
             (_delivery is null || !state.Settings.PushToTalk || _shortcutHeld);
         if (!showWaveform) { _popupFailed = false; }
@@ -347,7 +343,7 @@ public sealed partial class MainWindow : Window
         catch (Exception error)
         {
             Debug.WriteLine($"Ansible: native shutdown needs recovery: {error.Message}");
-            SidebarStatus.Text = $"Close failed. {error.Message} Try closing the window again.";
+            _session.Notify(NoticeKind.Error, "Close failed", $"{error.Message} Try closing the window again.");
             _closing = false;
         }
     }
