@@ -145,6 +145,20 @@ public sealed class AppSettingsStoreTests : IDisposable
         Assert.Throws<InvalidDataException>(() => CustomVocabulary.Normalize(entry + "a"));
     }
 
+    [Theory]
+    [InlineData("\U0001F600", "\U0001F600")]
+    [InlineData("e\u0301", "\u00e9")]
+    [InlineData("q\u0301", "q\u0301")]
+    public void DictionaryCountsOneHundredUnicodeTextElementsAfterNormalization(
+        string inputElement, string normalizedElement)
+    {
+        var input = string.Concat(Enumerable.Repeat(inputElement, 100));
+        var expected = string.Concat(Enumerable.Repeat(normalizedElement, 100));
+
+        Assert.Equal(expected, CustomVocabulary.Normalize(input));
+        Assert.Throws<InvalidDataException>(() => CustomVocabulary.Normalize(input + inputElement));
+    }
+
     [Fact]
     public void DictionaryAcceptsFourThousandNinetySixUtf8BytesButRejectsTheNextByte()
     {
