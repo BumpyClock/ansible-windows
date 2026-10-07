@@ -94,7 +94,12 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
             await _manager.RefreshAsync(_lifetime.Token);
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
-        catch (Exception error) { ShowError(error); }
+        catch (Exception error)
+        {
+            _error = error.Message;
+            System.Diagnostics.Debug.WriteLine($"Local Voice: model catalog initialization failed: {error}");
+            Render();
+        }
     }
 
     private void ManagerChanged()
