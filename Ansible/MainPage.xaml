@@ -35,6 +35,11 @@
                                    Style="{StaticResource BodyTextBlockStyle}" />
                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                             <!-- Read-only keycap. Focus or click records a new shortcut; Esc cancels. -->
+                            <!-- Shown only when the shortcut differs from the default. -->
+                            <HyperlinkButton x:Name="ResetShortcutButton" Content="Reset" VerticalAlignment="Center"
+                                             AutomationProperties.AutomationId="ResetShortcutButton"
+                                             AutomationProperties.Name="Reset shortcut"
+                                             Visibility="Collapsed" Click="ResetShortcutClicked" />
                             <TextBox x:Name="HotkeyCaptureBox" VerticalAlignment="Center"
                                      AutomationProperties.AutomationId="HotkeyCaptureBox"
                                      AutomationProperties.Name="Shortcut" MinWidth="140" MaxWidth="280"
@@ -43,11 +48,6 @@
                                      BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1"
                                      GotFocus="ShortcutGotFocus" KeyDown="ShortcutKeyDown"
                                      KeyUp="ShortcutKeyUp" LostFocus="ShortcutLostFocus" />
-                            <!-- Shown only when the shortcut differs from the default. -->
-                            <HyperlinkButton x:Name="ResetShortcutButton" Content="Reset" VerticalAlignment="Center"
-                                             AutomationProperties.AutomationId="ResetShortcutButton"
-                                             AutomationProperties.Name="Reset shortcut"
-                                             Visibility="Collapsed" Click="ResetShortcutClicked" />
                         </StackPanel>
                     </Grid>
                     <Border Height="1" Margin="0,12" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
@@ -69,6 +69,7 @@
                              AutomationProperties.Name="Custom vocabulary"
                              ToolTipService.ToolTip="One name, word, or phrase per line. Supported models use these as recognition hints, not replacement rules. Up to 100 entries, 100 characters each."
                              PlaceholderText="Contoso&#x0a;WinUI&#x0a;audio.cpp"
+                             PlaceholderForeground="{ThemeResource TextFillColorTertiaryBrush}"
                              AcceptsReturn="True" TextWrapping="Wrap" MinHeight="112" MaxHeight="200"
                              MaxLength="8192" TextChanged="DictionaryChanged"
                              ScrollViewer.VerticalScrollBarVisibility="Auto" />

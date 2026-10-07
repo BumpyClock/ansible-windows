@@ -13,7 +13,7 @@
                 <StackPanel MaxWidth="{StaticResource PageContentMaxWidth}" Padding="{StaticResource PagePadding}" Spacing="24">
                 <TextBlock Text="Dictation" Style="{StaticResource PageTitleStyle}" />
 
-                <Border Style="{StaticResource CardStyle}" Padding="28,24">
+                <Border Style="{StaticResource CardStyle}">
                     <Grid ColumnSpacing="24" RowSpacing="20">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
@@ -84,7 +84,7 @@
 
                 <InfoBar x:Name="StatusInfo" IsOpen="False" IsClosable="True" Closing="StatusInfoClosing" />
 
-                <Border x:Name="TranscriptCard" Style="{StaticResource CardStyle}" Padding="24,16,24,24" MinHeight="160" Visibility="Collapsed">
+                <Border x:Name="TranscriptCard" Style="{StaticResource CardStyle}" MinHeight="160" Visibility="Collapsed">
                     <Grid RowSpacing="8">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />

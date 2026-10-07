@@ -18,7 +18,7 @@
             <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
         </Style>
     </UserControl.Resources>
-    <Border x:Name="CardBorder" Style="{StaticResource CardStyle}" Padding="20">
+    <Border x:Name="CardBorder" Style="{StaticResource CardStyle}">
         <StackPanel Spacing="16">
             <Grid ColumnSpacing="12">
                 <Grid.ColumnDefinitions>

@@ -5,7 +5,13 @@
     <ScrollViewer HorizontalScrollBarVisibility="Disabled">
         <Grid>
             <StackPanel MaxWidth="{StaticResource PageContentMaxWidth}" Padding="{StaticResource PagePadding}" Spacing="24">
-            <TextBlock Text="Insights" Style="{StaticResource PageTitleStyle}" />
+            <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <TextBlock Text="Insights" Style="{StaticResource PageTitleStyle}" />
+                <TextBlock Grid.Column="1" Text="All time" VerticalAlignment="Bottom" Margin="0,0,0,6"
+                           Style="{StaticResource CaptionSecondaryStyle}"
+                           ToolTipService.ToolTip="Every completed session recorded on this device." />
+            </Grid>
             <InfoBar x:Name="UsageErrorBar" IsOpen="False" IsClosable="False" Severity="Warning" Visibility="Collapsed" />
             <TextBlock x:Name="IntroText" Visibility="Collapsed" TextWrapping="Wrap"
                        Style="{StaticResource SecondaryTextStyle}" />
@@ -39,14 +45,14 @@
             <Grid x:Name="DetailGrid" ColumnSpacing="16" RowSpacing="16">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                 <Grid.RowDefinitions><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-                <Border x:Name="ModelsCard" VerticalAlignment="Top" Style="{StaticResource MetricCardStyle}">
+                <Border x:Name="ModelsCard" Style="{StaticResource MetricCardStyle}">
                     <StackPanel Spacing="16">
                         <TextBlock Text="Sessions by model" Style="{StaticResource BodyStrongTextBlockStyle}"
                                    ToolTipService.ToolTip="Up to five models, ranked by completed sessions." />
                         <StackPanel x:Name="ModelRows" Spacing="8" />
                     </StackPanel>
                 </Border>
-                <Border x:Name="ActivityCard" Grid.Column="1" VerticalAlignment="Top" Style="{StaticResource MetricCardStyle}">
+                <Border x:Name="ActivityCard" Grid.Column="1" Style="{StaticResource MetricCardStyle}">
                     <StackPanel Spacing="16">
                         <Grid>
                             <TextBlock Text="Activity" Style="{StaticResource BodyStrongTextBlockStyle}" />
