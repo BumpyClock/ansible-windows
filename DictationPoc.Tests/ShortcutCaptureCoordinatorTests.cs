@@ -4,6 +4,32 @@ namespace DictationPoc.Tests;
 
 public sealed class ShortcutCaptureCoordinatorTests
 {
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task QueuedPressThenImmediateReleaseChecksOwnershipBeforeCompletedInspectionStarts(
+        bool pushToTalk, bool expectedStart)
+    {
+        var coordinator = new ShortcutCaptureCoordinator();
+        var capture = coordinator.TryBeginCapture(pushToTalk, deliveryActive: false)!;
+        var resumeInspection = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var inspection = Task.FromResult(true);
+
+        async Task<bool> StartAfterDispatchAsync()
+        {
+            await resumeInspection.Task;
+            return await inspection && coordinator.TryStartDelivery(capture);
+        }
+
+        var start = StartAfterDispatchAsync();
+        coordinator.NoteReleased();
+        resumeInspection.SetResult();
+
+        Assert.Equal(expectedStart, await start);
+        coordinator.Abandon(capture);
+        Assert.False(coordinator.HasPendingCapture);
+    }
+
     [Fact]
     public void AdmitsOneCaptureAndRejectsASecondWhileInspectionPending()
     {

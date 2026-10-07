@@ -208,22 +208,24 @@ internal sealed partial class GlobalDictationHotkey : IDisposable
         if (fireRelease) { SafeInvoke(false); }
     }
 
-    // UI-thread WM_HOTKEY handler. Only starts a press when the chord is genuinely held, so a stale/queued
-    // message whose keys are already up cannot start a push-to-talk session that never ends. _pressed and
-    // MOD_NOREPEAT together suppress auto-repeat and reentrancy.
+    // WM_HOTKEY records a valid press even if its keys were released before dispatch.
+    // Check release immediately after the press callback, then poll any chord still held.
     private void OnHotkeyPressed()
     {
         bool start = false;
         lock (_sync)
         {
             if (_disposed || !_registered || _pressed) { return; }
-            if (!ChordHeld(_shortcut)) { return; }
             _pressed = true;
             _pollTimer.Start();
             start = true;
         }
 
-        if (start) { SafeInvoke(true); }
+        if (start)
+        {
+            SafeInvoke(true);
+            OnPollTick(null, EventArgs.Empty);
+        }
     }
 
     private void SafeInvoke(bool pressed)
