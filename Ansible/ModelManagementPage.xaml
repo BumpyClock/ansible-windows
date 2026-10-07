@@ -5,7 +5,7 @@
       xmlns:local="using:Ansible">
     <ScrollViewer HorizontalScrollBarVisibility="Disabled">
         <Grid>
-            <StackPanel MaxWidth="{StaticResource PageContentMaxWidth}" Padding="{StaticResource PagePadding}" Spacing="24">
+            <StackPanel MaxWidth="{StaticResource PageContentMaxWidth}" Padding="{StaticResource PagePadding}" Spacing="16">
             <!-- The title line (TitleTextBlockStyle, 36 px line height) sets this row's height. The 32 px button
                  centres inside it, so the first card starts at the same y as on the other pages. -->
             <Grid ColumnSpacing="16">

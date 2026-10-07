@@ -122,8 +122,12 @@
                  carry behaviour and memory on the state line. The caption row, bar and actions share the content edge. -->
             <TextBlock x:Name="StatsText" Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap" />
 
-            <ProgressBar x:Name="DownloadProgress" Minimum="0" Maximum="100" Visibility="Collapsed"
-                         HorizontalAlignment="Stretch" AutomationProperties.Name="Model download progress" />
+            <Grid x:Name="ProgressHost" Visibility="Collapsed" Height="4">
+                <Border Height="3" VerticalAlignment="Center" CornerRadius="1.5"
+                        Background="{ThemeResource ControlStrongFillColorDisabledBrush}" />
+                <ProgressBar x:Name="DownloadProgress" Minimum="0" Maximum="100" VerticalAlignment="Center"
+                             HorizontalAlignment="Stretch" AutomationProperties.Name="Model download progress" />
+            </Grid>
             <TextBlock x:Name="ProgressText" TextWrapping="Wrap" Visibility="Collapsed"
                        Style="{StaticResource CaptionSecondaryStyle}" />
 

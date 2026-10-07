@@ -10,7 +10,7 @@
     </Page.Resources>
     <ScrollViewer HorizontalScrollBarVisibility="Disabled">
             <Grid>
-                <StackPanel MaxWidth="{StaticResource PageContentMaxWidth}" Padding="{StaticResource PagePadding}" Spacing="24">
+                <StackPanel MaxWidth="{StaticResource PageContentMaxWidth}" Padding="{StaticResource PagePadding}" Spacing="16">
                 <TextBlock Text="Dictation" Style="{StaticResource PageTitleStyle}" />
 
                 <Border Style="{StaticResource CardStyle}">
@@ -24,7 +24,7 @@
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
-                        <Grid Width="112" Height="112" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Grid Width="72" Height="72" Margin="0,6" HorizontalAlignment="Left" VerticalAlignment="Center">
                             <Ellipse x:Name="OuterHalo" Width="72" Height="72" HorizontalAlignment="Center" VerticalAlignment="Center"
                                      Fill="{ThemeResource AccentGraphicBrush}" Opacity="0" IsHitTestVisible="False" />
                             <Ellipse x:Name="InnerHalo" Width="72" Height="72" HorizontalAlignment="Center" VerticalAlignment="Center"

@@ -191,7 +191,7 @@ public sealed partial class InsightsPage : Page
     private void HeatmapHostSizeChanged(object sender, SizeChangedEventArgs args)
     {
         // 13 week columns plus the label column are separated by 13 gaps of 4 DIPs.
-        var cell = Math.Clamp(Math.Floor((args.NewSize.Width - 16 - 13 * 4) / 13), 12, 16);
+        var cell = Math.Clamp(Math.Floor((args.NewSize.Width - 16 - 13 * 4) / 13), 12, 20);
         if (cell == _cellSize) { return; }
         _cellSize = cell;
         if (_summary is not null) { RenderActivity(_summary); }
