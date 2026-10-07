@@ -54,29 +54,26 @@ public sealed partial class InsightsPage : Page
             : "Usage collection is paused. Saved counts remain visible.";
         IntroText.Visibility = IntroText.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
         PaceText.Text = summary.WordsPerMinute?.ToString("N0", CultureInfo.CurrentCulture) ?? "--";
-        SetCaption(PaceCaption, summary.RecordingSeconds > 0 ? $"{summary.RecordingSeconds / 60:N1} min recorded" : null);
+        ToolTipService.SetToolTip(PaceText,
+            "Recognized dictation words divided by recorded microphone time, including pauses." +
+            (summary.RecordingSeconds > 0 ? $" {summary.RecordingSeconds / 60:N1} min recorded." : ""));
         SessionsText.Text = summary.DictationSessions.ToString("N0");
-        SetCaption(FilesText, summary.FileSessions > 0
-            ? $"{summary.FileSessions:N0} {(summary.FileSessions == 1 ? "file" : "files")} transcribed"
-            : null);
+        ToolTipService.SetToolTip(SessionsText, "Only completed sessions count." +
+            (summary.FileSessions > 0
+                ? $" {summary.FileSessions:N0} {(summary.FileSessions == 1 ? "file" : "files")} transcribed."
+                : ""));
         TotalWordsText.Text = summary.TotalWords.ToString("N0");
-        SetCaption(FileWordsText, summary.FileWords > 0 ? $"{summary.FileWords:N0} from files" : null);
-        ToolTipService.SetToolTip(TotalWordsText, summary.UnknownWordSessions > 0
+        ToolTipService.SetToolTip(TotalWordsText, (summary.UnknownWordSessions > 0
             ? $"Excludes {summary.UnknownWordSessions:N0} " +
               $"{(summary.UnknownWordSessions == 1 ? "session" : "sessions")} with unknown word counts."
-            : "Excludes sessions with unknown word counts.");
+            : "Excludes sessions with unknown word counts.") +
+            (summary.FileWords > 0 ? $" {summary.FileWords:N0} from files." : ""));
         StreakText.Text = $"{summary.CurrentStreak} day streak";
-        SetCaption(LongestText, summary.LongestStreak > summary.CurrentStreak
-            ? $"Best {summary.LongestStreak} {(summary.LongestStreak == 1 ? "day" : "days")}"
-            : null);
+        ToolTipService.SetToolTip(StreakText, summary.LongestStreak > summary.CurrentStreak
+            ? $"Best {summary.LongestStreak} {(summary.LongestStreak == 1 ? "day" : "days")}."
+            : "Consecutive days with a completed session.");
         RenderModels(summary);
         RenderActivity(summary);
-    }
-
-    private static void SetCaption(TextBlock caption, string? text)
-    {
-        caption.Text = text ?? "";
-        caption.Visibility = text is null ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private static Style AppStyle(string key) => (Style)Application.Current.Resources[key];

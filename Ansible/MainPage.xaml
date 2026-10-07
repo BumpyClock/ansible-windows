@@ -4,34 +4,34 @@
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <ScrollViewer HorizontalScrollBarVisibility="Disabled">
         <Grid>
-            <StackPanel MaxWidth="{StaticResource PageContentMaxWidth}" Padding="{StaticResource PagePadding}" Spacing="20">
+            <StackPanel MaxWidth="{StaticResource PageContentMaxWidth}" Padding="{StaticResource PagePadding}" Spacing="24">
             <TextBlock Text="Settings" Style="{StaticResource PageTitleStyle}" />
 
-            <InfoBar x:Name="StatusInfo" IsOpen="False" IsClosable="True" Closing="StatusInfoClosing" />
+            <!-- A closed InfoBar stays Visible and still takes stack spacing, so RenderNotice collapses it too. -->
+            <InfoBar x:Name="StatusInfo" IsOpen="False" IsClosable="True" Visibility="Collapsed" Closing="StatusInfoClosing" />
 
-            <StackPanel Spacing="8">
-                <TextBlock Text="Dictation" Style="{StaticResource SectionHeaderStyle}" />
-                <Border Style="{StaticResource CardStyle}">
-                    <StackPanel>
-                        <Grid ColumnSpacing="16">
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                            <TextBlock Text="Activation mode" VerticalAlignment="Center"
-                                       Style="{StaticResource BodyStrongTextBlockStyle}" />
-                            <RadioButtons x:Name="PushToTalkChoice" Grid.Column="1" VerticalAlignment="Center" MaxColumns="2"
-                                          AutomationProperties.AutomationId="PushToTalkToggle"
-                                          AutomationProperties.Name="Activation mode"
-                                          SelectionChanged="DictationModeChanged">
-                                <x:String>Hold to talk</x:String>
-                                <x:String>Press to start and stop</x:String>
-                            </RadioButtons>
-                        </Grid>
-                        <Border Height="1" Margin="0,12" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
-                        <Grid ColumnSpacing="16">
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                            <TextBlock Text="Shortcut" VerticalAlignment="Center"
-                                       Style="{StaticResource BodyStrongTextBlockStyle}" />
+            <Border Style="{StaticResource CardStyle}">
+                <StackPanel>
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <TextBlock Text="Activation mode" VerticalAlignment="Center"
+                                   Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <RadioButtons x:Name="PushToTalkChoice" Grid.Column="1" VerticalAlignment="Center" MaxColumns="2"
+                                      AutomationProperties.AutomationId="PushToTalkToggle"
+                                      AutomationProperties.Name="Activation mode"
+                                      SelectionChanged="DictationModeChanged">
+                            <x:String>Hold to talk</x:String>
+                            <x:String>Press to start and stop</x:String>
+                        </RadioButtons>
+                    </Grid>
+                    <Border Height="1" Margin="0,12" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <TextBlock Text="Shortcut" VerticalAlignment="Center"
+                                   Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                             <!-- Read-only keycap. Focus or click records a new shortcut; Esc cancels. -->
-                            <TextBox x:Name="HotkeyCaptureBox" Grid.Column="1" VerticalAlignment="Center"
+                            <TextBox x:Name="HotkeyCaptureBox" VerticalAlignment="Center"
                                      AutomationProperties.AutomationId="HotkeyCaptureBox"
                                      AutomationProperties.Name="Shortcut" MinWidth="140" MaxWidth="280"
                                      IsReadOnly="True" TextAlignment="Center"
@@ -39,52 +39,53 @@
                                      BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1"
                                      GotFocus="ShortcutGotFocus" KeyDown="ShortcutKeyDown"
                                      KeyUp="ShortcutKeyUp" LostFocus="ShortcutLostFocus" />
-                        </Grid>
-                        <Border Height="1" Margin="0,12" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
-                        <Grid ColumnSpacing="16">
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                            <TextBlock Text="Language hint" VerticalAlignment="Center"
-                                       Style="{StaticResource BodyStrongTextBlockStyle}" />
-                            <TextBox x:Name="LanguageBox" Grid.Column="1" Width="180" VerticalAlignment="Center"
-                                     AutomationProperties.Name="Language hint" PlaceholderText="Model default"
-                                     TextChanged="LanguageChanged" />
-                        </Grid>
-                    </StackPanel>
-                </Border>
-            </StackPanel>
+                            <!-- Shown only when the shortcut differs from the default. -->
+                            <HyperlinkButton x:Name="ResetShortcutButton" Content="Reset" VerticalAlignment="Center"
+                                             AutomationProperties.AutomationId="ResetShortcutButton"
+                                             AutomationProperties.Name="Reset shortcut"
+                                             Visibility="Collapsed" Click="ResetShortcutClicked" />
+                        </StackPanel>
+                    </Grid>
+                    <Border Height="1" Margin="0,12" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <TextBlock Text="Language hint" VerticalAlignment="Center"
+                                   Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <TextBox x:Name="LanguageBox" Grid.Column="1" Width="180" VerticalAlignment="Center"
+                                 AutomationProperties.Name="Language hint" PlaceholderText="Model default"
+                                 TextChanged="LanguageChanged" />
+                    </Grid>
+                </StackPanel>
+            </Border>
 
-            <StackPanel Spacing="8">
-                <TextBlock Text="Vocabulary" Style="{StaticResource SectionHeaderStyle}" />
-                <Border Style="{StaticResource CardStyle}">
-                    <StackPanel Spacing="12">
-                        <TextBox x:Name="DictionaryBox" AutomationProperties.AutomationId="DictionaryBox"
-                                 AutomationProperties.Name="Custom dictionary entries"
-                                 ToolTipService.ToolTip="One name, word, or phrase per line. Supported models use these as recognition hints, not replacement rules. Up to 100 entries, 100 characters each."
-                                 PlaceholderText="Contoso&#x0a;WinUI&#x0a;audio.cpp"
-                                 AcceptsReturn="True" TextWrapping="Wrap" MinHeight="112" MaxHeight="200"
-                                 MaxLength="8192" TextChanged="DictionaryChanged"
-                                 ScrollViewer.VerticalScrollBarVisibility="Auto" />
-                        <Grid ColumnSpacing="12">
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                            <Button x:Name="SaveDictionaryButton" AutomationProperties.AutomationId="SaveDictionaryButton"
-                                    Content="Save dictionary" Click="SaveDictionaryClicked" />
-                            <TextBlock x:Name="DictionaryStatusText" Grid.Column="1" VerticalAlignment="Center"
-                                       TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}"
-                                       Visibility="Collapsed" AutomationProperties.LiveSetting="Polite" />
-                        </Grid>
-                    </StackPanel>
-                </Border>
-            </StackPanel>
+            <Border Style="{StaticResource CardStyle}">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="Custom vocabulary" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                    <TextBox x:Name="DictionaryBox" AutomationProperties.AutomationId="DictionaryBox"
+                             AutomationProperties.Name="Custom vocabulary"
+                             ToolTipService.ToolTip="One name, word, or phrase per line. Supported models use these as recognition hints, not replacement rules. Up to 100 entries, 100 characters each."
+                             PlaceholderText="Contoso&#x0a;WinUI&#x0a;audio.cpp"
+                             AcceptsReturn="True" TextWrapping="Wrap" MinHeight="112" MaxHeight="200"
+                             MaxLength="8192" TextChanged="DictionaryChanged"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto" />
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <Button x:Name="SaveDictionaryButton" AutomationProperties.AutomationId="SaveDictionaryButton"
+                                Content="Save dictionary" Click="SaveDictionaryClicked" />
+                        <TextBlock x:Name="DictionaryStatusText" Grid.Column="1" VerticalAlignment="Center"
+                                   TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}"
+                                   Visibility="Collapsed" AutomationProperties.LiveSetting="Polite" />
+                    </Grid>
+                </StackPanel>
+            </Border>
 
             <Border Style="{StaticResource CardStyle}">
                 <Grid x:Name="UsageRow" ColumnSpacing="16" Background="Transparent">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                    <StackPanel Spacing="4" VerticalAlignment="Center">
-                        <TextBlock Text="Usage statistics" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                        <TextBlock Text="Stored on this device. Never audio or text."
-                                   TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}" />
-                    </StackPanel>
-                    <ToggleSwitch x:Name="UsageToggle" Grid.Column="1" VerticalAlignment="Center"
+                    <TextBlock Text="Usage statistics" VerticalAlignment="Center"
+                               Style="{StaticResource BodyStrongTextBlockStyle}" />
+                    <!-- The template keeps a fixed 12 DIP column for the empty On/Off content; the negative margin aligns the switch with the other row controls. -->
+                    <ToggleSwitch x:Name="UsageToggle" Grid.Column="1" VerticalAlignment="Center" Margin="0,0,-12,0"
                                   AutomationProperties.AutomationId="UsageToggle"
                                   AutomationProperties.Name="Usage statistics"
                                   OnContent="" OffContent="" MinWidth="0" Toggled="UsageToggled" />

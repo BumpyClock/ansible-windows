@@ -115,6 +115,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         var idle = state.IsIdle && managerIdle;
         var managerBusy = _manager?.IsBusy == true;
         FolderText.Text = _manager?.DirectoryPath ?? state.ModelsDirectory;
+        ToolTipService.SetToolTip(FolderMenuButton, FolderText.Text);
         FolderButton.IsEnabled = idle;
         RefreshButton.IsEnabled = !managerBusy && !_dialogActive;
         FolderMenuButton.IsEnabled = !_dialogActive;
@@ -135,7 +136,8 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
             attention ? state.Notice.Message : "");
 
         if (_manager is null) { return; }
-        var canSelect = state.Phase == DictationPhase.Ready && managerIdle;
+        // Selecting an installed model does not depend on the download manager.
+        var canSelect = state.Phase == DictationPhase.Ready;
         var activeId = state.SelectedModel?.Id;
         var snapshots = new Dictionary<ModelCard, ModelDownloadSnapshot>();
         foreach (var card in _cardList)

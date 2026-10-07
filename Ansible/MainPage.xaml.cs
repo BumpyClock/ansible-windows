@@ -34,7 +34,7 @@ public sealed partial class MainPage : Page
         _changeMode = changeMode;
         _captureShortcut = captureShortcut;
         _state = session.State;
-        const string typingHelp = "Live models type recognition updates as they arrive. Held Ctrl, Alt, Shift or Win keys delay typing until released. Some editors cannot distinguish fields within the same window. Hold to talk finishes when you release the shortcut; otherwise press it again to finish. Check the destination before dictating, because Cancel cannot undo inserted text.";
+        const string typingHelp = "Click to record a new shortcut. Esc cancels. Live models type recognition updates as they arrive. Held Ctrl, Alt, Shift or Win keys delay typing until released. Some editors cannot distinguish fields within the same window. Hold to talk finishes when you release the shortcut; otherwise press it again to finish. Check the destination before dictating, because Cancel cannot undo inserted text.";
         ToolTipService.SetToolTip(HotkeyCaptureBox, typingHelp);
         AutomationProperties.SetHelpText(HotkeyCaptureBox, typingHelp);
         // TextBox handles pointer presses itself, so listen for handled presses to restart capture on click.
@@ -66,10 +66,12 @@ public sealed partial class MainPage : Page
             RenderNotice();
             UsageToggle.IsOn = _state.Settings.CollectUsage;
             UsageToggle.IsEnabled = idle;
-            ToolTipService.SetToolTip(UsageRow, $"Session dates, model, word counts, and timing. File: {_session.UsagePath}");
+            ToolTipService.SetToolTip(UsageRow, $"Stored on this device. Never audio or text. Session dates, model, word counts, and timing. File: {_session.UsagePath}");
             AutomationProperties.SetHelpText(UsageToggle, _session.UsagePath);
             if (!_recordingShortcut) { HotkeyCaptureBox.Text = _state.Settings.Shortcut.DisplayText; }
             HotkeyCaptureBox.IsEnabled = idle;
+            ResetShortcutButton.Visibility = _state.Settings.Shortcut != DictationShortcut.Default ? Visibility.Visible : Visibility.Collapsed;
+            ResetShortcutButton.IsEnabled = idle;
             PushToTalkChoice.IsEnabled = idle;
             PushToTalkChoice.SelectedIndex = _state.Settings.PushToTalk ? 0 : 1;
         }
@@ -93,16 +95,23 @@ public sealed partial class MainPage : Page
     {
         var notice = _state.Notice;
         var attention = notice.Kind is NoticeKind.Warning or NoticeKind.Error;
-        if (!attention || ReferenceEquals(notice, _dismissedNotice)) { StatusInfo.IsOpen = false; return; }
+        if (!attention || ReferenceEquals(notice, _dismissedNotice))
+        {
+            StatusInfo.IsOpen = false;
+            StatusInfo.Visibility = Visibility.Collapsed;
+            return;
+        }
         StatusInfo.Severity = notice.Kind == NoticeKind.Error ? InfoBarSeverity.Error : InfoBarSeverity.Warning;
         StatusInfo.Title = notice.Title;
         StatusInfo.Message = notice.Message;
         StatusInfo.IsOpen = true;
+        StatusInfo.Visibility = Visibility.Visible;
     }
 
     private void StatusInfoClosing(InfoBar sender, InfoBarClosingEventArgs args)
     {
         if (args.Reason == InfoBarCloseReason.CloseButton) { _dismissedNotice = _state.Notice; }
+        sender.Visibility = Visibility.Collapsed;
     }
 
     private void LanguageChanged(object sender, TextChangedEventArgs args)
@@ -145,6 +154,12 @@ public sealed partial class MainPage : Page
         if (pushToTalk == _session.State.Settings.PushToTalk) { return; }
         try { _changeMode(pushToTalk); }
         catch (Exception error) { _session.ReportUiError(error); Render(); }
+    }
+
+    private void ResetShortcutClicked(object sender, RoutedEventArgs args)
+    {
+        try { _changeHotkey(DictationShortcut.Default); }
+        catch (Exception error) { _session.Notify(NoticeKind.Error, "Shortcut unavailable", error.Message); }
     }
 
     private void ShortcutGotFocus(object sender, RoutedEventArgs args) => StartShortcutCapture();

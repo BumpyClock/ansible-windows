@@ -18,6 +18,8 @@ public sealed partial class ModelCard : UserControl
     private string? _stateDotBrushKey;
     private ModelInstallState _state;
     private bool _removeDiscardsPartial;
+    private string _behavior = "";
+    private const string MemoryEstimateTip = "Memory is the admission estimate used before loading, not measured usage.";
 
     public ModelCard()
     {
@@ -42,12 +44,11 @@ public sealed partial class ModelCard : UserControl
         _name = entry.DisplayName ?? entry.Id;
         NameText.Text = _name;
         AutomationProperties.SetName(NameText, _name);
-        CaptionRun.Text = entry.Precision is { } precision ? $"{BehaviorLabel(entry)} \u00B7 {precision}" : BehaviorLabel(entry);
-        // The catalog mixes concrete values ("English") with caveat sentences; only concrete values stay on the card.
+        // A name such as "... (WAV only)" already states the behaviour, so the caption would repeat it.
+        _behavior = BehaviorLabel(entry);
+        if (entry.Mode == "offline" && _name.Contains("WAV", StringComparison.OrdinalIgnoreCase)) { _behavior = ""; }
         var languages = entry.Languages ?? "Languages not specified";
-        var concreteLanguages = entry.Languages is { } value && !value.TrimEnd().EndsWith('.');
-        LanguageText.Text = concreteLanguages ? languages : "";
-        LanguageText.Visibility = concreteLanguages ? Visibility.Visible : Visibility.Collapsed;
+        ToolTipService.SetToolTip(StatsText, MemoryEstimateTip);
 
         DescriptionText.Text = entry.Description ?? "";
         AboutSection.Visibility = string.IsNullOrEmpty(entry.Description) ? Visibility.Collapsed : Visibility.Visible;
@@ -58,6 +59,8 @@ public sealed partial class ModelCard : UserControl
         SourceText.Text = $"{entry.Repo}\nPinned revision {entry.Revision}\n{entry.RemoteFile}";
         ByteCountText.Text = $"{entry.Bytes:N0} bytes";
         HashText.Text = $"SHA-256 {entry.Sha256}";
+        PrecisionText.Text = entry.Precision is { } precision ? $"Precision {precision}" : "";
+        PrecisionText.Visibility = entry.Precision is null ? Visibility.Collapsed : Visibility.Visible;
 
         AutomationProperties.SetAutomationId(PrimaryButton, $"ModelPrimary_{entry.Id}");
         AutomationProperties.SetAutomationId(UseButton, $"ModelUse_{entry.Id}");
@@ -83,40 +86,47 @@ public sealed partial class ModelCard : UserControl
         var state = snapshot.State;
         _state = state;
 
-        // Not installed has no state label; the Download button already says it.
+        // Not installed and Installed have no state label; the Download, Use and Remove buttons already say it.
         var stateLabel = !snapshot.Supported ? "Unsupported" : active ? "In use" : StateLabel(state);
+        // Installed cards carry memory on this line; a paid download cost leaves the card once the model file exists.
+        var installed = snapshot.HasModelFile || active;
+        var memory = FormatBytes(entry.EstimatedMemoryBytes);
+        var caption = !installed ? _behavior : _behavior.Length > 0 ? $"{_behavior} \u00B7 {memory}" : memory;
         StateRun.Text = stateLabel ?? "";
-        SeparatorRun.Text = stateLabel is null ? "" : " \u00B7 ";
+        SeparatorRun.Text = stateLabel is not null && caption.Length > 0 ? " \u00B7 " : "";
+        CaptionRun.Text = caption;
+        StateLine.Visibility = stateLabel is null && caption.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+        ToolTipService.SetToolTip(StateLineText, installed ? MemoryEstimateTip : null);
         StateDot.Visibility = stateLabel is null ? Visibility.Collapsed : Visibility.Visible;
-        _stateDotBrushKey = !snapshot.Supported || state == ModelInstallState.Failed ? "SystemFillColorCriticalBrush"
-            : "AccentGraphicBrush";
+        _stateDotBrushKey = stateLabel is null ? null
+            : !snapshot.Supported || (!active && state == ModelInstallState.Failed) ? "SystemFillColorCriticalBrush"
+            : active ? "AccentGraphicBrush"
+            : "SystemFillColorCautionBrush";
         ApplyStateDot();
         CardBorder.BorderBrush = (Brush)Application.Current.Resources[active ? "AccentGraphicBrush" : "CardStrokeColorDefaultBrush"];
         CardBorder.BorderThickness = new Thickness(active ? 1.5 : 1);
 
-        // A paid download cost leaves the card once the model file exists.
-        StatsText.Text = snapshot.HasModelFile || active ? $"{FormatBytes(entry.EstimatedMemoryBytes)} memory"
-            : $"{FormatBytes(entry.Bytes)} download \u00B7 {FormatBytes(entry.EstimatedMemoryBytes)} memory";
+        StatsText.Text = installed ? "" : $"{FormatBytes(entry.Bytes)} download \u00B7 {memory} memory";
+        StatsText.Visibility = installed ? Visibility.Collapsed : Visibility.Visible;
 
         var showBar = state is ModelInstallState.Downloading or ModelInstallState.Paused or ModelInstallState.Verifying;
         DownloadProgress.Value = snapshot.Progress;
+        // Verification reports no progress, so the bar shows activity rather than a fill level.
+        DownloadProgress.IsIndeterminate = state == ModelInstallState.Verifying;
         DownloadProgress.Visibility = showBar ? Visibility.Visible : Visibility.Collapsed;
-        // Verifying shows the state and bar only.
-        ProgressText.Text = state == ModelInstallState.ReadyToInstall
-            ? "Verified. Install when dictation is idle."
-            : $"{FormatBytes(snapshot.DownloadedBytes)} / {FormatBytes(entry.Bytes)}" +
-              (snapshot.BytesPerSecond > 0 ? $" / {FormatBytes((long)snapshot.BytesPerSecond)}/s" : "");
-        ProgressText.Visibility = state is ModelInstallState.Downloading or ModelInstallState.Paused or ModelInstallState.ReadyToInstall
+        // Verifying shows the state and bar only; Ready to install is covered by the state and the Install button.
+        ProgressText.Text = $"{FormatBytes(snapshot.DownloadedBytes)} / {FormatBytes(entry.Bytes)}" +
+            (snapshot.BytesPerSecond > 0 ? $" / {FormatBytes((long)snapshot.BytesPerSecond)}/s" : "");
+        ProgressText.Visibility = state is ModelInstallState.Downloading or ModelInstallState.Paused
             ? Visibility.Visible : Visibility.Collapsed;
 
         ErrorInfo.Message = snapshot.Error ?? "";
         ErrorInfo.IsOpen = snapshot.Error is not null;
+        ErrorInfo.Visibility = snapshot.Error is null ? Visibility.Collapsed : Visibility.Visible;
 
         // One primary action per card. While a transfer runs the primary action stops it; an installed
         // file has no primary action here because Use or the in-use state covers it.
         var transferring = state is ModelInstallState.Downloading or ModelInstallState.Verifying;
-        // Accent marks a forward step only; Pause and Stop use the default style.
-        PrimaryButton.Style = (Style)Application.Current.Resources[transferring ? "DefaultButtonStyle" : "AccentButtonStyle"];
         PrimaryButton.Content = state switch
         {
             ModelInstallState.Downloading => "Pause",
@@ -130,7 +140,13 @@ public sealed partial class ModelCard : UserControl
             ? idle
             : managerIdle && !snapshot.HasModelFile &&
               state is ModelInstallState.NotInstalled or ModelInstallState.Paused or ModelInstallState.Failed);
-        PrimaryButton.Visibility = !active && (transferring || !snapshot.HasModelFile) ? Visibility.Visible : Visibility.Collapsed;
+        // Accent marks an enabled forward step only; Pause, Stop and disabled buttons use the default style.
+        PrimaryButton.Style = (Style)Application.Current.Resources[
+            transferring || !PrimaryButton.IsEnabled ? "DefaultButtonStyle" : "AccentButtonStyle"];
+        PrimaryHost.Visibility = !active && (transferring || !snapshot.HasModelFile) ? Visibility.Visible : Visibility.Collapsed;
+        // A disabled button shows no tooltip, so the host explains a wait on another model operation.
+        ToolTipService.SetToolTip(PrimaryHost, !transferring && !PrimaryButton.IsEnabled && managerBusy && snapshot.Supported
+            ? "Wait for the current model operation to finish." : null);
         ToolTipService.SetToolTip(PrimaryButton, state == ModelInstallState.Downloading
             ? "Pause keeps partial files for Resume. Dictation can continue during downloads; installation waits until dictation finishes."
             : null);
@@ -152,7 +168,7 @@ public sealed partial class ModelCard : UserControl
         // Use appears only when it can be clicked; a disabled Use cannot explain itself.
         UseButton.Visibility = snapshot.HasModelFile && !active && snapshot.Supported && canSelect
             ? Visibility.Visible : Visibility.Collapsed;
-        ActionRow.Visibility = PrimaryButton.Visibility == Visibility.Visible || UseButton.Visibility == Visibility.Visible
+        ActionRow.Visibility = PrimaryHost.Visibility == Visibility.Visible || UseButton.Visibility == Visibility.Visible
             ? Visibility.Visible : Visibility.Collapsed;
 
         LocationText.Text = snapshot.Path;
@@ -175,10 +191,8 @@ public sealed partial class ModelCard : UserControl
     }
 
     // Theme brushes resolved from code do not follow theme changes, so the fill is reapplied on ActualThemeChanged.
-    private void ApplyStateDot()
-    {
-        if (_stateDotBrushKey is { } key) { StateDot.Fill = (Brush)Application.Current.Resources[key]; }
-    }
+    private void ApplyStateDot() =>
+        StateDot.Fill = _stateDotBrushKey is { } key ? (Brush)Application.Current.Resources[key] : null;
 
     private void OnThemeSettingsChanged(ThemeSettings sender, object args)
     {
@@ -245,7 +259,7 @@ public sealed partial class ModelCard : UserControl
 
     private static string? StateLabel(ModelInstallState state) => state switch
     {
-        ModelInstallState.NotInstalled => null,
+        ModelInstallState.NotInstalled or ModelInstallState.Installed => null,
         ModelInstallState.ReadyToInstall => "Ready to install",
         _ => state.ToString()
     };

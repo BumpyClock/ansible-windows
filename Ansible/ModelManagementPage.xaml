@@ -5,7 +5,7 @@
       xmlns:local="using:Ansible">
     <ScrollViewer HorizontalScrollBarVisibility="Disabled">
         <Grid>
-            <StackPanel MaxWidth="{StaticResource PageContentMaxWidth}" Padding="{StaticResource PagePadding}" Spacing="20">
+            <StackPanel MaxWidth="{StaticResource PageContentMaxWidth}" Padding="{StaticResource PagePadding}" Spacing="24">
             <Grid ColumnSpacing="16">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -26,12 +26,11 @@
                                            Style="{StaticResource SecondaryTextStyle}" />
                                 <StackPanel Orientation="Horizontal" Spacing="12">
                                     <Button x:Name="FolderButton" Content="Choose folder" Click="ChooseFolderClicked"
-                                            MinHeight="40" AutomationProperties.AutomationId="ChooseModelFolder" />
+                                            MinHeight="40" AutomationProperties.AutomationId="ChooseModelFolder"
+                                            ToolTipService.ToolTip="Changing folders does not move or delete model files." />
                                     <Button x:Name="RefreshButton" Content="Verify installed files" Click="RefreshClicked"
                                             MinHeight="40" AutomationProperties.AutomationId="VerifyModelFiles" />
                                 </StackPanel>
-                                <TextBlock Text="Changing folders does not move or delete model files."
-                                           TextWrapping="Wrap" Style="{StaticResource SecondaryTextStyle}" />
                                 <TextBlock x:Name="BackendText" Style="{StaticResource CaptionSecondaryStyle}" />
                             </StackPanel>
                         </Flyout>

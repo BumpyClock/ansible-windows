@@ -29,7 +29,7 @@
                     <!-- AccentGraphicBrush matches AccentFillColorDefaultBrush, which is SystemColorWindowColor (invisible) in High Contrast. -->
                     <SolidColorBrush x:Key="AccentGraphicBrush" Color="{ThemeResource SystemAccentColorDark1}" />
                     <SolidColorBrush x:Key="AccentSoftBrush" Color="#DDF1EB" />
-                    <SolidColorBrush x:Key="InactiveChartBrush" Color="#D1CEC4" />
+                    <SolidColorBrush x:Key="InactiveChartBrush" Color="#E3E1DA" />
                     <SolidColorBrush x:Key="ActivityLowBrush" Color="#CDEBE5" />
                     <SolidColorBrush x:Key="ActivityMediumBrush" Color="#79C1B7" />
                     <x:Double x:Key="FutureActivityOpacity">0.35</x:Double>
@@ -48,7 +48,7 @@
                     <!-- App tokens: accent graphics and data visualization. -->
                     <SolidColorBrush x:Key="AccentGraphicBrush" Color="{ThemeResource SystemAccentColorLight2}" />
                     <SolidColorBrush x:Key="AccentSoftBrush" Color="#254F49" />
-                    <SolidColorBrush x:Key="InactiveChartBrush" Color="#505853" />
+                    <SolidColorBrush x:Key="InactiveChartBrush" Color="#3C423F" />
                     <SolidColorBrush x:Key="ActivityLowBrush" Color="#365D54" />
                     <SolidColorBrush x:Key="ActivityMediumBrush" Color="#568F82" />
                     <x:Double x:Key="FutureActivityOpacity">0.35</x:Double>
@@ -108,7 +108,7 @@
                 <Setter Property="TextWrapping" Value="Wrap" />
             </Style>
             <Style x:Key="SectionHeaderStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
-                <Setter Property="Margin" Value="0,12,0,4" />
+                <Setter Property="Margin" Value="0,8,0,0" />
             </Style>
             <!-- Read-only keyboard shortcut display. -->
             <Style x:Key="KeycapStyle" TargetType="Border">

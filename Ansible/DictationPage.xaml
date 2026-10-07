@@ -10,7 +10,7 @@
     </Page.Resources>
     <ScrollViewer HorizontalScrollBarVisibility="Disabled">
             <Grid>
-                <StackPanel MaxWidth="{StaticResource PageContentMaxWidth}" Padding="{StaticResource PagePadding}" Spacing="20">
+                <StackPanel MaxWidth="{StaticResource PageContentMaxWidth}" Padding="{StaticResource PagePadding}" Spacing="24">
                 <TextBlock Text="Dictation" Style="{StaticResource PageTitleStyle}" />
 
                 <Border Style="{StaticResource CardStyle}" Padding="28,24">
@@ -84,7 +84,7 @@
 
                 <InfoBar x:Name="StatusInfo" IsOpen="False" IsClosable="True" Closing="StatusInfoClosing" />
 
-                <Border x:Name="TranscriptCard" Style="{StaticResource CardStyle}" Padding="24,16,24,24" MinHeight="160">
+                <Border x:Name="TranscriptCard" Style="{StaticResource CardStyle}" Padding="24,16,24,24" MinHeight="160" Visibility="Collapsed">
                     <Grid RowSpacing="8">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
@@ -118,9 +118,6 @@
                                     <Thickness x:Key="TextControlBorderThemeThicknessFocused">0</Thickness>
                                 </TextBox.Resources>
                             </TextBox>
-                            <TextBlock x:Name="EmptyState" Text="Transcript appears here." HorizontalAlignment="Center"
-                                       VerticalAlignment="Center" IsHitTestVisible="False"
-                                       Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
                         </Grid>
                     </Grid>
                 </Border>

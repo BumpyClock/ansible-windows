@@ -38,25 +38,35 @@
                 </Border>
                 <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center">
                     <TextBlock x:Name="NameText" Style="{StaticResource BodyStrongTextBlockStyle}" TextWrapping="Wrap" />
-                    <Grid>
+                    <Grid x:Name="StateLine">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <Ellipse x:Name="StateDot" Width="7" Height="7" Margin="0,0,6,0" VerticalAlignment="Center" Visibility="Collapsed" />
-                        <!-- State and caption share one line; the state runs stay empty when the Download button says it. -->
-                        <TextBlock Grid.Column="1" TextWrapping="Wrap" VerticalAlignment="Center"
+                        <!-- State, behaviour and (for installed cards) memory share one line; empty parts drop out. -->
+                        <TextBlock x:Name="StateLineText" Grid.Column="1" TextWrapping="Wrap" VerticalAlignment="Center"
                                    Style="{StaticResource CaptionSecondaryStyle}">
                             <Run x:Name="StateRun" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}" /><Run x:Name="SeparatorRun" /><Run x:Name="CaptionRun" />
                         </TextBlock>
                     </Grid>
-                    <TextBlock x:Name="LanguageText" TextWrapping="Wrap" Visibility="Collapsed"
-                               Style="{StaticResource CaptionSecondaryStyle}" />
                 </StackPanel>
-                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Top">
-                    <Button x:Name="DetailsButton" Style="{StaticResource IconButtonStyle}"
+                <!-- Two fixed 32px slots keep Details in the same place on every card; a hidden Remove keeps its slot. -->
+                <Grid Grid.Column="2" ColumnSpacing="4" VerticalAlignment="Top">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="32" />
+                        <ColumnDefinition Width="32" />
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="RemoveButton" Grid.Column="0" Style="{StaticResource IconButtonStyle}" Click="RemoveClicked"
+                            Visibility="Collapsed">
+                        <Button.Resources>
+                            <SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="Transparent" />
+                        </Button.Resources>
+                        <FontIcon Glyph="&#xE74D;" FontSize="14" />
+                    </Button>
+                    <Button x:Name="DetailsButton" Grid.Column="1" Style="{StaticResource IconButtonStyle}"
                             ToolTipService.ToolTip="Details">
-                        <FontIcon Glyph="&#xE9CE;" FontSize="14" />
+                        <FontIcon Glyph="&#xE946;" FontSize="14" />
                         <Button.Flyout>
                             <Flyout Placement="BottomEdgeAlignedRight">
                                 <Flyout.FlyoutPresenterStyle>
@@ -88,6 +98,8 @@
                                     <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
                                     <StackPanel Spacing="4">
                                         <TextBlock Text="Verification" Style="{StaticResource DetailLabelStyle}" />
+                                        <TextBlock x:Name="PrecisionText" Style="{StaticResource BodyTextBlockStyle}"
+                                                   IsTextSelectionEnabled="True" />
                                         <TextBlock x:Name="ByteCountText" Style="{StaticResource BodyTextBlockStyle}"
                                                    IsTextSelectionEnabled="True" />
                                         <TextBlock x:Name="HashText" Style="{StaticResource BodyTextBlockStyle}"
@@ -103,29 +115,26 @@
                             </Flyout>
                         </Button.Flyout>
                     </Button>
-                    <Button x:Name="RemoveButton" Style="{StaticResource IconButtonStyle}" Click="RemoveClicked"
-                            Visibility="Collapsed">
-                        <Button.Resources>
-                            <SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="Transparent" />
-                        </Button.Resources>
-                        <FontIcon Glyph="&#xE74D;" FontSize="14" />
-                    </Button>
-                </StackPanel>
+                </Grid>
             </Grid>
 
-            <TextBlock x:Name="StatsText" Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap"
-                       ToolTipService.ToolTip="Memory is the admission estimate used before loading, not measured usage." />
+            <!-- Not-installed cards only; installed cards carry memory on the state line. Update sets the tooltip. -->
+            <TextBlock x:Name="StatsText" Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap" />
 
             <ProgressBar x:Name="DownloadProgress" Minimum="0" Maximum="100" Visibility="Collapsed"
                          AutomationProperties.Name="Model download progress" />
             <TextBlock x:Name="ProgressText" TextWrapping="Wrap" Visibility="Collapsed"
                        Style="{StaticResource CaptionSecondaryStyle}" />
 
-            <InfoBar x:Name="ErrorInfo" Severity="Error" IsOpen="False" IsClosable="False" />
+            <!-- A closed InfoBar stays Visible and still takes stack spacing, so Update collapses it too. -->
+            <InfoBar x:Name="ErrorInfo" Severity="Error" IsOpen="False" IsClosable="False" Visibility="Collapsed" />
 
             <StackPanel x:Name="ActionRow" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                <!-- Update owns the style: accent for forward steps, default for Pause and Stop. -->
-                <Button x:Name="PrimaryButton" Content="Download" MinHeight="36" Click="PrimaryClicked" />
+                <!-- Update owns the style: accent for enabled forward steps, default for Pause, Stop and disabled.
+                     A disabled button shows no tooltip, so the transparent host carries the reason. -->
+                <Border x:Name="PrimaryHost" Background="Transparent">
+                    <Button x:Name="PrimaryButton" Content="Download" MinHeight="36" Click="PrimaryClicked" />
+                </Border>
                 <Button x:Name="UseButton" Content="Use" MinHeight="32" Click="UseClicked" Visibility="Collapsed" />
             </StackPanel>
         </StackPanel>

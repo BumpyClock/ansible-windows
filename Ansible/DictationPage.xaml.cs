@@ -83,7 +83,7 @@ public sealed partial class DictationPage : Page
             RenderNotice();
             if (TranscriptBox.Text != _state.Transcript) { TranscriptBox.Text = _state.Transcript; }
             var empty = string.IsNullOrWhiteSpace(_state.Transcript);
-            EmptyState.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
+            TranscriptCard.Visibility = empty ? Visibility.Collapsed : Visibility.Visible;
             TranscriptHeader.Visibility = empty ? Visibility.Collapsed : Visibility.Visible;
             CopyButton.IsEnabled = _state.IsIdle || _state.Phase == DictationPhase.RecoveryRequired;
         }

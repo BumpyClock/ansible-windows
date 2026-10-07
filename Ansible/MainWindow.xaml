@@ -14,12 +14,12 @@
         </Grid.RowDefinitions>
         <!-- Drag region and caption buttons only. The sidebar wordmark is the single brand mark. -->
         <TitleBar x:Name="AppTitleBar" Height="48" Background="Transparent" />
-        <Grid Grid.Row="1" ColumnSpacing="16" Padding="16,8,4,4">
+        <Grid Grid.Row="1" ColumnSpacing="16" Padding="16,0,4,4">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition x:Name="SidebarColumn" Width="220" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
-            <!-- Top margin 31 plus the brand top margin 4 puts the wordmark baseline on the page title baseline. -->
+            <!-- The sidebar and the content tray share this grid. Top margin 31 plus the brand top margin 4 puts the wordmark baseline on the page title baseline (PagePadding top 28 plus the tray border). -->
             <Grid x:Name="Sidebar" Margin="0,31,0,0">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
