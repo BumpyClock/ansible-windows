@@ -5,33 +5,36 @@
     <ScrollViewer HorizontalScrollBarVisibility="Disabled">
         <StackPanel Padding="36" Spacing="24">
             <TextBlock Text="Dictation" FontSize="28" FontWeight="SemiBold" />
-            <TextBlock Text="A little less typing. A little more you."
-                       FontSize="18" Foreground="{ThemeResource SecondaryTextBrush}" />
             <Border Style="{StaticResource MetricCardStyle}">
                 <StackPanel Spacing="20">
-                    <TextBlock Text="Say what you have in mind." FontSize="24" FontWeight="SemiBold" />
-                    <TextBlock Text="A floating panel keeps your microphone level and actual transcript in view while the native model works."
-                               TextWrapping="Wrap" Foreground="{ThemeResource SecondaryTextBrush}" />
                     <ComboBox x:Name="ModelBox" Header="Speech model" HorizontalAlignment="Stretch" SelectionChanged="ModelChanged" />
                     <StackPanel Orientation="Horizontal" Spacing="12">
                         <Button x:Name="RecordButton" Content="Start dictation" Click="RecordClicked"
                                 Style="{StaticResource AccentButtonStyle}" MinHeight="44" MinWidth="160" />
                         <Button x:Name="CancelButton" Content="Cancel" Click="CancelClicked" MinHeight="44" />
                     </StackPanel>
-                    <TextBlock x:Name="ModelNote" TextWrapping="Wrap" Foreground="{ThemeResource SecondaryTextBrush}" />
+                    <TextBlock x:Name="ModelNote" TextWrapping="Wrap" Visibility="Collapsed"
+                               Foreground="{ThemeResource SecondaryTextBrush}" />
                 </StackPanel>
             </Border>
             <InfoBar x:Name="StatusInfo" IsOpen="True" IsClosable="False" />
             <Grid>
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                <TextBlock Text="Your words" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <TextBlock Text="Transcript" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" />
                 <Button x:Name="CopyButton" Grid.Column="1" Content="Copy transcript" Click="CopyClicked" />
             </Grid>
             <TextBox x:Name="TranscriptBox" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True"
-                     MinHeight="220" MaxHeight="360" FontSize="18" PlaceholderText="Your transcript appears here."
+                     MinHeight="220" MaxHeight="360" FontSize="18"
                      AutomationProperties.Name="Dictation transcript" ScrollViewer.VerticalScrollBarVisibility="Auto" />
-            <TextBlock Text="Focus a text field in another app, then use the shortcut shown in Settings to start and finish dictation. If text cannot be sent, use Copy transcript instead. Audio stays on this device."
-                       FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource SecondaryTextBrush}" />
+            <Expander Header="Dictation help" AutomationProperties.AutomationId="DictationHelp"
+                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="Start dictation records here without typing into another app."
+                               TextWrapping="Wrap" />
+                    <TextBlock Text="To insert speech in another app, use your dictation shortcut. Change the shortcut and activation mode in Settings."
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </Expander>
         </StackPanel>
     </ScrollViewer>
 </Page>

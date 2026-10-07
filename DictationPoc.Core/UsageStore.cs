@@ -37,16 +37,13 @@ public sealed class UsageStore(string path) : IUsageStore
         entry.Validate();
         return UpdateAsync(document =>
         {
-            if (document.Enabled && document.Entries.All(existing => existing.Id != entry.Id))
+            if (document.Entries.All(existing => existing.Id != entry.Id))
             {
                 return document with { Entries = document.Entries.Append(entry).ToArray() };
             }
             return document;
         }, cancellationToken);
     }
-
-    public Task<UsageDocument> SetEnabledAsync(bool enabled, CancellationToken cancellationToken = default) =>
-        UpdateAsync(document => document with { Enabled = enabled }, cancellationToken);
 
     private async Task<UsageDocument> UpdateAsync(
         Func<UsageDocument, UsageDocument> update, CancellationToken cancellationToken)

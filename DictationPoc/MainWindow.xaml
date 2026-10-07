@@ -38,8 +38,6 @@
                         </StackPanel>
                         <TextBlock Text="Local Voice" FontSize="24" FontWeight="SemiBold" VerticalAlignment="Center" />
                     </StackPanel>
-                    <TextBlock Text="YOUR VOICE. YOUR DEVICE." FontSize="10" CharacterSpacing="120"
-                               Foreground="{ThemeResource SecondaryTextBrush}" />
                 </StackPanel>
                 <StackPanel Grid.Row="1" Spacing="6">
                     <Button x:Name="InsightsNav" Tag="insights" Click="NavigateClicked" Style="{StaticResource NavigationButtonStyle}">
@@ -57,7 +55,7 @@
                     <Button x:Name="SettingsNav" Tag="settings" Click="NavigateClicked" Style="{StaticResource NavigationButtonStyle}">
                         <StackPanel Orientation="Horizontal" Spacing="14">
                             <FontIcon Glyph="&#xE713;" FontSize="19" />
-                            <TextBlock Text="Settings + verification" VerticalAlignment="Center" TextWrapping="Wrap" />
+                            <TextBlock Text="Settings" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
                     <Button x:Name="ModelsNav" Tag="models" Click="NavigateClicked" Style="{StaticResource NavigationButtonStyle}">
@@ -67,19 +65,9 @@
                         </StackPanel>
                     </Button>
                 </StackPanel>
-                <Border Grid.Row="2" Background="{ThemeResource SurfaceBrush}" BorderBrush="{ThemeResource BorderBrush}"
-                        BorderThickness="1" CornerRadius="12" Padding="16" Margin="8,16,8,0">
-                    <StackPanel Spacing="8">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon Glyph="&#xE72E;" FontSize="15" Foreground="{ThemeResource AccentBrush}" />
-                            <TextBlock Text="On-device by design" FontSize="13" FontWeight="SemiBold" />
-                        </StackPanel>
-                        <TextBlock Text="Native audio.cpp integration. No inference server."
-                                   FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource SecondaryTextBrush}" />
-                        <TextBlock x:Name="SidebarStatus" Text="Preparing native backend" FontSize="11"
-                                   TextWrapping="Wrap" Foreground="{ThemeResource SecondaryTextBrush}" />
-                    </StackPanel>
-                </Border>
+                <TextBlock x:Name="SidebarStatus" Grid.Row="2" Text="Preparing speech models" FontSize="12"
+                           Margin="12,16,12,0" TextWrapping="Wrap" Foreground="{ThemeResource SecondaryTextBrush}"
+                           AutomationProperties.LiveSetting="Polite" />
             </Grid>
             <Border Grid.Column="1" Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource BorderBrush}" BorderThickness="1" CornerRadius="12">

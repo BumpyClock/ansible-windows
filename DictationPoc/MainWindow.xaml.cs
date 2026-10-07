@@ -6,7 +6,6 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
-using Windows.Storage;
 
 namespace DictationPoc;
 
@@ -19,26 +18,30 @@ public sealed partial class MainWindow : Window
     private readonly ModelManagementPage _models;
     private readonly UiSessionObserver _observer;
     private GlobalDictationHotkey? _hotkey;
-    private HotkeyChoice _configuredHotkey = GlobalDictationHotkey.Default;
+    private DictationShortcut _configuredHotkey = DictationShortcut.Default;
+    private volatile bool _shortcutHeld;
     private FloatingDictationWindow? _floating;
     private bool _initialized;
     private bool _closed;
     private bool _allowClose;
     private bool _closing;
     private bool _popupFailed;
-    private bool _capturingTarget;
+    private readonly ShortcutCaptureCoordinator _captureCoordinator = new();
     private readonly CancellationTokenSource _deliveryCancellation = new();
     private Task<(bool available, CapturedTextTarget? target, string reason)>? _captureTask;
     private Task? _deliveryTask;
+    private LiveTextDelivery? _delivery;
+    private Task<SessionOutcome>? _deliveryOperation;
+    private Guid? _deliveryOperationId;
 
     internal MainWindow(DictationSession session, AppPaths paths, HttpClient modelDownloads)
     {
         InitializeComponent();
         _session = session;
-        _insights = new InsightsPage(session, Navigate);
+        _insights = new InsightsPage(session);
         _dictation = new DictationPage(session);
         _settings = new MainPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this),
-            () => _configuredHotkey, ChangeHotkey);
+            ChangeHotkey, ChangeDictationMode, CaptureShortcut);
         _models = new ModelManagementPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this), modelDownloads);
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
@@ -61,24 +64,14 @@ public sealed partial class MainWindow : Window
         try
         {
             await _session.InitializeAsync();
+            if (_closed || _closing) { return; }
             if (_session.State.Phase == DictationPhase.Disconnected && _session.State.Models.Count == 0)
                 Navigate("models");
             try
             {
-                var values = ApplicationData.Current.LocalSettings.Values;
-                string? preferenceWarning = null;
-                if (values.TryGetValue("dictationHotkey", out var stored))
-                {
-                    if (stored is not int value || !GlobalDictationHotkey.TryFromValue(value, out _configuredHotkey))
-                    {
-                        _configuredHotkey = GlobalDictationHotkey.Default;
-                        preferenceWarning = "The saved shortcut is not supported. Ctrl + Alt + D is active; choose a shortcut in Settings.";
-                    }
-                }
+                _configuredHotkey = _session.State.Settings.Shortcut;
                 _hotkey = new GlobalDictationHotkey(WinRT.Interop.WindowNative.GetWindowHandle(this),
-                    _configuredHotkey, HotkeyPressed);
-                if (preferenceWarning is not null)
-                    _session.Notify(NoticeKind.Warning, "Shortcut reset", preferenceWarning);
+                    _configuredHotkey, HotkeyChanged);
             }
             catch (Exception error) { _session.Notify(NoticeKind.Error, "Shortcut unavailable", error.Message); }
         }
@@ -98,37 +91,49 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void ChangeHotkey(HotkeyChoice choice)
+    private void ChangeHotkey(DictationShortcut choice)
     {
-        if (_hotkey is null)
-            _hotkey = new GlobalDictationHotkey(WinRT.Interop.WindowNative.GetWindowHandle(this),
-                choice, HotkeyPressed);
-        else
-            _hotkey.Change(choice);
+        if (!_session.State.IsIdle || _captureCoordinator.HasPendingCapture || _deliveryTask is { IsCompleted: false })
+            throw new InvalidOperationException("Finish dictation before changing its shortcut.");
+        var replacement = new GlobalDictationHotkey(WinRT.Interop.WindowNative.GetWindowHandle(this),
+            choice, HotkeyChanged);
+        _hotkey?.Dispose();
+        _hotkey = replacement;
         _configuredHotkey = choice;
-        try
+        _session.SetShortcut(choice);
+    }
+
+    private void ChangeDictationMode(bool pushToTalk)
+    {
+        if (!_session.State.IsIdle || _captureCoordinator.HasPendingCapture || _deliveryTask is { IsCompleted: false })
+            throw new InvalidOperationException("Finish dictation before changing its activation mode.");
+        _session.SetPushToTalk(pushToTalk);
+    }
+
+    private void CaptureShortcut(bool capturing)
+    {
+        if (capturing)
         {
-            ApplicationData.Current.LocalSettings.Values["dictationHotkey"] = (int)choice;
-            _session.Notify(NoticeKind.Success, "Shortcut updated",
-                $"Use {_hotkey.CurrentOption.DisplayText} to start and finish dictation in another app.");
+            if (!_session.State.IsIdle || _captureCoordinator.HasPendingCapture || _deliveryTask is { IsCompleted: false })
+                throw new InvalidOperationException("Finish dictation before recording a shortcut.");
+            _hotkey?.Suspend();
         }
-        catch (Exception error)
-        {
-            _session.Notify(NoticeKind.Warning, "Shortcut not saved",
-                $"The shortcut works until this app closes, but its preference could not be saved: {error.Message}");
-        }
+        else { _hotkey?.Resume(); }
     }
 
     private void SessionChanged(SessionSnapshot state)
     {
         if (_closed) { return; }
         SidebarStatus.Text = state.Phase == DictationPhase.Disconnected
-            ? "Open Speech models to download or verify local weights."
-            : state.Phase is DictationPhase.Closing or DictationPhase.Closed
-                ? "Releasing owned native resources."
-                : $"{state.Models.Count} models available / native CPU";
-        if (!state.IsLiveOperation) { _popupFailed = false; }
-        if (state.IsLiveOperation && _floating is null && !_popupFailed)
+            ? "Choose a model in Speech models."
+            : state.Notice.Title;
+        SidebarStatus.Visibility = state.Phase == DictationPhase.Ready &&
+            state.Notice.Kind is not (NoticeKind.Warning or NoticeKind.Error)
+                ? Visibility.Collapsed : Visibility.Visible;
+        var showWaveform = state.Phase is DictationPhase.Preparing or DictationPhase.Recording &&
+            (_delivery is null || !state.Settings.PushToTalk || _shortcutHeld);
+        if (!showWaveform) { _popupFailed = false; }
+        if (showWaveform && _floating is null && !_popupFailed)
         {
             try
             {
@@ -141,85 +146,184 @@ public sealed partial class MainWindow : Window
                 _session.ReportUiError(new InvalidOperationException("The floating preview could not be opened.", error));
             }
         }
-        if (state.IsLiveOperation) { _floating?.ShowPreview(); }
+        if (showWaveform) { _floating?.ShowPreview(); }
+        else { _floating?.HidePreview(); }
     }
 
-    private async void HotkeyPressed()
+    private async void HotkeyChanged(bool pressed)
     {
-        if (_closed || _closing || _capturingTarget) { return; }
+        _shortcutHeld = pressed;
+        if (_closed || _closing) { return; }
         try
         {
-            if (_session.State.CanFinish)
-            {
-                await _session.FinishAsync();
-                return;
-            }
-            if (_deliveryTask is { IsCompleted: false }) { return; }
-            if (!_session.State.CanStart)
-            {
-                if (_session.State.IsIdle)
-                    _session.Notify(NoticeKind.Warning, "Dictation unavailable", "Choose a streaming speech model before using the shortcut.");
-                return;
-            }
-            _capturingTarget = true;
-            var windowHandle = WinRT.Interop.WindowNative.GetWindowHandle(this);
-            _captureTask = Task.Run(() =>
-            {
-                var available = WindowsTextTarget.TryCapture(windowHandle, out var target, out var reason);
-                return (available, target, reason);
-            });
-            var capture = await _captureTask;
-            if (_closing || _closed) { return; }
-            if (!capture.available)
-            {
-                _session.Notify(NoticeKind.Warning, "No insertion target", capture.reason);
-                return;
-            }
-            _deliveryTask = DeliverAsync(_session.StartDictationAsync(), capture.target!);
+            if (!pressed) { await HandleReleaseAsync(); }
+            else { await HandlePressAsync(); }
         }
         catch (Exception error) { _session.ReportUiError(error); }
-        finally
+    }
+
+    // Shortcut release. Marks a pending push-to-talk capture stale so its inspection cannot start a late
+    // recording, wakes the delivery pump to flush text retained while a modifier was held, and finishes or
+    // cancels a push-to-talk dictation from a single State snapshot so a Preparing->Recording transition
+    // cannot be read inconsistently across two reads.
+    private async Task HandleReleaseAsync()
+    {
+        var state = _session.State;
+        if (state.Settings.PushToTalk) { _floating?.HidePreview(); }
+        _captureCoordinator.NoteReleased();
+        _delivery?.SignalRelease();
+        if (state.Settings.PushToTalk && _delivery is not null)
         {
-            _capturingTarget = false;
-            if (_captureTask?.IsCompleted == true) { _captureTask = null; }
+            if (state.CanFinish) { await _session.FinishAsync(); }
+            else if (state.Phase == DictationPhase.Preparing) { await _session.CancelAsync(); }
         }
     }
 
-    private async Task DeliverAsync(Task<SessionOutcome> operation, CapturedTextTarget target)
+    // Shortcut press. Admits at most one interaction to own the target inspection; a press arriving while an
+    // inspection is pending or a delivery is active is ignored. After the inspection completes it rechecks
+    // ownership and idle admission before starting delivery, so a stale or superseded press cannot start or
+    // overwrite another interaction's recording.
+    private async Task HandlePressAsync()
     {
+        if (_captureCoordinator.HasPendingCapture) { return; }
+        var state = _session.State;
+        if (state.CanFinish)
+        {
+            if (!state.Settings.PushToTalk) { await _session.FinishAsync(); }
+            return;
+        }
+        if (_deliveryTask is { IsCompleted: false }) { return; }
+        if (!state.CanStart)
+        {
+            if (state.IsIdle)
+                _session.Notify(NoticeKind.Warning, "Dictation unavailable", "Choose a streaming speech model before using the shortcut.");
+            return;
+        }
+        if (state.SelectedModel?.EmitsAuthoritativeLiveSpeech != true)
+        {
+            _session.Notify(NoticeKind.Warning, "Live recognition model required",
+                "This model does not emit authoritative incremental speech in this backend. Choose a live speech model such as Nemotron streaming in Speech models. Manual transcription remains available for other models.");
+            return;
+        }
+        var capture = _captureCoordinator.TryBeginCapture(state.Settings.PushToTalk, _deliveryTask is { IsCompleted: false });
+        if (capture is null) { return; }
+        var windowHandle = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        var inspection = Task.Run(() =>
+        {
+            var available = WindowsTextTarget.TryCapture(windowHandle, out var target, out var reason);
+            return (available, target, reason);
+        });
+        _captureTask = inspection;
+        try
+        {
+            // Let the hotkey adapter report an already-released chord before admitting recording.
+            await Task.Yield();
+            var inspected = await inspection;
+            if (_closing || _closed) { return; }
+            if (!_captureCoordinator.IsCurrent(capture)) { return; }
+            if (!inspected.available)
+            {
+                _session.Notify(NoticeKind.Warning, "No insertion target", inspected.reason);
+                return;
+            }
+            if (!_session.State.CanStart) { return; }
+            if (!_captureCoordinator.TryStartDelivery(capture)) { return; }
+            StartDelivery(inspected.target!);
+        }
+        finally
+        {
+            _captureCoordinator.Abandon(capture);
+            if (ReferenceEquals(_captureTask, inspection)) { _captureTask = null; }
+        }
+    }
+
+    private void StartDelivery(CapturedTextTarget target)
+    {
+        var modifiers = _configuredHotkey.Modifiers;
+        var delivery = new LiveTextDelivery(
+            insert: (pending, token) => Task.Run(() =>
+                WindowsTextTarget.Insert(target, pending, token, IsDeliveryCurrent), token),
+            isCurrent: IsDeliveryCurrent,
+            typingDeferred: () => _shortcutHeld && modifiers != 0,
+            notify: _session.Notify);
+        _delivery = delivery;
+        try
+        {
+            var operation = _session.StartDictationAsync(new InlineTranscriptProgress(delivery.Report));
+            _deliveryOperation = operation;
+            _deliveryOperationId = _session.State.OperationId;
+            _deliveryTask = DeliverAsync(operation, delivery);
+        }
+        catch
+        {
+            _delivery = null;
+            _deliveryOperation = null;
+            _deliveryOperationId = null;
+            throw;
+        }
+    }
+
+    // True while the current live delivery still owns the session operation and the UI can accept inserted
+    // text: the operation id is unchanged, the window is not closing, and either recognition is still active
+    // or it completed successfully and the session is idle for the final flush.
+    private bool IsDeliveryCurrent()
+    {
+        var operation = _deliveryOperation;
+        var operationId = _deliveryOperationId;
+        if (operation is null || operationId is null || _closing || _closed) { return false; }
+        var state = _session.State;
+        if (state.OperationId != operationId) { return false; }
+        if (operation.IsCompleted)
+            return operation.IsCompletedSuccessfully && operation.Result.Kind == SessionOutcomeKind.Completed && state.IsIdle;
+        return state.Phase is DictationPhase.Recording or DictationPhase.Finishing;
+    }
+
+    private async Task DeliverAsync(Task<SessionOutcome> operation, LiveTextDelivery delivery)
+    {
+        var pump = delivery.RunAsync(_deliveryCancellation.Token);
         try
         {
             var outcome = await operation;
-            if (_closing || _closed || outcome.Kind != SessionOutcomeKind.Completed) { return; }
-            var text = DictationDeliveryPolicy.SpeechForInsertion(outcome);
-            if (text is null)
+            delivery.Complete();
+            await pump;
+            if (_closing || _closed || _session.State.OperationId != _deliveryOperationId) { return; }
+            if (outcome.Kind == SessionOutcomeKind.Completed)
             {
-                _session.Notify(NoticeKind.Warning, "No speech to insert",
-                    "The model did not return authoritative speech text. Use Copy transcript if text is visible.");
-                return;
+                await delivery.InsertFinalAsync(outcome.Result?.SpeechText, _deliveryCancellation.Token);
+                if (_closing || _closed || _session.State.OperationId != _deliveryOperationId) { return; }
+                if (delivery.Error is not null)
+                    _session.Notify(NoticeKind.Warning, "Insertion stopped",
+                        $"{delivery.Error} {(delivery.Cursor.SentText.Length > 0 ? "Previously inserted text remains. " : "")}Use Copy transcript for the final text.");
+                else if (delivery.Cursor.SentText.Length > 0)
+                    _session.Notify(NoticeKind.Success, "Text sent", "Recognition updates were typed as they arrived. The final result was not inserted again.");
+                else
+                    _session.Notify(NoticeKind.Information, "No speech to insert",
+                        "The model returned no speech text.");
             }
-            if (!ReferenceEquals(_session.State.Result, outcome.Result)) { return; }
-            TextInsertionResult result;
-            try
-            {
-                result = await Task.Run(() => WindowsTextTarget.Insert(target, text, _deliveryCancellation.Token, () =>
-                {
-                    var current = _session.State;
-                    return current.IsIdle && ReferenceEquals(current.Result, outcome.Result);
-                }));
-            }
-            catch (Exception error)
-            {
-                if (!_closing && !_closed)
-                    _session.Notify(NoticeKind.Warning, "Text not inserted",
-                        $"Windows could not verify or reach the original field: {error.Message}. Use Copy transcript instead.");
-                return;
-            }
-            if (_closing || _closed || !ReferenceEquals(_session.State.Result, outcome.Result)) { return; }
-            _session.Notify(result.Sent ? NoticeKind.Success : NoticeKind.Warning,
-                result.Sent ? "Text sent" : "Text not inserted", result.Message);
+            else if (delivery.Cursor.SentText.Length > 0)
+                _session.Notify(outcome.Kind == SessionOutcomeKind.Failed ? NoticeKind.Error : NoticeKind.Warning,
+                    "Dictation stopped",
+                    $"{outcome.Error?.Message} Previously inserted text remains; unfinished speech was not inserted.");
         }
+        catch (OperationCanceledException) when (_deliveryCancellation.IsCancellationRequested) { }
         catch (Exception error) { _session.ReportUiError(error); }
+        finally
+        {
+            delivery.Complete();
+            try { await pump; }
+            catch (OperationCanceledException) when (_deliveryCancellation.IsCancellationRequested) { }
+            if (ReferenceEquals(_delivery, delivery))
+            {
+                _delivery = null;
+                _deliveryOperation = null;
+                _deliveryOperationId = null;
+            }
+        }
+    }
+
+    private sealed class InlineTranscriptProgress(Action<TranscriptUpdate> report) : IProgress<TranscriptUpdate>
+    {
+        public void Report(TranscriptUpdate value) => report(value);
     }
 
     private async void CloseRequested(AppWindow sender, AppWindowClosingEventArgs args)

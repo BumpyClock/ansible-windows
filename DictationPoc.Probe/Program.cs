@@ -24,9 +24,9 @@ if (args is ["--cpu-check"])
     }
 }
 
-if (args.Length is < 4 or > 6 || args.Length == 6 && (args[5] != "--file-only" || args[4] == "--file-only"))
+if (args.Length < 4)
 {
-    Console.Error.WriteLine("Usage: DictationPoc.Probe --cpu-check | <native-dll> <models-directory> <catalog-json> <16k-mono-PCM16.wav> [model-id] [--file-only]");
+    Console.Error.WriteLine("Usage: DictationPoc.Probe --cpu-check | <native-dll> <models-directory> <catalog-json> <16k-mono-PCM16.wav> [model-id] [--file-only] [--dictionary <one-term-per-line>]");
     return 2;
 }
 
@@ -34,17 +34,31 @@ var clock = Stopwatch.StartNew();
 var stage = "native initialization";
 try
 {
+    string? modelId = null;
+    string? dictionary = null;
+    var fileOnly = false;
+    for (var index = 4; index < args.Length; index++)
+    {
+        if (args[index] == "--file-only" && !fileOnly) { fileOnly = true; }
+        else if (args[index] == "--dictionary" && dictionary is null && index + 1 < args.Length &&
+                 !args[index + 1].StartsWith("--", StringComparison.Ordinal))
+            dictionary = args[++index];
+        else if (!args[index].StartsWith("--", StringComparison.Ordinal) && modelId is null)
+            modelId = args[index];
+        else { throw new ArgumentException($"Unexpected or incomplete probe argument '{args[index]}'."); }
+    }
+    var options = new RecognitionOptions(CustomDictionary: CustomVocabulary.Normalize(dictionary ?? ""));
     using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(3));
     await using var engine = new NativeAudioEngine(args[0], args[2], args[1], threads: 4, memoryHeadroomMB: 512);
     var models = await engine.ConnectAsync(timeout.Token);
-    var fileOnly = args[^1] == "--file-only";
-    var model = args.Length >= 5 && args[4] != "--file-only"
-        ? models.FirstOrDefault(model => model.Id == args[4]) ??
-            throw new ArgumentException($"Model '{args[4]}' is not installed in the native catalog.")
+    var model = modelId is not null
+        ? models.FirstOrDefault(model => model.Id == modelId) ??
+            throw new ArgumentException($"Model '{modelId}' is not installed in the native catalog.")
         : models.FirstOrDefault(model => model.Mode == "streaming") ??
             models.FirstOrDefault() ?? throw new InvalidDataException("No ASR models are installed.");
     Console.WriteLine($"Native DLL={Path.GetFullPath(args[0])}; available models={string.Join(", ", models.Select(model => model.Id))}");
     Console.WriteLine($"Selected model={model.Id}; mode={model.Mode ?? "not reported"}; family={model.Family}; path={model.ModelPath}");
+    Console.WriteLine($"Custom dictionary supported={model.SupportsCustomDictionary}; context supplied={options.CustomDictionary.Length > 0}");
     IAudioInputReader input = new AudioInputReader();
     var decoded = await input.ReadRecordingAsync(args[3], timeout.Token);
 
@@ -53,7 +67,7 @@ try
     clock.Restart();
     timeout.CancelAfter(TimeSpan.FromMinutes(3));
     var transcript = await engine.TranscribeAsync(
-        model, decoded, null, null, timeout.Token);
+        model, decoded, options, null, timeout.Token);
     if (string.IsNullOrWhiteSpace(transcript.DisplayText))
     {
         throw new InvalidDataException("The native engine returned no speech for the validation recording.");
@@ -73,7 +87,7 @@ try
     var previewsDuringUpload = 0;
     clock.Restart();
     timeout.CancelAfter(TimeSpan.FromMinutes(3));
-    var streaming = engine.StreamAsync(model, audio.Reader, null,
+    var streaming = engine.StreamAsync(model, audio.Reader, options,
         new InlineProgress<TranscriptUpdate>(update =>
         {
             if (!update.IsFinal && !Volatile.Read(ref uploadFinished))

@@ -6,37 +6,19 @@
     <Window.SystemBackdrop>
         <DesktopAcrylicBackdrop />
     </Window.SystemBackdrop>
-    <Button x:Name="PreviewRoot" IsTabStop="False" Click="DismissPreviewClicked"
+    <Border x:Name="PreviewRoot"
             HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
             Loaded="PreviewLoaded" SizeChanged="PreviewSizeChanged" ActualThemeChanged="ThemeChanged">
-        <Button.Resources>
+        <Border.Resources>
             <Style x:Key="CompactWaveformBarStyle" TargetType="Rectangle">
                 <Setter Property="Fill" Value="{ThemeResource PrimaryTextBrush}" />
             </Style>
-        </Button.Resources>
-        <Button.Template>
-            <ControlTemplate TargetType="Button">
-                <ContentPresenter Content="{TemplateBinding Content}" />
-            </ControlTemplate>
-        </Button.Template>
-        <Button.ContextFlyout>
-            <MenuFlyout>
-                <MenuFlyoutItem x:Name="DismissPreviewItem" Text="Dismiss preview" Click="DismissPreviewClicked" />
-            </MenuFlyout>
-        </Button.ContextFlyout>
-        <StackPanel Spacing="8">
-            <Border x:Name="RibbonViewport" Height="24" Visibility="Collapsed">
-                <TextBlock x:Name="RibbonText" FontSize="16" LineHeight="24"
-                           LineStackingStrategy="BlockLineHeight" TextWrapping="NoWrap"
-                           HorizontalAlignment="Center" TextAlignment="Center" IsHitTestVisible="False"
-                           Foreground="{ThemeResource PrimaryTextBrush}" AutomationProperties.LiveSetting="Polite" />
-            </Border>
-            <Border x:Name="PillBorder" Width="160" Background="Transparent"
-                    BorderBrush="{ThemeResource PrimaryTextBrush}" BorderThickness="2"
-                    CornerRadius="28" Padding="14" HorizontalAlignment="Center">
-                <StackPanel x:Name="WaveBars" Orientation="Horizontal" Spacing="3" Height="24"
-                            HorizontalAlignment="Center" AutomationProperties.Name="Real audio energy history" />
-            </Border>
-        </StackPanel>
-    </Button>
+        </Border.Resources>
+        <Border x:Name="PillBorder" Width="160" Background="Transparent"
+                BorderBrush="{ThemeResource PrimaryTextBrush}" BorderThickness="2"
+                CornerRadius="28" Padding="14" HorizontalAlignment="Center">
+            <StackPanel x:Name="WaveBars" Orientation="Horizontal" Spacing="3" Height="24"
+                        HorizontalAlignment="Center" AutomationProperties.Name="Real audio energy history" />
+        </Border>
+    </Border>
 </Window>

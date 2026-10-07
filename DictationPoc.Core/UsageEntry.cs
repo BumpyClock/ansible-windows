@@ -30,7 +30,6 @@ public sealed record UsageEntry
 public sealed record UsageDocument
 {
     public int SchemaVersion { get; init; } = 2;
-    public bool Enabled { get; init; } = true;
     public IReadOnlyList<UsageEntry> Entries { get; init; } = [];
 }
 

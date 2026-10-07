@@ -1,6 +1,7 @@
 using DictationPoc.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.System;
 using Windows.Storage.Pickers;
 
 namespace DictationPoc;
@@ -12,8 +13,11 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
     private readonly Func<nint> _windowHandle;
     private readonly HttpClient _http;
     private readonly CancellationTokenSource _lifetime = new();
-    private readonly List<ComboBoxItem> _items = [];
+    private readonly List<ModelCard> _cardList = [];
+    private const double TwoColumnThreshold = 620;
+    private int _columns;
     private ModelDownloadManager? _manager;
+    private ThemeSettings? _themeSettings;
     private UiSessionObserver? _observer;
     private Task? _initialization;
     private Task? _disposal;
@@ -43,6 +47,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         _loaded = true;
         _observer ??= new UiSessionObserver(_session, DispatcherQueue, _ => Render());
         _initialization ??= InitializeAsync();
+        Render();
         await _initialization;
         Render();
     }
@@ -53,19 +58,48 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         {
             var catalog = await NativeModelCatalog.LoadAsync(_paths.ModelCatalog, _lifetime.Token);
             var families = await NativeAudioEngine.GetSupportedFamiliesAsync(_paths.NativeLibrary, _lifetime.Token);
-            _manager = new ModelDownloadManager(catalog, families, _session.State.ModelsDirectory, _http);
-            _manager.Changed += ManagerChanged;
-            foreach (var model in catalog)
+            var candidate = new ModelDownloadManager(catalog, families, _session.State.ModelsDirectory, _http);
+            try
             {
-                var item = new ComboBoxItem { Tag = model.Id };
-                _items.Add(item);
-                CatalogBox.Items.Add(item);
+                _themeSettings = ThemeSettings.CreateForWindowId(
+                    Microsoft.UI.Win32Interop.GetWindowIdFromWindow(_windowHandle()));
+                foreach (var entry in catalog)
+                {
+                    var card = new ModelCard();
+                    _cardList.Add(card);
+                    card.Initialize(entry, _themeSettings);
+                    card.PrimaryRequested += OnPrimaryRequested;
+                    card.PauseRequested += OnPauseRequested;
+                    card.RemoveRequested += OnRemoveRequested;
+                    card.DiscardRequested += OnDiscardRequested;
+                }
+                LayoutCards(ModelsGrid.ActualWidth >= TwoColumnThreshold ? 2 : 1);
+                candidate.Changed += ManagerChanged;
+                _manager = candidate;
             }
-            CatalogBox.SelectedIndex = 0;
+            finally
+            {
+                if (_manager is null)
+                {
+                    foreach (var card in _cardList) { card.DetachThemeEvents(); }
+                    ModelsGrid.Children.Clear();
+                    _cardList.Clear();
+                    ModelsGrid.RowDefinitions.Clear();
+                    ModelsGrid.ColumnDefinitions.Clear();
+                    _columns = 0;
+                    _themeSettings = null;
+                    await candidate.DisposeAsync();
+                }
+            }
             await _manager.RefreshAsync(_lifetime.Token);
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
-        catch (Exception error) { ShowError(error); }
+        catch (Exception error)
+        {
+            _error = error.Message;
+            System.Diagnostics.Debug.WriteLine($"Local Voice: model catalog initialization failed: {error}");
+            Render();
+        }
     }
 
     private void ManagerChanged()
@@ -74,8 +108,32 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
             System.Diagnostics.Debug.WriteLine("Local Voice: model view dispatcher is closed.");
     }
 
-    private ModelDownloadSnapshot? Selection => CatalogBox.SelectedItem is ComboBoxItem { Tag: string id }
-        ? _manager?.Get(id) : null;
+    private void OnModelsGridSizeChanged(object sender, SizeChangedEventArgs args) =>
+        LayoutCards(args.NewSize.Width >= TwoColumnThreshold ? 2 : 1);
+
+    // Owns intrinsic card sizing: a bounded Grid with Auto rows per pair so each card keeps its
+    // natural height (no equal-height sizing from the shortest card) and the catalog never exceeds
+    // two columns, collapsing to one when narrow.
+    private void LayoutCards(int columns)
+    {
+        if (columns < 1) { columns = 1; }
+        if (_columns == columns && ModelsGrid.Children.Count == _cardList.Count) { return; }
+        _columns = columns;
+        ModelsGrid.ColumnDefinitions.Clear();
+        ModelsGrid.RowDefinitions.Clear();
+        for (var column = 0; column < columns; column++)
+            ModelsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        var rows = (_cardList.Count + columns - 1) / columns;
+        for (var row = 0; row < rows; row++)
+            ModelsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        for (var index = 0; index < _cardList.Count; index++)
+        {
+            var card = _cardList[index];
+            Grid.SetRow(card, index / columns);
+            Grid.SetColumn(card, index % columns);
+            if (index >= ModelsGrid.Children.Count) { ModelsGrid.Children.Add(card); }
+        }
+    }
 
     private void Render()
     {
@@ -83,95 +141,49 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         var state = _session.State;
         var managerIdle = _manager is { IsBusy: false } && !_dialogActive;
         var idle = state.IsIdle && managerIdle;
+        var managerBusy = _manager?.IsBusy == true;
         FolderText.Text = _manager?.DirectoryPath ?? state.ModelsDirectory;
         FolderButton.IsEnabled = idle;
-        RefreshButton.IsEnabled = _manager?.IsBusy != true && !_dialogActive;
-        CatalogBox.IsEnabled = _manager is not null && !_dialogActive;
-        if (_manager is not null)
-        {
-            foreach (var item in _items)
-            {
-                var model = _manager.Get((string)item.Tag);
-                item.Content = $"{model.Model.DisplayName ?? model.Model.Id} / {StateLabel(model.State)}" +
-                    (model.Supported ? "" : " / backend unavailable");
-            }
-        }
-        StatusInfo.Severity = _error is not null ? InfoBarSeverity.Error :
-            state.Notice.Kind == NoticeKind.Error ? InfoBarSeverity.Error : InfoBarSeverity.Informational;
+        RefreshButton.IsEnabled = _initialization is not { IsCompleted: false } && !managerBusy && !_dialogActive;
+        FolderMenuButton.IsEnabled = !_dialogActive;
+
+        var opening = _manager is null && _initialization is { IsCompleted: false } && _error is null;
+        var attention = state.Notice.Kind is NoticeKind.Warning or NoticeKind.Error;
+        StatusInfo.Severity = _error is not null || state.Notice.Kind == NoticeKind.Error ? InfoBarSeverity.Error :
+            state.Notice.Kind == NoticeKind.Warning ? InfoBarSeverity.Warning : InfoBarSeverity.Informational;
+        StatusInfo.IsOpen = _error is not null || _manager is null || !state.IsIdle || attention;
         StatusInfo.Title = _error is not null ? "Model operation failed" :
+            opening ? "Opening model catalog" :
             _manager is null ? "Catalog unavailable" :
-            state.Phase == DictationPhase.MaintainingModels ? "Maintaining models" :
-            state.Models.Count == 0 ? "Choose a model to get started" : "On-device recognition";
-        StatusInfo.Message = _error ?? (_manager is null ? "Select Verify installed files to retry opening the catalog." :
-            !state.IsIdle ? state.Notice.Message :
-            $"{state.Models.Count} models available for recognition. Downloads require your explicit selection.");
-        var selected = Selection;
-        ModelCard.Visibility = selected is null ? Visibility.Collapsed : Visibility.Visible;
-        if (selected is null) { return; }
-        var entry = selected.Model;
-        NameText.Text = entry.DisplayName ?? entry.Id;
-        DescriptionText.Text = entry.Description ?? "";
-        CapabilitiesText.Text = $"{entry.Languages ?? "Languages not specified"} / {entry.Precision ?? "Precision not specified"}\n" +
-            (entry.Mode == "offline" ? "WAV transcription only. No microphone dictation." :
-                entry.Preview == "live" ? "Streaming input with incremental transcript events." :
-                entry.Preview == "buffered" ? "Streaming input; buffered decoding, not continuous text." :
-                "Streaming input; transcript after Finish.");
-        SizeText.Text = $"Download {FormatBytes(entry.Bytes)} ({entry.Bytes:N0} bytes). Estimated admission memory {FormatBytes(entry.EstimatedMemoryBytes)}.";
-        StateText.Text = selected.Supported ? StateLabel(selected.State) : "Unsupported by this compiled backend";
-        DownloadProgress.Value = selected.Progress;
-        DownloadProgress.Visibility = selected.State is ModelInstallState.Downloading or ModelInstallState.Paused or
-            ModelInstallState.Verifying ? Visibility.Visible : Visibility.Collapsed;
-        ProgressText.Text = selected.State == ModelInstallState.ReadyToInstall ?
-            "Weights verified. Select Install verified model when dictation is idle." :
-            selected.State == ModelInstallState.Verifying ? "Checking exact length and SHA-256 before installation." :
-            $"{FormatBytes(selected.DownloadedBytes)} / {FormatBytes(entry.Bytes)}" +
-            (selected.BytesPerSecond > 0 ? $" / {FormatBytes((long)selected.BytesPerSecond)}/s" : "");
-        ErrorText.Text = selected.Error ?? "";
-        ErrorText.Visibility = selected.Error is null ? Visibility.Collapsed : Visibility.Visible;
-        DownloadButton.Content = selected.State == ModelInstallState.ReadyToInstall ? "Install verified model" :
-            selected.State == ModelInstallState.Paused ? "Resume" :
-            selected.State == ModelInstallState.Failed ? "Retry download" : "Download";
-        DownloadButton.IsEnabled = selected.Supported && (selected.State == ModelInstallState.ReadyToInstall ? idle :
-            managerIdle && !selected.HasModelFile &&
-            selected.State is ModelInstallState.NotInstalled or ModelInstallState.Paused or ModelInstallState.Failed);
-        PauseButton.IsEnabled = _manager?.IsBusy == true && selected.State is ModelInstallState.Downloading or ModelInstallState.Verifying;
-        RemoveButton.IsEnabled = idle && selected.HasModelFile;
-        DiscardButton.IsEnabled = idle && selected.HasPartial;
-        DiscardButton.Visibility = selected.HasPartial ? Visibility.Visible : Visibility.Collapsed;
-        LicenseText.Text = $"{entry.License ?? "License not specified"}\n{entry.LicenseNotes}";
-        SourceText.Text = $"{entry.Repo}\nPinned revision {entry.Revision}\n{entry.RemoteFile}";
-        IntegrityText.Text = $"{entry.Id} / {entry.Family}\nSHA-256 {entry.Sha256}\n{selected.Path}";
-    }
+            attention || !state.IsIdle ? state.Notice.Title : "";
+        StatusInfo.Message = _error ?? (opening ? "Please wait while the model catalog opens." :
+            _manager is null ? "Open Model folder, then Verify installed files to retry opening the catalog." :
+            attention || !state.IsIdle ? state.Notice.Message : "");
 
-    private void ModelChanged(object sender, SelectionChangedEventArgs args) => Render();
-
-    private async void RefreshClicked(object sender, RoutedEventArgs args)
-    {
-        if (_manager is null)
+        if (_manager is null) { return; }
+        foreach (var card in _cardList)
         {
-            _error = null;
-            _initialization = InitializeAsync();
-            await _initialization;
-            Render();
-            return;
+            card.Update(_manager.Get(card.ModelId), idle, managerIdle, managerBusy);
         }
-        await RefreshAsync();
     }
 
-    private async void DownloadClicked(object sender, RoutedEventArgs args)
+    private async void OnPrimaryRequested(string id)
     {
-        if (Selection is not { } selected || _manager is null) { return; }
+        if (_manager is null) { return; }
+        ModelDownloadSnapshot selected;
+        try { selected = _manager.Get(id); }
+        catch (Exception error) { ShowError(error); return; }
         if (selected.State == ModelInstallState.ReadyToInstall)
         {
-            await MaintainAsync(token => _manager.InstallAsync(selected.Model.Id, token));
+            await MaintainAsync(token => _manager.InstallAsync(id, token));
             return;
         }
         try
         {
             _error = null;
-            await _manager.DownloadAsync(selected.Model.Id, _lifetime.Token);
+            await _manager.DownloadAsync(id, _lifetime.Token);
             if (!_closed && _session.State.IsIdle)
-                await MaintainAsync(token => _manager.InstallAsync(selected.Model.Id, token));
+                await MaintainAsync(token => _manager.InstallAsync(id, token));
         }
         catch (OperationCanceledException)
         {
@@ -181,18 +193,21 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         finally { Render(); }
     }
 
-    private async void PauseClicked(object sender, RoutedEventArgs args)
+    private async void OnPauseRequested(string id)
     {
         try { if (_manager is not null) { await _manager.PauseAsync(); } }
         catch (Exception error) { ShowError(error); }
     }
 
-    private async void RemoveClicked(object sender, RoutedEventArgs args) => await ConfirmRemovalAsync(false);
-    private async void DiscardClicked(object sender, RoutedEventArgs args) => await ConfirmRemovalAsync(true);
+    private async void OnRemoveRequested(string id) => await ConfirmRemovalAsync(id, false);
+    private async void OnDiscardRequested(string id) => await ConfirmRemovalAsync(id, true);
 
-    private async Task ConfirmRemovalAsync(bool partial)
+    private async Task ConfirmRemovalAsync(string id, bool partial)
     {
-        if (Selection is not { } selected || _manager is null) { return; }
+        if (_manager is null) { return; }
+        ModelDownloadSnapshot selected;
+        try { selected = _manager.Get(id); }
+        catch (Exception error) { ShowError(error); return; }
         _dialogActive = true;
         Render();
         try
@@ -209,11 +224,26 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
                 DefaultButton = ContentDialogButton.Close
             };
             if (await dialog.ShowAsync() == ContentDialogResult.Primary)
-                await MaintainAsync(token => partial ? _manager.DiscardPartialAsync(selected.Model.Id, token) :
-                    _manager.RemoveAsync(selected.Model.Id, token));
+                await MaintainAsync(token => partial ? _manager.DiscardPartialAsync(id, token) :
+                    _manager.RemoveAsync(id, token));
         }
         catch (Exception error) { ShowError(error); }
         finally { _dialogActive = false; Render(); }
+    }
+
+    private async void RefreshClicked(object sender, RoutedEventArgs args)
+    {
+        if (_closed || _initialization is { IsCompleted: false }) { return; }
+        if (_manager is null)
+        {
+            _error = null;
+            _initialization = InitializeAsync();
+            Render();
+            await _initialization;
+            Render();
+            return;
+        }
+        await RefreshAsync();
     }
 
     private async void ChooseFolderClicked(object sender, RoutedEventArgs args)
@@ -227,10 +257,11 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
             picker.FileTypeFilter.Add("*");
             WinRT.Interop.InitializeWithWindow.Initialize(picker, _windowHandle());
             var folder = await picker.PickSingleFolderAsync();
-            if (folder is not null && await MaintainAsync(async token =>
+            if (folder is not null && await MaintainAsync(token =>
                 {
+                    token.ThrowIfCancellationRequested();
                     _manager.ChangeDirectory(folder.Path);
-                    await _paths.SaveModelsDirectoryAsync(folder.Path, token);
+                    return Task.CompletedTask;
                 }, folder.Path))
                 await RefreshAsync();
         }
@@ -276,16 +307,6 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         Render();
     }
 
-    private static string FormatBytes(long bytes) => bytes >= 1024L * 1024 * 1024 ? $"{bytes / (1024.0 * 1024 * 1024):F2} GiB" :
-        bytes >= 1024 * 1024 ? $"{bytes / (1024.0 * 1024):F1} MiB" : $"{bytes:N0} bytes";
-
-    private static string StateLabel(ModelInstallState state) => state switch
-    {
-        ModelInstallState.NotInstalled => "Not installed",
-        ModelInstallState.ReadyToInstall => "Ready to install",
-        _ => state.ToString()
-    };
-
     public ValueTask DisposeAsync()
     {
         if (_disposal?.IsFaulted == true) { _disposal = null; }
@@ -299,6 +320,8 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         _observer?.Dispose();
         Loaded -= PageLoaded;
         if (_initialization is not null) { await _initialization; }
+        foreach (var card in _cardList) { card.DetachThemeEvents(); }
+        _themeSettings = null;
         if (_manager is not null)
         {
             _manager.Changed -= ManagerChanged;

@@ -52,7 +52,7 @@ public sealed class UsageTests
     }
 
     [Fact]
-    public async Task StoreDeduplicatesSessionsAndHonorsDisabledCollection()
+    public async Task StoreDeduplicatesSessionsAndStoresOnlyUsageData()
     {
         var directory = System.IO.Path.Combine(AppContext.BaseDirectory, "usage-test-" + Guid.NewGuid().ToString("N"));
         var path = System.IO.Path.Combine(directory, "usage.json");
@@ -62,15 +62,14 @@ public sealed class UsageTests
             var entry = Entry(2, "moonshine", UsageSource.Dictation, 8, 4);
             await store.RecordAsync(entry);
             await store.RecordAsync(entry);
-            await store.SetEnabledAsync(false);
             await store.RecordAsync(Entry(2, "vibevoice", UsageSource.File, 20, 0));
             var data = await store.LoadAsync();
-            Assert.False(data.Enabled);
-            Assert.Single(data.Entries);
+            Assert.Equal(2, data.Entries.Count);
             var wire = await File.ReadAllTextAsync(path);
             Assert.DoesNotContain("transcript", wire, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("audio", wire, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("path", wire, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("enabled", wire, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

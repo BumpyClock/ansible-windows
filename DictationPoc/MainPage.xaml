@@ -4,22 +4,11 @@
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <ScrollViewer HorizontalScrollBarVisibility="Disabled">
         <StackPanel Padding="32" Spacing="24">
-            <StackPanel Spacing="8">
-                <TextBlock Text="Settings + verification" FontSize="28" FontWeight="SemiBold" />
-                <TextBlock Text="Keep the original test workflow. Compare models before choosing your daily driver."
-                           TextWrapping="Wrap" Foreground="{ThemeResource SecondaryTextBrush}" />
-            </StackPanel>
+            <TextBlock Text="Settings" FontSize="28" FontWeight="SemiBold" />
+            <InfoBar x:Name="StatusInfo" IsOpen="True" IsClosable="False" />
             <Border Style="{StaticResource MetricCardStyle}">
                 <StackPanel Spacing="16">
-                    <TextBlock Text="Native inference" FontSize="20" FontWeight="SemiBold" />
-                    <TextBlock Text="audio.cpp is loaded as a DLL in this process. No web service or listener is required."
-                               TextWrapping="Wrap" Foreground="{ThemeResource SecondaryTextBrush}" />
-                    <Grid ColumnSpacing="12">
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                        <TextBox x:Name="ModelsFolderBox" Header="Model folder (change in Speech models)" IsReadOnly="True" />
-                        <Button x:Name="ConnectButton" Grid.Column="1" Content="Load models" Click="ConnectClicked"
-                                VerticalAlignment="Bottom" MinHeight="36" />
-                    </Grid>
+                    <TextBlock Text="Recognition" FontSize="20" FontWeight="SemiBold" />
                     <Grid ColumnSpacing="16">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="160" /></Grid.ColumnDefinitions>
                         <ComboBox x:Name="ModelBox" Header="Speech model" HorizontalAlignment="Stretch"
@@ -27,54 +16,101 @@
                         <TextBox x:Name="LanguageBox" Grid.Column="1" Header="Language hint" PlaceholderText="Model default"
                                  TextChanged="LanguageChanged" />
                     </Grid>
-                    <TextBlock x:Name="BackendText" TextWrapping="Wrap" Foreground="{ThemeResource SecondaryTextBrush}" />
+                    <Expander Header="Model details" AutomationProperties.AutomationId="ModelDetails"
+                              HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                        <StackPanel Spacing="12">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                <TextBox x:Name="ModelsFolderBox" Header="Model folder" IsReadOnly="True" />
+                                <Button x:Name="ConnectButton" Grid.Column="1" Content="Load models" Click="ConnectClicked"
+                                        VerticalAlignment="Bottom" MinHeight="36" />
+                            </Grid>
+                            <TextBlock Text="Change the folder in Speech models." TextWrapping="Wrap" />
+                            <TextBlock x:Name="BackendText" TextWrapping="Wrap" Foreground="{ThemeResource SecondaryTextBrush}" />
+                        </StackPanel>
+                    </Expander>
                 </StackPanel>
             </Border>
             <Border Style="{StaticResource MetricCardStyle}">
                 <StackPanel Spacing="12">
-                    <TextBlock Text="Insert into another app" FontSize="20" FontWeight="SemiBold" />
-                    <TextBlock Text="Focus a text field, press the shortcut to start dictation, then press it again to finish. The app checks the original window and, when available, the field's identity."
+                    <TextBlock Text="Custom dictionary" Style="{StaticResource SubtitleTextBlockStyle}" />
+                    <TextBlock Text="Add one name, word, or phrase per line. Supported models use these as recognition hints, not replacement rules."
                                TextWrapping="Wrap" Foreground="{ThemeResource SecondaryTextBrush}" />
-                    <ComboBox x:Name="HotkeyBox" Header="Global dictation shortcut" HorizontalAlignment="Stretch"
-                              SelectionChanged="HotkeyChanged" />
-                    <TextBlock Text="The shortcut does not change your clipboard. Some editors do not expose individual field identities; check where the text lands. Copy the transcript manually if typing is unavailable."
-                               TextWrapping="Wrap" Foreground="{ThemeResource SecondaryTextBrush}" />
+                    <TextBox x:Name="DictionaryBox" AutomationProperties.AutomationId="DictionaryBox"
+                             AutomationProperties.Name="Custom dictionary entries"
+                             Header="Words and phrases" PlaceholderText="Contoso&#x0a;WinUI&#x0a;audio.cpp"
+                             AcceptsReturn="True" TextWrapping="Wrap" MinHeight="112" MaxHeight="200"
+                             MaxLength="8192" TextChanged="DictionaryChanged"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto" />
+                    <TextBlock x:Name="DictionarySupportText" TextWrapping="Wrap"
+                               Foreground="{ThemeResource SecondaryTextBrush}" />
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <Button x:Name="SaveDictionaryButton" AutomationProperties.AutomationId="SaveDictionaryButton"
+                                Content="Save dictionary" Click="SaveDictionaryClicked" />
+                        <TextBlock x:Name="DictionaryDraftText" Text="Unsaved dictionary changes"
+                                   VerticalAlignment="Center" Foreground="{ThemeResource SecondaryTextBrush}" />
+                    </StackPanel>
+                    <TextBlock Text="Up to 100 entries, 100 characters per entry, and 4 KB total. Save an empty list to clear it."
+                               Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap"
+                               Foreground="{ThemeResource SecondaryTextBrush}" />
                 </StackPanel>
             </Border>
-            <StackPanel Spacing="12">
-                <TextBlock Text="Verify recognition" FontSize="20" FontWeight="SemiBold" />
-                <TextBlock x:Name="ModelNote" TextWrapping="Wrap" Foreground="{ThemeResource SecondaryTextBrush}" />
-                <StackPanel Orientation="Horizontal" Spacing="10">
-                    <Button x:Name="RecordButton" Content="Start dictation" Click="RecordClicked"
-                            Style="{StaticResource AccentButtonStyle}" MinHeight="44" />
-                    <Button x:Name="FileButton" Content="Transcribe WAV" Click="FileClicked" MinHeight="44" />
-                    <Button x:Name="ReplayButton" Content="Replay WAV live" Click="ReplayClicked" MinHeight="44" />
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" Spacing="10">
-                    <Button x:Name="SampleButton" Content="Verify public sample" Click="SampleClicked" MinHeight="40" />
-                    <Button x:Name="CancelButton" Content="Cancel" Click="CancelClicked" MinHeight="40" />
-                </StackPanel>
-                <InfoBar x:Name="StatusInfo" IsOpen="True" IsClosable="False" />
-                <Grid>
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                    <TextBlock x:Name="DetailsText" Text="0 words / 00:00" VerticalAlignment="Center"
-                               Foreground="{ThemeResource SecondaryTextBrush}" />
-                    <Button x:Name="CopyButton" Grid.Column="1" Content="Copy transcript" Click="CopyClicked" />
-                </Grid>
-                <TextBox x:Name="TranscriptBox" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap"
-                         MinHeight="180" MaxHeight="300" FontSize="16"
-                         PlaceholderText="Actual model output appears here."
-                         AutomationProperties.Name="Verification transcript"
-                         ScrollViewer.VerticalScrollBarVisibility="Auto" />
-            </StackPanel>
             <Border Style="{StaticResource MetricCardStyle}">
                 <StackPanel Spacing="12">
-                    <TextBlock Text="Privacy + local insights" FontSize="20" FontWeight="SemiBold" />
-                    <ToggleSwitch x:Name="UsageToggle" Header="Keep local usage statistics" Toggled="UsageToggled" />
-                    <TextBlock Text="Only session counts, word counts, timing, model IDs, and dates are stored. Audio and transcripts are never saved."
+                    <TextBlock Text="Dictation shortcut" FontSize="20" FontWeight="SemiBold" />
+                    <ToggleSwitch x:Name="PushToTalkToggle" AutomationProperties.AutomationId="PushToTalkToggle"
+                                  Header="Activation mode" OnContent="Push-to-talk (hold)" OffContent="Toggle (press twice)"
+                                  Toggled="DictationModeChanged" />
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <TextBox x:Name="HotkeyCaptureBox" AutomationProperties.AutomationId="HotkeyCaptureBox"
+                                 Header="Shortcut" IsReadOnly="True" KeyDown="ShortcutKeyDown"
+                                 KeyUp="ShortcutKeyUp"
+                                 LostFocus="ShortcutLostFocus" />
+                        <Button x:Name="ChangeShortcutButton" AutomationProperties.AutomationId="ChangeShortcutButton"
+                                Grid.Column="1" Content="Change shortcut" Click="ChangeShortcutClicked" VerticalAlignment="Bottom" />
+                    </Grid>
+                    <TextBlock x:Name="ShortcutHint"
                                TextWrapping="Wrap" Foreground="{ThemeResource SecondaryTextBrush}" />
-                    <TextBlock x:Name="UsagePathText" TextWrapping="Wrap" FontSize="12"
-                               Foreground="{ThemeResource SecondaryTextBrush}" />
+                    <TextBlock Text="Check the destination before dictating. Cancel cannot undo inserted text."
+                               FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource SecondaryTextBrush}" />
+                </StackPanel>
+            </Border>
+            <Expander Header="Recognition tools" AutomationProperties.AutomationId="RecognitionTools"
+                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                <StackPanel Spacing="12">
+                    <TextBlock x:Name="ModelNote" TextWrapping="Wrap" Foreground="{ThemeResource SecondaryTextBrush}" />
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Button x:Name="RecordButton" Content="Start dictation" Click="RecordClicked"
+                                Style="{StaticResource AccentButtonStyle}" MinHeight="44" />
+                        <Button x:Name="FileButton" Content="Transcribe WAV" Click="FileClicked" MinHeight="44" />
+                        <Button x:Name="ReplayButton" Content="Replay WAV live" Click="ReplayClicked" MinHeight="44" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Button x:Name="SampleButton" Content="Verify public sample" Click="SampleClicked" MinHeight="40" />
+                        <Button x:Name="CancelButton" Content="Cancel" Click="CancelClicked" MinHeight="40" />
+                    </StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <TextBlock x:Name="DetailsText" Text="0 words / 00:00" VerticalAlignment="Center"
+                                   Foreground="{ThemeResource SecondaryTextBrush}" />
+                        <Button x:Name="CopyButton" Grid.Column="1" Content="Copy transcript" Click="CopyClicked" />
+                    </Grid>
+                    <TextBox x:Name="TranscriptBox" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap"
+                             MinHeight="180" MaxHeight="300" FontSize="16"
+                             AutomationProperties.Name="Verification transcript"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto" />
+                </StackPanel>
+            </Expander>
+            <Border Style="{StaticResource MetricCardStyle}">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="Privacy" FontSize="20" FontWeight="SemiBold" />
+                    <ToggleSwitch x:Name="UsageToggle" Header="Local usage statistics" Toggled="UsageToggled" />
+                    <TextBlock Text="Save session dates, model IDs, word counts, and timing. Audio and transcripts are not saved."
+                               TextWrapping="Wrap" Foreground="{ThemeResource SecondaryTextBrush}" />
+                    <TextBlock x:Name="UsagePathText" FontSize="12" TextTrimming="CharacterEllipsis"
+                               IsTextSelectionEnabled="True" Foreground="{ThemeResource SecondaryTextBrush}"
+                               AutomationProperties.Name="Usage statistics file" />
                 </StackPanel>
             </Border>
         </StackPanel>
