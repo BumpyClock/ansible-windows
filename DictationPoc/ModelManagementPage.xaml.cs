@@ -71,6 +71,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
                     card.PauseRequested += OnPauseRequested;
                     card.RemoveRequested += OnRemoveRequested;
                     card.DiscardRequested += OnDiscardRequested;
+                    card.UseRequested += OnUseRequested;
                     _cardList.Add(card);
                 }
                 LayoutCards(ModelsGrid.ActualWidth >= TwoColumnThreshold ? 2 : 1);
@@ -137,10 +138,33 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
             attention || !state.IsIdle ? state.Notice.Message : "");
 
         if (_manager is null) { return; }
+        var canSelect = state.Phase == DictationPhase.Ready && managerIdle;
         foreach (var card in _cardList)
         {
-            card.Update(_manager.Get(card.ModelId), idle, managerIdle, managerBusy);
+            card.Update(_manager.Get(card.ModelId), idle, managerIdle, managerBusy,
+                active: state.SelectedModel?.Id == card.ModelId, canSelect: canSelect);
         }
+    }
+
+    private void OnUseRequested(string id)
+    {
+        var models = _session.State.Models;
+        var index = -1;
+        for (var candidate = 0; candidate < models.Count; candidate++)
+        {
+            if (models[candidate].Id == id) { index = candidate; break; }
+        }
+        if (index < 0)
+        {
+            _session.Notify(NoticeKind.Warning, "Model not loaded",
+                "Open Model folder, then Verify installed files to load this model.");
+        }
+        else
+        {
+            try { _session.SelectModel(index); }
+            catch (Exception error) { _session.ReportUiError(error); }
+        }
+        Render();
     }
 
     private async void OnPrimaryRequested(string id)

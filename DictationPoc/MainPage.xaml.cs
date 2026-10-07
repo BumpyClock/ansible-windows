@@ -13,6 +13,8 @@ namespace DictationPoc;
 
 public sealed partial class MainPage : Page
 {
+    private static readonly TimeSpan NoticeDuration = TimeSpan.FromSeconds(6);
+
     private readonly DictationSession _session;
     private readonly AppPaths _paths;
     private readonly Func<nint> _windowHandle;
@@ -22,6 +24,9 @@ public sealed partial class MainPage : Page
     private bool _recordingShortcut;
     private DictationShortcut? _pendingShortcut;
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMilliseconds(200) };
+    private readonly DispatcherTimer _noticeTimer = new() { Interval = NoticeDuration };
+    private SessionNotice? _surfacedNotice;
+    private SessionNotice? _dismissedNotice;
     private UiSessionObserver? _observer;
     private SessionSnapshot _state;
     private bool _rendering;
@@ -50,6 +55,7 @@ public sealed partial class MainPage : Page
         _rendering = false;
         _timer.Tick += (_, _) => DetailsText.Text =
             $"{(_state.Words is { } words ? $"{words} spoken words" : "Word count pending")} / {_session.Elapsed:mm\\:ss}";
+        _noticeTimer.Tick += (_, _) => { _noticeTimer.Stop(); StatusInfo.IsOpen = false; };
         Loaded += (_, _) =>
         {
             _observer = new UiSessionObserver(session, DispatcherQueue, state => { _state = state; Render(); });
@@ -59,6 +65,7 @@ public sealed partial class MainPage : Page
         {
             EndShortcutCapture();
             _observer?.Dispose(); _observer = null; _timer.Stop();
+            _noticeTimer.Stop();
         };
     }
 
@@ -108,16 +115,7 @@ public sealed partial class MainPage : Page
             CopyButton.IsEnabled = (_state.IsIdle || _state.Phase == DictationPhase.RecoveryRequired) &&
                 !string.IsNullOrWhiteSpace(_state.Transcript);
             if (TranscriptBox.Text != _state.Transcript) { TranscriptBox.Text = _state.Transcript; }
-            StatusInfo.Severity = _state.Notice.Kind switch
-            {
-                NoticeKind.Success => InfoBarSeverity.Success,
-                NoticeKind.Warning => InfoBarSeverity.Warning,
-                NoticeKind.Error => InfoBarSeverity.Error,
-                _ => InfoBarSeverity.Informational
-            };
-            StatusInfo.Title = _state.Notice.Title;
-            StatusInfo.Message = _state.Notice.Message;
-            StatusInfo.IsOpen = _state.Phase != DictationPhase.Ready || _state.Notice.Kind != NoticeKind.Information;
+            RenderNotice();
             UsageToggle.IsOn = _state.Settings.CollectUsage;
             UsageToggle.IsEnabled = idle;
             UsagePathText.Text = _session.UsagePath;
@@ -134,6 +132,43 @@ public sealed partial class MainPage : Page
                     : $"Hold {shortcut.DisplayText} to record. Text is inserted after release.";
         }
         finally { _rendering = false; }
+    }
+
+    // Warnings and errors stay until dismissed. Success and information notices are shown once for a few
+    // seconds while the session is idle; a notice closed with the close button is not reopened.
+    private void RenderNotice()
+    {
+        var notice = _state.Notice;
+        var attention = notice.Kind is NoticeKind.Warning or NoticeKind.Error;
+        StatusInfo.Severity = notice.Kind switch
+        {
+            NoticeKind.Success => InfoBarSeverity.Success,
+            NoticeKind.Warning => InfoBarSeverity.Warning,
+            NoticeKind.Error => InfoBarSeverity.Error,
+            _ => InfoBarSeverity.Informational
+        };
+        if (ReferenceEquals(notice, _dismissedNotice)) { StatusInfo.IsOpen = false; return; }
+        if (ReferenceEquals(notice, _surfacedNotice)) { return; }
+        _surfacedNotice = notice;
+        _noticeTimer.Stop();
+        StatusInfo.Title = notice.Title;
+        StatusInfo.Message = notice.Message;
+        if (attention)
+        {
+            StatusInfo.IsOpen = true;
+        }
+        else if (_state.IsIdle || _state.Phase == DictationPhase.RecoveryRequired)
+        {
+            StatusInfo.IsOpen = true;
+            _noticeTimer.Start();
+        }
+        else { StatusInfo.IsOpen = false; }
+    }
+
+    private void StatusInfoClosing(InfoBar sender, InfoBarClosingEventArgs args)
+    {
+        if (args.Reason == InfoBarCloseReason.CloseButton) { _dismissedNotice = _surfacedNotice; }
+        _noticeTimer.Stop();
     }
 
     private async void ConnectClicked(object sender, RoutedEventArgs args) =>

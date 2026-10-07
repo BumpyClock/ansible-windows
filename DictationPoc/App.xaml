@@ -109,6 +109,70 @@
             <Style x:Key="PreviewWaveformBarStyle" TargetType="Rectangle">
                 <Setter Property="Fill" Value="{ThemeResource AccentBrush}" />
             </Style>
+            <Style x:Key="PageTitleStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="28" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="LineHeight" Value="36" />
+            </Style>
+            <Style x:Key="PageSubtitleStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="14" />
+                <Setter Property="Foreground" Value="{ThemeResource SecondaryTextBrush}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+            <Style x:Key="SectionHeaderStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="14" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Margin" Value="4,8,0,0" />
+            </Style>
+            <Style x:Key="CardStyle" TargetType="Border">
+                <Setter Property="Background" Value="{ThemeResource SurfaceBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource BorderBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="12" />
+                <Setter Property="Padding" Value="20" />
+            </Style>
+            <Style x:Key="CaptionSecondaryStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="Foreground" Value="{ThemeResource SecondaryTextBrush}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+            <Style x:Key="KeycapStyle" TargetType="Border">
+                <Setter Property="Background" Value="{ThemeResource MetricSurfaceBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource BorderBrush}" />
+                <Setter Property="BorderThickness" Value="1,1,1,2" />
+                <Setter Property="CornerRadius" Value="6" />
+                <Setter Property="Padding" Value="8,3" />
+                <Setter Property="MinWidth" Value="28" />
+            </Style>
+            <Style x:Key="KeycapTextStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="HorizontalAlignment" Value="Center" />
+            </Style>
+            <Style x:Key="StatusPillStyle" TargetType="Border">
+                <Setter Property="Background" Value="{ThemeResource MetricSurfaceBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource BorderBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="12" />
+                <Setter Property="Padding" Value="10,4" />
+            </Style>
+            <Style x:Key="AccentPillStyle" TargetType="Border" BasedOn="{StaticResource StatusPillStyle}">
+                <Setter Property="Background" Value="{ThemeResource AccentSoftBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource AccentSoftBrush}" />
+            </Style>
+            <Style x:Key="RecordButtonStyle" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}">
+                <Setter Property="Width" Value="72" />
+                <Setter Property="Height" Value="72" />
+                <Setter Property="CornerRadius" Value="36" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="FontSize" Value="26" />
+            </Style>
+            <Style x:Key="TranscriptTextBoxStyle" TargetType="TextBox">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="FontSize" Value="17" />
+            </Style>
             <Style x:Key="MetricCardStyle" TargetType="Border">
                 <Setter Property="Background" Value="{ThemeResource MetricSurfaceBrush}" />
                 <Setter Property="BorderBrush" Value="{ThemeResource BorderBrush}" />

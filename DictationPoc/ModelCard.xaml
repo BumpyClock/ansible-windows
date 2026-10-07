@@ -4,13 +4,13 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="using:DictationPoc"
              HorizontalAlignment="Stretch">
-    <Border Background="{ThemeResource SurfaceBrush}" BorderBrush="{ThemeResource BorderBrush}"
-            BorderThickness="1" CornerRadius="12" Padding="24">
+    <Border Style="{StaticResource CardStyle}" Padding="20">
         <StackPanel Spacing="16">
             <Grid ColumnSpacing="12">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <Border Width="40" Height="40" CornerRadius="8" Background="{ThemeResource AccentSoftBrush}"
                         VerticalAlignment="Top">
@@ -27,6 +27,10 @@
                     <TextBlock x:Name="VariantText" FontSize="12" TextWrapping="Wrap"
                                Foreground="{ThemeResource SecondaryTextBrush}" />
                 </StackPanel>
+                <Border x:Name="ActivePill" Grid.Column="2" Style="{StaticResource AccentPillStyle}"
+                        VerticalAlignment="Top" Visibility="Collapsed">
+                    <TextBlock Text="Active" FontSize="12" FontWeight="SemiBold" />
+                </Border>
             </Grid>
 
             <StackPanel Spacing="2">
@@ -35,18 +39,33 @@
                            Foreground="{ThemeResource SecondaryTextBrush}" />
             </StackPanel>
 
-            <StackPanel Orientation="Horizontal" Spacing="32">
+            <Grid ColumnSpacing="24">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
                 <StackPanel Spacing="2">
                     <TextBlock Text="Download" FontSize="12" Foreground="{ThemeResource SecondaryTextBrush}" />
                     <TextBlock x:Name="DownloadSizeText" FontSize="16" />
                 </StackPanel>
-                <StackPanel Spacing="2">
+                <StackPanel Grid.Column="1" Spacing="2">
                     <TextBlock Text="Memory estimate" FontSize="12" Foreground="{ThemeResource SecondaryTextBrush}" />
                     <TextBlock x:Name="MemoryText" FontSize="16" />
                 </StackPanel>
-            </StackPanel>
+                <StackPanel Grid.Column="2" Spacing="2">
+                    <TextBlock Text="License" FontSize="12" Foreground="{ThemeResource SecondaryTextBrush}" />
+                    <TextBlock x:Name="LicenseText" FontSize="16" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+            </Grid>
 
-            <TextBlock x:Name="StateText" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" />
+            <Border Style="{StaticResource StatusPillStyle}" HorizontalAlignment="Left">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Ellipse x:Name="StateDot" Width="8" Height="8" VerticalAlignment="Center" />
+                    <TextBlock x:Name="StateText" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+            </Border>
 
             <ProgressBar x:Name="DownloadProgress" Minimum="0" Maximum="100" Visibility="Collapsed"
                          AutomationProperties.Name="Model download progress" />
@@ -56,18 +75,14 @@
             <InfoBar x:Name="ErrorInfo" Severity="Error" IsOpen="False" IsClosable="False"
                      Title="This model needs attention" />
 
-            <local:ActionWrapPanel HorizontalSpacing="8" VerticalSpacing="8">
-                <Border MinHeight="40">
-                    <TextBlock x:Name="LicenseText" FontSize="12" VerticalAlignment="Center" TextWrapping="Wrap"
-                               Foreground="{ThemeResource SecondaryTextBrush}" />
-                </Border>
-                <Button x:Name="DiscardButton" Content="Discard" MinHeight="40" Click="DiscardClicked"
+            <local:ActionWrapPanel HorizontalSpacing="8" VerticalSpacing="8" HorizontalAlignment="Right">
+                <Button x:Name="DiscardButton" Content="Discard" MinHeight="36" Click="DiscardClicked"
                         Visibility="Collapsed" />
-                <Button x:Name="PauseButton" Content="Pause" MinHeight="40" Click="PauseClicked"
+                <Button x:Name="PauseButton" Content="Pause" MinHeight="36" Click="PauseClicked"
                         Visibility="Collapsed" />
-                <Button x:Name="RemoveButton" Content="Remove" MinHeight="40" Click="RemoveClicked"
+                <Button x:Name="RemoveButton" Content="Remove" MinHeight="36" Click="RemoveClicked"
                         Visibility="Collapsed" />
-                <Button x:Name="DetailsButton" Content="Details" MinHeight="40">
+                <Button x:Name="DetailsButton" Content="Details" MinHeight="36">
                     <Button.Flyout>
                         <Flyout>
                             <ScrollViewer MaxHeight="420" HorizontalScrollBarVisibility="Disabled">
@@ -84,7 +99,9 @@
                         </Flyout>
                     </Button.Flyout>
                 </Button>
-                <Button x:Name="PrimaryButton" Content="Download" MinHeight="40" Click="PrimaryClicked"
+                <Button x:Name="UseButton" Content="Use" MinHeight="36" Click="UseClicked"
+                        Style="{StaticResource AccentButtonStyle}" Visibility="Collapsed" />
+                <Button x:Name="PrimaryButton" Content="Download" MinHeight="36" Click="PrimaryClicked"
                         Style="{StaticResource AccentButtonStyle}" />
             </local:ActionWrapPanel>
         </StackPanel>

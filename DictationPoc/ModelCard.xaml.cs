@@ -2,6 +2,7 @@ using DictationPoc.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.System;
 using Windows.Foundation;
@@ -15,6 +16,7 @@ public sealed partial class ModelCard : UserControl
     private string _name = "";
     private Uri? _iconUri;
     private bool _iconFailureLogged;
+    private string? _stateDotBrushKey;
 
     public ModelCard()
     {
@@ -29,6 +31,7 @@ public sealed partial class ModelCard : UserControl
     public event Action<string>? PauseRequested;
     public event Action<string>? RemoveRequested;
     public event Action<string>? DiscardRequested;
+    public event Action<string>? UseRequested;
 
     public void Initialize(NativeModelEntry entry, ThemeSettings themeSettings)
     {
@@ -44,6 +47,7 @@ public sealed partial class ModelCard : UserControl
         DownloadSizeText.Text = FormatBytes(entry.Bytes);
         MemoryText.Text = FormatBytes(entry.EstimatedMemoryBytes);
         LicenseText.Text = entry.License ?? "License not specified";
+        ToolTipService.SetToolTip(LicenseText, LicenseText.Text);
 
         DescriptionText.Text = entry.Description ?? "";
         DescriptionText.Visibility = string.IsNullOrEmpty(entry.Description) ? Visibility.Collapsed : Visibility.Visible;
@@ -58,6 +62,8 @@ public sealed partial class ModelCard : UserControl
         AutomationProperties.SetAutomationId(RemoveButton, $"ModelRemove_{entry.Id}");
         AutomationProperties.SetAutomationId(DiscardButton, $"ModelDiscard_{entry.Id}");
         AutomationProperties.SetAutomationId(DetailsButton, $"ModelDetails_{entry.Id}");
+        AutomationProperties.SetAutomationId(UseButton, $"ModelUse_{entry.Id}");
+        AutomationProperties.SetName(UseButton, $"Use {_name}");
         AutomationProperties.SetName(DetailsButton, $"Details for {_name}");
         AutomationProperties.SetName(PauseButton, $"Pause download of {_name}");
         AutomationProperties.SetName(RemoveButton, $"Remove {_name}");
@@ -75,12 +81,17 @@ public sealed partial class ModelCard : UserControl
         ApplyIcon();
     }
 
-    public void Update(ModelDownloadSnapshot snapshot, bool idle, bool managerIdle, bool managerBusy)
+    public void Update(ModelDownloadSnapshot snapshot, bool idle, bool managerIdle, bool managerBusy, bool active, bool canSelect)
     {
         var entry = snapshot.Model;
         var state = snapshot.State;
 
         StateText.Text = snapshot.Supported ? StateLabel(state) : "Unsupported by this compiled backend";
+        _stateDotBrushKey = !snapshot.Supported || state == ModelInstallState.Failed ? "SystemFillColorCriticalBrush"
+            : state == ModelInstallState.NotInstalled ? "SecondaryTextBrush"
+            : "AccentBrush";
+        ApplyStateDot();
+        ActivePill.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
 
         var showBar = state is ModelInstallState.Downloading or ModelInstallState.Paused or ModelInstallState.Verifying;
         DownloadProgress.Value = snapshot.Progress;
@@ -121,6 +132,9 @@ public sealed partial class ModelCard : UserControl
         DiscardButton.IsEnabled = idle && snapshot.HasPartial;
         DiscardButton.Visibility = snapshot.HasPartial ? Visibility.Visible : Visibility.Collapsed;
 
+        UseButton.Visibility = snapshot.HasModelFile && !active && snapshot.Supported ? Visibility.Visible : Visibility.Collapsed;
+        UseButton.IsEnabled = canSelect;
+
         IntegrityText.Text = $"{entry.Id} / {entry.Family} / {entry.Precision ?? "Precision not specified"}\n" +
             $"{entry.Bytes:N0} bytes\nSHA-256 {entry.Sha256}\n{snapshot.Path}";
     }
@@ -135,7 +149,17 @@ public sealed partial class ModelCard : UserControl
 
     private void OnLoaded(object sender, RoutedEventArgs e) => ApplyIcon();
 
-    private void OnThemeChanged(FrameworkElement sender, object args) => ApplyIcon();
+    private void OnThemeChanged(FrameworkElement sender, object args)
+    {
+        ApplyIcon();
+        ApplyStateDot();
+    }
+
+    // Theme brushes resolved from code do not follow theme changes, so the fill is reapplied on ActualThemeChanged.
+    private void ApplyStateDot()
+    {
+        if (_stateDotBrushKey is { } key) { StateDot.Fill = (Brush)Application.Current.Resources[key]; }
+    }
 
     private void OnThemeSettingsChanged(ThemeSettings sender, object args)
     {
@@ -186,6 +210,7 @@ public sealed partial class ModelCard : UserControl
     private void PauseClicked(object sender, RoutedEventArgs e) => PauseRequested?.Invoke(ModelId);
     private void RemoveClicked(object sender, RoutedEventArgs e) => RemoveRequested?.Invoke(ModelId);
     private void DiscardClicked(object sender, RoutedEventArgs e) => DiscardRequested?.Invoke(ModelId);
+    private void UseClicked(object sender, RoutedEventArgs e) => UseRequested?.Invoke(ModelId);
 
     private static string ModeLabel(string mode) => mode switch
     {
@@ -211,8 +236,9 @@ public sealed partial class ModelCard : UserControl
     };
 }
 
-// Flow layout for the footer: keeps license + actions on one row when they fit and reflows buttons
-// onto additional rows when the card is too narrow, so no action is clipped at the two-column width.
+// Flow layout for the footer actions: keeps buttons on one row when they fit and reflows them onto
+// additional rows when the card is too narrow, so no action is clipped at the two-column width.
+// Measures to the widest row so HorizontalAlignment can right-align the buttons.
 public sealed partial class ActionWrapPanel : Panel
 {
     public double HorizontalSpacing { get; set; }
@@ -240,7 +266,7 @@ public sealed partial class ActionWrapPanel : Panel
         }
         totalHeight += rowHeight;
         widest = Math.Max(widest, x);
-        return new Size(double.IsInfinity(limit) ? widest : limit, totalHeight);
+        return new Size(Math.Min(widest, limit), totalHeight);
     }
 
     protected override Size ArrangeOverride(Size finalSize)
