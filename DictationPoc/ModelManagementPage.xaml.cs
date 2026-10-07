@@ -57,23 +57,38 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         {
             var catalog = await NativeModelCatalog.LoadAsync(_paths.ModelCatalog, _lifetime.Token);
             var families = await NativeAudioEngine.GetSupportedFamiliesAsync(_paths.NativeLibrary, _lifetime.Token);
-            _manager = new ModelDownloadManager(catalog, families, _session.State.ModelsDirectory, _http);
-            _manager.Changed += ManagerChanged;
-            if (_cardList.Count == 0)
+            var candidate = new ModelDownloadManager(catalog, families, _session.State.ModelsDirectory, _http);
+            try
             {
                 _themeSettings = ThemeSettings.CreateForWindowId(
                     Microsoft.UI.Win32Interop.GetWindowIdFromWindow(_windowHandle()));
                 foreach (var entry in catalog)
                 {
                     var card = new ModelCard();
+                    _cardList.Add(card);
                     card.Initialize(entry, _themeSettings);
                     card.PrimaryRequested += OnPrimaryRequested;
                     card.PauseRequested += OnPauseRequested;
                     card.RemoveRequested += OnRemoveRequested;
                     card.DiscardRequested += OnDiscardRequested;
-                    _cardList.Add(card);
                 }
                 LayoutCards(ModelsGrid.ActualWidth >= TwoColumnThreshold ? 2 : 1);
+                candidate.Changed += ManagerChanged;
+                _manager = candidate;
+            }
+            finally
+            {
+                if (_manager is null)
+                {
+                    foreach (var card in _cardList) { card.DetachThemeEvents(); }
+                    ModelsGrid.Children.Clear();
+                    _cardList.Clear();
+                    ModelsGrid.RowDefinitions.Clear();
+                    ModelsGrid.ColumnDefinitions.Clear();
+                    _columns = 0;
+                    _themeSettings = null;
+                    await candidate.DisposeAsync();
+                }
             }
             await _manager.RefreshAsync(_lifetime.Token);
         }
