@@ -116,6 +116,9 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
                 entry.Preview == "live" ? "Streaming input with incremental transcript events." :
                 entry.Preview == "buffered" ? "Streaming input; buffered decoding, not continuous text." :
                 "Streaming input; transcript after Finish.");
+        CapabilitiesText.Text += entry.SupportsCustomDictionary
+            ? "\nSupports custom dictionary context hints."
+            : "\nCustom dictionary hints are not supported.";
         SizeText.Text = $"Download {FormatBytes(entry.Bytes)} ({entry.Bytes:N0} bytes). Estimated admission memory {FormatBytes(entry.EstimatedMemoryBytes)}.";
         StateText.Text = selected.Supported ? StateLabel(selected.State) : "Unsupported by this compiled backend";
         DownloadProgress.Value = selected.Progress;
@@ -227,10 +230,11 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
             picker.FileTypeFilter.Add("*");
             WinRT.Interop.InitializeWithWindow.Initialize(picker, _windowHandle());
             var folder = await picker.PickSingleFolderAsync();
-            if (folder is not null && await MaintainAsync(async token =>
+            if (folder is not null && await MaintainAsync(token =>
                 {
+                    token.ThrowIfCancellationRequested();
                     _manager.ChangeDirectory(folder.Path);
-                    await _paths.SaveModelsDirectoryAsync(folder.Path, token);
+                    return Task.CompletedTask;
                 }, folder.Path))
                 await RefreshAsync();
         }

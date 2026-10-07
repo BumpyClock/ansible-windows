@@ -11,17 +11,16 @@ namespace DictationPoc;
 public sealed partial class InsightsPage : Page
 {
     private readonly DictationSession _session;
-    private readonly Action<string> _navigate;
     private SessionSnapshot _state;
     private UiSessionObserver? _observer;
     private UsageDocument? _usage;
     private IReadOnlyList<AudioModel>? _models;
+    private bool _collectUsage;
 
-    internal InsightsPage(DictationSession session, Action<string> navigate)
+    internal InsightsPage(DictationSession session)
     {
         InitializeComponent();
         _session = session;
-        _navigate = navigate;
         _state = session.State;
         Loaded += (_, _) =>
         {
@@ -31,10 +30,12 @@ public sealed partial class InsightsPage : Page
             {
                 _state = state;
                 RenderState();
-                if (!ReferenceEquals(_usage, state.Usage) || !ReferenceEquals(_models, state.Models) || state.UsageError is not null)
+                if (!ReferenceEquals(_usage, state.Usage) || !ReferenceEquals(_models, state.Models) ||
+                    _collectUsage != state.Settings.CollectUsage || state.UsageError is not null)
                 {
                     _usage = state.Usage;
                     _models = state.Models;
+                    _collectUsage = state.Settings.CollectUsage;
                     RenderUsage();
                 }
             });
@@ -53,27 +54,29 @@ public sealed partial class InsightsPage : Page
         if (_state.Usage is null) { return; }
         var summary = UsageSummary.Create(
             _state.Usage.Entries, DateOnly.FromDateTime(DateTime.Today), TimeZoneInfo.Local);
-        IntroText.Text = _state.Usage.Enabled
-            ? "Your activity, measured on this device. No audio or transcript history is saved."
-            : "Local usage collection is paused. Previously saved counts remain visible.";
+        IntroText.Text = _state.Settings.CollectUsage
+            ? ""
+            : "Usage collection is paused. Saved counts remain visible.";
         if (summary.UnknownWordSessions > 0)
         {
-            IntroText.Text += $" Word totals exclude {summary.UnknownWordSessions} sessions without authoritative speech content.";
+            if (IntroText.Text.Length > 0) { IntroText.Text += " "; }
+            IntroText.Text += $"Word totals exclude {summary.UnknownWordSessions} " +
+                $"{(summary.UnknownWordSessions == 1 ? "session" : "sessions")} with unknown word counts.";
         }
+        IntroText.Visibility = IntroText.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
         PaceText.Text = summary.WordsPerMinute?.ToString("N0", CultureInfo.CurrentCulture) ?? "--";
-        PaceCaption.Text = summary.RecordingSeconds > 0 ? $"{summary.RecordingSeconds / 60:N1} measured min" :
+        PaceCaption.Text = summary.RecordingSeconds > 0 ? $"{summary.RecordingSeconds / 60:N1} min recorded" :
             summary.DictationSessions > 0 ? "Awaiting speech counts" : "No dictations yet";
         SessionsText.Text = summary.Sessions.ToString("N0");
         DictationsText.Text = $"{summary.DictationSessions:N0} dictations";
         VerificationsText.Text = $"{summary.FileSessions:N0} file verifications";
         TotalWordsText.Text = summary.TotalWords.ToString("N0");
-        WordsCaption.Text = summary.TotalWords == 0 ? "Start a dictation to see your voice add up." : "A little more of your day, written in your own voice.";
         WordsSplitText.Text = $"{summary.DictatedWords:N0} dictated / {summary.FileWords:N0} verified";
         WordsShareBar.Visibility = summary.TotalWords == 0 ? Visibility.Collapsed : Visibility.Visible;
         DictationShare.Width = new GridLength(summary.DictatedWords, GridUnitType.Star);
         FileShare.Width = new GridLength(summary.FileWords, GridUnitType.Star);
         StreakText.Text = $"{summary.CurrentStreak} day streak";
-        LongestText.Text = $"BEST: {summary.LongestStreak} DAYS";
+        LongestText.Text = $"Best: {summary.LongestStreak} {(summary.LongestStreak == 1 ? "day" : "days")}";
         RenderPace(summary.WordsPerMinute);
         RenderModels(summary);
         RenderActivity(summary);
@@ -103,9 +106,6 @@ public sealed partial class InsightsPage : Page
     private void RenderModels(UsageSummary summary)
     {
         ModelRows.Children.Clear();
-        ModelsCaption.Text = summary.Models.Count == 0
-            ? "No completed sessions yet. Try dictation or verify a WAV file."
-            : $"{summary.Models.Count} models used / {summary.Sessions:N0} completed sessions";
         foreach (var model in summary.Models.Take(5))
         {
             var label = _state.Models.FirstOrDefault(candidate => candidate.Id == model.ModelId)?.DisplayName ?? model.ModelId;
@@ -132,7 +132,7 @@ public sealed partial class InsightsPage : Page
         {
             ModelRows.Children.Add(new TextBlock
             {
-                Text = "Your model comparisons will appear here.",
+                Text = "No completed sessions yet.",
                 TextWrapping = TextWrapping.Wrap,
                 Style = (Style)Application.Current.Resources["SecondaryTextStyle"],
                 Margin = new Thickness(0, 32, 0, 32)
@@ -196,8 +196,8 @@ public sealed partial class InsightsPage : Page
             }
         }
         ActivityCaption.Text = summary.Activity.Count == 0
-            ? "No activity recorded yet. Only completed sessions fill the calendar."
-            : $"Active on {summary.Activity.Count:N0} days. The calendar shows recent local sessions.";
+            ? "No activity recorded yet."
+            : $"Active on {summary.Activity.Count:N0} {(summary.Activity.Count == 1 ? "day" : "days")}.";
     }
 
     private void LayoutChanged(object sender, SizeChangedEventArgs args)
@@ -239,5 +239,4 @@ public sealed partial class InsightsPage : Page
         try { await _session.StartDictationAsync(); }
         catch (Exception error) { _session.ReportUiError(error); }
     }
-    private void VerifyClicked(object sender, RoutedEventArgs args) => _navigate("settings");
 }

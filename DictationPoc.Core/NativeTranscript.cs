@@ -6,7 +6,7 @@ internal static class NativeTranscript
         string family, string displayText, IReadOnlyList<string> segments, IReadOnlyList<string> speakerTurns)
     {
         var speech = Join(segments) ?? Join(speakerTurns);
-        if (speech is null && family is "moonshine_asr" or "qwen3_asr" or "nemotron_asr")
+        if (speech is null && SpeechContent.IsPlainSpeechFamily(family))
             speech = displayText;
         // Annotated families without authoritative speech metadata have unknown spoken content.
         return new RecognitionResult(displayText, speech);

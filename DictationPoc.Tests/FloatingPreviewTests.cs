@@ -14,7 +14,6 @@ public sealed class FloatingPreviewTests
         var presentation = FloatingPreviewPresentation.From(State(phase));
         Assert.Equal(status, presentation.Status);
         Assert.False(presentation.IsTerminal);
-        Assert.False(presentation.AutoDismiss);
     }
 
     [Fact]
@@ -26,130 +25,33 @@ public sealed class FloatingPreviewTests
         });
         Assert.Equal("Replaying WAV", presentation.Status);
         Assert.Equal("Text appears after the WAV replay.", presentation.Hint);
-        Assert.False(presentation.AutoDismiss);
     }
 
     [Fact]
-    public void BufferedRecognitionHasNoInventedTranscript()
+    public void BufferedRecognitionExplainsWhenTextArrivesWithoutInventingPreview()
     {
         var recording = FloatingPreviewPresentation.From(State(DictationPhase.Recording));
-        Assert.Equal("", recording.Transcript);
         Assert.Equal("Text appears after Finish.", recording.Hint);
         var finishing = FloatingPreviewPresentation.From(State(DictationPhase.Finishing));
-        Assert.Equal("", finishing.Transcript);
         Assert.Equal("Recognizing audio. Waiting for final text.", finishing.Hint);
     }
 
-    [Theory]
-    [InlineData("Speaker 0: first\nsecond\nthird\nfourth")]
-    [InlineData("中文😀 Καλημέρα café\r\nآخر سطر")]
-    [InlineData("averylongunbrokenwordwithoutspacesatall")]
-    public void PresentationPreservesFullAuthoritativeTextForAccessibility(string transcript)
-    {
-        var presentation = FloatingPreviewPresentation.From(State(DictationPhase.Recording) with { Transcript = transcript });
-        Assert.Equal(transcript, presentation.Transcript);
-        Assert.False(presentation.ShowHintWithTranscript);
-    }
-
-    [Theory]
-    [InlineData("one two three four five six seven eight", "three four five six seven eight")]
-    [InlineData("  one\t two\r\nthree\u00a0four five six seven  ", "two three four five six seven")]
-    [InlineData("中文 😀 café Καλημέρα مرحبا بالعالم", "中文 😀 café Καλημέρα مرحبا بالعالم")]
-    [InlineData("first second third fourth fifth sixth 👨‍👩‍👧‍👦", "second third fourth fifth sixth 👨‍👩‍👧‍👦")]
-    [InlineData("   \r\n\t", "")]
-    [InlineData("hello", "hello")]
-    public void RibbonKeepsTheLastSixWholeWordsAndUnicode(string text, string expected) =>
-        Assert.Equal(expected, FloatingPreviewPresentation.LastWords(text));
-
-    [Theory]
-    [InlineData(DictationPhase.Recording)]
-    [InlineData(DictationPhase.Finishing)]
-    public void ActualIncrementalTextUsesRibbonWithoutLosingFullTranscript(DictationPhase phase)
-    {
-        var transcript = "one two three four five six seven eight";
-        var presentation = FloatingPreviewPresentation.From(State(phase) with
-        {
-            Models = [new() { Id = "live-model", Preview = "live", Mode = "streaming" }],
-            Transcript = transcript
-        });
-        Assert.True(presentation.ShowRibbon);
-        Assert.Equal("three four five six seven eight", presentation.Ribbon);
-        Assert.Equal(transcript, presentation.Transcript);
-    }
-
-    [Theory]
-    [InlineData("final-only")]
-    [InlineData("buffered")]
-    public void BufferedModelsNeverPretendToHaveIncrementalRecognition(string preview)
+    [Fact]
+    public void CaptureRemainsIndependentOfTranscriptContent()
     {
         var presentation = FloatingPreviewPresentation.From(State(DictationPhase.Recording) with
         {
-            Models = [new() { Id = "buffered-model", Preview = preview, Mode = "streaming" }]
+            Transcript = "actual completed utterance",
+            Result = new("actual completed utterance", "actual completed utterance")
         });
-        Assert.False(presentation.ShowRibbon);
-        Assert.Equal("", presentation.Ribbon);
-        Assert.Equal("", presentation.Transcript);
+        Assert.False(presentation.IsTerminal);
         Assert.Equal("Text appears after Finish.", presentation.Hint);
     }
 
-    [Theory]
-    [InlineData(DictationPhase.Cancelling)]
-    [InlineData(DictationPhase.Ready)]
-    [InlineData(DictationPhase.RecoveryRequired)]
-    public void TerminalAndCancellationStatesFreezeActualWordsAndRetainFullAccessibleText(DictationPhase phase)
-    {
-        var presentation = FloatingPreviewPresentation.From(State(phase) with
-        {
-            Models = [new() { Id = "live-model", Preview = "live", Mode = "streaming" }],
-            Transcript = "one two three four five six seven eight"
-        });
-        Assert.True(presentation.ShowRibbon);
-        Assert.Equal("three four five six seven eight", presentation.Ribbon);
-        Assert.Equal("one two three four five six seven eight", presentation.Transcript);
-    }
-
     [Fact]
-    public void NewWordKeepsFiveExistingWordsInsteadOfReanimatingTheLine()
-    {
-        Assert.Equal([1, 2, 3, 4, 5, -1], FloatingPreviewPresentation.ReuseWords(
-            ["one", "two", "three", "four", "five", "six"],
-            ["two", "three", "four", "five", "six", "seven"]));
-    }
-
-    [Fact]
-    public void GrowingPartialWordKeepsItsExistingAnimation()
-    {
-        Assert.Equal([0, 1, 2], FloatingPreviewPresentation.ReuseWords(
-            ["five", "point", "bil"], ["five", "point", "billion"]));
-    }
-
-    [Fact]
-    public void PartialWordKeepsItsAnimationWhenTheSixWordWindowShifts()
-    {
-        Assert.Equal([1, 2, 3, 4, 5, -1], FloatingPreviewPresentation.ReuseWords(
-            ["over", "four", "point", "five", "bil", "year"],
-            ["four", "point", "five", "bil", "years", "ago"]));
-    }
-
-    [Fact]
-    public void CorrectionChangesOnlyTheCorrectedWord()
-    {
-        Assert.Equal([0, -1, 2], FloatingPreviewPresentation.ReuseWords(
-            ["a", "nice", "sentence"], ["a", "great", "sentence"]));
-    }
-
-    [Fact]
-    public void RepeatedAndRtlWordsRetainTheirLogicalOrder()
-    {
-        Assert.Equal([1, 2, -1], FloatingPreviewPresentation.ReuseWords(
-            ["مرحبا", "مرحبا", "بالعالم"], ["مرحبا", "بالعالم", "اليوم"]));
-    }
-
-    [Fact]
-    public void ErrorAndCancellationPreserveTextAndExplainWaiting()
+    public void ErrorAndCancellationExplainWaitingWithoutTextPreview()
     {
         var cancelled = FloatingPreviewPresentation.From(State(DictationPhase.Cancelling) with { Transcript = "partial" });
-        Assert.True(cancelled.ShowHintWithTranscript);
         Assert.Equal("Waiting for the native step to release resources.", cancelled.Hint);
         var failed = FloatingPreviewPresentation.From(State(DictationPhase.RecoveryRequired) with
         {
@@ -158,14 +60,11 @@ public sealed class FloatingPreviewTests
         });
         Assert.Equal("Recognition failed", failed.Status);
         Assert.Equal("Native resource release failed.", failed.Hint);
-        Assert.Equal("partial", failed.Transcript);
         Assert.True(failed.IsTerminal);
-        Assert.True(failed.ShowHintWithTranscript);
-        Assert.False(failed.AutoDismiss);
     }
 
     [Fact]
-    public void CompletedStateUsesAuthoritativeNoticeAndText()
+    public void CompletedStateUsesAuthoritativeNotice()
     {
         var presentation = FloatingPreviewPresentation.From(State(DictationPhase.Ready) with
         {
@@ -174,17 +73,15 @@ public sealed class FloatingPreviewTests
             Notice = new(NoticeKind.Success, "Transcript ready", "Released.")
         });
         Assert.Equal("Transcript ready", presentation.Status);
-        Assert.Equal("actual result", presentation.Transcript);
         Assert.Equal("Recognition complete. Speech stays on this device.", presentation.Hint);
         Assert.True(presentation.IsTerminal);
-        Assert.True(presentation.AutoDismiss);
     }
 
     [Theory]
     [InlineData(NoticeKind.Error)]
     [InlineData(NoticeKind.Warning)]
     [InlineData(NoticeKind.Information)]
-    public void OnlySuccessfulResultsAutoDismiss(NoticeKind kind)
+    public void AllOutcomesAreTerminalWithoutDelayingTheWaveformHide(NoticeKind kind)
     {
         var presentation = FloatingPreviewPresentation.From(State(DictationPhase.Ready) with
         {
@@ -192,8 +89,6 @@ public sealed class FloatingPreviewTests
             Notice = new(kind, "Actual notice", "Actual explanation")
         });
         Assert.True(presentation.IsTerminal);
-        Assert.False(presentation.AutoDismiss);
-        Assert.Equal(kind == NoticeKind.Error, presentation.ShowHintWithTranscript);
     }
 
     [Theory]
@@ -204,6 +99,13 @@ public sealed class FloatingPreviewTests
     [InlineData(-1, 0)]
     public void MeterUsesMeasuredEnergyOnly(double pcm, double expected) =>
         Assert.Equal(expected, FloatingPreviewPresentation.MeterLevel(pcm));
+
+    [Theory]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    [InlineData(double.NegativeInfinity)]
+    public void InvalidEnergyNeverDrawsInventedLevels(double pcm) =>
+        Assert.Equal(0, FloatingPreviewPresentation.MeterLevel(pcm));
 
     [Theory]
     [InlineData(0, 0, 1920, 1040, 1, 148, 760, 876, 400, 148)]
@@ -228,18 +130,11 @@ public sealed class FloatingPreviewTests
             FloatingPreviewPresentation.Place(0, 0, 1920, 1040, scale,
                 FloatingPreviewPresentation.WaveformWidth, 56));
 
-    [Theory]
-    [InlineData(double.NaN)]
-    [InlineData(double.PositiveInfinity)]
-    [InlineData(double.NegativeInfinity)]
-    public void InvalidEnergyNeverDrawsInventedLevels(double pcm) =>
-        Assert.Equal(0, FloatingPreviewPresentation.MeterLevel(pcm));
-
     private static SessionSnapshot State(DictationPhase phase) => new()
     {
         Version = 1, Phase = phase, Activity = SessionActivity.Dictation,
         Notice = new(NoticeKind.Information, "Preparing operation", "Actual operation notice."),
         Models = [new() { Id = "moonshine-tiny", DisplayName = "Moonshine Tiny", Mode = "streaming", Preview = "final-only" }],
-        SelectedIndex = 0, ModelsDirectory = "", BackendVersion = "", Language = "", Transcript = ""
+        SelectedIndex = 0, ModelsDirectory = "", BackendVersion = "", Transcript = ""
     };
 }

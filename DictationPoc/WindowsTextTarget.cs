@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using DictationPoc.Core;
 
 namespace DictationPoc;
 
@@ -8,7 +9,6 @@ internal sealed record CapturedTextTarget(nint Window, nint FocusWindow, int[]? 
         Window == window && FocusWindow == focusWindow &&
         (RuntimeId is null || runtimeId is null || RuntimeId.AsSpan().SequenceEqual(runtimeId));
 }
-internal sealed record TextInsertionResult(bool Sent, string Message);
 
 internal static unsafe partial class WindowsTextTarget
 {
@@ -47,26 +47,29 @@ internal static unsafe partial class WindowsTextTarget
         return true;
     }
 
-    internal static TextInsertionResult Insert(
+    internal static TextDeliveryOutcome Insert(
         CapturedTextTarget target, string text, CancellationToken cancellationToken, Func<bool> stillCurrent)
     {
         if (string.IsNullOrWhiteSpace(text))
-            return new(false, "The recognition result contains no speech text. Use Copy transcript if needed.");
-        for (var attempt = 0; attempt < 40; attempt++)
+            return TextDeliveryOutcome.Rejected("The recognition result contains no speech text. Use Copy transcript if needed.");
+        // A held modifier delays typing rather than disabling it: settle briefly, then defer (do not fail) so
+        // the caller retries once the keys are released. Only focus/target loss or a partial send is a rejection.
+        for (var attempt = 0; attempt < 8 && !ShortcutModifiersReleased(); attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (ShortcutModifiersReleased()) { break; }
+            if (!stillCurrent())
+                return TextDeliveryOutcome.Rejected("Another operation started before the text could be sent. Use Copy transcript instead.");
             Thread.Sleep(25);
         }
         if (!ShortcutModifiersReleased())
-            return new(false, "The shortcut keys are still held. Use Copy transcript instead.");
+            return TextDeliveryOutcome.Deferred("The shortcut keys are still held; typing resumes when they are released.");
         if (!TryFocus(0, out var window, out var focusWindow, out var reason) ||
             window != target.Window || focusWindow != target.FocusWindow)
-            return new(false, "The original text field no longer has focus. Use Copy transcript instead.");
+            return TextDeliveryOutcome.Rejected("The original text field no longer has focus. Use Copy transcript instead.");
         if (!TryFocusedElement(out var runtimeId, out reason))
-            return new(false, $"{reason} Use Copy transcript instead.");
+            return TextDeliveryOutcome.Rejected($"{reason} Use Copy transcript instead.");
         if (!target.Matches(window, focusWindow, runtimeId))
-            return new(false, "The original text field no longer has focus. Use Copy transcript instead.");
+            return TextDeliveryOutcome.Rejected("The original text field no longer has focus. Use Copy transcript instead.");
 
         var input = new KeyboardEvent[checked(text.Length * 2)];
         for (var index = 0; index < text.Length; index++)
@@ -76,20 +79,22 @@ internal static unsafe partial class WindowsTextTarget
         }
         cancellationToken.ThrowIfCancellationRequested();
         if (!stillCurrent())
-            return new(false, "Another operation started before the text could be sent. Use Copy transcript instead.");
-        if (!TryFocus(0, out window, out focusWindow, out reason) ||
-            !target.Matches(window, focusWindow, runtimeId) || !ShortcutModifiersReleased())
-            return new(false, "Focus or shortcut keys changed before insertion. Use Copy transcript instead.");
+            return TextDeliveryOutcome.Rejected("Another operation started before the text could be sent. Use Copy transcript instead.");
+        // Re-validate the target as a rejection, but a modifier re-pressed at the last moment only defers.
+        if (!TryFocus(0, out window, out focusWindow, out reason) || !target.Matches(window, focusWindow, runtimeId))
+            return TextDeliveryOutcome.Rejected("Focus changed before insertion. Use Copy transcript instead.");
+        if (!ShortcutModifiersReleased())
+            return TextDeliveryOutcome.Deferred("The shortcut keys are still held; typing resumes when they are released.");
         cancellationToken.ThrowIfCancellationRequested();
         if (!stillCurrent())
-            return new(false, "Another operation started before the text could be sent. Use Copy transcript instead.");
+            return TextDeliveryOutcome.Rejected("Another operation started before the text could be sent. Use Copy transcript instead.");
         var sent = SendInput((uint)input.Length, input, Marshal.SizeOf<KeyboardEvent>());
         if (sent != input.Length)
         {
             var error = Marshal.GetLastPInvokeError();
-            return new(false, $"Windows sent {sent} of {input.Length} keyboard events (error {error}). Some text may have been inserted. Check the field before using Copy transcript.");
+            return TextDeliveryOutcome.Rejected($"Windows sent {sent} of {input.Length} keyboard events (error {error}). Some text may have been inserted. Check the field before using Copy transcript.");
         }
-        return new(true, target.RuntimeId is null || runtimeId is null
+        return TextDeliveryOutcome.Sent(target.RuntimeId is null || runtimeId is null
             ? "Text was sent to the original window. Windows could not verify the individual field; check where the text appeared."
             : "Text was sent to the original field. Check the field if the target app does not accept simulated typing.");
     }
