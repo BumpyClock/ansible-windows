@@ -47,6 +47,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         _loaded = true;
         _observer ??= new UiSessionObserver(_session, DispatcherQueue, _ => Render());
         _initialization ??= InitializeAsync();
+        Render();
         await _initialization;
         Render();
     }
@@ -138,7 +139,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         var managerBusy = _manager?.IsBusy == true;
         FolderText.Text = _manager?.DirectoryPath ?? state.ModelsDirectory;
         FolderButton.IsEnabled = idle;
-        RefreshButton.IsEnabled = !managerBusy && !_dialogActive;
+        RefreshButton.IsEnabled = _initialization is not { IsCompleted: false } && !managerBusy && !_dialogActive;
         FolderMenuButton.IsEnabled = !_dialogActive;
 
         var attention = state.Notice.Kind is NoticeKind.Warning or NoticeKind.Error;
@@ -224,10 +225,12 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
 
     private async void RefreshClicked(object sender, RoutedEventArgs args)
     {
+        if (_closed || _initialization is { IsCompleted: false }) { return; }
         if (_manager is null)
         {
             _error = null;
             _initialization = InitializeAsync();
+            Render();
             await _initialization;
             Render();
             return;

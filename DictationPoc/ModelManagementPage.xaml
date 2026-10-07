@@ -27,7 +27,7 @@
                                     <Button x:Name="FolderButton" Content="Choose folder" Click="ChooseFolderClicked"
                                             MinHeight="40" AutomationProperties.AutomationId="ChooseModelFolder" />
                                     <Button x:Name="RefreshButton" Content="Verify installed files" Click="RefreshClicked"
-                                            MinHeight="40" AutomationProperties.AutomationId="VerifyModelFiles" />
+                                            IsEnabled="False" MinHeight="40" AutomationProperties.AutomationId="VerifyModelFiles" />
                                 </StackPanel>
                                 <TextBlock Text="Changing folders does not move or delete model files."
                                            TextWrapping="Wrap" Foreground="{ThemeResource SecondaryTextBrush}" />

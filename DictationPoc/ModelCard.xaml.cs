@@ -85,6 +85,9 @@ public sealed partial class ModelCard : UserControl
         var showBar = state is ModelInstallState.Downloading or ModelInstallState.Paused or ModelInstallState.Verifying;
         DownloadProgress.Value = snapshot.Progress;
         DownloadProgress.Visibility = showBar ? Visibility.Visible : Visibility.Collapsed;
+        AutomationProperties.SetName(DownloadProgress, state == ModelInstallState.Verifying
+            ? $"File verification progress for {_name}"
+            : $"Model download progress for {_name}");
         ProgressText.Text = state == ModelInstallState.ReadyToInstall
             ? "Weights verified. Select Install verified model when dictation is idle."
             : state == ModelInstallState.Verifying
@@ -114,6 +117,9 @@ public sealed partial class ModelCard : UserControl
         PauseButton.IsEnabled = managerBusy && state is ModelInstallState.Downloading or ModelInstallState.Verifying;
         PauseButton.Visibility = state is ModelInstallState.Downloading or ModelInstallState.Verifying
             ? Visibility.Visible : Visibility.Collapsed;
+        AutomationProperties.SetName(PauseButton, state == ModelInstallState.Verifying
+            ? $"Pause file verification for {_name}"
+            : $"Pause download of {_name}");
 
         RemoveButton.IsEnabled = idle && snapshot.HasModelFile;
         RemoveButton.Visibility = snapshot.HasModelFile ? Visibility.Visible : Visibility.Collapsed;
