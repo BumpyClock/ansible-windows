@@ -8,7 +8,7 @@
             <Grid>
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                 <TextBlock Text="Insights" Style="{StaticResource PageTitleStyle}" />
-                <TextBlock Grid.Column="1" Text="All time" VerticalAlignment="Bottom" Margin="0,0,0,6"
+                <TextBlock Grid.Column="1" Text="All time" VerticalAlignment="Center" Margin="0,0,0,8"
                            Style="{StaticResource CaptionSecondaryStyle}"
                            ToolTipService.ToolTip="Every completed session recorded on this device." />
             </Grid>
