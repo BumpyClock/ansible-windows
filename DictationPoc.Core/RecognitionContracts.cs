@@ -7,16 +7,18 @@ public sealed record RecognitionResult(string DisplayText, string? SpeechText)
     public int? SpokenWords => SpeechText is null ? null : AudioMeter.CountWords(SpeechText);
 }
 
+public sealed record RecognitionOptions(string? Language = null, string CustomDictionary = "");
+
 public interface IRecognitionEngine : IAsyncDisposable
 {
     string ModelsDirectory { get; }
     string Version { get; }
     Task<IReadOnlyList<AudioModel>> ConnectAsync(CancellationToken cancellationToken);
     Task<RecognitionResult> TranscribeAsync(
-        AudioModel model, WaveAudio audio, string? language,
+        AudioModel model, WaveAudio audio, RecognitionOptions options,
         IProgress<TranscriptUpdate>? progress, CancellationToken cancellationToken);
     Task<RecognitionResult> StreamAsync(
-        AudioModel model, ChannelReader<byte[]> audio, string? language,
+        AudioModel model, ChannelReader<byte[]> audio, RecognitionOptions options,
         IProgress<TranscriptUpdate>? progress, CancellationToken cancellationToken, Action? onReady = null);
 }
 
@@ -51,5 +53,4 @@ public interface IUsageStore
     string Path { get; }
     Task<UsageDocument> LoadAsync(CancellationToken cancellationToken = default);
     Task<UsageDocument> RecordAsync(UsageEntry entry, CancellationToken cancellationToken = default);
-    Task<UsageDocument> SetEnabledAsync(bool enabled, CancellationToken cancellationToken = default);
 }

@@ -20,12 +20,12 @@ public sealed class NativeEngineTests
         var recording = Path.Combine(root, ".runtime", "validation", "sample_16k.wav");
         var input = new AudioInputReader();
         var decoded = await input.ReadRecordingAsync(recording, timeout.Token);
-        var result = await engine.TranscribeAsync(model, decoded, null, null, timeout.Token);
+        var result = await engine.TranscribeAsync(model, decoded, new(), null, timeout.Token);
         Assert.Contains("Mother Nature", result.SpeechText!, StringComparison.OrdinalIgnoreCase);
         var audio = Channel.CreateUnbounded<byte[]>();
         await audio.Writer.WriteAsync(await input.ReadReplayAsync(recording, timeout.Token), timeout.Token);
         audio.Writer.Complete();
-        var live = await engine.StreamAsync(model, audio.Reader, null, null, timeout.Token);
+        var live = await engine.StreamAsync(model, audio.Reader, new(), null, timeout.Token);
         Assert.Contains("Mother Nature", live.SpeechText!, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(result.SpeechText, live.SpeechText);
     }

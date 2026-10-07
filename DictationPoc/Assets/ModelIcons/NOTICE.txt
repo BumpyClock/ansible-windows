@@ -1,0 +1,42 @@
+Local Voice model-family artwork
+
+These assets identify upstream projects. They do not imply endorsement.
+All artwork is packaged locally; the app makes no image requests at runtime.
+Model weights have separate licenses in tools\audio-models.json.
+
+Moonshine
+Source: https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/examples/web/assets/favicon.png
+License: MIT; see moonshine-LICENSE.txt.
+Copyright (c) 2025 Useful Sensors, Inc. (dba Moonshine AI).
+The upstream favicon is unmodified in both theme variants.
+
+Qwen3-ASR
+Source: https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3-ASR-Repo/logo.png
+Referenced by the official README:
+https://github.com/QwenLM/Qwen3-ASR/blob/7c6daf77a2421100f5fb066495372c00129d39ff/README.md
+License: Apache-2.0; see qwen-LICENSE.txt.
+Original PNG SHA-256:
+4aa54a2d6dccb5de7a8107575adb6061c6cb8240e131109f8b066b18ef34bdf9
+Modified: the emblem is cropped from the wordmark, padded, and resized to 96 pixels.
+The same color artwork is used in both themes.
+
+VibeVoice
+Source: https://github.com/microsoft/VibeVoice/blob/1541f590c7099820f10ea012f48d2399282df69f/Figures/VibeVoice_logo_white.png
+License: MIT; see vibevoice-LICENSE.txt.
+Copyright (c) 2025 Microsoft.
+Modified: the emblem is cropped from the wordmark, padded, and resized to 96 pixels.
+The light-theme variant uses dark ink with the original alpha and geometry.
+
+Nemotron
+Source: https://avatars.githubusercontent.com/u/1728152?v=4
+Official NVIDIA organization: https://github.com/NVIDIA
+Original PNG SHA-256:
+308d323d3bc3ff8c667fe8a099baf151b1f9562b382b115e903233e318c96dc9
+The official organization emblem is unmodified in both theme variants.
+NVIDIA and the NVIDIA logo are registered trademarks of NVIDIA Corporation.
+The emblem identifies the provider of Nemotron; it does not imply endorsement.
+No MIT or Apache license grant is asserted for the NVIDIA trademark.
+Brand guidance: https://www.nvidia.com/en-us/about-nvidia/legal-info/logo-brand-usage/
+
+Unknown families and High Contrast
+The UI uses a neutral, semantic model initial.

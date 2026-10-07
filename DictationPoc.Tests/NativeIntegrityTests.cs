@@ -25,6 +25,30 @@ public sealed class NativeIntegrityTests : IDisposable
         Assert.Equal("model-0.6b", Assert.Single(inventory.Models).Id);
     }
 
+    [Theory]
+    [InlineData("qwen3_asr")]
+    [InlineData("vibevoice_asr")]
+    [InlineData("vibevoice_asr_streaming")]
+    public async Task SupportedDictionaryCapabilityReachesTheConnectedModel(string family)
+    {
+        WriteCatalog(EntryJson().Replace("\"family\":\"moonshine_asr\"",
+            $"\"family\":\"{family}\",\"supports_custom_dictionary\":true", StringComparison.Ordinal));
+        var inventory = await NativeModelCatalog.ReadAsync(CatalogPath, _directory, CancellationToken.None);
+        Assert.True(Assert.Single(inventory.Models).SupportsCustomDictionary);
+    }
+
+    [Theory]
+    [InlineData("moonshine_asr")]
+    [InlineData("nemotron_asr")]
+    [InlineData("unknown-family")]
+    public async Task CatalogCannotClaimDictionarySupportForUnsupportedAdapters(string family)
+    {
+        WriteCatalog(EntryJson().Replace("\"family\":\"moonshine_asr\"",
+            $"\"family\":\"{family}\",\"supports_custom_dictionary\":true", StringComparison.Ordinal));
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            NativeModelCatalog.ReadAsync(CatalogPath, _directory, CancellationToken.None));
+    }
+
     [Fact]
     public async Task DiscoveryRetainsHashButDoesNotPretendSameSizeWeightsAreVerified()
     {

@@ -1,10 +1,8 @@
 namespace DictationPoc.Core;
 
 public sealed record FloatingPreviewPresentation(
-    string Status, string Hint, string Transcript, string Ribbon, bool ShowRibbon, bool ShowHintWithTranscript,
-    bool IsTerminal, bool AutoDismiss)
+    string Status, string Hint, bool IsTerminal)
 {
-    public const double Width = 400;
     public const double WaveformWidth = 160;
 
     public static FloatingPreviewPresentation From(SessionSnapshot state)
@@ -35,88 +33,7 @@ public sealed record FloatingPreviewPresentation(
             _ => state.Notice.Message
         };
         var terminal = state.IsIdle || state.Phase == DictationPhase.RecoveryRequired;
-        var ribbon = (state.SelectedModel?.Preview == "live" && state.IsLiveOperation ||
-            terminal || state.Phase is DictationPhase.Cancelling or DictationPhase.Closing) &&
-            !string.IsNullOrWhiteSpace(state.Transcript);
-        return new(status, hint, state.Transcript, ribbon ? LastWords(state.Transcript) : "", ribbon,
-            error || state.Phase is DictationPhase.Cancelling or DictationPhase.Closing,
-            terminal, terminal && state.Notice.Kind == NoticeKind.Success && !error);
-    }
-
-    public static int[] ReuseWords(IReadOnlyList<string> previous, IReadOnlyList<string> current)
-    {
-        if (previous.Count > 6) { throw new ArgumentOutOfRangeException(nameof(previous)); }
-        if (current.Count > 6) { throw new ArgumentOutOfRangeException(nameof(current)); }
-        var lengths = new int[previous.Count + 1, current.Count + 1];
-        for (var old = 1; old <= previous.Count; old++)
-        {
-            for (var next = 1; next <= current.Count; next++)
-            {
-                lengths[old, next] = previous[old - 1] == current[next - 1]
-                    ? lengths[old - 1, next - 1] + 1 : Math.Max(lengths[old - 1, next], lengths[old, next - 1]);
-            }
-        }
-        var result = Enumerable.Repeat(-1, current.Count).ToArray();
-        var oldIndex = previous.Count;
-        var newIndex = current.Count;
-        while (oldIndex > 0 && newIndex > 0)
-        {
-            if (previous[oldIndex - 1] == current[newIndex - 1])
-            {
-                result[--newIndex] = --oldIndex;
-            }
-            else if (lengths[oldIndex - 1, newIndex] >= lengths[oldIndex, newIndex - 1]) { oldIndex--; }
-            else { newIndex--; }
-        }
-        if (previous.Count > 0 && !result.Contains(previous.Count - 1))
-        {
-            var partial = previous[^1];
-            for (var index = 0; index < current.Count; index++)
-            {
-                if (result[index] < 0 && (current[index].StartsWith(partial, StringComparison.Ordinal) ||
-                    partial.StartsWith(current[index], StringComparison.Ordinal)))
-                {
-                    result[index] = previous.Count - 1;
-                    break;
-                }
-            }
-        }
-        if (previous.Count == current.Count)
-        {
-            for (var index = 0; index < current.Count; index++)
-            {
-                if (result[index] < 0 && !result.Contains(index) &&
-                    (current[index].StartsWith(previous[index], StringComparison.Ordinal) ||
-                     previous[index].StartsWith(current[index], StringComparison.Ordinal)))
-                {
-                    result[index] = index;
-                }
-            }
-        }
-        return result;
-    }
-
-    public static string LastWords(string text)
-    {
-        var end = text.Length;
-        while (end > 0 && char.IsWhiteSpace(text[end - 1])) { end--; }
-        var start = end;
-        for (var words = 0; words < 6 && start > 0; words++)
-        {
-            while (start > 0 && !char.IsWhiteSpace(text[start - 1])) { start--; }
-            if (words == 5) { break; }
-            while (start > 0 && char.IsWhiteSpace(text[start - 1])) { start--; }
-        }
-        var tail = new System.Text.StringBuilder(Math.Min(end - start, 256));
-        for (var index = start; index < end; index++)
-        {
-            if (char.IsWhiteSpace(text[index]))
-            {
-                if (tail.Length > 0 && tail[^1] != ' ') { tail.Append(' '); }
-            }
-            else { tail.Append(text[index]); }
-        }
-        return tail.ToString();
+        return new(status, hint, terminal);
     }
 
     public static double MeterLevel(double pcmLevel) =>

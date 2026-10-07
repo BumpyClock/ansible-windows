@@ -48,7 +48,13 @@ try {
     foreach ($resource in @(
         "AppxManifest.xml", "resources.pri", "DictationPoc.exe",
         "audiocpp.dll", "audio-models.json", "validation-sample.wav", "audio.cpp-LICENSE",
-        "Assets\AppIcon.ico", "Assets\StoreLogo.png"
+        "Assets\AppIcon.ico", "Assets\StoreLogo.png",
+        "Assets\ModelIcons\moonshine.png", "Assets\ModelIcons\moonshine-dark.png",
+        "Assets\ModelIcons\qwen.png", "Assets\ModelIcons\qwen-dark.png",
+        "Assets\ModelIcons\vibevoice.png", "Assets\ModelIcons\vibevoice-dark.png",
+        "Assets\ModelIcons\nvidia.png", "Assets\ModelIcons\nvidia-dark.png",
+        "Assets\ModelIcons\NOTICE.txt", "Assets\ModelIcons\moonshine-LICENSE.txt",
+        "Assets\ModelIcons\qwen-LICENSE.txt", "Assets\ModelIcons\vibevoice-LICENSE.txt"
     )) {
         if (-not (Test-Path -LiteralPath (Join-Path $inspection $resource) -PathType Leaf)) {
             throw "The NativeAOT MSIX is missing '$resource'."
@@ -65,7 +71,7 @@ try {
     if (-not $resourceMap) { throw "The package resource index has no map for '$($identity.Name)'." }
     foreach ($xaml in @(
         "App.xbf", "MainWindow.xbf", "FloatingDictationWindow.xbf", "MainPage.xbf",
-        "DictationPage.xbf", "InsightsPage.xbf", "ModelManagementPage.xbf"
+        "DictationPage.xbf", "InsightsPage.xbf", "ModelManagementPage.xbf", "ModelCard.xbf"
     )) {
         # MSIX embeds compiled XAML in the PRI instead of shipping loose .xbf files.
         if (-not $resourceMap.SelectSingleNode(".//NamedResource[@name='$xaml']/Candidate[@type='EmbeddedData']")) {

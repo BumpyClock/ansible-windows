@@ -40,12 +40,16 @@ public sealed partial class DictationPage : Page
             CopyButton.IsEnabled = (_state.IsIdle || _state.Phase == DictationPhase.RecoveryRequired) &&
                 !string.IsNullOrWhiteSpace(_state.Transcript);
             ModelNote.Text = _state.SelectedModel?.Mode == "offline"
-                ? "This model is for file transcription. Open Settings + verification to test it."
+                ? "WAV transcription only. Open Recognition tools in Settings."
                 : _state.SelectedModel?.Preview == "final-only"
-                    ? "Text appears after Finish. The waveform still shows actual microphone input."
-                    : "Live transcript timing depends on the model and your hardware.";
+                    ? "Text appears after Finish dictation."
+                    : _state.SelectedModel?.Preview == "buffered"
+                        ? "Buffered recognition. Text updates are not continuous."
+                        : "";
+            ModelNote.Visibility = ModelNote.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
             StatusInfo.Title = _state.Notice.Title;
             StatusInfo.Message = _state.Notice.Message;
+            StatusInfo.IsOpen = _state.Phase != DictationPhase.Ready || _state.Notice.Kind != NoticeKind.Information;
             StatusInfo.Severity = _state.Notice.Kind switch
             {
                 NoticeKind.Success => InfoBarSeverity.Success,

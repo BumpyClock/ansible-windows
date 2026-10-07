@@ -46,6 +46,8 @@ public sealed record NativeModelCatalog
                 !IsFilename(entry.Filename) || entry.Bytes <= 0 ||
                 entry.Mode is not "offline" and not "streaming" ||
                 entry.Preview is not (null or "final-only" or "live" or "buffered") ||
+                entry.SupportsCustomDictionary &&
+                    entry.Family is not ("qwen3_asr" or "vibevoice_asr" or "vibevoice_asr_streaming") ||
                 entry.Sha256 is null || entry.Sha256.Length != 64 || !entry.Sha256.All(char.IsAsciiHexDigit) ||
                 string.Equals(entry.Filename, ".localvoice-models.lock", StringComparison.OrdinalIgnoreCase) ||
                 !entries.TryAdd(entry.Id, entry) || !filenames.Add(entry.Filename) ||
@@ -79,7 +81,8 @@ public sealed record NativeModelCatalog
             models.Add(new AudioModel
             {
                 Id = entry.Id, Family = entry.Family, Mode = entry.Mode, Task = "asr",
-                ModelPath = path, Preview = entry.Preview, DisplayName = entry.DisplayName
+                ModelPath = path, Preview = entry.Preview, DisplayName = entry.DisplayName,
+                SupportsCustomDictionary = entry.SupportsCustomDictionary
             });
         }
         return new NativeModelInventory(models.AsReadOnly(),
@@ -123,6 +126,7 @@ public sealed record NativeModelEntry
     [JsonPropertyName("languages")] public string? Languages { get; init; }
     [JsonPropertyName("precision")] public string? Precision { get; init; }
     [JsonPropertyName("license_notes")] public string? LicenseNotes { get; init; }
+    [JsonPropertyName("supports_custom_dictionary")] public bool SupportsCustomDictionary { get; init; }
 
     [JsonIgnore]
     public long EstimatedMemoryBytes => NativeMemory.EstimateRequired(
