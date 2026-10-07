@@ -18,11 +18,7 @@
                 <ColumnDefinition Width="*" MaxWidth="1052" />
             </Grid.ColumnDefinitions>
             <StackPanel Padding="36,28,36,36" Spacing="20">
-                <StackPanel Spacing="4">
-                    <TextBlock Text="Dictation" Style="{StaticResource PageTitleStyle}" />
-                    <TextBlock Text="Speak into this window, or use the shortcut to type into any app."
-                               Style="{StaticResource PageSubtitleStyle}" />
-                </StackPanel>
+                <TextBlock Text="Dictation" Style="{StaticResource PageTitleStyle}" />
 
                 <Border Style="{StaticResource CardStyle}" Padding="28,24">
                     <Grid ColumnSpacing="24" RowSpacing="20">
@@ -36,43 +32,35 @@
                         </Grid.RowDefinitions>
 
                         <Grid Width="112" Height="112" VerticalAlignment="Center">
-                            <Ellipse x:Name="PulseRing" Width="72" Height="72" Fill="{ThemeResource AccentBrush}"
+                            <Ellipse x:Name="PulseRing" Width="72" Height="72" Fill="{ThemeResource AccentGraphicBrush}"
                                      Opacity="0" IsHitTestVisible="False" RenderTransformOrigin="0.5,0.5">
                                 <Ellipse.RenderTransform>
                                     <ScaleTransform x:Name="PulseScale" />
                                 </Ellipse.RenderTransform>
                             </Ellipse>
                             <ProgressRing x:Name="BusyRing" Width="88" Height="88" IsActive="False"
-                                          Foreground="{ThemeResource AccentBrush}" IsHitTestVisible="False" />
+                                          Foreground="{ThemeResource AccentGraphicBrush}" IsHitTestVisible="False" />
                             <Button x:Name="RecordButton" Style="{StaticResource RecordButtonStyle}" Click="RecordClicked"
                                     AutomationProperties.Name="Start dictation" ToolTipService.ToolTip="Start dictation">
                                 <FontIcon x:Name="RecordGlyph" Glyph="&#xE720;" FontSize="26" />
                             </Button>
                         </Grid>
 
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="6">
-                            <TextBlock x:Name="StatusTitle" Text="Preparing" FontSize="22" FontWeight="SemiBold"
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="8">
+                            <TextBlock x:Name="StatusTitle" Text="Preparing" Style="{StaticResource SubtitleTextBlockStyle}"
                                        AutomationProperties.LiveSetting="Polite" />
                             <TextBlock x:Name="StatusDetail" Text="" TextWrapping="Wrap"
-                                       Foreground="{ThemeResource SecondaryTextBrush}" />
-                            <StackPanel x:Name="ShortcutRow" Orientation="Horizontal" Spacing="6" Margin="0,6,0,0"
-                                        AutomationProperties.Name="Dictation shortcut">
-                                <TextBlock x:Name="ShortcutVerb" Text="Press" VerticalAlignment="Center" FontSize="12"
-                                           Foreground="{ThemeResource SecondaryTextBrush}" />
-                                <StackPanel x:Name="ShortcutKeys" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" />
-                                <TextBlock x:Name="ShortcutSuffix" Text="in any app" VerticalAlignment="Center" FontSize="12"
-                                           Foreground="{ThemeResource SecondaryTextBrush}" />
-                            </StackPanel>
+                                       Style="{StaticResource SecondaryTextStyle}" />
                             <Grid x:Name="LiveRow" Margin="0,8,0,0" ColumnSpacing="16" Visibility="Collapsed">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock x:Name="ElapsedText" Text="00:00" FontSize="15" FontWeight="SemiBold"
+                                <TextBlock x:Name="ElapsedText" Text="00:00" Style="{StaticResource BodyStrongTextBlockStyle}"
                                            VerticalAlignment="Center" AutomationProperties.Name="Elapsed time" />
-                                <TextBlock x:Name="WordsText" Grid.Column="1" Text="Word count pending" FontSize="13"
-                                           VerticalAlignment="Center" Foreground="{ThemeResource SecondaryTextBrush}" />
+                                <TextBlock x:Name="WordsText" Grid.Column="1" Text="Word count pending"
+                                           VerticalAlignment="Center" Style="{StaticResource CaptionSecondaryStyle}" />
                                 <StackPanel x:Name="LevelBars" Grid.Column="2" Orientation="Horizontal" Spacing="3"
                                             Height="28" HorizontalAlignment="Left" VerticalAlignment="Center"
                                             AutomationProperties.Name="Microphone level history" />
@@ -109,12 +97,12 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Text="Transcript" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <TextBlock Text="Transcript" Style="{StaticResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" />
                             <Button x:Name="CopyButton" Grid.Column="1" Click="CopyClicked" MinHeight="32"
                                     AutomationProperties.Name="Copy transcript">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <FontIcon Glyph="&#xE8C8;" FontSize="14" />
-                                    <TextBlock Text="Copy" />
+                                    <TextBlock x:Name="CopyLabel" Text="Copy" />
                                 </StackPanel>
                             </Button>
                         </Grid>
@@ -134,8 +122,8 @@
                             </TextBox>
                             <StackPanel x:Name="EmptyState" Spacing="8" HorizontalAlignment="Center" VerticalAlignment="Center"
                                         IsHitTestVisible="False" MaxWidth="360">
-                                <FontIcon Glyph="&#xE8D2;" FontSize="28" Foreground="{ThemeResource SecondaryTextBrush}" />
-                                <TextBlock Text="Nothing transcribed yet" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                                <FontIcon Glyph="&#xE8D2;" FontSize="28" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock Text="Nothing transcribed yet" Style="{StaticResource BodyStrongTextBlockStyle}" HorizontalAlignment="Center" />
                                 <TextBlock x:Name="EmptyHint" TextWrapping="Wrap" TextAlignment="Center"
                                            Text="Recognized text appears here. Transcripts stay in memory on this device."
                                            Style="{StaticResource CaptionSecondaryStyle}" />
@@ -144,8 +132,6 @@
                     </Grid>
                 </Border>
 
-                <TextBlock x:Name="FooterHint" Style="{StaticResource CaptionSecondaryStyle}"
-                           Text="Change the shortcut and activation mode in Settings." />
             </StackPanel>
         </Grid>
     </ScrollViewer>

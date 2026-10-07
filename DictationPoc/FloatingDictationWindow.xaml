@@ -2,23 +2,20 @@
 <Window x:Class="DictationPoc.FloatingDictationWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Local Voice preview">
+        Title="Ansible preview">
     <Window.SystemBackdrop>
         <DesktopAcrylicBackdrop />
     </Window.SystemBackdrop>
     <Border x:Name="PreviewRoot"
             HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
             Loaded="PreviewLoaded" SizeChanged="PreviewSizeChanged" ActualThemeChanged="ThemeChanged">
-        <Border.Resources>
-            <Style x:Key="CompactWaveformBarStyle" TargetType="Rectangle">
-                <Setter Property="Fill" Value="{ThemeResource PrimaryTextBrush}" />
-            </Style>
-        </Border.Resources>
-        <Border x:Name="PillBorder" Width="160" Background="Transparent"
-                BorderBrush="{ThemeResource PrimaryTextBrush}" BorderThickness="2"
-                CornerRadius="28" Padding="14" HorizontalAlignment="Center">
-            <StackPanel x:Name="WaveBars" Orientation="Horizontal" Spacing="3" Height="24"
-                        HorizontalAlignment="Center" AutomationProperties.Name="Real audio energy history" />
+        <!-- The native composition pill draws the visible overlay. This region-empty host sizes the
+             window and resolves the theme text colour from BorderBrush for high-contrast drawing. -->
+        <Border x:Name="PillBorder" Width="220" Height="56" Background="Transparent"
+                BorderBrush="{ThemeResource PrimaryTextBrush}" BorderThickness="0"
+                CornerRadius="28" HorizontalAlignment="Center">
+            <StackPanel x:Name="WaveBars" HorizontalAlignment="Center"
+                        AutomationProperties.Name="Real audio energy history" />
         </Border>
     </Border>
 </Window>

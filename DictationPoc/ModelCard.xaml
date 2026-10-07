@@ -4,7 +4,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="using:DictationPoc"
              HorizontalAlignment="Stretch">
-    <Border Style="{StaticResource CardStyle}" Padding="20">
+    <Border x:Name="CardBorder" Style="{StaticResource CardStyle}" Padding="20">
         <StackPanel Spacing="16">
             <Grid ColumnSpacing="12">
                 <Grid.ColumnDefinitions>
@@ -18,25 +18,23 @@
                         <Image x:Name="IconImage" Width="28" Height="28" Stretch="Uniform"
                                Visibility="Collapsed" ImageOpened="IconOpened" ImageFailed="IconFailed" />
                         <TextBlock x:Name="Monogram" FontSize="18" FontWeight="SemiBold"
-                                   Foreground="{ThemeResource PrimaryTextBrush}"
+                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Grid>
                 </Border>
-                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
-                    <TextBlock x:Name="NameText" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" />
-                    <TextBlock x:Name="VariantText" FontSize="12" TextWrapping="Wrap"
-                               Foreground="{ThemeResource SecondaryTextBrush}" />
+                <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center">
+                    <TextBlock x:Name="NameText" Style="{StaticResource BodyStrongTextBlockStyle}" TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Ellipse x:Name="StateDot" Width="7" Height="7" VerticalAlignment="Center" />
+                        <TextBlock x:Name="StateText" Style="{StaticResource CaptionTextBlockStyle}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <TextBlock x:Name="VariantText" VerticalAlignment="Center" Style="{StaticResource CaptionSecondaryStyle}" />
+                    </StackPanel>
                 </StackPanel>
-                <Border x:Name="ActivePill" Grid.Column="2" Style="{StaticResource AccentPillStyle}"
-                        VerticalAlignment="Top" Visibility="Collapsed">
-                    <TextBlock Text="Active" FontSize="12" FontWeight="SemiBold" />
-                </Border>
             </Grid>
 
-            <StackPanel Spacing="2">
-                <TextBlock x:Name="BehaviorText" FontSize="14" TextWrapping="Wrap" />
-                <TextBlock x:Name="LanguageText" FontSize="12" TextWrapping="Wrap"
-                           Foreground="{ThemeResource SecondaryTextBrush}" />
+            <StackPanel Spacing="4">
+                <TextBlock x:Name="BehaviorText" Style="{StaticResource BodyTextBlockStyle}" TextWrapping="Wrap" />
+                <TextBlock x:Name="LanguageText" TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}" />
             </StackPanel>
 
             <Grid ColumnSpacing="24">
@@ -45,32 +43,26 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-                <StackPanel Spacing="2">
-                    <TextBlock Text="Download" FontSize="12" Foreground="{ThemeResource SecondaryTextBrush}" />
-                    <TextBlock x:Name="DownloadSizeText" FontSize="16" />
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Download" Style="{StaticResource CaptionSecondaryStyle}" />
+                    <TextBlock x:Name="DownloadSizeText" Style="{StaticResource BodyTextBlockStyle}" />
                 </StackPanel>
-                <StackPanel Grid.Column="1" Spacing="2">
-                    <TextBlock Text="Memory estimate" FontSize="12" Foreground="{ThemeResource SecondaryTextBrush}" />
-                    <TextBlock x:Name="MemoryText" FontSize="16" />
+                <StackPanel Grid.Column="1" Spacing="4">
+                    <TextBlock Text="Memory" Style="{StaticResource CaptionSecondaryStyle}"
+                               ToolTipService.ToolTip="Admission estimate used before loading, not measured usage." />
+                    <TextBlock x:Name="MemoryText" Style="{StaticResource BodyTextBlockStyle}" />
                 </StackPanel>
-                <StackPanel Grid.Column="2" Spacing="2">
-                    <TextBlock Text="License" FontSize="12" Foreground="{ThemeResource SecondaryTextBrush}" />
-                    <TextBlock x:Name="LicenseText" FontSize="16" TextTrimming="CharacterEllipsis" />
+                <StackPanel Grid.Column="2" Spacing="4">
+                    <TextBlock Text="License" Style="{StaticResource CaptionSecondaryStyle}" />
+                    <TextBlock x:Name="LicenseText" Style="{StaticResource BodyTextBlockStyle}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
                 </StackPanel>
             </Grid>
 
-            <Border Style="{StaticResource StatusPillStyle}" HorizontalAlignment="Left">
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <Ellipse x:Name="StateDot" Width="8" Height="8" VerticalAlignment="Center" />
-                    <TextBlock x:Name="StateText" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap"
-                               VerticalAlignment="Center" />
-                </StackPanel>
-            </Border>
 
             <ProgressBar x:Name="DownloadProgress" Minimum="0" Maximum="100" Visibility="Collapsed"
                          AutomationProperties.Name="Model download progress" />
-            <TextBlock x:Name="ProgressText" FontSize="12" TextWrapping="Wrap" Visibility="Collapsed"
-                       Foreground="{ThemeResource SecondaryTextBrush}" />
+            <TextBlock x:Name="ProgressText" TextWrapping="Wrap" Visibility="Collapsed"
+                       Style="{StaticResource CaptionSecondaryStyle}" />
 
             <InfoBar x:Name="ErrorInfo" Severity="Error" IsOpen="False" IsClosable="False"
                      Title="This model needs attention" />
@@ -90,7 +82,7 @@
                                     <TextBlock x:Name="DescriptionText" TextWrapping="Wrap" />
                                     <TextBlock x:Name="CapabilityText" TextWrapping="Wrap" />
                                     <TextBlock Text="Pause keeps partial files for Resume. Dictation can continue during downloads; installation waits until dictation finishes."
-                                               TextWrapping="Wrap" Foreground="{ThemeResource SecondaryTextBrush}" />
+                                               TextWrapping="Wrap" Style="{StaticResource SecondaryTextStyle}" />
                                     <TextBlock x:Name="LicenseDetailText" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
                                     <TextBlock x:Name="SourceText" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
                                     <TextBlock x:Name="IntegrityText" TextWrapping="Wrap" IsTextSelectionEnabled="True" />

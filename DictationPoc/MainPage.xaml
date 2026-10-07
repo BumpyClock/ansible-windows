@@ -22,8 +22,8 @@
                         <StackPanel>
                             <Grid ColumnSpacing="16">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                                <StackPanel Spacing="2" VerticalAlignment="Center">
-                                    <TextBlock Text="Speech model" FontSize="14" FontWeight="SemiBold" />
+                                <StackPanel Spacing="4" VerticalAlignment="Center">
+                                    <TextBlock Text="Speech model" Style="{StaticResource BodyStrongTextBlockStyle}" />
                                     <TextBlock Text="The model used for dictation and file transcription."
                                                Style="{StaticResource CaptionSecondaryStyle}" />
                                 </StackPanel>
@@ -31,11 +31,11 @@
                                           AutomationProperties.Name="Speech model"
                                           SelectionChanged="ModelChanged" PlaceholderText="No installed models" />
                             </Grid>
-                            <Border Height="1" Margin="0,12" Background="{ThemeResource BorderBrush}" />
+                            <Border Height="1" Margin="0,12" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
                             <Grid ColumnSpacing="16">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                                <StackPanel Spacing="2" VerticalAlignment="Center">
-                                    <TextBlock Text="Language hint" FontSize="14" FontWeight="SemiBold" />
+                                <StackPanel Spacing="4" VerticalAlignment="Center">
+                                    <TextBlock Text="Language hint" Style="{StaticResource BodyStrongTextBlockStyle}" />
                                     <TextBlock Text="Leave blank to use the model default."
                                                Style="{StaticResource CaptionSecondaryStyle}" />
                                 </StackPanel>
@@ -43,7 +43,7 @@
                                          AutomationProperties.Name="Language hint" PlaceholderText="Model default"
                                          TextChanged="LanguageChanged" />
                             </Grid>
-                            <Border Height="1" Margin="0,12" Background="{ThemeResource BorderBrush}" />
+                            <Border Height="1" Margin="0,12" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
                             <Expander Header="Model details" AutomationProperties.AutomationId="ModelDetails"
                                       HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                                 <Expander.Resources>
@@ -79,8 +79,8 @@
                         <StackPanel>
                             <Grid ColumnSpacing="16">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                                <StackPanel Spacing="2" VerticalAlignment="Center">
-                                    <TextBlock Text="Activation mode" FontSize="14" FontWeight="SemiBold" />
+                                <StackPanel Spacing="4" VerticalAlignment="Center">
+                                    <TextBlock Text="Activation mode" Style="{StaticResource BodyStrongTextBlockStyle}" />
                                     <TextBlock Text="On: hold the shortcut while you speak. Off: press it once to start and again to finish."
                                                Style="{StaticResource CaptionSecondaryStyle}" />
                                 </StackPanel>
@@ -90,11 +90,11 @@
                                               OnContent="Push-to-talk (hold)" OffContent="Toggle (press twice)"
                                               Toggled="DictationModeChanged" />
                             </Grid>
-                            <Border Height="1" Margin="0,12" Background="{ThemeResource BorderBrush}" />
+                            <Border Height="1" Margin="0,12" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
                             <Grid ColumnSpacing="16">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                                <StackPanel Spacing="2" VerticalAlignment="Center">
-                                    <TextBlock Text="Shortcut" FontSize="14" FontWeight="SemiBold" />
+                                <StackPanel Spacing="4" VerticalAlignment="Center">
+                                    <TextBlock Text="Shortcut" Style="{StaticResource BodyStrongTextBlockStyle}" />
                                     <TextBlock x:Name="ShortcutHint" Style="{StaticResource CaptionSecondaryStyle}" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
@@ -144,16 +144,16 @@
                         <StackPanel Spacing="12">
                             <Grid ColumnSpacing="16">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                                <StackPanel Spacing="2" VerticalAlignment="Center">
-                                    <TextBlock Text="Local usage statistics" FontSize="14" FontWeight="SemiBold" />
+                                <StackPanel Spacing="4" VerticalAlignment="Center">
+                                    <TextBlock Text="Local usage statistics" Style="{StaticResource BodyStrongTextBlockStyle}" />
                                     <TextBlock Text="Saves session dates, model IDs, word counts, and timing. Audio and transcripts are never saved."
                                                Style="{StaticResource CaptionSecondaryStyle}" />
                                 </StackPanel>
                                 <ToggleSwitch x:Name="UsageToggle" Grid.Column="1" VerticalAlignment="Center"
                                               AutomationProperties.Name="Local usage statistics" Toggled="UsageToggled" />
                             </Grid>
-                            <TextBlock x:Name="UsagePathText" FontSize="12" TextTrimming="CharacterEllipsis"
-                                       IsTextSelectionEnabled="True" Style="{StaticResource SecondaryTextStyle}"
+                            <TextBlock x:Name="UsagePathText" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                       IsTextSelectionEnabled="True" Style="{StaticResource CaptionSecondaryStyle}"
                                        AutomationProperties.Name="Usage statistics file" />
                         </StackPanel>
                     </Border>
@@ -162,21 +162,21 @@
                 <Expander Header="Recognition tools" AutomationProperties.AutomationId="RecognitionTools"
                           HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                     <StackPanel Spacing="12">
-                        <TextBlock x:Name="ModelNote" TextWrapping="Wrap" Foreground="{ThemeResource SecondaryTextBrush}" />
-                        <StackPanel Orientation="Horizontal" Spacing="10">
+                        <TextBlock x:Name="ModelNote" TextWrapping="Wrap" Style="{StaticResource SecondaryTextStyle}" />
+                        <StackPanel Orientation="Horizontal" Spacing="12">
                             <Button x:Name="RecordButton" Content="Start dictation" Click="RecordClicked"
                                     Style="{StaticResource AccentButtonStyle}" MinHeight="44" />
                             <Button x:Name="FileButton" Content="Transcribe WAV" Click="FileClicked" MinHeight="44" />
                             <Button x:Name="ReplayButton" Content="Replay WAV live" Click="ReplayClicked" MinHeight="44" />
                         </StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="10">
+                        <StackPanel Orientation="Horizontal" Spacing="12">
                             <Button x:Name="SampleButton" Content="Verify public sample" Click="SampleClicked" MinHeight="40" />
                             <Button x:Name="CancelButton" Content="Cancel" Click="CancelClicked" MinHeight="40" />
                         </StackPanel>
                         <Grid>
                             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                             <TextBlock x:Name="DetailsText" Text="0 words / 00:00" VerticalAlignment="Center"
-                                       Foreground="{ThemeResource SecondaryTextBrush}" />
+                                       Style="{StaticResource SecondaryTextStyle}" />
                             <Button x:Name="CopyButton" Grid.Column="1" Content="Copy transcript" Click="CopyClicked" />
                         </Grid>
                         <TextBox x:Name="TranscriptBox" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap"

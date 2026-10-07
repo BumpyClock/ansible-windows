@@ -3,7 +3,11 @@ namespace DictationPoc.Core;
 public sealed record FloatingPreviewPresentation(
     string Status, string Hint, bool IsTerminal)
 {
-    public const double WaveformWidth = 160;
+    public const double WaveformWidth = 220;
+    public const double WaveformHeight = 56;
+    public const int WaveformBarCount = 24;
+    public const double BarMinHeight = 4;
+    public const double BarMaxHeight = 28;
 
     public static FloatingPreviewPresentation From(SessionSnapshot state)
     {
@@ -38,6 +42,9 @@ public sealed record FloatingPreviewPresentation(
 
     public static double MeterLevel(double pcmLevel) =>
         double.IsFinite(pcmLevel) ? Math.Clamp(pcmLevel * 8, 0, 1) : 0;
+
+    public static double BarHeight(double meterLevel) =>
+        BarMinHeight + Math.Clamp(meterLevel, 0, 1) * (BarMaxHeight - BarMinHeight);
 
     public static PreviewPlacement Place(
         int workX, int workY, int workWidth, int workHeight, double scale, double contentWidth, double contentHeight)

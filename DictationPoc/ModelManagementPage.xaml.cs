@@ -85,7 +85,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
     private void ManagerChanged()
     {
         if (!_closed && !DispatcherQueue.TryEnqueue(() => { if (_loaded && !_closed) { Render(); } }))
-            System.Diagnostics.Debug.WriteLine("Local Voice: model view dispatcher is closed.");
+            System.Diagnostics.Debug.WriteLine("Ansible: model view dispatcher is closed.");
     }
 
     private void OnModelsGridSizeChanged(object sender, SizeChangedEventArgs args) =>

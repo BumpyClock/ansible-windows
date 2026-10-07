@@ -44,7 +44,7 @@ internal sealed class UiSessionObserver : IDisposable
         if (_dispatcher.HasThreadAccess) { action(); }
         else if (!_dispatcher.TryEnqueue(() => { if (!_disposed) { action(); } }))
         {
-            Debug.WriteLine("Local Voice: the UI dispatcher is closed; a late view update was discarded.");
+            Debug.WriteLine("Ansible: the UI dispatcher is closed; a late view update was discarded.");
         }
     }
 

@@ -337,7 +337,7 @@ public sealed partial class MainWindow : Window
             if (_captureTask is { } capture)
             {
                 try { await capture; }
-                catch (Exception error) { Debug.WriteLine($"Local Voice: target inspection failed during close: {error.Message}"); }
+                catch (Exception error) { Debug.WriteLine($"Ansible: target inspection failed during close: {error.Message}"); }
             }
             if (_deliveryTask is not null) { await _deliveryTask; }
             if (_floating is not null) { await _floating.ClosePreviewAsync(); }
@@ -346,7 +346,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception error)
         {
-            Debug.WriteLine($"Local Voice: native shutdown needs recovery: {error.Message}");
+            Debug.WriteLine($"Ansible: native shutdown needs recovery: {error.Message}");
             SidebarStatus.Text = $"Close failed. {error.Message} Try closing the window again.";
             _closing = false;
         }

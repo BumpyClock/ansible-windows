@@ -122,13 +122,21 @@ public sealed class FloatingPreviewTests
     }
 
     [Theory]
-    [InlineData(1, 880, 968, 160, 56)]
-    [InlineData(1.5, 840, 932, 240, 84)]
+    [InlineData(1, 850, 968, 220, 56)]
+    [InlineData(1.5, 795, 932, 330, 84)]
     public void WaveformOnlyPillUsesCompactNativeBounds(
         double scale, int x, int y, int width, int height) =>
         Assert.Equal(new PreviewPlacement(x, y, width, height),
             FloatingPreviewPresentation.Place(0, 0, 1920, 1040, scale,
-                FloatingPreviewPresentation.WaveformWidth, 56));
+                FloatingPreviewPresentation.WaveformWidth, FloatingPreviewPresentation.WaveformHeight));
+
+    [Theory]
+    [InlineData(0, 4)]
+    [InlineData(0.5, 16)]
+    [InlineData(1, 28)]
+    [InlineData(2, 28)]
+    public void SilentBarsStayVisibleAndLoudBarsStayInsideThePill(double level, double expected) =>
+        Assert.Equal(expected, FloatingPreviewPresentation.BarHeight(level));
 
     private static SessionSnapshot State(DictationPhase phase) => new()
     {

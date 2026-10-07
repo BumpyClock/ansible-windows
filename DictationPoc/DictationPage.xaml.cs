@@ -1,7 +1,9 @@
 using DictationPoc.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Text;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Shapes;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.UI.ViewManagement;
@@ -11,20 +13,18 @@ namespace DictationPoc;
 public sealed partial class DictationPage : Page
 {
     private const int LevelBarCount = 24;
-    private static readonly TimeSpan NoticeDuration = TimeSpan.FromSeconds(6);
+    private static readonly TimeSpan CopiedDuration = TimeSpan.FromSeconds(2);
 
     private readonly DictationSession _session;
     private readonly UISettings _uiSettings = new();
     private readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromMilliseconds(250) };
-    private readonly DispatcherTimer _noticeTimer = new() { Interval = NoticeDuration };
+    private readonly DispatcherTimer _copiedTimer = new() { Interval = CopiedDuration };
     private readonly List<Rectangle> _levelBars = [];
     private readonly double[] _levels = new double[LevelBarCount];
     private SessionSnapshot _state;
     private UiSessionObserver? _observer;
     private IReadOnlyList<AudioModel>? _models;
-    private SessionNotice? _surfacedNotice;
     private SessionNotice? _dismissedNotice;
-    private string? _renderedShortcut;
     private bool _pulsing;
     private bool _rendering;
 
@@ -45,7 +45,7 @@ public sealed partial class DictationPage : Page
             LevelBars.Children.Add(bar);
         }
         _clock.Tick += (_, _) => RenderClock();
-        _noticeTimer.Tick += (_, _) => { _noticeTimer.Stop(); StatusInfo.IsOpen = false; };
+        _copiedTimer.Tick += (_, _) => { _copiedTimer.Stop(); CopyLabel.Text = "Copy"; };
         Loaded += (_, _) =>
         {
             _observer = new UiSessionObserver(session, DispatcherQueue, state => { _state = state; Render(); }, UpdateLevel);
@@ -55,7 +55,7 @@ public sealed partial class DictationPage : Page
         {
             _observer?.Dispose(); _observer = null;
             _clock.Stop();
-            if (_noticeTimer.IsEnabled) { _noticeTimer.Stop(); StatusInfo.IsOpen = false; }
+            if (_copiedTimer.IsEnabled) { _copiedTimer.Stop(); CopyLabel.Text = "Copy"; }
             StopPulse();
         };
     }
@@ -74,7 +74,6 @@ public sealed partial class DictationPage : Page
             ModelBox.IsEnabled = _state.Phase == DictationPhase.Ready;
             RenderRecordControl();
             RenderStatus();
-            RenderShortcut();
             RenderClock();
             RenderNotice();
             ModelNote.Text = _state.SelectedModel?.Mode == "offline"
@@ -121,13 +120,13 @@ public sealed partial class DictationPage : Page
     private void RenderStatus()
     {
         var preview = _state.SelectedModel?.Preview;
+        var settings = _state.Settings;
         var (title, detail) = _state.Phase switch
         {
             DictationPhase.Disconnected => ("No speech model loaded",
                 _state.Models.Count == 0 ? "Download a model in Speech models to start." : _state.Notice.Message),
             DictationPhase.Connecting => ("Loading models", "Opening the native backend."),
-            DictationPhase.Ready when _state.CanStart => ("Ready to dictate",
-                "Click the microphone to dictate here, or use the shortcut in any app."),
+            DictationPhase.Ready when _state.CanStart => ("Ready to dictate", ""),
             DictationPhase.Ready when _state.SelectedModel is null => ("Choose a speech model", "Pick an installed model to begin."),
             DictationPhase.Ready => ("File transcription only",
                 "This model does not take microphone input. Choose a streaming model to dictate."),
@@ -135,9 +134,9 @@ public sealed partial class DictationPage : Page
             DictationPhase.Recording when _state.IsReplay => ("Replaying WAV", "No microphone is open."),
             DictationPhase.Recording => ("Listening", preview switch
             {
-                "live" => "Text appears as you speak. Click stop when you are done.",
-                "buffered" => "Text arrives in chunks. Click stop when you are done.",
-                _ => "Text appears after you finish. Click stop when you are done."
+                "live" => "Text appears as you speak.",
+                "buffered" => "Text arrives in chunks.",
+                _ => "Text appears after you finish."
             }),
             DictationPhase.Finishing => ("Finishing", "Recognizing the last audio."),
             DictationPhase.Transcribing => ("Transcribing file", _state.Notice.Message),
@@ -147,36 +146,11 @@ public sealed partial class DictationPage : Page
             _ => ("Closing", "Releasing native resources.")
         };
         StatusTitle.Text = title;
-        StatusDetail.Text = detail;
-    }
-
-    private void RenderShortcut()
-    {
-        var settings = _state.Settings;
-        ShortcutVerb.Text = settings.PushToTalk ? "Hold" : "Press";
-        ShortcutSuffix.Text = settings.PushToTalk ? "in any app, release to finish" : "in any app, again to finish";
-        var display = settings.Shortcut.DisplayText;
-        if (display == _renderedShortcut) { return; }
-        _renderedShortcut = display;
-        ShortcutKeys.Children.Clear();
-        var keys = display.Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        for (var index = 0; index < keys.Length; index++)
-        {
-            if (index > 0)
-            {
-                ShortcutKeys.Children.Add(new TextBlock
-                {
-                    Text = "+", FontSize = 12, VerticalAlignment = VerticalAlignment.Center,
-                    Style = (Style)Application.Current.Resources["SecondaryTextStyle"]
-                });
-            }
-            ShortcutKeys.Children.Add(new Border
-            {
-                Style = (Style)Application.Current.Resources["KeycapStyle"],
-                Child = new TextBlock { Text = keys[index], Style = (Style)Application.Current.Resources["KeycapTextStyle"] }
-            });
-        }
-        AutomationProperties.SetName(ShortcutRow, $"{ShortcutVerb.Text} {display} {ShortcutSuffix.Text}");
+        StatusDetail.Inlines.Clear();
+        if (detail.Length > 0) { StatusDetail.Inlines.Add(new Run { Text = detail }); return; }
+        StatusDetail.Inlines.Add(new Run { Text = settings.PushToTalk ? "Click the microphone, or hold " : "Click the microphone, or press " });
+        StatusDetail.Inlines.Add(new Run { Text = settings.Shortcut.DisplayText, FontWeight = FontWeights.SemiBold });
+        StatusDetail.Inlines.Add(new Run { Text = settings.PushToTalk ? " in any app and release to finish." : " in any app, then press it again to finish." });
     }
 
     private void RenderClock()
@@ -194,41 +168,22 @@ public sealed partial class DictationPage : Page
             ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    // Warnings and errors stay until dismissed. Success and information notices are shown once for a few
-    // seconds while the page is idle; during live work the hero status already describes the state.
+    // Only warnings and errors interrupt. Success and information are already reflected by the hero status,
+    // the transcript, or the control that was used.
     private void RenderNotice()
     {
         var notice = _state.Notice;
         var attention = notice.Kind is NoticeKind.Warning or NoticeKind.Error;
-        StatusInfo.Severity = notice.Kind switch
-        {
-            NoticeKind.Success => InfoBarSeverity.Success,
-            NoticeKind.Warning => InfoBarSeverity.Warning,
-            NoticeKind.Error => InfoBarSeverity.Error,
-            _ => InfoBarSeverity.Informational
-        };
-        if (ReferenceEquals(notice, _dismissedNotice)) { StatusInfo.IsOpen = false; return; }
-        if (ReferenceEquals(notice, _surfacedNotice)) { return; }
-        _surfacedNotice = notice;
-        _noticeTimer.Stop();
+        if (!attention || ReferenceEquals(notice, _dismissedNotice)) { StatusInfo.IsOpen = false; return; }
+        StatusInfo.Severity = notice.Kind == NoticeKind.Error ? InfoBarSeverity.Error : InfoBarSeverity.Warning;
         StatusInfo.Title = notice.Title;
         StatusInfo.Message = notice.Message;
-        if (attention)
-        {
-            StatusInfo.IsOpen = true;
-        }
-        else if (_state.IsIdle || _state.Phase == DictationPhase.RecoveryRequired)
-        {
-            StatusInfo.IsOpen = true;
-            _noticeTimer.Start();
-        }
-        else { StatusInfo.IsOpen = false; }
+        StatusInfo.IsOpen = true;
     }
 
     private void StatusInfoClosing(InfoBar sender, InfoBarClosingEventArgs args)
     {
-        if (args.Reason == InfoBarCloseReason.CloseButton) { _dismissedNotice = _surfacedNotice; }
-        _noticeTimer.Stop();
+        if (args.Reason == InfoBarCloseReason.CloseButton) { _dismissedNotice = _state.Notice; }
     }
 
     private void StartPulse()
@@ -291,7 +246,9 @@ public sealed partial class DictationPage : Page
             var package = new DataPackage();
             package.SetText(_state.Transcript);
             Clipboard.SetContent(package);
-            _session.Notify(NoticeKind.Success, "Copied", "The transcript is ready to paste.");
+            CopyLabel.Text = "Copied";
+            _copiedTimer.Stop();
+            _copiedTimer.Start();
         }
         catch (Exception error) { _session.ReportUiError(error); }
     }

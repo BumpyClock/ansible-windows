@@ -273,7 +273,7 @@ public sealed class DictationSession
             _operation = null;
             var notice = kind switch
             {
-                SessionOutcomeKind.Cancelled => new SessionNotice(NoticeKind.Warning, "Cancelled", "Partial text is retained; this attempt is not counted."),
+                SessionOutcomeKind.Cancelled => new SessionNotice(NoticeKind.Information, "Cancelled", "Partial text is retained; this attempt is not counted."),
                 SessionOutcomeKind.TimedOut => new(NoticeKind.Warning, "Timed out", "The operation exceeded its deadline and is not counted."),
                 SessionOutcomeKind.Failed => new(NoticeKind.Error, "Operation failed", errorResult?.Message ?? "The operation failed."),
                 _ when operation.UsageWarning is not null => new(NoticeKind.Warning, "Transcript ready; statistics unavailable", operation.UsageWarning),

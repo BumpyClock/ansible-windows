@@ -9,7 +9,6 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Shapes;
 using Windows.Foundation;
 using Windows.UI.ViewManagement;
 
@@ -21,8 +20,7 @@ public sealed partial class FloatingDictationWindow : Window
     private SessionSnapshot _state;
     private readonly UiSessionObserver _observer;
     private readonly MainWindow _owner;
-    private readonly List<Rectangle> _bars = [];
-    private readonly double[] _levels = new double[20];
+    private readonly double[] _levels = new double[FloatingPreviewPresentation.WaveformBarCount];
     private readonly UISettings _settings = new();
     private readonly AccessibilitySettings _accessibility = new();
     private XamlRoot? _xamlRoot;
@@ -59,17 +57,6 @@ public sealed partial class FloatingDictationWindow : Window
         {
             var noBorder = unchecked((int)0xFFFFFFFE);
             Marshal.ThrowExceptionForHR(DwmSetWindowAttribute(handle, 34, ref noBorder, 4));
-        }
-        for (var index = 0; index < _levels.Length; index++)
-        {
-            var bar = new Rectangle
-            {
-                Width = 3, Height = 3, RadiusX = 1.5, RadiusY = 1.5,
-                Style = (Style)PreviewRoot.Resources["CompactWaveformBarStyle"],
-                VerticalAlignment = VerticalAlignment.Center
-            };
-            _bars.Add(bar);
-            WaveBars.Children.Add(bar);
         }
         if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041))
         {
@@ -215,7 +202,7 @@ public sealed partial class FloatingDictationWindow : Window
                 AppWindow.Resize(new Windows.Graphics.SizeInt32(bounds.Width, bounds.Height));
             }
             var pillWidth = (int)Math.Ceiling(PillBorder.Width * scale);
-            var pillHeight = (int)Math.Min(bounds.Height, Math.Ceiling(56 * scale));
+            var pillHeight = (int)Math.Min(bounds.Height, Math.Ceiling(FloatingPreviewPresentation.WaveformHeight * scale));
             var shape = ((bounds.Width - pillWidth) / 2, bounds.Height - pillHeight, pillWidth, pillHeight);
             if (_windowShape != shape)
             {
@@ -240,7 +227,8 @@ public sealed partial class FloatingDictationWindow : Window
             _pill.Configure(bounds.X + shape.Item1, bounds.Y + shape.Item2, pillWidth, pillHeight,
                 scale, foreground, PreviewRoot.ActualTheme == ElementTheme.Dark, _accessibility.HighContrast,
                 _settings.AdvancedEffectsEnabled);
-            _pill.UpdateLevels(_levels);
+            _pill.SetRecording(_state.Phase == DictationPhase.Recording && !_state.IsReplay);
+            _pill.UpdateLevels(_levels, !_reducedMotion);
         }
         finally { _sizing = false; }
     }
@@ -296,9 +284,8 @@ public sealed partial class FloatingDictationWindow : Window
 
     private void PaintWaveform()
     {
-        for (var index = 0; index < _bars.Count; index++) { _bars[index].Height = 3 + _levels[index] * 21; }
         AutomationProperties.SetName(WaveBars, _reducedMotion ? "Current real audio energy" : "Real audio energy history");
-        _pill?.UpdateLevels(_levels);
+        _pill?.UpdateLevels(_levels, !_reducedMotion);
     }
 
     private static void SetStyle(nint handle, int index, nint style)
@@ -319,11 +306,19 @@ public sealed partial class FloatingDictationWindow : Window
         private readonly Windows.UI.Composition.SpriteVisual _backdrop;
         private readonly Windows.UI.Composition.CompositionRoundedRectangleGeometry _backdropGeometry;
         private readonly List<Windows.UI.Composition.CompositionSpriteShape> _bars = [];
+        private readonly Windows.UI.Composition.CompositionSpriteShape _dot;
+        private readonly Windows.UI.Composition.CompositionEllipseGeometry _dotGeometry;
+        private readonly Windows.UI.Composition.ImplicitAnimationCollection _barMotion;
         private readonly Windows.System.DispatcherQueueController? _queue;
         private readonly nint _handle;
         private readonly Action<Task> _retainCleanup;
+        private Windows.UI.Composition.CompositionColorBrush? _dotBrush;
         private bool _disposed;
+        private bool _recording;
+        private bool _animated;
         private double _scale;
+        // Logical pixels. The dot sits left of the bar row and the group is centred in the pill.
+        private const double BarWidth = 3, BarGap = 3, DotDiameter = 8, DotGap = 10;
         private (int Width, int Height, double Scale, Windows.UI.Color Foreground, bool Dark, bool Contrast, bool Effects) _style;
 
         public NativeCompositionPill(nint owner, Action dismiss, Action<Task> retainCleanup)
@@ -369,12 +364,25 @@ public sealed partial class FloatingDictationWindow : Window
                 _geometry = _compositor.CreateRoundedRectangleGeometry();
                 _outline = _compositor.CreateSpriteShape(_geometry);
                 _visual.Shapes.Add(_outline);
-                for (var index = 0; index < 20; index++)
+                _dotGeometry = _compositor.CreateEllipseGeometry();
+                _dot = _compositor.CreateSpriteShape(_dotGeometry);
+                _visual.Shapes.Add(_dot);
+                for (var index = 0; index < FloatingPreviewPresentation.WaveformBarCount; index++)
                 {
                     var geometry = _compositor.CreateRoundedRectangleGeometry();
                     var shape = _compositor.CreateSpriteShape(geometry);
                     _bars.Add(shape);
                     _visual.Shapes.Add(shape);
+                }
+                // Each bar geometry grows around the shape's vertical centre, so Size and Offset move together.
+                _barMotion = _compositor.CreateImplicitAnimationCollection();
+                foreach (var property in (string[])["Size", "Offset"])
+                {
+                    var animation = _compositor.CreateVector2KeyFrameAnimation();
+                    animation.Target = property;
+                    animation.InsertExpressionKeyFrame(1, "this.FinalValue");
+                    animation.Duration = TimeSpan.FromMilliseconds(80);
+                    _barMotion[property] = animation;
                 }
             }
             catch
@@ -395,9 +403,11 @@ public sealed partial class FloatingDictationWindow : Window
             {
                 _style = style;
                 _visual.Size = new Vector2(width, height);
-                _geometry.Offset = new Vector2((float)scale);
-                _geometry.Size = new Vector2(width - (float)(2 * scale), height - (float)(2 * scale));
-                _geometry.CornerRadius = new Vector2((float)(height / 2.0 - scale));
+                // Inset the outline by half the 1px hairline so the stroke stays inside the pill.
+                var inset = (float)(scale / 2);
+                _geometry.Offset = new Vector2(inset);
+                _geometry.Size = new Vector2(width - 2 * inset, height - 2 * inset);
+                _geometry.CornerRadius = new Vector2(height / 2f - inset);
                 var backdrop = !contrast && effects && OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000);
                 _backdrop.Size = new Vector2(width, height);
                 _backdropGeometry.Size = _backdrop.Size;
@@ -409,13 +419,36 @@ public sealed partial class FloatingDictationWindow : Window
                     _backdrop.Brush = _compositor.CreateHostBackdropBrush();
                 }
                 else { _backdrop.Brush = _compositor.CreateColorBrush(Windows.UI.Color.FromArgb(0, 0, 0, 0)); }
+                // Translucent fill and a faint hairline over the blurred host backdrop. Without the
+                // backdrop, and in high contrast, use an opaque fill and the window text colour.
                 _outline.FillBrush = _compositor.CreateColorBrush(contrast
                     ? new UISettings().GetColorValue(UIColorType.Background)
-                    : dark ? Windows.UI.Color.FromArgb(backdrop ? (byte)230 : (byte)255, 35, 35, 35)
-                    : Windows.UI.Color.FromArgb(backdrop ? (byte)235 : (byte)255, 247, 247, 247));
-                _outline.StrokeBrush = _compositor.CreateColorBrush(foreground);
-                _outline.StrokeThickness = (float)(2 * scale);
-                foreach (var bar in _bars) { bar.FillBrush = _compositor.CreateColorBrush(foreground); }
+                    : dark ? Windows.UI.Color.FromArgb(backdrop ? (byte)0xCC : (byte)0xFF, 0x20, 0x20, 0x20)
+                    : Windows.UI.Color.FromArgb(backdrop ? (byte)0xD9 : (byte)0xFF, 0xF7, 0xF7, 0xF7));
+                _outline.StrokeBrush = _compositor.CreateColorBrush(!backdrop ? foreground
+                    : dark ? Windows.UI.Color.FromArgb(0x1A, 0xFF, 0xFF, 0xFF)
+                    : Windows.UI.Color.FromArgb(0x14, 0x00, 0x00, 0x00));
+                _outline.StrokeThickness = (float)scale;
+                var barBrush = _compositor.CreateColorBrush(contrast ? foreground
+                    : dark ? Windows.UI.Color.FromArgb(0xFF, 0x79, 0xCF, 0xC0)
+                    : Windows.UI.Color.FromArgb(0xFF, 0x18, 0x5C, 0x5E));
+                _dotBrush = _compositor.CreateColorBrush(contrast ? foreground
+                    : dark ? Windows.UI.Color.FromArgb(0xFF, 0xFF, 0x99, 0xA4)
+                    : Windows.UI.Color.FromArgb(0xFF, 0xC4, 0x2B, 0x1C));
+                _dot.FillBrush = _recording ? _dotBrush : null;
+                var rowWidth = FloatingPreviewPresentation.WaveformBarCount * (BarWidth + BarGap) - BarGap;
+                var left = (width - (DotDiameter + DotGap + rowWidth) * scale) / 2;
+                var middle = height / 2f;
+                _dotGeometry.Radius = new Vector2((float)(DotDiameter / 2 * scale));
+                _dotGeometry.Center = new Vector2((float)(left + DotDiameter / 2 * scale), middle);
+                for (var index = 0; index < _bars.Count; index++)
+                {
+                    _bars[index].FillBrush = barBrush;
+                    _bars[index].Offset = new Vector2(
+                        (float)(left + (DotDiameter + DotGap + index * (BarWidth + BarGap)) * scale), middle);
+                    ((Windows.UI.Composition.CompositionRoundedRectangleGeometry)_bars[index].Geometry).CornerRadius =
+                        new Vector2((float)(BarWidth / 2 * scale));
+                }
             }
             if (SetWindowPos(_handle, -1, x, y, width, height, 0x10) == 0)
             {
@@ -423,18 +456,26 @@ public sealed partial class FloatingDictationWindow : Window
             }
         }
 
-        public void UpdateLevels(double[] levels)
+        public void UpdateLevels(double[] levels, bool animate)
         {
             if (_disposed || _scale == 0) { return; }
-            var left = (_visual.Size.X - (20 * 3 + 19 * 3) * _scale) / 2;
+            var motionChanged = _animated != animate;
+            _animated = animate;
             for (var index = 0; index < _bars.Count; index++)
             {
-                var height = (3 + levels[index] * 21) * _scale;
+                var height = (float)(FloatingPreviewPresentation.BarHeight(levels[index]) * _scale);
                 var geometry = (Windows.UI.Composition.CompositionRoundedRectangleGeometry)_bars[index].Geometry;
-                geometry.Size = new Vector2((float)(3 * _scale), (float)height);
-                geometry.CornerRadius = new Vector2((float)(1.5 * _scale));
-                _bars[index].Offset = new Vector2((float)(left + index * 6 * _scale), (float)((_visual.Size.Y - height) / 2));
+                if (motionChanged) { geometry.ImplicitAnimations = animate ? _barMotion : null; }
+                geometry.Size = new Vector2((float)(BarWidth * _scale), height);
+                geometry.Offset = new Vector2(0, -height / 2);
             }
+        }
+
+        public void SetRecording(bool recording)
+        {
+            if (_disposed || _recording == recording) { return; }
+            _recording = recording;
+            _dot.FillBrush = recording ? _dotBrush : null;
         }
 
         public void SetAccessibleText(string text) => NativeOverlayWindow.SetAccessibleText(_handle, text);
@@ -500,7 +541,7 @@ public sealed partial class FloatingDictationWindow : Window
         public static nint CreateCompositionWindow(nint owner, Action dismiss)
         {
             EnsureWindowClass();
-            var handle = CreateWindowEx(0x08200088, ClassName, "Local Voice overlay", 0x80000000,
+            var handle = CreateWindowEx(0x08200088, ClassName, "Ansible overlay", 0x80000000,
                 0, 0, 1, 1, owner, 0, GetModuleHandle(null), 0);
             if (handle == 0) { throw new Win32Exception(Marshal.GetLastPInvokeError()); }
             PillClicks.Add(handle, dismiss);

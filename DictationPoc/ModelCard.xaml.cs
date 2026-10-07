@@ -41,7 +41,7 @@ public sealed partial class ModelCard : UserControl
         _name = entry.DisplayName ?? entry.Id;
         NameText.Text = _name;
         AutomationProperties.SetName(NameText, _name);
-        VariantText.Text = $"{ModeLabel(entry.Mode)} \u00B7 {entry.Precision ?? "Precision not specified"}";
+        VariantText.Text = $"\u00B7 {ModeLabel(entry.Mode)} \u00B7 {entry.Precision ?? "Precision not specified"}";
         BehaviorText.Text = BehaviorLabel(entry);
         LanguageText.Text = entry.Languages ?? "Languages not specified";
         DownloadSizeText.Text = FormatBytes(entry.Bytes);
@@ -86,12 +86,13 @@ public sealed partial class ModelCard : UserControl
         var entry = snapshot.Model;
         var state = snapshot.State;
 
-        StateText.Text = snapshot.Supported ? StateLabel(state) : "Unsupported by this compiled backend";
+        StateText.Text = !snapshot.Supported ? "Unsupported" : active ? "In use" : StateLabel(state);
         _stateDotBrushKey = !snapshot.Supported || state == ModelInstallState.Failed ? "SystemFillColorCriticalBrush"
-            : state == ModelInstallState.NotInstalled ? "SecondaryTextBrush"
-            : "AccentBrush";
+            : state == ModelInstallState.NotInstalled ? "TextFillColorSecondaryBrush"
+            : "AccentGraphicBrush";
         ApplyStateDot();
-        ActivePill.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
+        CardBorder.BorderBrush = (Brush)Application.Current.Resources[active ? "AccentGraphicBrush" : "CardStrokeColorDefaultBrush"];
+        CardBorder.BorderThickness = new Thickness(active ? 1.5 : 1);
 
         var showBar = state is ModelInstallState.Downloading or ModelInstallState.Paused or ModelInstallState.Verifying;
         DownloadProgress.Value = snapshot.Progress;
@@ -167,7 +168,7 @@ public sealed partial class ModelCard : UserControl
             {
                 if (_themeSettings is not null) { ApplyIcon(); }
             }))
-            System.Diagnostics.Debug.WriteLine($"Local Voice: high-contrast icon update for '{ModelId}' could not be dispatched.");
+            System.Diagnostics.Debug.WriteLine($"Ansible: high-contrast icon update for '{ModelId}' could not be dispatched.");
     }
 
     private void ApplyIcon()
@@ -199,7 +200,7 @@ public sealed partial class ModelCard : UserControl
         {
             _iconFailureLogged = true;
             System.Diagnostics.Debug.WriteLine(
-                $"Local Voice: model icon '{_iconUri}' for '{ModelId}' failed to load: {e.ErrorMessage}. Using monogram fallback.");
+                $"Ansible: model icon '{_iconUri}' for '{ModelId}' failed to load: {e.ErrorMessage}. Using monogram fallback.");
         }
     }
 

@@ -28,9 +28,9 @@
                         <Button.Flyout>
                             <Flyout>
                                 <StackPanel Spacing="12" MaxWidth="380">
-                                    <TextBlock Text="Model folder" FontWeight="SemiBold" />
+                                    <TextBlock Text="Model folder" Style="{StaticResource BodyStrongTextBlockStyle}" />
                                     <TextBlock x:Name="FolderText" TextWrapping="Wrap" IsTextSelectionEnabled="True"
-                                               Foreground="{ThemeResource SecondaryTextBrush}" />
+                                               Style="{StaticResource SecondaryTextStyle}" />
                                     <StackPanel Orientation="Horizontal" Spacing="12">
                                         <Button x:Name="FolderButton" Content="Choose folder" Click="ChooseFolderClicked"
                                                 MinHeight="40" AutomationProperties.AutomationId="ChooseModelFolder" />
@@ -38,7 +38,7 @@
                                                 MinHeight="40" AutomationProperties.AutomationId="VerifyModelFiles" />
                                     </StackPanel>
                                     <TextBlock Text="Changing folders does not move or delete model files."
-                                               TextWrapping="Wrap" Foreground="{ThemeResource SecondaryTextBrush}" />
+                                               TextWrapping="Wrap" Style="{StaticResource SecondaryTextStyle}" />
                                 </StackPanel>
                             </Flyout>
                         </Button.Flyout>
@@ -50,8 +50,6 @@
                 <Grid x:Name="ModelsGrid" ColumnSpacing="16" RowSpacing="16"
                       SizeChanged="OnModelsGridSizeChanged" />
 
-                <TextBlock Text="Memory values are admission estimates, not measured usage." FontSize="12"
-                           TextWrapping="Wrap" Foreground="{ThemeResource SecondaryTextBrush}" />
             </StackPanel>
         </Grid>
     </ScrollViewer>

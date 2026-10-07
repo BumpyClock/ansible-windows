@@ -9,21 +9,15 @@
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
             </ResourceDictionary.MergedDictionaries>
+            <!--
+                Text, surface, stroke, and selection colors come from the WinUI system tokens
+                (TextFillColor*, CardBackgroundFillColor*, CardStrokeColor*, DividerStrokeColor*,
+                SubtleFillColor*, LayerFillColor*). Only app tokens without a system equivalent live here.
+                High Contrast entries reference SystemColor* only; the Fluent *Color keys are placeholders in High Contrast.
+            -->
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Light">
-                    <SolidColorBrush x:Key="CanvasBrush" Color="#F4F3EF" />
-                    <SolidColorBrush x:Key="SurfaceBrush" Color="#FFFFFF" />
-                    <SolidColorBrush x:Key="MetricSurfaceBrush" Color="#F6F5F1" />
-                    <SolidColorBrush x:Key="BorderBrush" Color="#E8E6DF" />
-                    <SolidColorBrush x:Key="PrimaryTextBrush" Color="#191B1B" />
-                    <SolidColorBrush x:Key="SecondaryTextBrush" Color="#666C6A" />
-                    <SolidColorBrush x:Key="AccentBrush" Color="#185C5E" />
-                    <SolidColorBrush x:Key="AccentSoftBrush" Color="#DDF1EB" />
-                    <SolidColorBrush x:Key="SelectionBrush" Color="#EAE8E1" />
-                    <SolidColorBrush x:Key="InactiveChartBrush" Color="#D1CEC4" />
-                    <SolidColorBrush x:Key="ActivityLowBrush" Color="#CDEBE5" />
-                    <SolidColorBrush x:Key="ActivityMediumBrush" Color="#79C1B7" />
-                    <x:Double x:Key="FutureActivityOpacity">0.35</x:Double>
+                    <!-- Accent overrides. The system Accent* brushes derive from these. -->
                     <Color x:Key="SystemAccentColor">#185C5E</Color>
                     <Color x:Key="SystemAccentColorLight1">#216E70</Color>
                     <Color x:Key="SystemAccentColorLight2">#185C5E</Color>
@@ -31,21 +25,19 @@
                     <Color x:Key="SystemAccentColorDark1">#124A4C</Color>
                     <Color x:Key="SystemAccentColorDark2">#103F41</Color>
                     <Color x:Key="SystemAccentColorDark3">#0B3032</Color>
+                    <!-- App tokens: accent graphics and data visualization. -->
+                    <!-- AccentGraphicBrush matches AccentFillColorDefaultBrush, which is SystemColorWindowColor (invisible) in High Contrast. -->
+                    <SolidColorBrush x:Key="AccentGraphicBrush" Color="{ThemeResource SystemAccentColorDark1}" />
+                    <SolidColorBrush x:Key="AccentSoftBrush" Color="#DDF1EB" />
+                    <SolidColorBrush x:Key="InactiveChartBrush" Color="#D1CEC4" />
+                    <SolidColorBrush x:Key="ActivityLowBrush" Color="#CDEBE5" />
+                    <SolidColorBrush x:Key="ActivityMediumBrush" Color="#79C1B7" />
+                    <x:Double x:Key="FutureActivityOpacity">0.35</x:Double>
+                    <!-- Temporary alias for FloatingDictationWindow. Use TextFillColorPrimaryBrush elsewhere. -->
+                    <SolidColorBrush x:Key="PrimaryTextBrush" Color="{ThemeResource TextFillColorPrimary}" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
-                    <SolidColorBrush x:Key="CanvasBrush" Color="#202321" />
-                    <SolidColorBrush x:Key="SurfaceBrush" Color="#292D2C" />
-                    <SolidColorBrush x:Key="MetricSurfaceBrush" Color="#242827" />
-                    <SolidColorBrush x:Key="BorderBrush" Color="#414744" />
-                    <SolidColorBrush x:Key="PrimaryTextBrush" Color="#F1F3F1" />
-                    <SolidColorBrush x:Key="SecondaryTextBrush" Color="#B6BFBB" />
-                    <SolidColorBrush x:Key="AccentBrush" Color="#79CFC0" />
-                    <SolidColorBrush x:Key="AccentSoftBrush" Color="#254F49" />
-                    <SolidColorBrush x:Key="SelectionBrush" Color="#35423E" />
-                    <SolidColorBrush x:Key="InactiveChartBrush" Color="#505853" />
-                    <SolidColorBrush x:Key="ActivityLowBrush" Color="#365D54" />
-                    <SolidColorBrush x:Key="ActivityMediumBrush" Color="#568F82" />
-                    <x:Double x:Key="FutureActivityOpacity">0.35</x:Double>
+                    <!-- Accent overrides. The system Accent* brushes derive from these. -->
                     <Color x:Key="SystemAccentColor">#79CFC0</Color>
                     <Color x:Key="SystemAccentColorLight1">#91DDD0</Color>
                     <Color x:Key="SystemAccentColorLight2">#79CFC0</Color>
@@ -53,21 +45,26 @@
                     <Color x:Key="SystemAccentColorDark1">#68BCAD</Color>
                     <Color x:Key="SystemAccentColorDark2">#57A999</Color>
                     <Color x:Key="SystemAccentColorDark3">#459787</Color>
+                    <!-- App tokens: accent graphics and data visualization. -->
+                    <SolidColorBrush x:Key="AccentGraphicBrush" Color="{ThemeResource SystemAccentColorLight2}" />
+                    <SolidColorBrush x:Key="AccentSoftBrush" Color="#254F49" />
+                    <SolidColorBrush x:Key="InactiveChartBrush" Color="#505853" />
+                    <SolidColorBrush x:Key="ActivityLowBrush" Color="#365D54" />
+                    <SolidColorBrush x:Key="ActivityMediumBrush" Color="#568F82" />
+                    <x:Double x:Key="FutureActivityOpacity">0.35</x:Double>
+                    <!-- Temporary alias for FloatingDictationWindow. Use TextFillColorPrimaryBrush elsewhere. -->
+                    <SolidColorBrush x:Key="PrimaryTextBrush" Color="{ThemeResource TextFillColorPrimary}" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="HighContrast">
-                    <SolidColorBrush x:Key="CanvasBrush" Color="{ThemeResource SystemColorWindowColor}" />
-                    <SolidColorBrush x:Key="SurfaceBrush" Color="{ThemeResource SystemColorWindowColor}" />
-                    <SolidColorBrush x:Key="MetricSurfaceBrush" Color="{ThemeResource SystemColorWindowColor}" />
-                    <SolidColorBrush x:Key="BorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
-                    <SolidColorBrush x:Key="PrimaryTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
-                    <SolidColorBrush x:Key="SecondaryTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
-                    <SolidColorBrush x:Key="AccentBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+                    <!-- App tokens: accent graphics and data visualization. -->
+                    <SolidColorBrush x:Key="AccentGraphicBrush" Color="{ThemeResource SystemColorHighlightColor}" />
                     <SolidColorBrush x:Key="AccentSoftBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
-                    <SolidColorBrush x:Key="SelectionBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
                     <SolidColorBrush x:Key="InactiveChartBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
                     <SolidColorBrush x:Key="ActivityLowBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
                     <SolidColorBrush x:Key="ActivityMediumBrush" Color="{ThemeResource SystemColorHotlightColor}" />
                     <x:Double x:Key="FutureActivityOpacity">1</x:Double>
+                    <!-- Temporary alias for FloatingDictationWindow. Use TextFillColorPrimaryBrush elsewhere. -->
+                    <SolidColorBrush x:Key="PrimaryTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
             <Style x:Key="ActivityEmptyCellStyle" TargetType="Border">
@@ -80,7 +77,7 @@
                 <Setter Property="Background" Value="{ThemeResource ActivityMediumBrush}" />
             </Style>
             <Style x:Key="ActivityHighCellStyle" TargetType="Border">
-                <Setter Property="Background" Value="{ThemeResource AccentBrush}" />
+                <Setter Property="Background" Value="{ThemeResource AccentGraphicBrush}" />
             </Style>
             <Style x:Key="ActivityFutureCellStyle" TargetType="Border" BasedOn="{StaticResource ActivityEmptyCellStyle}">
                 <Setter Property="Opacity" Value="{ThemeResource FutureActivityOpacity}" />
@@ -90,75 +87,47 @@
                 <Setter Property="HorizontalContentAlignment" Value="Left" />
                 <Setter Property="Background" Value="Transparent" />
                 <Setter Property="BorderThickness" Value="0" />
-                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
                 <Setter Property="Padding" Value="16,12" />
                 <Setter Property="MinHeight" Value="48" />
                 <Setter Property="FontSize" Value="15" />
             </Style>
             <Style x:Key="SelectedNavigationButtonStyle" TargetType="Button" BasedOn="{StaticResource NavigationButtonStyle}">
-                <Setter Property="Background" Value="{ThemeResource SelectionBrush}" />
+                <Setter Property="Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
             </Style>
             <Style x:Key="ModelUsageProgressStyle" TargetType="ProgressBar">
-                <Setter Property="Foreground" Value="{ThemeResource AccentBrush}" />
+                <Setter Property="Foreground" Value="{ThemeResource AccentGraphicBrush}" />
                 <Setter Property="Background" Value="{ThemeResource InactiveChartBrush}" />
                 <Setter Property="Height" Value="8" />
             </Style>
-            <Style x:Key="SecondaryTextStyle" TargetType="TextBlock">
-                <Setter Property="Foreground" Value="{ThemeResource SecondaryTextBrush}" />
+            <Style x:Key="SecondaryTextStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
             </Style>
             <Style x:Key="PreviewWaveformBarStyle" TargetType="Rectangle">
-                <Setter Property="Fill" Value="{ThemeResource AccentBrush}" />
+                <Setter Property="Fill" Value="{ThemeResource AccentGraphicBrush}" />
             </Style>
-            <Style x:Key="PageTitleStyle" TargetType="TextBlock">
-                <Setter Property="FontSize" Value="28" />
-                <Setter Property="FontWeight" Value="SemiBold" />
-                <Setter Property="LineHeight" Value="36" />
-            </Style>
-            <Style x:Key="PageSubtitleStyle" TargetType="TextBlock">
-                <Setter Property="FontSize" Value="14" />
-                <Setter Property="Foreground" Value="{ThemeResource SecondaryTextBrush}" />
+            <Style x:Key="PageTitleStyle" TargetType="TextBlock" BasedOn="{StaticResource TitleTextBlockStyle}" />
+            <Style x:Key="PageSubtitleStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
                 <Setter Property="TextWrapping" Value="Wrap" />
             </Style>
-            <Style x:Key="SectionHeaderStyle" TargetType="TextBlock">
-                <Setter Property="FontSize" Value="14" />
-                <Setter Property="FontWeight" Value="SemiBold" />
+            <Style x:Key="SectionHeaderStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
                 <Setter Property="Margin" Value="4,8,0,0" />
             </Style>
             <Style x:Key="CardStyle" TargetType="Border">
-                <Setter Property="Background" Value="{ThemeResource SurfaceBrush}" />
-                <Setter Property="BorderBrush" Value="{ThemeResource BorderBrush}" />
+                <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
                 <Setter Property="BorderThickness" Value="1" />
-                <Setter Property="CornerRadius" Value="12" />
+                <Setter Property="CornerRadius" Value="{StaticResource OverlayCornerRadius}" />
                 <Setter Property="Padding" Value="20" />
             </Style>
-            <Style x:Key="CaptionSecondaryStyle" TargetType="TextBlock">
-                <Setter Property="FontSize" Value="12" />
-                <Setter Property="Foreground" Value="{ThemeResource SecondaryTextBrush}" />
+            <Style x:Key="MetricCardStyle" TargetType="Border" BasedOn="{StaticResource CardStyle}">
+                <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorSecondaryBrush}" />
+                <Setter Property="Padding" Value="24" />
+            </Style>
+            <Style x:Key="CaptionSecondaryStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
                 <Setter Property="TextWrapping" Value="Wrap" />
-            </Style>
-            <Style x:Key="KeycapStyle" TargetType="Border">
-                <Setter Property="Background" Value="{ThemeResource MetricSurfaceBrush}" />
-                <Setter Property="BorderBrush" Value="{ThemeResource BorderBrush}" />
-                <Setter Property="BorderThickness" Value="1,1,1,2" />
-                <Setter Property="CornerRadius" Value="6" />
-                <Setter Property="Padding" Value="8,3" />
-                <Setter Property="MinWidth" Value="28" />
-            </Style>
-            <Style x:Key="KeycapTextStyle" TargetType="TextBlock">
-                <Setter Property="FontSize" Value="12" />
-                <Setter Property="FontWeight" Value="SemiBold" />
-                <Setter Property="HorizontalAlignment" Value="Center" />
-            </Style>
-            <Style x:Key="StatusPillStyle" TargetType="Border">
-                <Setter Property="Background" Value="{ThemeResource MetricSurfaceBrush}" />
-                <Setter Property="BorderBrush" Value="{ThemeResource BorderBrush}" />
-                <Setter Property="BorderThickness" Value="1" />
-                <Setter Property="CornerRadius" Value="12" />
-                <Setter Property="Padding" Value="10,4" />
-            </Style>
-            <Style x:Key="AccentPillStyle" TargetType="Border" BasedOn="{StaticResource StatusPillStyle}">
-                <Setter Property="Background" Value="{ThemeResource AccentSoftBrush}" />
-                <Setter Property="BorderBrush" Value="{ThemeResource AccentSoftBrush}" />
             </Style>
             <Style x:Key="RecordButtonStyle" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}">
                 <Setter Property="Width" Value="72" />
@@ -172,13 +141,6 @@
                 <Setter Property="BorderThickness" Value="0" />
                 <Setter Property="Padding" Value="0" />
                 <Setter Property="FontSize" Value="17" />
-            </Style>
-            <Style x:Key="MetricCardStyle" TargetType="Border">
-                <Setter Property="Background" Value="{ThemeResource MetricSurfaceBrush}" />
-                <Setter Property="BorderBrush" Value="{ThemeResource BorderBrush}" />
-                <Setter Property="BorderThickness" Value="1" />
-                <Setter Property="CornerRadius" Value="12" />
-                <Setter Property="Padding" Value="22" />
             </Style>
         </ResourceDictionary>
     </Application.Resources>
