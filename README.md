@@ -1,4 +1,4 @@
-# Local Dictation POC
+# Ansible
 
 ## Desktop experience
 
@@ -162,21 +162,21 @@ The setup script installs models only. The native build produces
 `.runtime\native\audiocpp.dll`, stages its required app-local MSVC/OpenMP
 dependencies, records their import closure and redistributable notices, and
 copies the public validation WAV from the pinned audio.cpp source. Run the native
-build before building or launching `DictationPoc` in Visual Studio.
+build before building or launching `Ansible` in Visual Studio.
 Then build and verify an unsigned NativeAOT package:
 
 ```powershell
-.\tools\Publish-Poc.ps1
+.\tools\Publish-Ansible.ps1
 ```
 
 The default output is
-`DictationPoc\bin\AppPackages\DictationPoc_1.0.0.0_x64_Test\DictationPoc_1.0.0.0_x64.msix`.
+`Ansible\bin\AppPackages\Ansible_1.0.0.0_x64_Test\Ansible_1.0.0.0_x64.msix`.
 `-OutputDirectory` changes the parent package directory. Packaging does not
 install the app, create certificates, change certificate trust, or enable
 Developer Mode. It never bundles downloaded models or development model paths.
 
-For development, open `DictationPoc.slnx` in Visual Studio, set `DictationPoc`
-as the startup project, select x64 and the **DictationPoc (Packaged)** launch
+For development, open `Ansible.slnx` in Visual Studio, set `Ansible`
+as the startup project, select x64 and the **Ansible (Packaged)** launch
 profile, and run it. Packaged development deployment requires Windows Developer
 Mode. Enable that setting yourself if needed. Normal builds and F5 deployment
 use managed code for debugging; creating a Release MSIX compiles NativeAOT.
@@ -263,12 +263,12 @@ weights until you download a model or choose an existing model folder.
 
 ## Microsoft Store preparation
 
-`DictationPoc\Package.appxmanifest` currently uses the development identity
+`Ansible\Package.appxmanifest` currently uses the development identity
 `BumpyClock.LocalVoice.Development` with publisher `CN=BumpyClock`. This is not
 a reserved Store identity.
 
 When ready, use Visual Studio's **Package & Publish > Associate App with the
-Store** on `DictationPoc`. Association supplies the exact package name, publisher,
+Store** on `Ansible`. Association supplies the exact package name, publisher,
 and publisher display name from Partner Center. Then use **Create App Packages**
 for Microsoft Store distribution in Release/x64 and upload the resulting Store
 package. Keep the fourth version component zero for Store submissions and
@@ -435,8 +435,8 @@ wrapper. No HTTP fallback is used.
 ## Reproduce the integration checks
 
 ```powershell
-dotnet test .\DictationPoc.Tests\DictationPoc.Tests.csproj
-dotnet run --project .\DictationPoc.Probe -- `
+dotnet test .\Ansible.Tests\Ansible.Tests.csproj
+dotnet run --project .\Ansible.Probe -- `
   .\.runtime\native\audiocpp.dll .\.runtime\models .\tools\audio-models.json `
   .\.runtime\validation\sample_16k.wav
 ```
@@ -446,11 +446,11 @@ microphone cadence. It reports how many previews arrive before input ends.
 To test a specific model without silent fallback:
 
 ```powershell
-dotnet run --project .\DictationPoc.Probe -- `
+dotnet run --project .\Ansible.Probe -- `
   .\.runtime\native\audiocpp.dll .\.runtime\models .\tools\audio-models.json `
   .\.runtime\validation\sample_16k.wav `
   qwen3-asr-0.6b-q8
-dotnet run --project .\DictationPoc.Probe -- `
+dotnet run --project .\Ansible.Probe -- `
   .\.runtime\native\audiocpp.dll .\.runtime\models .\tools\audio-models.json `
   .\.runtime\validation\sample_16k.wav `
   vibevoice-asr-7b-q8 --file-only
@@ -462,7 +462,7 @@ failure message. `--file-only` skips live recognition; offline models always do.
 `--dictionary` supplies a newline-separated vocabulary list to a supported model:
 
 ```powershell
-dotnet run --project .\DictationPoc.Probe -- `
+dotnet run --project .\Ansible.Probe -- `
   .\.runtime\native\audiocpp.dll .\.runtime\models .\tools\audio-models.json `
   .\.runtime\validation\sample_16k.wav `
   vibevoice-streaming-1.5b-q4 --dictionary "Mother Nature`nUnited States"
@@ -479,7 +479,7 @@ it cannot force-abort that call. Allow the probe to exit before another run.
 `NativeStreamingDeliveryTests` checks that real Nemotron recognition emits
 authoritative speech while its audio input is still open. Set `DICTATION_MODELS_DIRECTORY`
 to an existing verified model folder when it is not `.runtime\models`, and run
-`dotnet test .\DictationPoc.Tests\DictationPoc.Tests.csproj --filter FullyQualifiedName~NativeStreamingDeliveryTests`.
+`dotnet test .\Ansible.Tests\Ansible.Tests.csproj --filter FullyQualifiedName~NativeStreamingDeliveryTests`.
 The test uses the public sample and does not open a microphone or persist usage.
 
 ## Foundation ownership
@@ -515,9 +515,9 @@ contracts without loading model weights. The separately tagged native
 integration test uses the real DLL and public sample.
 
 ```powershell
-dotnet test .\DictationPoc.Tests\DictationPoc.Tests.csproj --filter Category!=NativeIntegration
-dotnet test .\DictationPoc.Tests\DictationPoc.Tests.csproj --filter Category=NativeIntegration
-.\tools\Publish-Poc.ps1 -OutputDirectory .\.runtime\packages
+dotnet test .\Ansible.Tests\Ansible.Tests.csproj --filter Category!=NativeIntegration
+dotnet test .\Ansible.Tests\Ansible.Tests.csproj --filter Category=NativeIntegration
+.\tools\Publish-Ansible.ps1 -OutputDirectory .\.runtime\packages
 ```
 
 Publishing inspects the actual MSIX for its identity, native x64 executable,
