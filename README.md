@@ -15,6 +15,19 @@ appears as a small selectable line; its tooltip shows the full path.
 Insights explains measurement rules in **About these numbers**,
 while paused collection and unknown word counts remain visible.
 
+Speech models uses individual cards instead of a model dropdown. Cards show
+recognition behavior, language limitations, download size, memory admission
+estimates, and each model's real installation state. Download and maintenance
+actions belong to the model on that card. Technical and license details stay
+secondary. The layout uses two columns when space permits and one on narrow
+windows.
+
+Moonshine, Qwen, and VibeVoice use locally packaged upstream family artwork.
+Nemotron uses NVIDIA's official organization emblem to identify its provider.
+High Contrast uses semantic initials for every family. Artwork sources,
+modifications, trademark attribution, and upstream licenses ship in `Assets\ModelIcons`; no icon
+requests leave the device.
+
 The main window uses the native Mica system backdrop. The main content container
 uses WinUI's in-app acrylic resource. The transient preview clips a native host
 backdrop and tint to a rounded waveform pill, without a rectangular window frame.
