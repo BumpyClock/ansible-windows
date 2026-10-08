@@ -77,6 +77,7 @@ public sealed partial class DictationPage : Page
             var ready = _state.Phase == DictationPhase.Ready && _state.SelectedModel is not null && !_picking;
             FileButton.Visibility = _state.SelectedModel is null ? Visibility.Collapsed : Visibility.Visible;
             FileButton.IsEnabled = ready;
+            UpdateModelActionsLayout();
             RenderRecordControl();
             RenderStatus();
             RenderClock();
@@ -195,10 +196,13 @@ public sealed partial class DictationPage : Page
         if (!sender.IsOpen) { sender.Visibility = Visibility.Collapsed; }
     }
 
-    private void ModelActionsSizeChanged(object sender, SizeChangedEventArgs args)
+    private void ModelActionsSizeChanged(object sender, SizeChangedEventArgs args) => UpdateModelActionsLayout();
+
+    private void UpdateModelActionsLayout()
     {
+        if (ModelActions.ActualWidth <= 0) { return; }
         FileButton.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
-        var narrow = args.NewSize.Width < 320 + FileButton.DesiredSize.Width + ModelActions.ColumnSpacing;
+        var narrow = ModelActions.ActualWidth < 320 + FileButton.DesiredSize.Width + ModelActions.ColumnSpacing;
         Grid.SetColumnSpan(ModelBox, narrow ? 2 : 1);
         Grid.SetColumn(FileButton, narrow ? 0 : 1);
         Grid.SetRow(FileButton, narrow ? 1 : 0);
