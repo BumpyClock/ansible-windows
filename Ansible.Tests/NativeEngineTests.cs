@@ -26,14 +26,15 @@ public sealed class NativeEngineTests
     }
 
     [Fact]
-    public async Task RejectsUnqualifiedNemotronVulkanStreamBeforeLoadingNativeCode()
+    public async Task NemotronVulkanStreamHonorsCancellationWithoutAModelSpecificRejection()
     {
         await using var engine = new NativeAudioEngine("missing.dll", "missing.json", "models");
-        var error = await Assert.ThrowsAsync<NotSupportedException>(() =>
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             engine.StreamAsync(new() { Id = "nemotron-asr-0.6b-q8", Family = "nemotron_asr" },
                 Channel.CreateUnbounded<byte[]>().Reader, new(Backend: NativeBackend.Vulkan),
-                null, CancellationToken.None));
-        Assert.Contains("Select CPU", error.Message);
+                null, cancellation.Token));
     }
 
     [Fact]

@@ -36,7 +36,7 @@ public sealed class NativeDictionaryTests(ITestOutputHelper output)
         var model = Assert.Single(models, candidate => candidate.Id == modelId);
         Assert.True(model.SupportsCustomDictionary);
         Assert.Equal(plainSpeech, model.HasPlainSpeechText);
-        Assert.False(model.EmitsAuthoritativeLiveSpeech);
+        Assert.Equal(plainSpeech && mode == "streaming", model.CanInsertDictation);
         var options = new RecognitionOptions(CustomDictionary: "Mother Nature\nUnited States");
         var recording = Path.Combine(root, ".runtime", "validation", "sample_16k.wav");
         var input = new AudioInputReader();

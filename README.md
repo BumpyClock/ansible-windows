@@ -207,26 +207,25 @@ Choose **Toggle** to start and finish with separate presses instead. Record a
 different key or key combination with **Change shortcut** in Settings. The
 activation mode and shortcut persist per user.
 
-Shortcut dictation sends genuine speech updates as the model produces them.
-It does not wait for a silence boundary or for the overall recognition to finish.
-Select a model with authoritative live speech, currently Nemotron streaming.
-Final-only, buffered, and display-only streaming adapters are not admitted for
-live shortcut dictation; they remain available for manual transcription.
-The pinned VibeVoice streaming adapter emits display previews without authoritative
-speech metadata, so it cannot provide shortcut insertion. Model and hardware latency still apply.
-No earlier words are rewritten. If the final result revises already-inserted
-words, insertion stops with a warning and keeps the existing text. Cancel stops
-future delivery but cannot undo text already inserted.
+Shortcut dictation waits for recognition to finish successfully, then inserts
+the authoritative final speech once. Live previews remain in the app and are
+not sent to the destination. Moonshine's final-only output and Qwen's buffered
+output do not require live recognition to use the shortcut. Models must support
+microphone input; WAV-only models remain available for file transcription.
+The pinned VibeVoice streaming adapter lacks authoritative speech metadata and
+remains available for manual transcription only.
+If a model returns no authoritative speech content, nothing is inserted; display
+labels and speaker metadata are never substituted for speech. Model and hardware
+latency still apply. Cancelling or failing recognition inserts no text.
 
-Use a modifier-free shortcut such as F9 for typing while it is held. A held
-Ctrl, Alt, Shift or Win key can interfere with text input, so recognized
-text is queued until that shortcut is released. If a target stops
+A held Ctrl, Alt, Shift or Win key can interfere with text input, so completed
+text waits until those modifiers are released. If a target stops
 accepting input or focus moves, insertion stops without retrying; copy the final
 transcript manually to recover.
 
 **Text insertion** in Settings chooses how speech content reaches the field:
 
-- **Paste, then restore clipboard** (default). For each update, the app backs up
+- **Paste, then restore clipboard** (default). The app backs up
   every clipboard format, offers the text through delayed rendering, and sends
   Ctrl+V. It restores the backup after the destination process reads the text.
   The pasted text carries the Windows formats that exclude it from clipboard
@@ -237,19 +236,17 @@ transcript manually to recover.
   does not read the text within 3 seconds, the clipboard is restored and
   insertion stops; an app that pastes later then inserts the restored content.
   If another app copies something during the paste, the new content is kept.
-  Each update copies the whole backup, so a large clipboard image slows insertion.
+  Copying the whole backup means a large clipboard image slows insertion.
 - **Type characters**. Sends Unicode keystrokes. **Gap between characters**
   (0-200 ms, default 20) paces them and re-checks focus before each one. A gap of
-  0 sends the whole update at once. Slow targets such as Windows 11 Notepad read
+  0 sends the whole transcript at once. Slow targets such as Windows 11 Notepad read
   each injected character when they process it, so a burst repeats one character
   instead of the text. In testing, 20 ms typed correctly into Notepad and 5 ms
   dropped a character. Windows may round short gaps up to about 15 ms. Use this
   mode for apps that block or remap Ctrl+V.
 
 Settings saved before this option existed load with a 0 ms gap; set the gap
-before choosing **Type characters**. Injecting Ctrl for a paste while a bare
-hold-to-talk key auto-repeats can deliver one Ctrl+key combination, such as
-Ctrl+F9, to the destination.
+before choosing **Type characters**.
 
 Neither mode activates another window. The app checks that the
 original window and focused native handle
@@ -279,7 +276,7 @@ options surface as native engine errors.
 
 The bundled audio.cpp v0.9.0 Moonshine adapter buffers each stream and recognizes it
 after its input finishes. Manual dictation therefore returns text after **Finish
-dictation**. It cannot provide live shortcut insertion in this backend.
+dictation**. Shortcut dictation inserts that final text after capture and recognition finish.
 Its `streaming` mode describes input ingestion, not
 incremental recognition. The native streaming API supports partial text, but a
 cache-aware model such as Nemotron or VibeVoice streaming is needed to exercise
@@ -415,11 +412,13 @@ failure is shown directly; the app does not silently retry on CPU or change the
 model. Select CPU explicitly to retry. The probe supports `--device <index>` for
 testing another Vulkan device. NPU acceleration is not included.
 
-Nemotron dictation and replay are blocked on Vulkan in this build. The Intel Arc
-140V validation run completed WAV transcription but terminated during streaming
-cleanup with a native `vk::DeviceLostError` from `vk::Queue::submit`. Select CPU
-for Nemotron streaming; the managed guard rejects this combination before native
-initialization. Nemotron WAV transcription remains available on Vulkan.
+Nemotron dictation and replay can attempt Vulkan, but this combination remains
+unqualified. The Intel Arc 140V validation run completed WAV transcription but
+terminated during streaming cleanup with a native `vk::DeviceLostError` from
+`vk::Queue::submit`. The former model-specific rejection has been removed; the
+native failure has not been fixed and can terminate the app. Select CPU to avoid
+this known Vulkan failure. Final-only text insertion does not change native
+streaming or its cleanup.
 
 Measured on 2026-10-08 with Intel Arc 140V, driver 32.0.101.8425, the public
 validation WAV, and the memory guard enabled: Moonshine Vulkan WAV and paced

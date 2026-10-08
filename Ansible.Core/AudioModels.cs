@@ -28,21 +28,15 @@ public sealed record AudioModel
     /// </summary>
     public bool HasPlainSpeechText => SpeechContent.IsPlainSpeechFamily(Family);
 
-    /// <summary>
-    /// True when the model emits authoritative incremental speech while streaming audio is still open: it
-    /// produces plain spoken text (<see cref="HasPlainSpeechText"/>), accepts streaming input, and exposes a
-    /// live incremental preview. Only such a model may be admitted to shortcut dictation that types speech as
-    /// it arrives. A "live" preview label alone does not qualify a family whose streaming output carries no
-    /// authoritative speech content (for example a display-only partial-text adapter).
-    /// </summary>
-    public bool EmitsAuthoritativeLiveSpeech => HasPlainSpeechText && Mode == "streaming" && Preview == "live";
+    /// <summary>Accepts microphone input and returns authoritative speech for final shortcut insertion.</summary>
+    public bool CanInsertDictation => HasPlainSpeechText && Mode == "streaming";
 
     public override string ToString() => Id;
 }
 
 /// <summary>
 /// Classifies which native families expose authoritative spoken text as plain display text. This is the single
-/// source of truth shared by transcript normalization and live-speech capability, so both stay in agreement.
+/// source of truth shared by transcript normalization and shortcut capability, so both stay in agreement.
 /// </summary>
 public static class SpeechContent
 {

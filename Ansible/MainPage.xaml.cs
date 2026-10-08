@@ -34,7 +34,7 @@ public sealed partial class MainPage : Page
         _changeMode = changeMode;
         _captureShortcut = captureShortcut;
         _state = session.State;
-        const string typingHelp = "Click to record a new shortcut. Esc cancels. Live models insert recognition updates as they arrive. Held Ctrl, Alt, Shift or Win keys delay typing until released. Some editors cannot distinguish fields within the same window. Hold to talk finishes when you release the shortcut; otherwise press it again to finish. Check the destination before dictating, because Cancel cannot undo inserted text.";
+        const string typingHelp = "Click to record a new shortcut. Esc cancels. The completed transcript is inserted once after recognition succeeds. Held Ctrl, Alt, Shift or Win keys delay insertion until released. Some editors cannot distinguish fields within the same window. Hold to talk finishes when you release the shortcut; otherwise press it again to finish. Cancelling recognition inserts no text. Check the destination before dictating.";
         ToolTipService.SetToolTip(HotkeyCaptureBox, typingHelp);
         AutomationProperties.SetHelpText(HotkeyCaptureBox, typingHelp);
         // TextBox handles pointer presses itself, so listen for handled presses to restart capture on click.

@@ -132,9 +132,6 @@ public sealed class NativeAudioEngine : IRecognitionEngine
     {
         ArgumentNullException.ThrowIfNull(audio);
         options = ValidateOptions(model, options);
-        if (options.Backend == NativeBackend.Vulkan && model.Family == "nemotron_asr")
-            throw new NotSupportedException(
-                "Nemotron streaming with Vulkan is disabled in this build after a native GPU device-loss failure. Select CPU for dictation or replay.");
         var result = await RunExclusiveAsync(() => NativeOperation.Run(
             () => StreamCore(model, audio, options, progress, cancellationToken, onReady), CleanupOperation), cancellationToken);
         progress?.Report(new TranscriptUpdate(result.DisplayText, true, result.SpeechText));

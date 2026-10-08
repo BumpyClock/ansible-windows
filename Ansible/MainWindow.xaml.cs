@@ -30,7 +30,7 @@ public sealed partial class MainWindow : Window
     private readonly CancellationTokenSource _deliveryCancellation = new();
     private Task<(bool available, CapturedTextTarget? target, string reason)>? _captureTask;
     private Task? _deliveryTask;
-    private LiveTextDelivery? _delivery;
+    private FinalTextDelivery? _delivery;
     private Task<SessionOutcome>? _deliveryOperation;
     private Guid? _deliveryOperationId;
 
@@ -166,15 +166,13 @@ public sealed partial class MainWindow : Window
     }
 
     // Shortcut release. Marks a pending push-to-talk capture stale so its inspection cannot start a late
-    // recording, wakes the delivery pump to flush text retained while a modifier was held, and finishes or
-    // cancels a push-to-talk dictation from a single State snapshot so a Preparing->Recording transition
+    // recording, and finishes or cancels dictation from a single State snapshot so a Preparing->Recording transition
     // cannot be read inconsistently across two reads.
     private async Task HandleReleaseAsync()
     {
         var state = _session.State;
         if (state.Settings.PushToTalk) { _floating?.HidePreview(); }
         _captureCoordinator.NoteReleased();
-        _delivery?.SignalRelease();
         if (state.Settings.PushToTalk && _delivery is not null)
         {
             if (state.CanFinish) { await _session.FinishAsync(); }
@@ -202,10 +200,10 @@ public sealed partial class MainWindow : Window
                 _session.Notify(NoticeKind.Warning, "Dictation unavailable", "Choose a streaming speech model before using the shortcut.");
             return;
         }
-        if (state.SelectedModel?.EmitsAuthoritativeLiveSpeech != true)
+        if (state.SelectedModel?.CanInsertDictation != true)
         {
-            _session.Notify(NoticeKind.Warning, "Live recognition model required",
-                "This model does not emit authoritative incremental speech in this backend. Choose a live speech model such as Nemotron streaming in Speech models. Manual transcription remains available for other models.");
+            _session.Notify(NoticeKind.Warning, "Speech text required",
+                "This model does not return authoritative speech text in this backend. Choose Moonshine, Qwen3, or Nemotron for shortcut insertion. Manual transcription remains available.");
             return;
         }
         var capture = _captureCoordinator.TryBeginCapture(state.Settings.PushToTalk, _deliveryTask is { IsCompleted: false });
@@ -229,7 +227,8 @@ public sealed partial class MainWindow : Window
                 _session.Notify(NoticeKind.Warning, "No insertion target", inspected.reason);
                 return;
             }
-            if (!_session.State.CanStart) { return; }
+            var current = _session.State;
+            if (!current.CanStart || current.SelectedModel?.CanInsertDictation != true) { return; }
             if (!_captureCoordinator.TryStartDelivery(capture)) { return; }
             StartDelivery(inspected.target!);
         }
@@ -246,16 +245,15 @@ public sealed partial class MainWindow : Window
         var settings = _session.State.Settings;
         var method = settings.InsertionMethod;
         var typingGap = settings.TypingGapMilliseconds;
-        var delivery = new LiveTextDelivery(
+        var delivery = new FinalTextDelivery(
             insert: (pending, token) => Task.Run(() =>
                 WindowsTextTarget.Insert(target, pending, method, typingGap, token, IsDeliveryCurrent), token),
             isCurrent: IsDeliveryCurrent,
-            typingDeferred: () => _shortcutHeld && modifiers != 0,
-            notify: _session.Notify);
+            typingDeferred: () => _shortcutHeld && modifiers != 0);
         _delivery = delivery;
         try
         {
-            var operation = _session.StartDictationAsync(new InlineTranscriptProgress(delivery.Report));
+            var operation = _session.StartDictationAsync();
             _deliveryOperation = operation;
             _deliveryOperationId = _session.State.OperationId;
             _deliveryTask = DeliverAsync(operation, delivery);
@@ -269,55 +267,35 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    // True while the current live delivery still owns the session operation and the UI can accept inserted
-    // text: the operation id is unchanged, the window is not closing, and either recognition is still active
-    // or it completed successfully and the session is idle for the final flush.
+    // The completed operation must still own the session before any target insertion.
     private bool IsDeliveryCurrent()
     {
         var operation = _deliveryOperation;
         var operationId = _deliveryOperationId;
         if (operation is null || operationId is null || _closing || _closed) { return false; }
         var state = _session.State;
-        if (state.OperationId != operationId) { return false; }
-        if (operation.IsCompleted)
-            return operation.IsCompletedSuccessfully && operation.Result.Kind == SessionOutcomeKind.Completed && state.IsIdle;
-        return state.Phase is DictationPhase.Recording or DictationPhase.Finishing;
+        return state.OperationId == operationId && state.IsIdle && operation.IsCompletedSuccessfully
+            && operation.Result.Kind == SessionOutcomeKind.Completed;
     }
 
-    private async Task DeliverAsync(Task<SessionOutcome> operation, LiveTextDelivery delivery)
+    private async Task DeliverAsync(Task<SessionOutcome> operation, FinalTextDelivery delivery)
     {
-        var pump = delivery.RunAsync(_deliveryCancellation.Token);
         try
         {
-            var outcome = await operation;
-            delivery.Complete();
-            await pump;
-            if (_closing || _closed || _session.State.OperationId != _deliveryOperationId) { return; }
-            if (outcome.Kind == SessionOutcomeKind.Completed)
-            {
-                await delivery.InsertFinalAsync(outcome.Result?.SpeechText, _deliveryCancellation.Token);
-                if (_closing || _closed || _session.State.OperationId != _deliveryOperationId) { return; }
-                if (delivery.Error is not null)
-                    _session.Notify(NoticeKind.Warning, "Insertion stopped",
-                        $"{delivery.Error} {(delivery.Cursor.SentText.Length > 0 ? "Previously inserted text remains. " : "")}Use Copy transcript for the final text.");
-                else if (delivery.Cursor.SentText.Length > 0)
-                    _session.Notify(NoticeKind.Success, "Text sent", "Recognition updates were typed as they arrived. The final result was not inserted again.");
-                else
-                    _session.Notify(NoticeKind.Information, "No speech to insert",
-                        "The model returned no speech text.");
-            }
-            else if (delivery.Cursor.SentText.Length > 0)
-                _session.Notify(outcome.Kind == SessionOutcomeKind.Failed ? NoticeKind.Error : NoticeKind.Warning,
-                    "Dictation stopped",
-                    $"{outcome.Error?.Message} Previously inserted text remains; unfinished speech was not inserted.");
+            var outcome = await delivery.RunAsync(operation, _deliveryCancellation.Token);
+            if (!IsDeliveryCurrent() || outcome.Kind != SessionOutcomeKind.Completed) { return; }
+            if (delivery.Error is not null)
+                _session.Notify(NoticeKind.Warning, "Insertion stopped",
+                    $"{delivery.Error} Use Copy transcript for the final text.");
+            else if (delivery.Sent)
+                _session.Notify(NoticeKind.Success, "Text sent", "The final transcript was inserted.");
+            else
+                _session.Notify(NoticeKind.Information, "No speech to insert", "The model returned no speech text.");
         }
         catch (OperationCanceledException) when (_deliveryCancellation.IsCancellationRequested) { }
         catch (Exception error) { _session.ReportUiError(error); }
         finally
         {
-            delivery.Complete();
-            try { await pump; }
-            catch (OperationCanceledException) when (_deliveryCancellation.IsCancellationRequested) { }
             if (ReferenceEquals(_delivery, delivery))
             {
                 _delivery = null;
@@ -325,11 +303,6 @@ public sealed partial class MainWindow : Window
                 _deliveryOperationId = null;
             }
         }
-    }
-
-    private sealed class InlineTranscriptProgress(Action<TranscriptUpdate> report) : IProgress<TranscriptUpdate>
-    {
-        public void Report(TranscriptUpdate value) => report(value);
     }
 
     private async void CloseRequested(AppWindow sender, AppWindowClosingEventArgs args)

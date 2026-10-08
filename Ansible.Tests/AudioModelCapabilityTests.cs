@@ -8,20 +8,20 @@ public sealed class AudioModelCapabilityTests
         new() { Id = $"{family}-{mode}-{preview}", Family = family, Mode = mode, Preview = preview };
 
     [Fact]
-    public void OnlyStreamingLivePlainSpeechFamilyEmitsAuthoritativeLiveSpeech()
+    public void StreamingPlainSpeechModelsSupportFinalInsertionRegardlessOfPreview()
     {
-        // Nemotron is the one qualified authoritative live producer in today's catalog.
-        Assert.True(Model("nemotron_asr", "streaming", "live").EmitsAuthoritativeLiveSpeech);
+        // Preview timing does not govern final insertion.
+        Assert.True(Model("nemotron_asr", "streaming", "live").CanInsertDictation);
 
-        // Plain-speech streaming families that are not live are excluded.
-        Assert.False(Model("moonshine_asr", "streaming", "final-only").EmitsAuthoritativeLiveSpeech);
-        Assert.False(Model("qwen3_asr", "streaming", "buffered").EmitsAuthoritativeLiveSpeech);
+        // Buffered and final-only models provide the same final insertion contract.
+        Assert.True(Model("moonshine_asr", "streaming", "final-only").CanInsertDictation);
+        Assert.True(Model("qwen3_asr", "streaming", "buffered").CanInsertDictation);
 
         // A "live" display preview does not qualify a family that carries no authoritative speech content.
-        Assert.False(Model("vibevoice_asr_streaming", "streaming", "live").EmitsAuthoritativeLiveSpeech);
+        Assert.False(Model("vibevoice_asr_streaming", "streaming", "live").CanInsertDictation);
 
         // Offline/annotated families are excluded regardless of preview.
-        Assert.False(Model("vibevoice_asr", "offline", "final-only").EmitsAuthoritativeLiveSpeech);
+        Assert.False(Model("vibevoice_asr", "offline", "final-only").CanInsertDictation);
     }
 
     [Fact]
@@ -30,7 +30,7 @@ public sealed class AudioModelCapabilityTests
         var vibevoice = Model("vibevoice_asr_streaming", "streaming", "live");
         Assert.Equal("live", vibevoice.Preview);
         Assert.False(vibevoice.HasPlainSpeechText);
-        Assert.False(vibevoice.EmitsAuthoritativeLiveSpeech);
+        Assert.False(vibevoice.CanInsertDictation);
     }
 
     [Theory]
