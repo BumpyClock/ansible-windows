@@ -30,7 +30,9 @@ public sealed class AppSettingsStoreTests : IDisposable
             Shortcut = new DictationShortcut(2, 0x44),
             PushToTalk = false,
             CollectUsage = false,
-            CustomDictionary = "NativeAOT\nWinUI"
+            CustomDictionary = "NativeAOT\nWinUI",
+            InsertionMethod = TextInsertionMethod.Type,
+            TypingGapMilliseconds = 35
         };
         CreateStore().Save(settings);
 
@@ -41,6 +43,8 @@ public sealed class AppSettingsStoreTests : IDisposable
         Assert.Equal(0x44u, shortcut.GetProperty("Key").GetUInt32());
         Assert.False(shortcut.TryGetProperty("DisplayText", out _));
         Assert.False(shortcut.TryGetProperty("IsValid", out _));
+        Assert.Equal("Type", document.RootElement.GetProperty("InsertionMethod").GetString());
+        Assert.Equal(35, document.RootElement.GetProperty("TypingGapMilliseconds").GetInt32());
     }
 
     [Fact]
@@ -85,6 +89,10 @@ public sealed class AppSettingsStoreTests : IDisposable
     [InlineData("{\"ModelId\":\"\"}", typeof(InvalidDataException))]
     [InlineData("{\"ModelId\":\"   \"}", typeof(InvalidDataException))]
     [InlineData("{\"ModelsDirectory\":\"relative-models\"}", typeof(InvalidDataException))]
+    [InlineData("{\"InsertionMethod\":\"Dictate\"}", typeof(JsonException))]
+    [InlineData("{\"InsertionMethod\":7}", typeof(InvalidDataException))]
+    [InlineData("{\"TypingGapMilliseconds\":-1}", typeof(InvalidDataException))]
+    [InlineData("{\"TypingGapMilliseconds\":201}", typeof(InvalidDataException))]
     public void CorruptSettingsAreReportedWithoutReplacingTheFile(string content, Type errorType)
     {
         var store = CreateStore();

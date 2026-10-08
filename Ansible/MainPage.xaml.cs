@@ -34,7 +34,7 @@ public sealed partial class MainPage : Page
         _changeMode = changeMode;
         _captureShortcut = captureShortcut;
         _state = session.State;
-        const string typingHelp = "Click to record a new shortcut. Esc cancels. Live models type recognition updates as they arrive. Held Ctrl, Alt, Shift or Win keys delay typing until released. Some editors cannot distinguish fields within the same window. Hold to talk finishes when you release the shortcut; otherwise press it again to finish. Check the destination before dictating, because Cancel cannot undo inserted text.";
+        const string typingHelp = "Click to record a new shortcut. Esc cancels. Live models insert recognition updates as they arrive. Held Ctrl, Alt, Shift or Win keys delay typing until released. Some editors cannot distinguish fields within the same window. Hold to talk finishes when you release the shortcut; otherwise press it again to finish. Check the destination before dictating, because Cancel cannot undo inserted text.";
         ToolTipService.SetToolTip(HotkeyCaptureBox, typingHelp);
         AutomationProperties.SetHelpText(HotkeyCaptureBox, typingHelp);
         // TextBox handles pointer presses itself, so listen for handled presses to restart capture on click.
@@ -42,6 +42,7 @@ public sealed partial class MainPage : Page
         _rendering = true;
         HotkeyCaptureBox.Text = _state.Settings.Shortcut.DisplayText;
         PushToTalkChoice.SelectedIndex = _state.Settings.PushToTalk ? 0 : 1;
+        RenderInsertion(_state.IsIdle);
         _rendering = false;
         Loaded += (_, _) =>
             _observer = new UiSessionObserver(session, DispatcherQueue, state => { _state = state; Render(); });
@@ -79,8 +80,22 @@ public sealed partial class MainPage : Page
             ResetShortcutButton.IsEnabled = idle;
             PushToTalkChoice.IsEnabled = idle;
             PushToTalkChoice.SelectedIndex = _state.Settings.PushToTalk ? 0 : 1;
+            RenderInsertion(idle);
         }
         finally { _rendering = false; }
+    }
+
+    private void RenderInsertion(bool idle)
+    {
+        var typing = _state.Settings.InsertionMethod == TextInsertionMethod.Type;
+        InsertionChoice.SelectedIndex = typing ? 1 : 0;
+        InsertionChoice.IsEnabled = idle;
+        InsertionHelpText.Text = typing
+            ? "Types one character at a time. Use this for apps that block paste."
+            : "Fastest and most reliable in most apps. Your clipboard is backed up and restored after each paste, and dictated text stays out of clipboard history.";
+        TypingGapRow.Visibility = typing ? Visibility.Visible : Visibility.Collapsed;
+        TypingGapBox.IsEnabled = idle;
+        TypingGapBox.Value = _state.Settings.TypingGapMilliseconds;
     }
 
     // Shared by Render and DictionaryChanged. DictionaryChanged must not call Render, because Render
@@ -167,6 +182,25 @@ public sealed partial class MainPage : Page
         // RadioButtons can raise SelectionChanged after Render returns; ignore echoes of the current setting.
         if (pushToTalk == _session.State.Settings.PushToTalk) { return; }
         try { _changeMode(pushToTalk); }
+        catch (Exception error) { _session.ReportUiError(error); Render(); }
+    }
+
+    private void InsertionMethodChanged(object sender, SelectionChangedEventArgs args)
+    {
+        if (_rendering || InsertionChoice.SelectedIndex < 0) { return; }
+        var method = InsertionChoice.SelectedIndex == 0 ? TextInsertionMethod.Paste : TextInsertionMethod.Type;
+        if (method == _session.State.Settings.InsertionMethod) { return; }
+        try { _session.SetInsertionMethod(method); }
+        catch (Exception error) { _session.ReportUiError(error); Render(); }
+    }
+
+    private void TypingGapChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
+    {
+        if (_rendering) { return; }
+        if (double.IsNaN(args.NewValue)) { Render(); return; }
+        var gap = (int)Math.Round(Math.Clamp(args.NewValue, 0, AppSettings.MaxTypingGapMilliseconds));
+        if (gap == _session.State.Settings.TypingGapMilliseconds) { return; }
+        try { _session.SetTypingGap(gap); }
         catch (Exception error) { _session.ReportUiError(error); Render(); }
     }
 

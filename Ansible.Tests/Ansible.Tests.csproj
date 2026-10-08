@@ -21,6 +21,7 @@
     <ProjectReference Include="..\Ansible.Core\Ansible.Core.csproj" />
     <Compile Include="..\Ansible\AppPaths.cs" Link="AppPaths.cs" />
     <Compile Include="..\Ansible\WindowsTextTarget.cs" Link="WindowsTextTarget.cs" />
+    <Compile Include="..\Ansible\WindowsTextTarget.Paste.cs" Link="WindowsTextTarget.Paste.cs" />
   </ItemGroup>
 
 </Project>

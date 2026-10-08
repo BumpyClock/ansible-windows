@@ -133,8 +133,9 @@ proof, not the production dictation application.
 - WAV recording transcription, including streamed decoding where the model supports it.
 - Model selection, downloads, and management from the pinned ASR catalog.
 - Cancellation, microphone level, elapsed time, and explicit connection/inference errors.
-- Direct typing of incremental microphone speech into the original window
-  while its focused native handle still matches; final-text copying remains available.
+- Direct insertion of incremental microphone speech into the original window
+  while its focused native handle still matches, by clipboard paste (default) or
+  paced typing; final-text copying remains available.
   Transcript and microphone audio remain in memory.
 - Direct native inference. No HTTP service, listener, or audio upload is required.
 
@@ -215,7 +216,7 @@ The pinned VibeVoice streaming adapter emits display previews without authoritat
 speech metadata, so it cannot provide shortcut insertion. Model and hardware latency still apply.
 No earlier words are rewritten. If the final result revises already-inserted
 words, insertion stops with a warning and keeps the existing text. Cancel stops
-future delivery but cannot undo text already typed.
+future delivery but cannot undo text already inserted.
 
 Use a modifier-free shortcut such as F9 for typing while it is held. A held
 Ctrl, Alt, Shift or Win key can interfere with text input, so recognized
@@ -223,16 +224,42 @@ text is queued until that shortcut is released. If a target stops
 accepting input or focus moves, insertion stops without retrying; copy the final
 transcript manually to recover.
 
-The app sends authoritative speech content as Unicode keyboard input without
-changing the clipboard or activating another window. It checks that the
+**Text insertion** in Settings chooses how speech content reaches the field:
+
+- **Paste, then restore clipboard** (default). For each update, the app backs up
+  every clipboard format, offers the text through delayed rendering, and sends
+  Ctrl+V. It restores the backup after the destination process reads the text.
+  The pasted text carries the Windows formats that exclude it from clipboard
+  history, cloud clipboard sync, and clipboard monitors. Identified processes
+  other than the destination receive nothing. If the clipboard holds a
+  format that cannot be copied (owner-drawn, private, or GDI handle formats) or
+  more than 256 MB, nothing is pasted and the clipboard is unchanged. If the app
+  does not read the text within 3 seconds, the clipboard is restored and
+  insertion stops; an app that pastes later then inserts the restored content.
+  If another app copies something during the paste, the new content is kept.
+  Each update copies the whole backup, so a large clipboard image slows insertion.
+- **Type characters**. Sends Unicode keystrokes. **Gap between characters**
+  (0-200 ms, default 20) paces them and re-checks focus before each one. A gap of
+  0 sends the whole update at once. Slow targets such as Windows 11 Notepad read
+  each injected character when they process it, so a burst repeats one character
+  instead of the text. In testing, 20 ms typed correctly into Notepad and 5 ms
+  dropped a character. Windows may round short gaps up to about 15 ms. Use this
+  mode for apps that block or remap Ctrl+V.
+
+Settings saved before this option existed load with a 0 ms gap; set the gap
+before choosing **Type characters**. Injecting Ctrl for a paste while a bare
+hold-to-talk key auto-repeats can deliver one Ctrl+key combination, such as
+Ctrl+F9, to the destination.
+
+Neither mode activates another window. The app checks that the
 original window and focused native handle
 still match. When Windows UI Automation provides a field identity, it also
 checks that identity. Some rich editors do not expose one: moving between
 fields inside the same window may then go undetected, so check the destination
 before using the text. Known password and read-only fields are rejected. If
 focus moves or recognition fails, use **Copy transcript** in the main window
-instead. Some target apps may not accept simulated Unicode input, and Windows
-cannot confirm that typed events were accepted. Elevated apps and the secure
+instead. Some target apps may not accept simulated input, and Windows cannot
+confirm that typed events were accepted. Elevated apps and the secure
 desktop are unsupported.
 
 Choose a different shortcut in **Settings** if it conflicts
@@ -245,7 +272,6 @@ available for manual transcription without automatic insertion. The first
 recognition can take longer while model graphs are prepared. **Cancel** aborts
 the operation and retains visible partial text. **Copy transcript** copies the
 completed result or retained text after an error.
-No clipboard contents are read.
 
 Leave **Language hint** blank for Moonshine, which is English-only. Other model
 families can accept a language hint, but the option is model-dependent. Unsupported

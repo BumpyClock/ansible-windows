@@ -48,7 +48,8 @@ internal static unsafe partial class WindowsTextTarget
     }
 
     internal static TextDeliveryOutcome Insert(
-        CapturedTextTarget target, string text, CancellationToken cancellationToken, Func<bool> stillCurrent)
+        CapturedTextTarget target, string text, TextInsertionMethod method, int typingGapMilliseconds,
+        CancellationToken cancellationToken, Func<bool> stillCurrent)
     {
         if (string.IsNullOrWhiteSpace(text))
             return TextDeliveryOutcome.Rejected("The recognition result contains no speech text. Use Copy transcript if needed.");
@@ -71,32 +72,83 @@ internal static unsafe partial class WindowsTextTarget
         if (!target.Matches(window, focusWindow, runtimeId))
             return TextDeliveryOutcome.Rejected("The original text field no longer has focus. Use Copy transcript instead.");
 
-        var input = new KeyboardEvent[checked(text.Length * 2)];
-        for (var index = 0; index < text.Length; index++)
+        // Runs immediately before any input is sent. Re-validates the target as a rejection, but a modifier
+        // re-pressed at the last moment only defers.
+        TextDeliveryOutcome? Recheck()
         {
-            input[2 * index] = KeyboardEvent.Unicode(text[index], KeyUnicode);
-            input[2 * index + 1] = KeyboardEvent.Unicode(text[index], KeyUnicode | KeyUp);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!stillCurrent())
+                return TextDeliveryOutcome.Rejected("Another operation started before the text could be sent. Use Copy transcript instead.");
+            if (!TryFocus(0, out var currentWindow, out var currentFocus, out _) || !target.Matches(currentWindow, currentFocus, runtimeId))
+                return TextDeliveryOutcome.Rejected("Focus changed before insertion. Use Copy transcript instead.");
+            if (!ShortcutModifiersReleased())
+                return TextDeliveryOutcome.Deferred("The shortcut keys are still held; typing resumes when they are released.");
+            return null;
         }
-        cancellationToken.ThrowIfCancellationRequested();
-        if (!stillCurrent())
-            return TextDeliveryOutcome.Rejected("Another operation started before the text could be sent. Use Copy transcript instead.");
-        // Re-validate the target as a rejection, but a modifier re-pressed at the last moment only defers.
-        if (!TryFocus(0, out window, out focusWindow, out reason) || !target.Matches(window, focusWindow, runtimeId))
-            return TextDeliveryOutcome.Rejected("Focus changed before insertion. Use Copy transcript instead.");
-        if (!ShortcutModifiersReleased())
-            return TextDeliveryOutcome.Deferred("The shortcut keys are still held; typing resumes when they are released.");
-        cancellationToken.ThrowIfCancellationRequested();
-        if (!stillCurrent())
-            return TextDeliveryOutcome.Rejected("Another operation started before the text could be sent. Use Copy transcript instead.");
-        var sent = SendInput((uint)input.Length, input, Marshal.SizeOf<KeyboardEvent>());
-        if (sent != input.Length)
-        {
-            var error = Marshal.GetLastPInvokeError();
-            return TextDeliveryOutcome.Rejected($"Windows sent {sent} of {input.Length} keyboard events (error {error}). Some text may have been inserted. Check the field before using Copy transcript.");
-        }
+
+        var failure = method == TextInsertionMethod.Paste
+            ? Paste(text, ReaderProcesses(target), Recheck)
+            : Type(text, typingGapMilliseconds, Recheck);
+        if (failure is { } outcome) { return outcome; }
         return TextDeliveryOutcome.Sent(target.RuntimeId is null || runtimeId is null
             ? "Text was sent to the original window. Windows could not verify the individual field; check where the text appeared."
-            : "Text was sent to the original field. Check the field if the target app does not accept simulated typing.");
+            : "Text was sent to the original field. Check the field if the target app does not accept simulated input.");
+    }
+
+    // A gap of zero sends the whole text in one SendInput call. Slow targets such as Windows 11 Notepad resolve
+    // each injected Unicode keystroke when they process it, so a burst can repeat the latest character instead.
+    // A positive gap sends one character (or surrogate pair) at a time and re-validates the target before each.
+    private static TextDeliveryOutcome? Type(string text, int gapMilliseconds, Func<TextDeliveryOutcome?> recheck)
+    {
+        if (gapMilliseconds <= 0)
+        {
+            if (recheck() is { } veto) { return veto; }
+            return SendUnicode(text, 0, text.Length);
+        }
+        var index = 0;
+        while (index < text.Length)
+        {
+            var count = char.IsHighSurrogate(text[index]) && index + 1 < text.Length && char.IsLowSurrogate(text[index + 1]) ? 2 : 1;
+            var veto = recheck();
+            // A modifier pressed partway through pauses typing; Ctrl or Alt would otherwise turn text into shortcuts.
+            while (index > 0 && veto is { Status: TextDeliveryStatus.Deferred })
+            {
+                Thread.Sleep(25);
+                veto = recheck();
+            }
+            if (veto is { } outcome)
+            {
+                return index == 0 ? outcome : TextDeliveryOutcome.Rejected(
+                    $"Typing stopped after {index} of {text.Length} characters. {outcome.Message}");
+            }
+            if (SendUnicode(text, index, count) is { } failure) { return failure; }
+            index += count;
+            if (index < text.Length) { Thread.Sleep(gapMilliseconds); }
+        }
+        return null;
+    }
+
+    private static TextDeliveryOutcome? SendUnicode(string text, int start, int count)
+    {
+        var input = new KeyboardEvent[checked(count * 2)];
+        for (var index = 0; index < count; index++)
+        {
+            input[2 * index] = KeyboardEvent.Unicode(text[start + index], KeyUnicode);
+            input[2 * index + 1] = KeyboardEvent.Unicode(text[start + index], KeyUnicode | KeyUp);
+        }
+        var sent = SendInput((uint)input.Length, input, Marshal.SizeOf<KeyboardEvent>());
+        if (sent == input.Length) { return null; }
+        var error = Marshal.GetLastPInvokeError();
+        return TextDeliveryOutcome.Rejected($"Windows sent {sent} of {input.Length} keyboard events (error {error}). Some text may have been inserted. Check the field before using Copy transcript.");
+    }
+
+    // The process that owns the focused field reads the clipboard; for hosted apps it can differ from the
+    // foreground frame window's process.
+    private static uint[] ReaderProcesses(CapturedTextTarget target)
+    {
+        _ = GetWindowThreadProcessId(target.Window, out var windowProcess);
+        _ = GetWindowThreadProcessId(target.FocusWindow, out var focusProcess);
+        return [windowProcess, focusProcess];
     }
 
     private static bool ShortcutModifiersReleased()
@@ -284,6 +336,9 @@ internal static unsafe partial class WindowsTextTarget
 
         public static KeyboardEvent Unicode(char character, uint flags) =>
             new() { Type = InputKeyboard, Key = new KeybdInput { ScanCode = character, Flags = flags } };
+
+        public static KeyboardEvent Virtual(ushort key, uint flags) =>
+            new() { Type = InputKeyboard, Key = new KeybdInput { VirtualKey = key, ScanCode = (ushort)MapVirtualKeyW(key, 0), Flags = flags } };
     }
 
     [LibraryImport("user32.dll")]
@@ -297,6 +352,8 @@ internal static unsafe partial class WindowsTextTarget
     private static partial short GetAsyncKeyState(int key);
     [LibraryImport("user32.dll", SetLastError = true)]
     private static partial uint SendInput(uint count, [In] KeyboardEvent[] inputs, int size);
+    [LibraryImport("user32.dll")]
+    private static partial uint MapVirtualKeyW(uint code, uint mapType);
     [LibraryImport("ole32.dll")]
     private static partial int CoInitializeEx(nint reserved, uint threadingModel);
     [LibraryImport("ole32.dll")]

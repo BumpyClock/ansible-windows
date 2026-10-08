@@ -90,6 +90,14 @@ public sealed class DictationSession
     public void SetPushToTalk(bool enabled) =>
         ChangeSettings(state => state with { Settings = state.Settings with { PushToTalk = enabled } },
             new(NoticeKind.Success, "Activation mode updated", enabled ? "Hold the shortcut to dictate." : "Press the shortcut to start and finish."));
+    public void SetInsertionMethod(TextInsertionMethod method) =>
+        ChangeSettings(state => state with { Settings = state.Settings with { InsertionMethod = method } },
+            new(NoticeKind.Success, "Text insertion updated", method == TextInsertionMethod.Paste
+                ? "Dictated text is pasted. Your clipboard is restored after each paste."
+                : "Dictated text is typed one character at a time."));
+    public void SetTypingGap(int milliseconds) =>
+        ChangeSettings(state => state with { Settings = state.Settings with { TypingGapMilliseconds = milliseconds } },
+            new(NoticeKind.Success, "Typing gap updated", $"Typed characters are sent {milliseconds} ms apart."));
     public Task<SessionOutcome> MaintainModelsAsync(
         Func<CancellationToken, Task> maintenance, string? directory = null)
     {

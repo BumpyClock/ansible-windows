@@ -243,9 +243,12 @@ public sealed partial class MainWindow : Window
     private void StartDelivery(CapturedTextTarget target)
     {
         var modifiers = _configuredHotkey.Modifiers;
+        var settings = _session.State.Settings;
+        var method = settings.InsertionMethod;
+        var typingGap = settings.TypingGapMilliseconds;
         var delivery = new LiveTextDelivery(
             insert: (pending, token) => Task.Run(() =>
-                WindowsTextTarget.Insert(target, pending, token, IsDeliveryCurrent), token),
+                WindowsTextTarget.Insert(target, pending, method, typingGap, token, IsDeliveryCurrent), token),
             isCurrent: IsDeliveryCurrent,
             typingDeferred: () => _shortcutHeld && modifiers != 0,
             notify: _session.Notify);

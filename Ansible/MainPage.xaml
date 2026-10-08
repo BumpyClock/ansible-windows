@@ -50,6 +50,37 @@
                     </Grid>
                     <Border Height="1" Margin="0,12" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
                     <StackPanel Spacing="8">
+                        <TextBlock Text="Text insertion" VerticalAlignment="Center"
+                                   Style="{StaticResource BodyTextBlockStyle}" />
+                        <RadioButtons x:Name="InsertionChoice" HorizontalAlignment="Stretch" MaxColumns="1"
+                                      AutomationProperties.AutomationId="InsertionChoice"
+                                      AutomationProperties.Name="Text insertion"
+                                      SelectionChanged="InsertionMethodChanged">
+                            <RadioButtons.Resources>
+                                <Thickness x:Key="RadioButtonsTopHeaderMargin">0</Thickness>
+                            </RadioButtons.Resources>
+                            <x:String>Paste, then restore clipboard</x:String>
+                            <x:String>Type characters</x:String>
+                        </RadioButtons>
+                        <TextBlock x:Name="InsertionHelpText" TextWrapping="Wrap"
+                                   Style="{StaticResource CaptionSecondaryStyle}" />
+                        <Grid x:Name="TypingGapRow" ColumnSpacing="16" Visibility="Collapsed">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="Gap between characters (ms)" Style="{StaticResource BodyTextBlockStyle}" />
+                                <TextBlock Text="0 sends all text at once, which some apps such as Notepad garble. Windows may round short gaps up to about 15 ms."
+                                           TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}" />
+                            </StackPanel>
+                            <NumberBox x:Name="TypingGapBox" Grid.Column="1" VerticalAlignment="Center" MinWidth="120"
+                                       AutomationProperties.AutomationId="TypingGapBox"
+                                       AutomationProperties.Name="Gap between typed characters in milliseconds"
+                                       Minimum="0" Maximum="200" SmallChange="5" LargeChange="20"
+                                       SpinButtonPlacementMode="Inline" ValidationMode="InvalidInputOverwritten"
+                                       ValueChanged="TypingGapChanged" />
+                        </Grid>
+                    </StackPanel>
+                    <Border Height="1" Margin="0,12" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                    <StackPanel Spacing="8">
                         <TextBlock Text="Language hint" VerticalAlignment="Center"
                                    Style="{StaticResource BodyTextBlockStyle}" />
                         <TextBox x:Name="LanguageBox" MaxWidth="180" HorizontalAlignment="Stretch"

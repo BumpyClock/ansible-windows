@@ -32,6 +32,7 @@ The code map below describes the current layout, not required module boundaries.
 - The UI includes Dictation, Settings, Insights, and a floating dictation preview.
 - Microphone capture uses Windows `waveIn` with 16 kHz mono PCM16 and bounded audio queues.
 - Transcripts and captured audio stay in memory. Local Insights persist session metadata, not transcript text or recordings.
+- Shortcut insertion pastes through the clipboard by default, backing up and restoring every format and excluding dictated text from clipboard history and cloud sync. Paced Unicode typing is the alternative; burst typing garbles slow targets such as Windows 11 Notepad.
 
 Read `README.md` for detailed setup, model limitations, and native probe instructions.
 Use the current source to determine implemented UI behavior.
