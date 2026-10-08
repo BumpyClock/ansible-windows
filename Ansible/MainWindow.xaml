@@ -11,6 +11,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="48" />
             <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <!-- Drag region and caption buttons only. The sidebar wordmark is the single brand mark. -->
         <TitleBar x:Name="AppTitleBar" Height="48" Background="Transparent" />
@@ -96,5 +97,8 @@
                 </ContentControl>
             </Border>
         </Grid>
+        <InfoBar x:Name="ShutdownError" Grid.Row="2" Margin="16,8,16,16"
+                 IsOpen="False" IsClosable="False" Visibility="Collapsed"
+                 Severity="Error" Title="Close failed" AutomationProperties.AutomationId="ShutdownError" />
     </Grid>
 </Window>

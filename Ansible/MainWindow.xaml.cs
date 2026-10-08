@@ -334,6 +334,8 @@ public sealed partial class MainWindow : Window
         args.Cancel = true;
         if (_closing) { return; }
         _closing = true;
+        ShutdownError.IsOpen = false;
+        ShutdownError.Visibility = Visibility.Collapsed;
         _deliveryCancellation.Cancel();
         try
         {
@@ -351,7 +353,9 @@ public sealed partial class MainWindow : Window
         catch (Exception error)
         {
             Debug.WriteLine($"Ansible: native shutdown needs recovery: {error.Message}");
-            _session.Notify(NoticeKind.Error, "Close failed", $"{error.Message} Try closing the window again.");
+            ShutdownError.Message = $"{error.Message} Try closing the window again.";
+            ShutdownError.Visibility = Visibility.Visible;
+            ShutdownError.IsOpen = true;
             _closing = false;
         }
     }
