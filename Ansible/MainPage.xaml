@@ -49,14 +49,13 @@
                         </StackPanel>
                     </Grid>
                     <Border Height="1" Margin="0,12" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
-                    <Grid ColumnSpacing="16">
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <StackPanel Spacing="8">
                         <TextBlock Text="Language hint" VerticalAlignment="Center"
                                    Style="{StaticResource BodyTextBlockStyle}" />
-                        <TextBox x:Name="LanguageBox" Grid.Column="1" Width="180" VerticalAlignment="Center"
+                        <TextBox x:Name="LanguageBox" MaxWidth="180" HorizontalAlignment="Stretch"
                                  AutomationProperties.Name="Language hint" PlaceholderText="Model default"
                                  TextChanged="LanguageChanged" />
-                    </Grid>
+                    </StackPanel>
                 </StackPanel>
             </Border>
 

@@ -253,7 +253,8 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
             });
             content.Children.Add(new TextBlock
             {
-                Text = partial ? "A complete model stays installed." : "You can download it again from this page.",
+                Text = partial ? "Deletes partial weights and their resume data." : "You can download it again from this page.",
+                TextWrapping = TextWrapping.Wrap,
                 Style = (Style)Application.Current.Resources["CaptionSecondaryStyle"]
             });
             var dialog = new ContentDialog
