@@ -1,18 +1,27 @@
 <Solution>
   <Configurations>
     <Platform Name="Any CPU" />
+    <Platform Name="ARM64" />
     <Platform Name="x64" />
+    <Platform Name="x86" />
   </Configurations>
   <Project Path="Ansible.Core/Ansible.Core.csproj">
+    <Platform Solution="*|ARM64" Project="ARM64" />
     <Platform Solution="*|x64" Project="x64" />
+    <Platform Solution="*|x86" Project="x86" />
   </Project>
   <Project Path="Ansible.Probe/Ansible.Probe.csproj">
+    <Platform Solution="*|ARM64" Project="ARM64" />
     <Platform Solution="*|x64" Project="x64" />
+    <Platform Solution="*|x86" Project="x86" />
   </Project>
   <Project Path="Ansible.Tests/Ansible.Tests.csproj">
+    <Platform Solution="*|ARM64" Project="ARM64" />
     <Platform Solution="*|x64" Project="x64" />
+    <Platform Solution="*|x86" Project="x86" />
   </Project>
   <Project Path="Ansible/Ansible.csproj">
+    <Platform Solution="*|ARM64" Project="ARM64" />
     <Platform Solution="*|x64" Project="x64" />
     <Deploy Solution="Debug|x64" />
   </Project>
