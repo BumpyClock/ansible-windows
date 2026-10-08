@@ -15,6 +15,7 @@ public sealed class NativeAudioEngine : IRecognitionEngine
     private NativeAudioHandle? _registry;
     private NativeAudioHandle? _model;
     private NativeAudioHandle? _session;
+    private SessionKey? _sessionKey;
     private readonly NativeModelIntegrity _integrity = new();
     private NativeModelInventory? _inventory;
     private FileStream? _modelLease;
@@ -133,10 +134,24 @@ public sealed class NativeAudioEngine : IRecognitionEngine
         ArgumentNullException.ThrowIfNull(audio);
         options = ValidateOptions(model, options);
         var result = await RunExclusiveAsync(() => NativeOperation.Run(
-            () => StreamCore(model, audio, options, progress, cancellationToken, onReady), CleanupOperation), cancellationToken);
+            () => StreamCore(model, audio, options, progress, cancellationToken, onReady), CleanupStream), cancellationToken);
         progress?.Report(new TranscriptUpdate(result.DisplayText, true, result.SpeechText));
         return result;
     }
+
+    public Task PrepareAsync(AudioModel model, RecognitionOptions options, CancellationToken cancellationToken)
+    {
+        // Request text such as the dictionary is per stream; only the model and backend shape the session.
+        options = ValidateOptions(model, options with { CustomDictionary = "" });
+        return RunExclusiveAsync(() => NativeOperation.Run(() =>
+        {
+            EnsureSession(model, "streaming", NativeMemory.MaximumStreamFrames * sizeof(float), options, cancellationToken);
+            return true;
+        }, success => { if (!success) { ReleaseModel(); } }), cancellationToken);
+    }
+
+    public Task UnloadAsync(CancellationToken cancellationToken) =>
+        RunExclusiveAsync(() => { ReleaseModel(); return true; }, cancellationToken);
 
     private RecognitionResult StreamCore(
         AudioModel model, ChannelReader<byte[]> audio, RecognitionOptions options,
@@ -352,6 +367,11 @@ public sealed class NativeAudioEngine : IRecognitionEngine
             if (NativeAudioApi.Supports(_model!.DangerousGetHandle(), "asr", mode) == 0)
                 throw new NotSupportedException($"{model.Id} does not support {mode} speech recognition.");
         });
+        var key = new SessionKey(model.Id, mode, options.Backend, options.DeviceIndex);
+        if (_session is not null && _sessionKey == key) { return; }
+        _session?.Dispose();
+        _session = null;
+        _sessionKey = null;
         var selectedBackend = options.Backend == NativeBackend.Vulkan ? "vulkan" : "cpu";
         var backendName = Marshal.StringToCoTaskMemUTF8(selectedBackend);
         try
@@ -365,6 +385,7 @@ public sealed class NativeAudioEngine : IRecognitionEngine
                 NativeAudioApi.Check(NativeAudioApi.SessionCreate(_model!.DangerousGetHandle(), "asr", mode, in backend, 0, out var session),
                     $"create the native recognition session on {selectedBackend} device {options.DeviceIndex}");
                 _session = new NativeAudioHandle(session, NativeHandleKind.Session);
+                _sessionKey = key;
             });
         }
         finally
@@ -438,10 +459,34 @@ public sealed class NativeAudioEngine : IRecognitionEngine
         }
     }
 
+    // A successful stream that resets cleanly keeps its session: creating one costs about 1.5 s for Nemotron on CPU.
+    private void CleanupStream(bool success)
+    {
+        var session = _session;
+        var started = _streamStartAttempted;
+        if (success && session is not null)
+        {
+            _streamStartAttempted = false;
+            try
+            {
+                if (started)
+                    NativeAudioApi.Check(NativeAudioApi.StreamReset(session.DangerousGetHandle()), "reset the dictation session");
+                return;
+            }
+            catch
+            {
+                ReleaseModel();
+                throw;
+            }
+        }
+        CleanupOperation(success);
+    }
+
     private void CleanupOperation(bool success)
     {
         var session = _session;
         _session = null;
+        _sessionKey = null;
         var reset = _streamStartAttempted;
         _streamStartAttempted = false;
         NativeOperation.Cleanup(success,
@@ -455,6 +500,7 @@ public sealed class NativeAudioEngine : IRecognitionEngine
     {
         _session?.Dispose();
         _session = null;
+        _sessionKey = null;
         _streamStartAttempted = false;
         _model?.Dispose();
         _model = null;
@@ -479,4 +525,6 @@ public sealed class NativeAudioEngine : IRecognitionEngine
             _gate.Release();
         }
     }
+
+    private sealed record SessionKey(string ModelId, string Mode, NativeBackend Backend, int DeviceIndex);
 }

@@ -62,30 +62,152 @@ public sealed class DictationSessionTests : IDisposable
     }
 
     [Fact]
-    public async Task CancelledReadinessCannotOpenAMicrophone()
+    public async Task MicrophoneOpensWhileTheModelLoadsAndKeepsEarlySpeech()
     {
         var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var received = new List<byte[]>();
         var engine = new FakeEngine
         {
-            Streaming = async (_, _, token, callback) =>
+            Streaming = async (_, audio, token, callback) =>
             {
-                await ready.Task;
+                await ready.Task.WaitAsync(token);
                 callback?.Invoke();
-                token.ThrowIfCancellationRequested();
+                await foreach (var packet in audio.ReadAllAsync(token)) { received.Add(packet); }
+                return new RecognitionResult("early words", "early words");
+            }
+        };
+        var source = new FakeCapture();
+        var session = Create(engine, new FakeCaptureFactory { Starting = _ => Task.FromResult<IAudioCapture>(source) });
+        await session.InitializeAsync();
+        var recording = session.StartDictationAsync();
+        await WaitForStateAsync(session, DictationPhase.Recording);
+        Assert.Contains("model is loading", session.State.Notice.Message);
+        Assert.True(source.Packets.Writer.TryWrite([1, 2]));
+        // Releasing hold-to-talk before the model is ready finishes the dictation instead of discarding it.
+        Assert.True(session.State.CanFinish);
+        await session.FinishAsync();
+        ready.SetResult();
+
+        var outcome = await recording;
+
+        Assert.Equal(SessionOutcomeKind.Completed, outcome.Kind);
+        Assert.Equal("early words", outcome.Result?.SpeechText);
+        Assert.Equal(new byte[] { 1, 2 }, Assert.Single(received));
+        await session.CloseAsync();
+    }
+
+    [Fact]
+    public async Task CancelWhileTheModelLoadsReleasesTheMicrophone()
+    {
+        var engine = new FakeEngine
+        {
+            Streaming = async (_, _, token, _) =>
+            {
+                await Task.Delay(Timeout.InfiniteTimeSpan, token);
                 return new RecognitionResult("", "");
             }
         };
-        var capture = new FakeCaptureFactory();
-        var session = Create(engine, capture);
+        var source = new FakeCapture();
+        var session = Create(engine, new FakeCaptureFactory { Starting = _ => Task.FromResult<IAudioCapture>(source) });
         await session.InitializeAsync();
         var recording = session.StartDictationAsync();
-        await engine.StreamEntered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await WaitForStateAsync(session, DictationPhase.Recording);
+
         await session.CancelAsync();
-        ready.SetResult();
+
         Assert.Equal(SessionOutcomeKind.Cancelled, (await recording).Kind);
-        Assert.Equal(0, capture.Starts);
+        Assert.True(source.IsReleased);
         Assert.Equal(DictationPhase.Ready, session.State.Phase);
         await session.CloseAsync();
+    }
+
+    [Fact]
+    public async Task ConnectingPreparesTheSelectedModelAndModelChangesPrepareAgain()
+    {
+        var engine = new FakeEngine();
+        var session = Create(engine);
+        await session.InitializeAsync();
+        await engine.PrepareCalled.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.Equal(Model, engine.PreparedModel);
+        Assert.Equal(NativeBackend.Cpu, engine.PreparedOptions?.Backend);
+
+        session.SetBackend(NativeBackend.Vulkan);
+        await WaitUntilAsync(() => engine.PreparedOptions?.Backend == NativeBackend.Vulkan);
+
+        await session.CloseAsync();
+        Assert.Equal(0, engine.Unloads);
+    }
+
+    [Fact]
+    public async Task IdleModelUnloadsAfterInactivityAndDictationRestartsTheCountdown()
+    {
+        var clock = new ManualTime();
+        var engine = new FakeEngine();
+        var source = new FakeCapture();
+        var session = new DictationSession(_ => engine,
+            new FakeCaptureFactory { Starting = _ => Task.FromResult<IAudioCapture>(source) }, new FakeInput(),
+            new FakeUsageStore(), "models", new FakeSettingsStore(), clock, idleUnloadAfter: TimeSpan.FromMinutes(10));
+        await session.InitializeAsync();
+        clock.Advance(TimeSpan.FromMinutes(9));
+        var recording = session.StartDictationAsync();
+        await WaitForStateAsync(session, DictationPhase.Recording);
+        await session.FinishAsync();
+        await recording;
+        clock.Advance(TimeSpan.FromMinutes(9));
+        Assert.Equal(0, engine.Unloads);
+
+        clock.Advance(TimeSpan.FromMinutes(2));
+
+        await engine.UnloadCalled.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.Equal(1, engine.Unloads);
+        await session.CloseAsync();
+    }
+
+    [Fact]
+    public async Task CloseCancelsAndJoinsPreparationBeforeReleasingTheEngine()
+    {
+        var cancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var engine = new FakeEngine
+        {
+            Preparing = async token =>
+            {
+                try { await Task.Delay(Timeout.InfiniteTimeSpan, token); }
+                finally { cancelled.TrySetResult(); }
+            }
+        };
+        var session = Create(engine);
+        await session.InitializeAsync();
+        await engine.PrepareCalled.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        await session.CloseAsync().WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.True(cancelled.Task.IsCompleted);
+        Assert.Equal(1, engine.Disposals);
+        Assert.Equal(DictationPhase.Closed, session.State.Phase);
+    }
+
+    [Fact]
+    public async Task FailedPreparationWarnsWithoutBlockingDictation()
+    {
+        var engine = new FakeEngine { Preparing = _ => Task.FromException(new InsufficientMemoryException("not enough memory")) };
+        var session = Create(engine);
+        await session.InitializeAsync();
+
+        await WaitUntilAsync(() => session.State.Notice.Title == "Model not preloaded");
+
+        Assert.Contains("not enough memory", session.State.Notice.Message);
+        Assert.True(session.State.CanStart);
+        await session.CloseAsync();
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(2);
+        while (!condition())
+        {
+            if (DateTime.UtcNow > deadline) { throw new TimeoutException("The expected session state was not reached."); }
+            await Task.Delay(10);
+        }
     }
 
     [Fact]
@@ -1039,6 +1161,27 @@ public sealed class DictationSessionTests : IDisposable
             FinishedStreams++;
             StreamCompleted.TrySetResult();
             return Result;
+        }
+        public int Prepares;
+        public int Unloads;
+        public AudioModel? PreparedModel;
+        public RecognitionOptions? PreparedOptions;
+        public Func<CancellationToken, Task>? Preparing { get; init; }
+        public TaskCompletionSource PrepareCalled { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource UnloadCalled { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public async Task PrepareAsync(AudioModel model, RecognitionOptions options, CancellationToken token)
+        {
+            Interlocked.Increment(ref Prepares);
+            PreparedModel = model;
+            PreparedOptions = options;
+            PrepareCalled.TrySetResult();
+            if (Preparing is not null) { await Preparing(token); }
+        }
+        public Task UnloadAsync(CancellationToken token)
+        {
+            Interlocked.Increment(ref Unloads);
+            UnloadCalled.TrySetResult();
+            return Task.CompletedTask;
         }
         public async ValueTask DisposeAsync()
         {

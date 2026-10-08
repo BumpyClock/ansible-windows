@@ -35,6 +35,10 @@ public interface IRecognitionEngine : IAsyncDisposable
     Task<RecognitionResult> StreamAsync(
         AudioModel model, ChannelReader<byte[]> audio, RecognitionOptions options,
         IProgress<TranscriptUpdate>? progress, CancellationToken cancellationToken, Action? onReady = null);
+    /// <summary>Loads the model and a reusable streaming session so the next dictation starts without loading.</summary>
+    Task PrepareAsync(AudioModel model, RecognitionOptions options, CancellationToken cancellationToken);
+    /// <summary>Releases the resident model and session; the next recognition loads them again.</summary>
+    Task UnloadAsync(CancellationToken cancellationToken);
 }
 
 public interface IAudioCapture : IAsyncDisposable

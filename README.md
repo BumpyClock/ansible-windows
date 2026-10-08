@@ -265,8 +265,19 @@ selecting another shortcut. Bare letters, digits and Space cannot be registered
 without Ctrl, Alt or Win, so the shortcut cannot swallow ordinary typing.
 
 The main-window **Start dictation** and **Finish dictation** buttons remain
-available for manual transcription without automatic insertion. The first
-recognition can take longer while model graphs are prepared. **Cancel** aborts
+available for manual transcription without automatic insertion.
+
+The app loads the selected streaming model and a native session in the
+background when it connects, after each operation, and when the model or
+processor changes. After 10 minutes without an operation it releases them; the
+next dictation loads them again. Dictation opens the microphone at once, even
+while the model is still loading. Speech waits in the capture's bounded
+five-minute backlog and is recognized when the model is ready, so words spoken
+during a load are kept and finishing early still produces a transcript. If
+preloading fails, a warning appears and dictation loads the model itself.
+Measured with Nemotron 0.6B on CPU: loading the model and session took about
+3.1 s, a new session alone about 1.5 s, and a reused session was ready in under
+0.1 s. **Cancel** aborts
 the operation and retains visible partial text. **Copy transcript** copies the
 completed result or retained text after an error.
 
@@ -432,8 +443,8 @@ AVX state. Initialization checks eligibility before reaching native kernels.
 Other architectures and CPU profiles require their own build and qualification.
 
 The native harness defaults to CPU inference, four threads, and 512 MB of memory
-headroom; `--backend vulkan` selects GPU inference. Models load lazily; keep at
-most one model resident. Host RAM/commit admission checks remain enabled on both
+headroom; `--backend vulkan` selects GPU inference. The app preloads the selected
+model and unloads it after inactivity; keep at most one model resident. Host RAM/commit admission checks remain enabled on both
 backends. They are not a dedicated GPU-memory budget check; GPU allocation
 failures can still occur.
 Keep the memory guard enabled. Being listed in the installed catalog does not
@@ -577,8 +588,11 @@ a close retry attempts recovery instead of pretending the app is idle.
 
 The native engine validates the ABI before publishing a module, checks
 cancellation between preparation stages, and resets or invalidates operation
-state before reuse. Model weights may stay resident, but a completed operation
-does not retain its transcript or decoding state.
+state before reuse. A streaming session that finishes and resets successfully is
+kept for the next dictation; a failed or cancelled operation releases the model
+and session. Reused sessions produced transcripts identical to fresh sessions in
+repeated runs of the public sample. A completed operation does not retain its
+transcript or decoding state.
 
 Deterministic engine/capture/input/store doubles cover lifecycle and failure
 contracts without loading model weights. The separately tagged native

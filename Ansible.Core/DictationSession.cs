@@ -13,7 +13,14 @@ public sealed class DictationSession
     private readonly SessionNotice? _initialSettingsWarning;
     private readonly TimeProvider _time;
     private readonly TimeSpan _timeout;
+    private readonly TimeSpan _idleUnload;
     private IRecognitionEngine? _engine;
+    // Background model preparation and idle unloading for the connected engine. Serialized, joined before the
+    // engine is replaced or the session closes, and never owned by an operation.
+    private Task _engineWork = Task.CompletedTask;
+    private CancellationTokenSource _engineWorkCancellation = new();
+    private ITimer? _idleTimer;
+    private long _idleGeneration;
     private Operation? _operation;
     private Operation? _recovery;
     private Task? _closeTask;
@@ -25,7 +32,8 @@ public sealed class DictationSession
     public DictationSession(
         Func<string, IRecognitionEngine> engineFactory, IAudioCaptureFactory captureFactory,
         IAudioInputReader input, IUsageStore usageStore, string modelsDirectory,
-        IAppSettingsStore settingsStore, TimeProvider? time = null, TimeSpan? operationTimeout = null)
+        IAppSettingsStore settingsStore, TimeProvider? time = null, TimeSpan? operationTimeout = null,
+        TimeSpan? idleUnloadAfter = null)
     {
         _engineFactory = engineFactory;
         _captureFactory = captureFactory;
@@ -35,6 +43,7 @@ public sealed class DictationSession
         _settingsStore = settingsStore;
         _time = time ?? TimeProvider.System;
         _timeout = operationTimeout ?? TimeSpan.FromMinutes(5);
+        _idleUnload = idleUnloadAfter ?? TimeSpan.FromMinutes(10);
         var settings = new AppSettings();
         try
         {
@@ -144,6 +153,8 @@ public sealed class DictationSession
             var updated = change(_state);
             updated.Settings.Validate();
             state = SetState(updated with { Notice = SaveSettings(updated.Settings) ?? notice });
+            // A model or processor change prepares the new session; other settings leave it resident.
+            KeepEngineWarm();
         }
         Publish(state);
     }
@@ -202,6 +213,7 @@ public sealed class DictationSession
             operation.TranscriptUpdates = transcriptUpdates;
             _operation = operation;
             _lastElapsed = TimeSpan.Zero;
+            StopIdleTimer();
             state = SetState(_state with
             {
                 Activity = activity,
@@ -304,6 +316,7 @@ public sealed class DictationSession
                 Notice = _recovery is not null ? new(NoticeKind.Error, "Cleanup requires recovery",
                     "Native resources remain owned. Close the app to retry release; new work is blocked.") : notice
             });
+            if (_recovery is null) { KeepEngineWarm(); }
         }
         if (_recovery is null) { operation.Dispose(); }
         operation.Completion.TrySetResult(outcome);
@@ -334,6 +347,7 @@ public sealed class DictationSession
         var backendVersion = candidate.Version;
         IRecognitionEngine? previous;
         SessionSnapshot detached;
+        await StopEngineWorkAsync();
         lock (_gate)
         {
             EnsureCurrent(operation);
@@ -388,6 +402,7 @@ public sealed class DictationSession
 
     private async Task MaintainModelsCoreAsync(Operation operation)
     {
+        await StopEngineWorkAsync();
         SessionSnapshot state;
         lock (_gate)
         {
@@ -438,39 +453,152 @@ public sealed class DictationSession
         operation.Inference = _engine!.StreamAsync(operation.Model!, operation.Pipe.Reader, operation.Options,
             Progress(operation),
             operation.Token, () => ready.TrySetResult());
-        if (await Task.WhenAny(ready.Task, operation.Inference) == operation.Inference)
-        {
-            await operation.Inference;
-            throw new InvalidOperationException("The native stream completed before audio input was admitted.");
-        }
-        await ready.Task.WaitAsync(operation.Token);
-        operation.Token.ThrowIfCancellationRequested();
-        lock (_gate) { EnsureCurrent(operation); }
         if (replay is null)
         {
+            // Open the microphone while the model loads. Until the stream reads, speech waits in the capture's
+            // bounded backlog, which stops recording at its five-minute limit rather than dropping samples.
             operation.Capture = await _captureFactory.StartAsync(operation.Token);
             operation.Token.ThrowIfCancellationRequested();
             lock (_gate) { EnsureCurrent(operation); }
             operation.LevelHandler = value => PublishLevel(operation, value);
             operation.Capture.LevelChanged += operation.LevelHandler;
             operation.Producer = ForwardAsync(operation.Capture.Audio, operation.Pipe.Writer, operation.Token);
+            operation.StartedAt = _time.GetTimestamp();
+            var loading = !ready.Task.IsCompleted;
+            UpdateCurrent(operation, state => state with
+            {
+                Phase = DictationPhase.Recording,
+                Notice = loading
+                    ? new(NoticeKind.Information, "Listening", "The model is loading. Speech is kept and recognized when it is ready. Audio stays local.")
+                    : new(NoticeKind.Information, "Listening", "Audio stays local. Finish when you are done.")
+            });
+            await WaitForStreamAsync(operation, ready.Task);
+            if (loading)
+            {
+                SessionSnapshot? loaded = null;
+                lock (_gate)
+                {
+                    EnsureCurrent(operation);
+                    if (_state.Phase == DictationPhase.Recording)
+                        loaded = SetState(_state with { Notice = new(NoticeKind.Information, "Listening", "Audio stays local. Finish when you are done.") });
+                }
+                if (loaded is not null) { Publish(loaded); }
+            }
         }
         else
         {
+            await WaitForStreamAsync(operation, ready.Task);
             operation.Producer = ReplayAsync(operation, replay);
+            operation.StartedAt = _time.GetTimestamp();
+            UpdateCurrent(operation, state => state with
+            {
+                Phase = DictationPhase.Recording,
+                Notice = new(NoticeKind.Information, "Live verification", "A WAV recording feeds the native stream; no microphone is open.")
+            });
         }
-        operation.StartedAt = _time.GetTimestamp();
-        UpdateCurrent(operation, state => state with
-        {
-            Phase = DictationPhase.Recording,
-            Notice = new(NoticeKind.Information, replay is null ? "Listening" : "Live verification",
-                replay is null ? "Audio stays local. Finish when you are done." : "A WAV recording feeds the native stream; no microphone is open.")
-        });
         operation.Result = await operation.Inference;
         operation.Token.ThrowIfCancellationRequested();
         await operation.Producer!;
         operation.RecordingSeconds = operation.Capture?.CapturedSeconds ?? 0;
         UpdateResult(operation);
+    }
+
+    private async Task WaitForStreamAsync(Operation operation, Task ready)
+    {
+        if (await Task.WhenAny(ready, operation.Inference!) == operation.Inference)
+        {
+            await operation.Inference;
+            throw new InvalidOperationException("The native stream completed before audio input was admitted.");
+        }
+        await ready.WaitAsync(operation.Token);
+        operation.Token.ThrowIfCancellationRequested();
+        lock (_gate) { EnsureCurrent(operation); }
+    }
+
+    // Requires _gate. Prepares the selected streaming model in the background and restarts the idle countdown.
+    private void KeepEngineWarm()
+    {
+        if (_closing || _engine is null || _operation is not null || _recovery is not null) { return; }
+        if (_state.SelectedModel is { Mode: "streaming" } model)
+        {
+            var options = new RecognitionOptions(_state.Language, "", _state.Settings.Backend);
+            QueueEngineWork((engine, token) => engine.PrepareAsync(model, options, token),
+                "Model not preloaded", "The model loads when dictation starts instead.");
+        }
+        ArmIdleTimer();
+    }
+
+    // Requires _gate.
+    private void QueueEngineWork(Func<IRecognitionEngine, CancellationToken, Task> work, string title, string consequence)
+    {
+        var engine = _engine!;
+        var token = _engineWorkCancellation.Token;
+        var previous = _engineWork;
+        _engineWork = Task.Run(async () =>
+        {
+            await previous;
+            if (token.IsCancellationRequested) { return; }
+            try { await work(engine, token); }
+            catch (Exception) when (token.IsCancellationRequested) { }
+            catch (Exception error) { ReportEngineWorkFailure(title, $"{consequence} {error.Message}"); }
+        });
+    }
+
+    private void ReportEngineWorkFailure(string title, string message)
+    {
+        SessionSnapshot state;
+        lock (_gate)
+        {
+            // Never replace an operation's own warning or error with a background consequence of the same cause.
+            if (_closing || _operation is not null || _state.Notice.Kind is NoticeKind.Warning or NoticeKind.Error) { return; }
+            state = SetState(_state with { Notice = new(NoticeKind.Warning, title, message) });
+        }
+        Publish(state);
+    }
+
+    // Cancels and joins background engine work so the engine can be replaced or disposed.
+    private async Task StopEngineWorkAsync()
+    {
+        Task work;
+        CancellationTokenSource cancellation;
+        lock (_gate)
+        {
+            StopIdleTimer();
+            work = _engineWork;
+            cancellation = _engineWorkCancellation;
+            _engineWork = Task.CompletedTask;
+            _engineWorkCancellation = new CancellationTokenSource();
+        }
+        cancellation.Cancel();
+        await work;
+        cancellation.Dispose();
+    }
+
+    // Requires _gate.
+    private void ArmIdleTimer()
+    {
+        StopIdleTimer();
+        var generation = _idleGeneration;
+        _idleTimer = _time.CreateTimer(_ => UnloadWhenIdle(generation), null, _idleUnload, Timeout.InfiniteTimeSpan);
+    }
+
+    // Requires _gate.
+    private void StopIdleTimer()
+    {
+        _idleTimer?.Dispose();
+        _idleTimer = null;
+        _idleGeneration++;
+    }
+
+    private void UnloadWhenIdle(long generation)
+    {
+        lock (_gate)
+        {
+            if (generation != _idleGeneration || _closing || _engine is null || _operation is not null || _recovery is not null) { return; }
+            StopIdleTimer();
+            QueueEngineWork((engine, token) => engine.UnloadAsync(token),
+                "Model still loaded", "The idle model could not be released and stays in memory.");
+        }
     }
 
     private async Task ReleaseOperationAsync(Operation operation, List<Exception> errors)
@@ -618,6 +746,7 @@ public sealed class DictationSession
                 recovery.Dispose();
                 lock (_gate) { _recovery = null; }
             }
+            await StopEngineWorkAsync();
             if (_engine is not null) { await _engine.DisposeAsync(); _engine = null; }
             SessionSnapshot state;
             lock (_gate) { state = SetState(_state with { Phase = DictationPhase.Closed, Activity = SessionActivity.None }); }
