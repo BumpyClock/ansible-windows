@@ -87,6 +87,7 @@ try
         throw new InvalidDataException("The native engine returned no speech for the validation recording.");
     }
     Console.WriteLine($"WAV transcription completed in {clock.Elapsed.TotalMilliseconds:F0} ms: {transcript.DisplayText}");
+    Console.WriteLine($"Speech text={transcript.SpeechText ?? "unknown"}");
     Console.WriteLine($"Spoken words={transcript.SpokenWords?.ToString() ?? "unknown"}");
     if (model.Mode == "offline" || fileOnly)
     {
@@ -133,6 +134,7 @@ try
         }
         Console.WriteLine($"Live stream completed in {clock.Elapsed.TotalMilliseconds:F0} ms; previews during upload={previewsDuringUpload}");
         Console.WriteLine(liveTranscript.DisplayText);
+        Console.WriteLine($"Speech text={liveTranscript.SpeechText ?? "unknown"}");
         Console.WriteLine($"Spoken words={liveTranscript.SpokenWords?.ToString() ?? "unknown"}");
     }
     catch (Exception error)

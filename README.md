@@ -567,7 +567,7 @@ additional preparation work and waits for a currently executing native call;
 it cannot force-abort that call. Allow the probe to exit before another run.
 
 `NativeStreamingDeliveryTests` checks that real Nemotron recognition emits
-authoritative speech while its audio input is still open. Set `DICTATION_MODELS_DIRECTORY`
+speech text while its audio input is still open. Set `DICTATION_MODELS_DIRECTORY`
 to an existing verified model folder when it is not `.runtime\models`, and run
 `dotnet test .\Ansible.Tests\Ansible.Tests.csproj --filter FullyQualifiedName~NativeStreamingDeliveryTests`.
 The test uses the public sample and does not open a microphone or persist usage.
