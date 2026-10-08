@@ -1,0 +1,19 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+  </Configurations>
+  <Project Path="Ansible.Core/Ansible.Core.csproj">
+    <Platform Solution="*|x64" Project="x64" />
+  </Project>
+  <Project Path="Ansible.Probe/Ansible.Probe.csproj">
+    <Platform Solution="*|x64" Project="x64" />
+  </Project>
+  <Project Path="Ansible.Tests/Ansible.Tests.csproj">
+    <Platform Solution="*|x64" Project="x64" />
+  </Project>
+  <Project Path="Ansible/Ansible.csproj">
+    <Platform Solution="*|x64" Project="x64" />
+    <Deploy Solution="Debug|x64" />
+  </Project>
+</Solution>

@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page x:Class="Ansible.InsightsPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+        <Grid>
+            <StackPanel MaxWidth="{StaticResource PageContentMaxWidth}" Padding="{StaticResource PagePadding}" Spacing="16">
+            <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <TextBlock Text="Insights" Style="{StaticResource PageTitleStyle}" />
+                <TextBlock Grid.Column="1" Text="All time" VerticalAlignment="Center" Margin="0,0,0,8"
+                           Style="{StaticResource CaptionSecondaryStyle}"
+                           ToolTipService.ToolTip="Every completed session recorded on this device." />
+            </Grid>
+            <InfoBar x:Name="UsageErrorBar" IsOpen="False" IsClosable="False" Severity="Warning" Visibility="Collapsed" />
+            <TextBlock x:Name="IntroText" Visibility="Collapsed" TextWrapping="Wrap"
+                       Style="{StaticResource SecondaryTextStyle}" />
+
+            <Grid x:Name="SummaryGrid" ColumnSpacing="16" RowSpacing="16" SizeChanged="LayoutChanged">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                <Border x:Name="PaceCard" Style="{StaticResource MetricCardStyle}">
+                    <StackPanel Spacing="4">
+                        <TextBlock x:Name="PaceText" Text="--" Style="{StaticResource TitleTextBlockStyle}"
+                                   ToolTipService.ToolTip="Recognized dictation words divided by recorded microphone time, including pauses." />
+                        <TextBlock Text="Average words per minute" Style="{StaticResource CaptionSecondaryStyle}" />
+                        <TextBlock x:Name="PaceDefinition" Text="Dictation words divided by microphone time, including pauses."
+                                   TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}" />
+                    </StackPanel>
+                </Border>
+                <Border x:Name="SessionsCard" Grid.Column="1" Style="{StaticResource MetricCardStyle}">
+                    <StackPanel Spacing="4">
+                        <TextBlock x:Name="SessionsText" Text="0" Style="{StaticResource TitleTextBlockStyle}"
+                                   ToolTipService.ToolTip="Only completed sessions count." />
+                        <TextBlock Text="Dictations" Style="{StaticResource CaptionSecondaryStyle}" />
+                        <TextBlock x:Name="SessionsDefinition" Text="Only completed sessions count."
+                                   TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}" />
+                    </StackPanel>
+                </Border>
+                <Border x:Name="WordsCard" Grid.Column="2" Style="{StaticResource MetricCardStyle}">
+                    <StackPanel Spacing="4">
+                        <TextBlock x:Name="TotalWordsText" Text="0" Style="{StaticResource TitleTextBlockStyle}"
+                                   ToolTipService.ToolTip="Excludes sessions with unknown word counts." />
+                        <TextBlock Text="Recognized words" Style="{StaticResource CaptionSecondaryStyle}" />
+                        <TextBlock x:Name="WordsDefinition" Text="Excludes sessions with unknown word counts."
+                                   TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <Grid x:Name="DetailGrid" ColumnSpacing="16" RowSpacing="16">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                <Border x:Name="ModelsCard" Style="{StaticResource MetricCardStyle}">
+                    <StackPanel Spacing="16">
+                        <TextBlock Text="Sessions by model" Style="{StaticResource BodyStrongTextBlockStyle}"
+                                   ToolTipService.ToolTip="Up to five models, ranked by completed sessions." />
+                        <StackPanel x:Name="ModelRows" Spacing="8" />
+                    </StackPanel>
+                </Border>
+                <Border x:Name="ActivityCard" Grid.Column="1" Style="{StaticResource MetricCardStyle}">
+                    <StackPanel Spacing="16">
+                        <Grid>
+                            <TextBlock Text="Activity" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                            <TextBlock x:Name="StreakText" Text="0 day streak" HorizontalAlignment="Right"
+                                       Style="{StaticResource BodyTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </Grid>
+                        <Grid x:Name="HeatmapHost" SizeChanged="HeatmapHostSizeChanged">
+                            <Grid x:Name="HeatmapGrid" ColumnSpacing="4" RowSpacing="4" HorizontalAlignment="Center"
+                                  AutomationProperties.Name="Local session activity calendar" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </StackPanel>
+    </Grid>
+    </ScrollViewer>
+</Page>

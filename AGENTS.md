@@ -38,15 +38,15 @@ Use the current source to determine implemented UI behavior.
 
 ## Code map
 
-- `DictationPoc\` contains the WinUI app, XAML views, floating window, and Windows microphone integration.
-- `DictationPoc.Core\DictationSession.cs` owns the shared operation lifecycle, including startup, recognition, preferences, cancellation and shutdown.
-- `DictationPoc.Core\RecognitionContracts.cs` defines testable engine, audio and storage boundaries. `SessionState.cs` defines immutable UI snapshots and terminal outcomes.
-- `DictationPoc.Core\` contains native interop, verified model admission, shared audio input parsing, speech-content normalization, and per-user usage storage.
-- `DictationPoc.Core\Windows\` owns Windows capture bindings and retained-resource teardown. `WaveInCaptureFactory.cs` composes the native capture adapter.
-- `DictationPoc\AppPaths.cs` supplies installation resources and per-user data paths. `UiSessionObserver.cs` dispatches versioned snapshots to the UI.
-- `DictationPoc.Core\NativeAudioEngine.cs` owns model sessions and recognition. `NativeAudioApi.cs` defines the C ABI bindings.
-- `DictationPoc.Probe\` exercises actual native WAV and streaming recognition independently of the UI.
-- `DictationPoc.Tests\` contains xUnit tests for core behavior.
+- `Ansible\` contains the WinUI app, XAML views, floating window, and Windows microphone integration.
+- `Ansible.Core\DictationSession.cs` owns the shared operation lifecycle, including startup, recognition, preferences, cancellation and shutdown.
+- `Ansible.Core\RecognitionContracts.cs` defines testable engine, audio and storage boundaries. `SessionState.cs` defines immutable UI snapshots and terminal outcomes.
+- `Ansible.Core\` contains native interop, verified model admission, shared audio input parsing, speech-content normalization, and per-user usage storage.
+- `Ansible.Core\Windows\` owns Windows capture bindings and retained-resource teardown. `WaveInCaptureFactory.cs` composes the native capture adapter.
+- `Ansible\AppPaths.cs` supplies installation resources and per-user data paths. `UiSessionObserver.cs` dispatches versioned snapshots to the UI.
+- `Ansible.Core\NativeAudioEngine.cs` owns model sessions and recognition. `NativeAudioApi.cs` defines the C ABI bindings.
+- `Ansible.Probe\` exercises actual native WAV and streaming recognition independently of the UI.
+- `Ansible.Tests\` contains xUnit tests for core behavior.
 - `tools\` contains model setup, native build, and NativeAOT publish scripts.
 - `tools\audio-models.json` owns model IDs, capabilities, pinned downloads, checksums, and licenses.
 - `.runtime\` holds downloaded models, upstream source, native tools, and generated binaries. Keep it out of Git.
@@ -59,7 +59,7 @@ Native publishing requires Windows x64, the .NET 10 SDK, and Visual Studio's Des
 Run the core tests when changing core behavior:
 
 ```powershell
-dotnet test .\DictationPoc.Tests\DictationPoc.Tests.csproj
+dotnet test .\Ansible.Tests\Ansible.Tests.csproj
 ```
 
 Prepare the runtime when the native DLL or models are missing:
@@ -76,7 +76,7 @@ Do not install every model for routine checks; `-Models all` downloads large wei
 Build and verify an unsigned NativeAOT MSIX after changes to the WinUI app, native interop, or deployment:
 
 ```powershell
-.\tools\Publish-Poc.ps1
+.\tools\Publish-Ansible.ps1
 ```
 
 The package uses a development identity until the project is associated with the Microsoft Store.

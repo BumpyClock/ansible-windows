@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "Ansible (Packaged)": {
+      "commandName": "MsixPackage",
+      "alwaysReinstallApp": false,
+      "nativeDebugging": false
+    }
+  }
+}

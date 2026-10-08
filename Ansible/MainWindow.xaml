@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Window
+    x:Class="Ansible.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Ansible">
+    <Window.SystemBackdrop>
+        <MicaBackdrop />
+    </Window.SystemBackdrop>
+    <Grid Background="Transparent">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="48" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <!-- Drag region and caption buttons only. The sidebar wordmark is the single brand mark. -->
+        <TitleBar x:Name="AppTitleBar" Height="48" Background="Transparent" />
+        <Grid Grid.Row="1" ColumnSpacing="16" Padding="16,0,4,4">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="SidebarColumn" Width="220" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <!-- The sidebar and the content tray share this grid. Top margin 31 plus the brand top margin 4 puts the wordmark baseline on the page title baseline (PagePadding top 28 plus the tray border). -->
+            <Grid x:Name="Sidebar" Margin="0,31,0,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <StackPanel Margin="12,4,8,24" Spacing="12">
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <StackPanel Orientation="Horizontal" Spacing="3" VerticalAlignment="Center">
+                            <Border Width="4" Height="14" CornerRadius="2" Background="{ThemeResource AccentGraphicBrush}" />
+                            <Border Width="4" Height="27" CornerRadius="2" Background="{ThemeResource AccentGraphicBrush}" />
+                            <Border Width="4" Height="20" CornerRadius="2" Background="{ThemeResource AccentGraphicBrush}" />
+                            <Border Width="4" Height="32" CornerRadius="2" Background="{ThemeResource AccentGraphicBrush}" />
+                        </StackPanel>
+                        <TextBlock Text="Ansible" Style="{StaticResource SubtitleTextBlockStyle}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </StackPanel>
+                <StackPanel Grid.Row="1" Spacing="8">
+                    <Button x:Name="DictationNav" Tag="dictation" Click="NavigateClicked" Style="{StaticResource NavigationButtonStyle}">
+                        <Grid>
+                            <Border x:Name="DictationIndicator" Width="3" Height="16" CornerRadius="1.5" Margin="-8,0,0,0"
+                                    HorizontalAlignment="Left" VerticalAlignment="Center"
+                                    Background="{ThemeResource AccentGraphicBrush}" Visibility="Collapsed" />
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <FontIcon Glyph="&#xE720;" FontSize="16" />
+                                <TextBlock Text="Dictation" Style="{StaticResource BodyTextBlockStyle}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Grid>
+                    </Button>
+                    <Button x:Name="ModelsNav" Tag="models" Click="NavigateClicked" Style="{StaticResource NavigationButtonStyle}">
+                        <Grid>
+                            <Border x:Name="ModelsIndicator" Width="3" Height="16" CornerRadius="1.5" Margin="-8,0,0,0"
+                                    HorizontalAlignment="Left" VerticalAlignment="Center"
+                                    Background="{ThemeResource AccentGraphicBrush}" Visibility="Collapsed" />
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <FontIcon Glyph="&#xE896;" FontSize="16" />
+                                <TextBlock Text="Speech models" Style="{StaticResource BodyTextBlockStyle}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Grid>
+                    </Button>
+                    <Button x:Name="InsightsNav" Tag="insights" Click="NavigateClicked" Style="{StaticResource NavigationButtonStyle}">
+                        <Grid>
+                            <Border x:Name="InsightsIndicator" Width="3" Height="16" CornerRadius="1.5" Margin="-8,0,0,0"
+                                    HorizontalAlignment="Left" VerticalAlignment="Center"
+                                    Background="{ThemeResource AccentGraphicBrush}" Visibility="Collapsed" />
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <FontIcon Glyph="&#xE9D9;" FontSize="16" />
+                                <TextBlock Text="Insights" Style="{StaticResource BodyTextBlockStyle}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Grid>
+                    </Button>
+                </StackPanel>
+                <Button x:Name="SettingsNav" Tag="settings" Grid.Row="2" Margin="0,8,0,8" Click="NavigateClicked" Style="{StaticResource NavigationButtonStyle}">
+                    <Grid>
+                        <Border x:Name="SettingsIndicator" Width="3" Height="16" CornerRadius="1.5" Margin="-8,0,0,0"
+                                HorizontalAlignment="Left" VerticalAlignment="Center"
+                                Background="{ThemeResource AccentGraphicBrush}" Visibility="Collapsed" />
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <FontIcon Glyph="&#xE713;" FontSize="16" />
+                            <TextBlock Text="Settings" Style="{StaticResource BodyTextBlockStyle}" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Grid>
+                </Button>
+            </Grid>
+            <Border Grid.Column="1" Background="{ThemeResource LayerFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
+                    CornerRadius="{StaticResource OverlayCornerRadius}">
+                <ContentControl x:Name="MainContent" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
+                    <ContentControl.ContentTransitions>
+                        <TransitionCollection>
+                            <ContentThemeTransition HorizontalOffset="0" VerticalOffset="12" />
+                        </TransitionCollection>
+                    </ContentControl.ContentTransitions>
+                </ContentControl>
+            </Border>
+        </Grid>
+        <InfoBar x:Name="ShutdownError" Grid.Row="2" Margin="16,8,16,16"
+                 IsOpen="False" IsClosable="False" Visibility="Collapsed"
+                 Severity="Error" Title="Close failed" AutomationProperties.AutomationId="ShutdownError" />
+    </Grid>
+</Window>

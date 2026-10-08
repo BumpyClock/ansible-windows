@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl x:Class="Ansible.ModelCard"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             HorizontalAlignment="Stretch" VerticalAlignment="Top">
+    <UserControl.Resources>
+        <!-- Transparent at rest; the default Button template supplies the hover and pressed fills. -->
+        <Style x:Key="IconButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Width" Value="32" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
+        </Style>
+        <Style x:Key="DetailLabelStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+        </Style>
+    </UserControl.Resources>
+    <Border x:Name="CardBorder" Style="{StaticResource CardStyle}">
+        <StackPanel Spacing="16">
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Border Width="40" Height="40" CornerRadius="8" Background="{ThemeResource AccentSoftBrush}"
+                        VerticalAlignment="Top">
+                    <Grid>
+                        <Image x:Name="IconImage" Width="28" Height="28" Stretch="Uniform"
+                               Visibility="Collapsed" ImageOpened="IconOpened" ImageFailed="IconFailed" />
+                        <TextBlock x:Name="Monogram" FontSize="18" FontWeight="SemiBold"
+                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+                <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center">
+                    <TextBlock x:Name="NameText" Style="{StaticResource BodyStrongTextBlockStyle}" TextWrapping="Wrap" />
+                    <Grid x:Name="StateLine">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Ellipse x:Name="StateDot" Width="7" Height="7" Margin="0,0,6,0" VerticalAlignment="Center" Visibility="Collapsed" />
+                        <!-- Installed cards: state, behaviour and memory share one line. Other cards: the state only. -->
+                        <TextBlock x:Name="StateLineText" Grid.Column="1" TextWrapping="Wrap" VerticalAlignment="Center"
+                                   Style="{StaticResource CaptionSecondaryStyle}">
+                            <Run x:Name="StateRun" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}" /><Run x:Name="SeparatorRun" /><Run x:Name="CaptionRun" />
+                        </TextBlock>
+                    </Grid>
+                </StackPanel>
+                <!-- Two fixed 32px slots keep Details in the same place on every card; a hidden Remove keeps its slot. -->
+                <Grid Grid.Column="2" ColumnSpacing="4" VerticalAlignment="Top">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="32" />
+                        <ColumnDefinition Width="32" />
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="RemoveButton" Grid.Column="0" Style="{StaticResource IconButtonStyle}" Click="RemoveClicked"
+                            Visibility="Collapsed">
+                        <Button.Resources>
+                            <SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="Transparent" />
+                        </Button.Resources>
+                        <FontIcon Glyph="&#xE74D;" FontSize="14" />
+                    </Button>
+                    <Button x:Name="DetailsButton" Grid.Column="1" Style="{StaticResource IconButtonStyle}"
+                            ToolTipService.ToolTip="Details">
+                        <FontIcon Glyph="&#xE946;" FontSize="14" />
+                        <Button.Flyout>
+                            <Flyout Placement="BottomEdgeAlignedRight">
+                                <Flyout.FlyoutPresenterStyle>
+                                    <Style TargetType="FlyoutPresenter">
+                                        <Setter Property="MaxWidth" Value="400" />
+                                        <Setter Property="Padding" Value="16" />
+                                    </Style>
+                                </Flyout.FlyoutPresenterStyle>
+                                <ScrollViewer MaxHeight="420" VerticalScrollBarVisibility="Auto"
+                                              HorizontalScrollBarVisibility="Disabled">
+                                  <StackPanel Spacing="12">
+                                    <StackPanel x:Name="AboutSection" Spacing="12">
+                                        <TextBlock x:Name="DescriptionText" TextWrapping="Wrap" Style="{StaticResource BodyTextBlockStyle}" />
+                                        <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                                    </StackPanel>
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Text="Capabilities" Style="{StaticResource DetailLabelStyle}" />
+                                        <TextBlock x:Name="CapabilityText" TextWrapping="Wrap" Style="{StaticResource BodyTextBlockStyle}" />
+                                    </StackPanel>
+                                    <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Text="License" Style="{StaticResource DetailLabelStyle}" />
+                                        <TextBlock x:Name="LicenseDetailText" TextWrapping="Wrap" Style="{StaticResource BodyTextBlockStyle}" />
+                                    </StackPanel>
+                                    <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Text="Source" Style="{StaticResource DetailLabelStyle}" />
+                                        <TextBlock x:Name="SourceText" TextWrapping="Wrap" Style="{StaticResource BodyTextBlockStyle}"
+                                                   IsTextSelectionEnabled="True" />
+                                    </StackPanel>
+                                    <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Text="Verification" Style="{StaticResource DetailLabelStyle}" />
+                                        <TextBlock x:Name="PrecisionText" TextWrapping="Wrap" Style="{StaticResource BodyTextBlockStyle}"
+                                                   IsTextSelectionEnabled="True" />
+                                        <TextBlock x:Name="ByteCountText" Style="{StaticResource BodyTextBlockStyle}"
+                                                   IsTextSelectionEnabled="True" />
+                                        <TextBlock x:Name="HashText" Style="{StaticResource BodyTextBlockStyle}"
+                                                   FontFamily="Consolas" IsTextSelectionEnabled="True" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Text="Location" Style="{StaticResource DetailLabelStyle}" />
+                                        <TextBlock x:Name="LocationText" TextWrapping="Wrap" Style="{StaticResource BodyTextBlockStyle}"
+                                                   IsTextSelectionEnabled="True" />
+                                    </StackPanel>
+                                  </StackPanel>
+                                </ScrollViewer>
+                            </Flyout>
+                        </Button.Flyout>
+                    </Button>
+                </Grid>
+            </Grid>
+
+            <!-- Not-installed cards only: behaviour, download size and memory on one row. Installed cards
+                 carry behaviour and memory on the state line. The caption row, bar and actions share the content edge. -->
+            <TextBlock x:Name="StatsText" Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap" />
+
+            <Grid x:Name="ProgressHost" Visibility="Collapsed" Height="4">
+                <Border Height="3" VerticalAlignment="Center" CornerRadius="1.5"
+                        Background="{ThemeResource ControlStrongFillColorDisabledBrush}" />
+                <ProgressBar x:Name="DownloadProgress" Minimum="0" Maximum="100" VerticalAlignment="Center"
+                             HorizontalAlignment="Stretch" AutomationProperties.Name="Model download progress" />
+            </Grid>
+            <TextBlock x:Name="ProgressText" TextWrapping="Wrap" Visibility="Collapsed"
+                       Style="{StaticResource CaptionSecondaryStyle}" />
+
+            <!-- A closed InfoBar stays Visible and still takes stack spacing, so Update collapses it too. -->
+            <InfoBar x:Name="ErrorInfo" Severity="Error" IsOpen="False" IsClosable="False" Visibility="Collapsed" />
+
+            <StackPanel x:Name="ActionRow" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                <!-- Update owns the style: accent for enabled forward steps, default for Pause, Stop and disabled.
+                     A disabled button shows no tooltip, so the transparent host carries the reason. -->
+                <Border x:Name="PrimaryHost" Background="Transparent">
+                    <Button x:Name="PrimaryButton" Content="Download" MinHeight="36" Click="PrimaryClicked" />
+                </Border>
+                <Button x:Name="UseButton" Content="Use" MinHeight="32" Click="UseClicked" Visibility="Collapsed" />
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</UserControl>

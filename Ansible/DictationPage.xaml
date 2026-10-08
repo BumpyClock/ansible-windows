@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page x:Class="Ansible.DictationPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Page.Resources>
+        <Storyboard x:Name="SpinStoryboard">
+            <DoubleAnimation Storyboard.TargetName="SpinRotate" Storyboard.TargetProperty="Angle"
+                             From="0" To="360" Duration="0:0:1.2" RepeatBehavior="Forever" />
+        </Storyboard>
+    </Page.Resources>
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+            <Grid>
+                <StackPanel MaxWidth="{StaticResource PageContentMaxWidth}" Padding="{StaticResource PagePadding}" Spacing="16">
+                <TextBlock Text="Dictation" Style="{StaticResource PageTitleStyle}" />
+
+                <Border Style="{StaticResource CardStyle}">
+                    <Grid ColumnSpacing="24" RowSpacing="20">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <Grid Width="84" Height="84" HorizontalAlignment="Left" VerticalAlignment="Center">
+                            <Ellipse x:Name="OuterHalo" Width="72" Height="72" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                     Fill="{ThemeResource AccentGraphicBrush}" Opacity="0" IsHitTestVisible="False" />
+                            <Ellipse x:Name="InnerHalo" Width="72" Height="72" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                     Fill="{ThemeResource AccentGraphicBrush}" Opacity="0" IsHitTestVisible="False" />
+                            <Ellipse x:Name="SpinRing" Width="84" Height="84" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                     Stroke="{ThemeResource AccentGraphicBrush}" StrokeThickness="2" StrokeDashArray="32,97"
+                                     StrokeStartLineCap="Round" StrokeEndLineCap="Round" Opacity="0" IsHitTestVisible="False">
+                                <Ellipse.RenderTransform>
+                                    <RotateTransform x:Name="SpinRotate" CenterX="42" CenterY="42" />
+                                </Ellipse.RenderTransform>
+                            </Ellipse>
+                            <Button x:Name="RecordButton" Width="72" Height="72" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    Style="{StaticResource RecordButtonStyle}" Click="RecordClicked"
+                                    AutomationProperties.Name="Start dictation" ToolTipService.ToolTip="Start dictation">
+                                <FontIcon x:Name="RecordGlyph" Glyph="&#xE720;" FontSize="26" />
+                            </Button>
+                        </Grid>
+
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="8">
+                            <TextBlock x:Name="StatusTitle" Text="Preparing" Style="{StaticResource SubtitleTextBlockStyle}"
+                                       AutomationProperties.LiveSetting="Polite" />
+                            <TextBlock x:Name="StatusDetail" Text="" TextWrapping="Wrap"
+                                       Style="{StaticResource SecondaryTextStyle}" />
+                            <StackPanel x:Name="LiveRow" Orientation="Horizontal" Spacing="16" Height="32" Opacity="0"
+                                        IsHitTestVisible="False">
+                                <TextBlock x:Name="LiveText" Text="00:00" Style="{StaticResource BodyStrongTextBlockStyle}"
+                                           VerticalAlignment="Center" AutomationProperties.Name="Elapsed time and words" />
+                                <Button x:Name="FinishButton" Content="Finish" Click="RecordClicked" MinHeight="32"
+                                        VerticalAlignment="Center" Style="{StaticResource AccentButtonStyle}"
+                                        AutomationProperties.Name="Finish dictation" Visibility="Collapsed" />
+                                <Button x:Name="CancelButton" Content="Cancel" Click="CancelClicked" MinHeight="32"
+                                        VerticalAlignment="Center" ToolTipService.ToolTip="Cancel (Esc)">
+                                    <Button.KeyboardAccelerators>
+                                        <KeyboardAccelerator Key="Escape" />
+                                    </Button.KeyboardAccelerators>
+                                </Button>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <Grid x:Name="ModelActions" Grid.Row="1" Grid.ColumnSpan="2" ColumnSpacing="12" RowSpacing="12"
+                              SizeChanged="ModelActionsSizeChanged">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <ComboBox x:Name="ModelBox" Header="Speech model" HorizontalAlignment="Stretch"
+                                      SelectionChanged="ModelChanged" PlaceholderText="No installed models" />
+                            <Button x:Name="FileButton" Grid.Column="1" VerticalAlignment="Bottom" MinHeight="32"
+                                    Click="TranscribeClicked" AutomationProperties.Name="Transcribe a WAV file">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE8E5;" FontSize="14" />
+                                    <TextBlock Text="Transcribe WAV file…" />
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+                    </Grid>
+                </Border>
+
+                <InfoBar x:Name="StatusInfo" IsOpen="False" IsClosable="True" Visibility="Collapsed"
+                         Closing="StatusInfoClosing" Closed="StatusInfoClosed" />
+
+                <Border x:Name="TranscriptCard" Style="{StaticResource CardStyle}" MinHeight="160" Visibility="Collapsed">
+                    <Grid RowSpacing="8">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <Grid x:Name="TranscriptHeader" ColumnSpacing="12" MinHeight="32" Visibility="Collapsed">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Transcript" Style="{StaticResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" />
+                            <Button x:Name="CopyButton" Grid.Column="1" Click="CopyClicked" MinHeight="32"
+                                    AutomationProperties.Name="Copy transcript">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE8C8;" FontSize="14" />
+                                    <TextBlock x:Name="CopyLabel" Text="Copy" />
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+                        <Grid Grid.Row="1" MinHeight="96">
+                            <TextBox x:Name="TranscriptBox" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True"
+                                     MaxHeight="420" Style="{StaticResource TranscriptTextBoxStyle}"
+                                     AutomationProperties.Name="Dictation transcript"
+                                     ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                <TextBox.Resources>
+                                    <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="Transparent" />
+                                    <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="Transparent" />
+                                    <SolidColorBrush x:Key="TextControlBackgroundDisabled" Color="Transparent" />
+                                    <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="Transparent" />
+                                    <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="Transparent" />
+                                    <Thickness x:Key="TextControlBorderThemeThicknessFocused">0</Thickness>
+                                </TextBox.Resources>
+                            </TextBox>
+                        </Grid>
+                    </Grid>
+                </Border>
+
+            </StackPanel>
+    </Grid>
+    </ScrollViewer>
+</Page>
