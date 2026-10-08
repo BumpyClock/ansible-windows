@@ -324,8 +324,13 @@ weights until you download a model or choose an existing model folder.
 ## Microsoft Store preparation
 
 `Ansible\Package.appxmanifest` currently uses the development identity
-`BumpyClock.LocalVoice.Development` with publisher `CN=BumpyClock`. This is not
+`BumpyClock.Ansible.Development` with publisher `CN=BumpyClock`. This is not
 a reserved Store identity.
+
+The package and Start menu display names are `Ansible`. The development identity
+was renamed from `BumpyClock.LocalVoice.Development`; Windows treats the renamed
+package as a separate app with its own `LocalState`. Existing preferences, usage,
+and models in the old package's `LocalState` are not migrated automatically.
 
 When ready, use Visual Studio's **Package & Publish > Associate App with the
 Store** on `Ansible`. Association supplies the exact package name, publisher,

@@ -6,7 +6,7 @@
   IgnorableNamespaces="uap rescap">
 
   <!-- Development identity. Associate with the Store before creating a submission. -->
-  <Identity Name="BumpyClock.LocalVoice.Development"
+  <Identity Name="BumpyClock.Ansible.Development"
             Publisher="CN=BumpyClock"
             Version="1.0.1.0" />
 
