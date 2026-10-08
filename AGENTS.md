@@ -29,13 +29,13 @@ The code map below describes the current layout, not required module boundaries.
 - The build scripts target Windows x64 with CPU and Vulkan inference. Qualify each model/GPU combination separately; ARM64 and NPU support remain separate work.
 - Recognition runs in-process through the audio.cpp C ABI, using `audiocpp.dll`.
 - The native build pins audio.cpp v0.9.0. Upstream support does not imply support in this compiled backend.
-- The UI includes Dictation, Settings, Insights, and a floating dictation preview.
+- The UI includes Dictation, Settings, Insights, Speech models, and a floating waveform pill.
 - Microphone capture uses Windows `waveIn` with 16 kHz mono PCM16 and bounded audio queues.
 - The session preloads the selected streaming model and a reusable native session, unloads them after 10 idle minutes, and opens the microphone before the model is ready so early speech is buffered, not lost.
 - Transcripts and captured audio stay in memory. Local Insights persist session metadata, not transcript text or recordings.
-- Shortcut insertion pastes through the clipboard by default, backing up and restoring every format and excluding dictated text from clipboard history and cloud sync. Paced Unicode typing is the alternative; burst typing garbles slow targets such as Windows 11 Notepad.
+- Shortcut insertion sends authoritative final speech once after successful recognition. Clipboard paste is the default; it backs up supported formats, requests history and cloud-sync exclusions, and reports restoration failures. Paced Unicode typing is the alternative; burst typing garbles slow targets such as Windows 11 Notepad. Manual Copy uses the ordinary clipboard.
 
-Read `README.md` for detailed setup, model limitations, and native probe instructions.
+Start with `README.md`. Use `docs/user-guide.md` for app workflows, `docs/development.md` for builds and tests, and `docs/native-validation.md` for model probes and native limits.
 Use the current source to determine implemented UI behavior.
 
 ## Code map
@@ -61,7 +61,7 @@ Native publishing requires Windows x64, the .NET 10 SDK, and Visual Studio's Des
 Run the core tests when changing core behavior:
 
 ```powershell
-dotnet test .\Ansible.Tests\Ansible.Tests.csproj
+dotnet test .\Ansible.Tests\Ansible.Tests.csproj --filter 'Category!=NativeIntegration'
 ```
 
 Prepare the runtime when the native DLL or models are missing:
@@ -81,10 +81,9 @@ Build and verify an unsigned NativeAOT MSIX after changes to the WinUI app, nati
 .\tools\Publish-Ansible.ps1
 ```
 
-The package uses a development identity until the project is associated with the Microsoft Store.
-Use the packaged Visual Studio launch profile for development; signing, certificate trust, installation, and Store submission are separate operations.
+Use the packaged Visual Studio launch profile for development. Package signing, certificate trust, and installation are separate operations.
 
-Use the native probe instructions in `README.md` when changing model integration or streaming behavior.
+Use `docs/native-validation.md` when changing model integration or streaming behavior. Native integration tests require the native runtime, public sample, and specific weights; see `docs/development.md` before running them.
 Run model probes sequentially and wait for each process to exit.
 Documentation-only edits do not require model downloads or a native rebuild.
 

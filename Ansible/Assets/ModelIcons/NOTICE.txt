@@ -1,4 +1,4 @@
-Local Voice model-family artwork
+Ansible model-family artwork
 
 These assets identify upstream projects. They do not imply endorsement.
 All artwork is packaged locally; the app makes no image requests at runtime.
