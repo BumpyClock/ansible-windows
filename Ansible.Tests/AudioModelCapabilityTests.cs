@@ -4,11 +4,11 @@ namespace Ansible.Tests;
 
 public sealed class AudioModelCapabilityTests
 {
-    private static AudioModel Model(string family, string mode, string preview) =>
+    private static AudioModel Model(string? family, string mode, string preview) =>
         new() { Id = $"{family}-{mode}-{preview}", Family = family, Mode = mode, Preview = preview };
 
     [Fact]
-    public void StreamingPlainSpeechModelsSupportFinalInsertionRegardlessOfPreview()
+    public void StreamingModelsWithAReadableOutputLayoutSupportFinalInsertionRegardlessOfPreview()
     {
         // Preview timing does not govern final insertion.
         Assert.True(Model("nemotron_asr", "streaming", "live").CanInsertDictation);
@@ -17,29 +17,23 @@ public sealed class AudioModelCapabilityTests
         Assert.True(Model("moonshine_asr", "streaming", "final-only").CanInsertDictation);
         Assert.True(Model("qwen3_asr", "streaming", "buffered").CanInsertDictation);
 
-        // A "live" display preview does not qualify a family that carries no authoritative speech content.
-        Assert.False(Model("vibevoice_asr_streaming", "streaming", "live").CanInsertDictation);
+        // Diarized output is inserted after its speaker labels are removed.
+        Assert.True(Model("vibevoice_asr_streaming", "streaming", "live").CanInsertDictation);
 
-        // Offline/annotated families are excluded regardless of preview.
+        // Offline models and families without a reading rule are excluded regardless of preview.
         Assert.False(Model("vibevoice_asr", "offline", "final-only").CanInsertDictation);
-    }
-
-    [Fact]
-    public void LivePreviewLabelAloneDoesNotEstablishAuthoritativeSpeech()
-    {
-        var vibevoice = Model("vibevoice_asr_streaming", "streaming", "live");
-        Assert.Equal("live", vibevoice.Preview);
-        Assert.False(vibevoice.HasPlainSpeechText);
-        Assert.False(vibevoice.CanInsertDictation);
+        Assert.False(Model("future_asr", "streaming", "live").CanInsertDictation);
+        Assert.False(Model(null, "streaming", "live").CanInsertDictation);
     }
 
     [Theory]
-    [InlineData("moonshine_asr", true)]
-    [InlineData("qwen3_asr", true)]
-    [InlineData("nemotron_asr", true)]
-    [InlineData("vibevoice_asr_streaming", false)]
-    [InlineData("vibevoice_asr", false)]
-    [InlineData(null, false)]
-    public void PlainSpeechFamilyClassificationIsSharedWithNormalization(string? family, bool expected) =>
-        Assert.Equal(expected, SpeechContent.IsPlainSpeechFamily(family));
+    [InlineData("moonshine_asr", SpeechLayout.Plain)]
+    [InlineData("qwen3_asr", SpeechLayout.Plain)]
+    [InlineData("nemotron_asr", SpeechLayout.Plain)]
+    [InlineData("vibevoice_asr_streaming", SpeechLayout.SpeakerLabelled)]
+    [InlineData("vibevoice_asr", SpeechLayout.Annotated)]
+    [InlineData("future_asr", SpeechLayout.Unknown)]
+    [InlineData(null, SpeechLayout.Unknown)]
+    public void EveryCatalogFamilyHasOneOutputLayout(string? family, SpeechLayout expected) =>
+        Assert.Equal(expected, SpeechExtraction.LayoutOf(family));
 }

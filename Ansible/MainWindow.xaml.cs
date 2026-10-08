@@ -203,7 +203,7 @@ public sealed partial class MainWindow : Window
         if (state.SelectedModel?.CanInsertDictation != true)
         {
             _session.Notify(NoticeKind.Warning, "Speech text required",
-                "This model does not return authoritative speech text in this backend. Choose Moonshine, Qwen3, or Nemotron for shortcut insertion. Manual transcription remains available.");
+                "This app cannot read speech text from this model's output yet. Choose a model that supports shortcut insertion. Manual transcription remains available.");
             return;
         }
         var capture = _captureCoordinator.TryBeginCapture(state.Settings.PushToTalk, _deliveryTask is { IsCompleted: false });

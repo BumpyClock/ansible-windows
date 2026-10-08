@@ -11,13 +11,13 @@ public sealed class NativeDictionaryTests(ITestOutputHelper output)
     [Theory]
     [Trait("Category", "NativeIntegration")]
     [InstalledDictionaryModel("vibevoice-streaming-1.5b-q4", "vibevoice-asr-streaming-1.5b-q4_k.gguf",
-        "vibevoice_asr_streaming", "streaming", false)]
+        "vibevoice_asr_streaming", "streaming", true)]
     [InstalledDictionaryModel("vibevoice-asr-7b-q8", "vibevoice-asr-q8_0.gguf",
         "vibevoice_asr", "offline", false)]
     [InstalledDictionaryModel("qwen3-asr-0.6b-q8", "qwen3-asr-0.6b-q8_0.gguf",
         "qwen3_asr", "streaming", true)]
     public async Task RecognizesPublicSampleWithNonEmptyDictionary(
-        string modelId, string filename, string family, string mode, bool plainSpeech)
+        string modelId, string filename, string family, string mode, bool speechFromText)
     {
         var root = FindWorkspace();
         var directory = ModelsDirectory(root);
@@ -35,14 +35,13 @@ public sealed class NativeDictionaryTests(ITestOutputHelper output)
         var models = await engine.ConnectAsync(timeout.Token);
         var model = Assert.Single(models, candidate => candidate.Id == modelId);
         Assert.True(model.SupportsCustomDictionary);
-        Assert.Equal(plainSpeech, model.HasPlainSpeechText);
-        Assert.Equal(plainSpeech && mode == "streaming", model.CanInsertDictation);
+        Assert.Equal(mode == "streaming", model.CanInsertDictation);
         var options = new RecognitionOptions(CustomDictionary: "Mother Nature\nUnited States");
         var recording = Path.Combine(root, ".runtime", "validation", "sample_16k.wav");
         var input = new AudioInputReader();
         var decoded = await input.ReadRecordingAsync(recording, timeout.Token);
         var wav = await engine.TranscribeAsync(model, decoded, options, null, timeout.Token);
-        AssertResult(wav, plainSpeech);
+        AssertResult(wav, speechFromText);
         output.WriteLine($"WAV succeeded: model={modelId}; verified bytes={entry.Bytes}; SHA256={entry.Sha256}; dictionary nonempty=true; authoritative speech={wav.SpeechText is not null}.");
         if (mode == "streaming")
         {
@@ -51,16 +50,19 @@ public sealed class NativeDictionaryTests(ITestOutputHelper output)
             await audio.Writer.WriteAsync(await input.ReadReplayAsync(recording, timeout.Token), timeout.Token);
             audio.Writer.Complete();
             var live = await engine.StreamAsync(model, audio.Reader, options, null, timeout.Token);
-            AssertResult(live, plainSpeech);
+            AssertResult(live, speechFromText);
             output.WriteLine($"Stream succeeded: model={modelId}; authoritative speech={live.SpeechText is not null}; spoken words={live.SpokenWords?.ToString() ?? "unknown"}.");
         }
     }
 
-    private static void AssertResult(RecognitionResult result, bool plainSpeech)
+    private static void AssertResult(RecognitionResult result, bool speechFromText)
     {
         Assert.False(string.IsNullOrWhiteSpace(result.DisplayText));
-        if (plainSpeech)
+        if (speechFromText)
+        {
             Assert.False(string.IsNullOrWhiteSpace(result.SpeechText));
+            Assert.DoesNotContain("Speaker", result.SpeechText, StringComparison.Ordinal);
+        }
         if (result.SpeechText is null)
             Assert.Null(result.SpokenWords);
         else

@@ -121,7 +121,7 @@ public sealed class NativeAudioEngine : IRecognitionEngine
                 "transcribe the recording");
             using var owned = new NativeAudioHandle(pointer, NativeHandleKind.Result);
             cancellationToken.ThrowIfCancellationRequested();
-            return ReadResult(pointer, model.Family!, cancellationToken);
+            return SpeechExtraction.ToResult(model.Family, ReadOutput(pointer, cancellationToken));
         }, CleanupOperation), cancellationToken);
         progress?.Report(new TranscriptUpdate(result.DisplayText, true, result.SpeechText));
         return result;
@@ -181,7 +181,7 @@ public sealed class NativeAudioEngine : IRecognitionEngine
         var used = 0;
         long offset = 0;
         long receivedFrames = 0;
-        var transcript = new StreamingTranscript();
+        var transcript = new StreamingTranscript(model.Family);
         NativeOperation.Step(token, () => SetStreamingAudioContract(request));
         NativeOperation.Step(token, () =>
         {
@@ -209,7 +209,7 @@ public sealed class NativeAudioEngine : IRecognitionEngine
                     index += count;
                     if (used == buffer.Length)
                     {
-                        Push(session, buffer.AsSpan(0, used), offset, model.Family!, transcript, progress, token);
+                        Push(session, buffer.AsSpan(0, used), offset, transcript, progress, token);
                         offset += used / 2;
                         used = 0;
                     }
@@ -217,16 +217,16 @@ public sealed class NativeAudioEngine : IRecognitionEngine
             }
         }
         if (used > 0)
-            Push(session, buffer.AsSpan(0, used), offset, model.Family!, transcript, progress, token);
+            Push(session, buffer.AsSpan(0, used), offset, transcript, progress, token);
         token.ThrowIfCancellationRequested();
         NativeAudioApi.Check(NativeAudioApi.StreamFinish(session, out var result), "finish native dictation");
         using var owned = new NativeAudioHandle(result, NativeHandleKind.Result);
         token.ThrowIfCancellationRequested();
-        return ReadResult(result, model.Family!, token);
+        return SpeechExtraction.ToResult(model.Family, ReadOutput(result, token));
     }
 
     private static unsafe void Push(
-        nint session, ReadOnlySpan<byte> bytes, long offset, string family, StreamingTranscript transcript,
+        nint session, ReadOnlySpan<byte> bytes, long offset, StreamingTranscript transcript,
         IProgress<TranscriptUpdate>? progress, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
@@ -242,7 +242,7 @@ public sealed class NativeAudioEngine : IRecognitionEngine
             {
                 NativeAudioApi.Check(NativeAudioApi.StreamPush(session, pointer, (nuint)frames, 16000, 1, offset, out var streamEvent),
                     "process a dictation audio chunk");
-                AppendEvent(streamEvent, family, transcript, progress, token);
+                AppendEvent(streamEvent, transcript, progress, token);
             }
             token.ThrowIfCancellationRequested();
             while (true)
@@ -253,7 +253,7 @@ public sealed class NativeAudioEngine : IRecognitionEngine
                 {
                     break;
                 }
-                AppendEvent(streamEvent, family, transcript, progress, token);
+                AppendEvent(streamEvent, transcript, progress, token);
             }
         }
         finally
@@ -262,7 +262,7 @@ public sealed class NativeAudioEngine : IRecognitionEngine
         }
     }
 
-    private static void AppendEvent(nint pointer, string family, StreamingTranscript transcript,
+    private static void AppendEvent(nint pointer, StreamingTranscript transcript,
         IProgress<TranscriptUpdate>? progress, CancellationToken token)
     {
         if (pointer == 0)
@@ -270,13 +270,10 @@ public sealed class NativeAudioEngine : IRecognitionEngine
             return;
         }
         using var owned = new NativeAudioHandle(pointer, NativeHandleKind.Event);
-        var resultPointer = NativeAudioApi.EventResult(pointer);
-        var result = ReadResult(resultPointer, family, token, optionalText: true);
-        if (!string.IsNullOrEmpty(result.DisplayText) || !string.IsNullOrEmpty(result.SpeechText))
+        var delta = ReadOutput(NativeAudioApi.EventResult(pointer), token, optionalText: true);
+        if (!delta.IsEmpty)
         {
-            var speechMetadata = NativeAudioApi.SegmentCount(resultPointer) > 0 ||
-                NativeAudioApi.SpeakerTurnCount(resultPointer) > 0;
-            progress?.Report(transcript.Append(result, speechMetadata));
+            progress?.Report(transcript.Append(delta));
         }
     }
 
@@ -291,7 +288,7 @@ public sealed class NativeAudioEngine : IRecognitionEngine
         return Marshal.PtrToStringUTF8(text) ?? throw new InvalidDataException("The native transcript pointer is null.");
     }
 
-    private static RecognitionResult ReadResult(nint result, string family, CancellationToken token, bool optionalText = false)
+    private static ModelOutput ReadOutput(nint result, CancellationToken token, bool optionalText = false)
     {
         var text = ReadText(result, optionalText) ?? "";
         List<string> segments = [];
@@ -315,7 +312,7 @@ public sealed class NativeAudioEngine : IRecognitionEngine
                 ?? throw new InvalidDataException("The native speaker turn pointer is null."));
         }
         token.ThrowIfCancellationRequested();
-        return NativeTranscript.Normalize(family, text, segments, turns);
+        return new ModelOutput(text, segments, turns);
     }
 
     private void EnsureSession(AudioModel model, string mode, long decodedBytes, RecognitionOptions options, CancellationToken token)

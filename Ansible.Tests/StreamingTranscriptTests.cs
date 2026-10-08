@@ -4,29 +4,42 @@ namespace Ansible.Tests;
 
 public sealed class StreamingTranscriptTests
 {
+    private static ModelOutput Delta(string text) => new(text, [], []);
+
     [Fact]
-    public void SpeechUpdatesExcludePresentationLabels()
+    public void LivePreviewSpeechExcludesLabelsAcrossDeltas()
     {
-        var transcript = new StreamingTranscript();
-        var update = transcript.Append(new("Speaker 0: hello", "hello"), true);
+        var transcript = new StreamingTranscript("vibevoice_asr_streaming");
+        var update = transcript.Append(Delta("Speaker 0: hello"));
         Assert.Equal("Speaker 0: hello", update.Text);
+        Assert.False(update.IsFinal);
         Assert.Equal("hello", update.SpeechText);
-        Assert.Equal("hello world", transcript.Append(new(" Speaker 0: world", "world"), true).SpeechText);
+        var next = transcript.Append(Delta(" Speaker 1: world"));
+        Assert.Equal("Speaker 0: hello Speaker 1: world", next.Text);
+        Assert.Equal("hello world", next.SpeechText);
     }
 
     [Fact]
-    public void RawNativeDeltasPreserveTokenSpacingWithoutAddingSpaces()
+    public void LabelSplitAcrossDeltasIsStillRemoved()
     {
-        var transcript = new StreamingTranscript();
-        transcript.Append(new("hel", "hel"), false);
-        Assert.Equal("hello world", transcript.Append(new("lo world", "lo world"), false).SpeechText);
+        var transcript = new StreamingTranscript("vibevoice_asr_streaming");
+        Assert.Equal("Speak", transcript.Append(Delta("Speak")).SpeechText);
+        Assert.Equal("hello", transcript.Append(Delta("er 0: hello")).SpeechText);
     }
 
     [Fact]
-    public void AnnotatedPreviewDoesNotBlockLaterAuthoritativeSpeechMetadata()
+    public void PlainDeltasPreserveNativeTokenSpacing()
     {
-        var transcript = new StreamingTranscript();
-        Assert.Null(transcript.Append(new("Speaker 0: hello", null), false).SpeechText);
-        Assert.Equal("hello", transcript.Append(new("", "hello"), true).SpeechText);
+        var transcript = new StreamingTranscript("nemotron_asr");
+        transcript.Append(Delta("hel"));
+        Assert.Equal("hello world", transcript.Append(Delta("lo world")).SpeechText);
+    }
+
+    [Fact]
+    public void AnnotatedPreviewSpeechStaysUnknownUntilMetadataArrives()
+    {
+        var transcript = new StreamingTranscript("vibevoice_asr");
+        Assert.Null(transcript.Append(Delta("Speaker 0: hello")).SpeechText);
+        Assert.Equal("hello", transcript.Append(new("", ["hello"], [])).SpeechText);
     }
 }

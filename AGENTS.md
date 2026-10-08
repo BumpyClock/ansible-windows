@@ -43,7 +43,7 @@ Use the current source to determine implemented UI behavior.
 - `Ansible\` contains the WinUI app, XAML views, floating window, and Windows microphone integration.
 - `Ansible.Core\DictationSession.cs` owns the shared operation lifecycle, including startup, recognition, preferences, cancellation and shutdown.
 - `Ansible.Core\RecognitionContracts.cs` defines testable engine, audio and storage boundaries. `SessionState.cs` defines immutable UI snapshots and terminal outcomes.
-- `Ansible.Core\` contains native interop, verified model admission, shared audio input parsing, speech-content normalization, and per-user usage storage.
+- `Ansible.Core\` contains native interop, verified model admission, shared audio input parsing, and per-user usage storage. `SpeechExtraction.cs` maps each native family's raw output to display text and insertable speech text.
 - `Ansible.Core\Windows\` owns Windows capture bindings and retained-resource teardown. `WaveInCaptureFactory.cs` composes the native capture adapter.
 - `Ansible\AppPaths.cs` supplies installation resources and per-user data paths. `UiSessionObserver.cs` dispatches versioned snapshots to the UI.
 - `Ansible.Core\NativeAudioEngine.cs` owns model sessions and recognition. `NativeAudioApi.cs` defines the C ABI bindings.
@@ -102,7 +102,8 @@ Documentation-only edits do not require model downloads or a native rebuild.
 - Pin upstream revisions and verify download lengths and SHA-256 checksums. Include upstream notices; model licenses are separate from audio.cpp's license.
 - Bound inference by available memory. Do not close unrelated applications or disable memory safeguards to force model loading.
 - Keep speech local. Do not add audio uploads, transcript persistence, or external telemetry without an explicit product decision.
-- Count authoritative speech content, not presentation labels. Unknown speech counts remain unknown rather than becoming zero.
+- Count speech content, not presentation labels. Unknown speech counts remain unknown rather than becoming zero.
+- Keep family-specific output cleanup in `Ansible.Core\SpeechExtraction.cs`. Insertion and usage code consume only `RecognitionResult.SpeechText` and must never inspect raw model output.
 - Measure startup, recognition latency, and memory before making performance claims. NativeAOT does not remove native model costs.
 
 ## Version control

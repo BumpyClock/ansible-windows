@@ -61,9 +61,10 @@ through streaming models or transcribes it through offline models. This exercise
 the native backend and waveform pill without recording ambient microphone audio.
 
 Statistics persist per user in the package's `LocalState\usage.json`.
-Only dates, model IDs, authoritative speech-word counts, session type, and
-durations are stored. Speaker annotations are not speech content. If native
-speech content cannot be established, its count is unknown and excluded from
+Only dates, model IDs, speech-word counts, session type, and
+durations are stored. Words are counted on the extracted speech text, so
+speaker labels are never counted. If speech content cannot be read from a
+model's output, its count is unknown and excluded from
 word totals and pace, not silently replaced with zero. Audio and transcript
 content are never persisted. Disable collection without deleting prior counts.
 Failed and cancelled sessions are not counted. Existing prototype statistics
@@ -129,7 +130,7 @@ proof, not the production dictation application.
 ## Included
 
 - Microphone capture, waveform-only feedback, and manual transcription.
-- Incremental shortcut insertion for models that emit authoritative live speech.
+- Shortcut insertion of the final speech text, read from each model family's output by `SpeechExtraction`.
 - WAV recording transcription, including streamed decoding where the model supports it.
 - Model selection, downloads, and management from the pinned ASR catalog.
 - Cancellation, microphone level, elapsed time, and explicit connection/inference errors.
@@ -208,15 +209,22 @@ different key or key combination with **Change shortcut** in Settings. The
 activation mode and shortcut persist per user.
 
 Shortcut dictation waits for recognition to finish successfully, then inserts
-the authoritative final speech once. Live previews remain in the app and are
+the final speech text once. Live previews remain in the app and are
 not sent to the destination. Moonshine's final-only output and Qwen's buffered
 output do not require live recognition to use the shortcut. Models must support
 microphone input; WAV-only models remain available for file transcription.
-The pinned VibeVoice streaming adapter lacks authoritative speech metadata and
-remains available for manual transcription only.
-If a model returns no authoritative speech content, nothing is inserted; display
-labels and speaker metadata are never substituted for speech. Model and hardware
-latency still apply. Cancelling or failing recognition inserts no text.
+
+Insertion never sees raw model output. `Ansible.Core\SpeechExtraction.cs` is the
+one place that knows how each native family encodes speech, and it turns the
+raw output into display text plus speech text. Moonshine, Qwen3, and Nemotron
+return plain speech. The VibeVoice streaming adapter returns `Speaker N:`
+diarization labels in its text and no speech metadata, so its labels are
+removed and the remaining text is inserted. The offline VibeVoice model reads
+speech only from segment or speaker-turn metadata. A family without a reading
+rule has unknown speech, so nothing is inserted and the shortcut reports that
+the model is not supported. Add a model-specific cleanup by adding a layout in
+that file; the insertion code does not change. Model and hardware latency still
+apply. Cancelling or failing recognition inserts no text.
 
 A held Ctrl, Alt, Shift or Win key can interfere with text input, so completed
 text waits until those modifiers are released. If a target stops
@@ -490,7 +498,8 @@ Streaming times include preparation, paced audio upload, and final decoding:
 - `qwen3-asr-0.6b-q8`: WAV 8.227 seconds, live 22.169 seconds,
   zero previews during upload. Buffered recognition is not a live preview.
 - `vibevoice-streaming-1.5b-q4`: WAV 33.582 seconds, live 41.364 seconds,
-  four previews during upload. Output includes a `Speaker 0:` label.
+  four previews during upload. Display text includes a `Speaker 0:` label; the
+  label is removed from the inserted speech text.
 - `moonshine-tiny`: earlier native baseline WAV 1.083 seconds,
   live 18.051 seconds, zero previews during upload.
 - `vibevoice-asr-7b-q8`: installed and verified; the memory guard rejects the

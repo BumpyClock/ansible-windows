@@ -169,44 +169,6 @@ public sealed class NativeBoundaryTests
     }
 
     [Fact]
-    public void AuthoritativeSegmentsExcludeSpeakerLabelsButPreserveSpokenSpeakerPhrases()
-    {
-        var result = NativeTranscript.Normalize("vibevoice_asr", "Speaker 0: I said Speaker 0.",
-            ["I said Speaker 0."], ["I said Speaker 0."]);
-        Assert.Equal("Speaker 0: I said Speaker 0.", result.DisplayText);
-        Assert.Equal("I said Speaker 0.", result.SpeechText);
-        Assert.Equal(4, result.SpokenWords);
-    }
-
-    [Fact]
-    public void SpeakerTurnsAreUsedWithoutDuplicatingSegmentText()
-    {
-        var result = NativeTranscript.Normalize("vibevoice_asr_streaming", "Speaker 0: hello. Speaker 1: world.",
-            [], ["hello.", "world."]);
-        Assert.Equal("hello. world.", result.SpeechText);
-        Assert.Equal(2, result.SpokenWords);
-    }
-
-    [Fact]
-    public void MissingOrIncompleteAnnotatedSpeechIsUnknownNotZero()
-    {
-        var absent = NativeTranscript.Normalize("vibevoice_asr", "Speaker 0:", [], []);
-        var incomplete = NativeTranscript.Normalize("vibevoice_asr", "Speaker 0: hello", ["hello", ""], []);
-        Assert.Null(absent.SpeechText);
-        Assert.Null(absent.SpokenWords);
-        Assert.Null(incomplete.SpeechText);
-        Assert.Null(incomplete.SpokenWords);
-    }
-
-    [Fact]
-    public void PlainSpeechIsNotRegexStripped()
-    {
-        var result = NativeTranscript.Normalize("moonshine_asr", "Speaker 0 is what I said.", [], []);
-        Assert.Equal("Speaker 0 is what I said.", result.SpeechText);
-        Assert.Equal(6, result.SpokenWords);
-    }
-
-    [Fact]
     public void MemoryAdmissionAlwaysIncludesWeightsAlongsideInputCopies()
     {
         var small = NativeMemory.EstimateRequired(60_000_000, 1024, 512);
