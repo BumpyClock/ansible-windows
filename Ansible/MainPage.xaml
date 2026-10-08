@@ -12,22 +12,20 @@
 
             <Border Style="{StaticResource CardStyle}">
                 <StackPanel>
-                    <Grid ColumnSpacing="16">
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <StackPanel Spacing="8">
                         <TextBlock Text="Activation mode" VerticalAlignment="Center"
                                    Style="{StaticResource BodyTextBlockStyle}" />
-                        <RadioButtons x:Name="PushToTalkChoice" Grid.Column="1" VerticalAlignment="Center" MaxColumns="2"
+                        <RadioButtons x:Name="PushToTalkChoice" HorizontalAlignment="Stretch" MaxColumns="1"
                                       AutomationProperties.AutomationId="PushToTalkToggle"
                                       AutomationProperties.Name="Activation mode"
                                       SelectionChanged="DictationModeChanged">
-                            <!-- The template keeps an 8 DIP header margin even without a header, which pushes the radios below the label centre. -->
                             <RadioButtons.Resources>
                                 <Thickness x:Key="RadioButtonsTopHeaderMargin">0</Thickness>
                             </RadioButtons.Resources>
                             <x:String>Hold to talk</x:String>
                             <x:String>Press to start and stop</x:String>
                         </RadioButtons>
-                    </Grid>
+                    </StackPanel>
                     <Border Height="1" Margin="0,12" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
                     <Grid ColumnSpacing="16">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>

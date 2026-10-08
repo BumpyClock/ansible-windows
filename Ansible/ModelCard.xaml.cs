@@ -176,7 +176,7 @@ public sealed partial class ModelCard : UserControl
 
         // Use appears only when it can be clicked; a disabled Use cannot explain itself. A card that is still
         // downloading or verifying offers Pause or Stop only, so selection follows a finished install.
-        UseButton.Visibility = snapshot.HasModelFile && !active && snapshot.Supported && canSelect && !transferring
+        UseButton.Visibility = state == ModelInstallState.Installed && !active && snapshot.Supported && canSelect
             ? Visibility.Visible : Visibility.Collapsed;
         ActionRow.Visibility = PrimaryHost.Visibility == Visibility.Visible || UseButton.Visibility == Visibility.Visible
             ? Visibility.Visible : Visibility.Collapsed;

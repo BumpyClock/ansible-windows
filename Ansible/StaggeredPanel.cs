@@ -10,6 +10,8 @@ namespace Ansible;
 public sealed partial class StaggeredPanel : Panel
 {
     private int _columns = 1;
+    private double _columnSpacing;
+    private double _rowSpacing;
 
     public int Columns
     {
@@ -23,8 +25,26 @@ public sealed partial class StaggeredPanel : Panel
         }
     }
 
-    public double ColumnSpacing { get; set; }
-    public double RowSpacing { get; set; }
+    public double ColumnSpacing
+    {
+        get => _columnSpacing;
+        set
+        {
+            if (value == _columnSpacing) { return; }
+            _columnSpacing = value;
+            InvalidateMeasure();
+        }
+    }
+    public double RowSpacing
+    {
+        get => _rowSpacing;
+        set
+        {
+            if (value == _rowSpacing) { return; }
+            _rowSpacing = value;
+            InvalidateMeasure();
+        }
+    }
 
     protected override Size MeasureOverride(Size availableSize)
     {

@@ -96,6 +96,7 @@ public sealed partial class MainWindow : Window
                 selected ? "SelectedNavigationButtonStyle" : "NavigationButtonStyle"];
             indicator.Visibility = selected ? Visibility.Visible : Visibility.Collapsed;
             AutomationProperties.SetHelpText(button, selected ? "Current page" : "");
+            AutomationProperties.SetItemStatus(button, selected ? "Current page" : "");
         }
     }
 

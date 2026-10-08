@@ -24,6 +24,8 @@
                         <TextBlock x:Name="PaceText" Text="--" Style="{StaticResource TitleTextBlockStyle}"
                                    ToolTipService.ToolTip="Recognized dictation words divided by recorded microphone time, including pauses." />
                         <TextBlock Text="Average words per minute" Style="{StaticResource CaptionSecondaryStyle}" />
+                        <TextBlock x:Name="PaceDefinition" Text="Dictation words divided by microphone time, including pauses."
+                                   TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}" />
                     </StackPanel>
                 </Border>
                 <Border x:Name="SessionsCard" Grid.Column="1" Style="{StaticResource MetricCardStyle}">
@@ -31,6 +33,8 @@
                         <TextBlock x:Name="SessionsText" Text="0" Style="{StaticResource TitleTextBlockStyle}"
                                    ToolTipService.ToolTip="Only completed sessions count." />
                         <TextBlock Text="Dictations" Style="{StaticResource CaptionSecondaryStyle}" />
+                        <TextBlock x:Name="SessionsDefinition" Text="Only completed sessions count."
+                                   TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}" />
                     </StackPanel>
                 </Border>
                 <Border x:Name="WordsCard" Grid.Column="2" Style="{StaticResource MetricCardStyle}">
@@ -38,6 +42,8 @@
                         <TextBlock x:Name="TotalWordsText" Text="0" Style="{StaticResource TitleTextBlockStyle}"
                                    ToolTipService.ToolTip="Excludes sessions with unknown word counts." />
                         <TextBlock Text="Recognized words" Style="{StaticResource CaptionSecondaryStyle}" />
+                        <TextBlock x:Name="WordsDefinition" Text="Excludes sessions with unknown word counts."
+                                   TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}" />
                     </StackPanel>
                 </Border>
             </Grid>

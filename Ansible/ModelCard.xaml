@@ -77,28 +77,28 @@
                                 </Flyout.FlyoutPresenterStyle>
                                 <StackPanel Spacing="12">
                                     <StackPanel x:Name="AboutSection" Spacing="12">
-                                        <TextBlock x:Name="DescriptionText" Style="{StaticResource BodyTextBlockStyle}" />
+                                        <TextBlock x:Name="DescriptionText" TextWrapping="Wrap" Style="{StaticResource BodyTextBlockStyle}" />
                                         <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
                                     </StackPanel>
                                     <StackPanel Spacing="4">
                                         <TextBlock Text="Capabilities" Style="{StaticResource DetailLabelStyle}" />
-                                        <TextBlock x:Name="CapabilityText" Style="{StaticResource BodyTextBlockStyle}" />
+                                        <TextBlock x:Name="CapabilityText" TextWrapping="Wrap" Style="{StaticResource BodyTextBlockStyle}" />
                                     </StackPanel>
                                     <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
                                     <StackPanel Spacing="4">
                                         <TextBlock Text="License" Style="{StaticResource DetailLabelStyle}" />
-                                        <TextBlock x:Name="LicenseDetailText" Style="{StaticResource BodyTextBlockStyle}" />
+                                        <TextBlock x:Name="LicenseDetailText" TextWrapping="Wrap" Style="{StaticResource BodyTextBlockStyle}" />
                                     </StackPanel>
                                     <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
                                     <StackPanel Spacing="4">
                                         <TextBlock Text="Source" Style="{StaticResource DetailLabelStyle}" />
-                                        <TextBlock x:Name="SourceText" Style="{StaticResource BodyTextBlockStyle}"
+                                        <TextBlock x:Name="SourceText" TextWrapping="Wrap" Style="{StaticResource BodyTextBlockStyle}"
                                                    IsTextSelectionEnabled="True" />
                                     </StackPanel>
                                     <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
                                     <StackPanel Spacing="4">
                                         <TextBlock Text="Verification" Style="{StaticResource DetailLabelStyle}" />
-                                        <TextBlock x:Name="PrecisionText" Style="{StaticResource BodyTextBlockStyle}"
+                                        <TextBlock x:Name="PrecisionText" TextWrapping="Wrap" Style="{StaticResource BodyTextBlockStyle}"
                                                    IsTextSelectionEnabled="True" />
                                         <TextBlock x:Name="ByteCountText" Style="{StaticResource BodyTextBlockStyle}"
                                                    IsTextSelectionEnabled="True" />

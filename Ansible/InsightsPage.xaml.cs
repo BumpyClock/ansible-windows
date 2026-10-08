@@ -56,20 +56,23 @@ public sealed partial class InsightsPage : Page
             : "Usage collection is paused. Saved counts remain visible.";
         IntroText.Visibility = IntroText.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
         PaceText.Text = summary.WordsPerMinute?.ToString("N0", CultureInfo.CurrentCulture) ?? "--";
-        ToolTipService.SetToolTip(PaceText,
+        PaceDefinition.Text =
             "Recognized dictation words divided by recorded microphone time, including pauses." +
-            (summary.RecordingSeconds > 0 ? $" {summary.RecordingSeconds / 60:N1} min recorded." : ""));
+            (summary.RecordingSeconds > 0 ? $" {summary.RecordingSeconds / 60:N1} min recorded." : "");
+        ToolTipService.SetToolTip(PaceText, PaceDefinition.Text);
         SessionsText.Text = summary.DictationSessions.ToString("N0");
-        ToolTipService.SetToolTip(SessionsText, "Only completed sessions count." +
+        SessionsDefinition.Text = "Only completed sessions count." +
             (summary.FileSessions > 0
                 ? $" {summary.FileSessions:N0} {(summary.FileSessions == 1 ? "file" : "files")} transcribed."
-                : ""));
+                : "");
+        ToolTipService.SetToolTip(SessionsText, SessionsDefinition.Text);
         TotalWordsText.Text = summary.TotalWords.ToString("N0");
-        ToolTipService.SetToolTip(TotalWordsText, (summary.UnknownWordSessions > 0
+        WordsDefinition.Text = (summary.UnknownWordSessions > 0
             ? $"Excludes {summary.UnknownWordSessions:N0} " +
               $"{(summary.UnknownWordSessions == 1 ? "session" : "sessions")} with unknown word counts."
             : "Excludes sessions with unknown word counts.") +
-            (summary.FileWords > 0 ? $" {summary.FileWords:N0} from files." : ""));
+            (summary.FileWords > 0 ? $" {summary.FileWords:N0} from files." : "");
+        ToolTipService.SetToolTip(TotalWordsText, WordsDefinition.Text);
         StreakText.Text = $"{summary.CurrentStreak} day streak";
         ToolTipService.SetToolTip(StreakText, summary.LongestStreak > summary.CurrentStreak
             ? $"Best {summary.LongestStreak} {(summary.LongestStreak == 1 ? "day" : "days")}."
