@@ -5,7 +5,7 @@ using System.Threading.Channels;
 
 namespace Ansible.Core.Windows;
 
-internal sealed class WaveInCapture(IWaveInApi api) : IAudioCapture
+internal sealed class WaveInCapture(IWaveInApi api, MicrophoneBoost boost) : IAudioCapture
 {
     internal const int PacketBytes = 1280;
     internal const int PacketCapacity = 7500;
@@ -122,6 +122,7 @@ internal sealed class WaveInCapture(IWaveInApi api) : IAudioCapture
                     }
                     var bytes = new byte[checked((int)header.BytesRecorded)];
                     Marshal.Copy(buffer.Data, bytes, 0, bytes.Length);
+                    boost.Apply(bytes);
                     if (!_audio.Writer.TryWrite(bytes))
                     {
                         throw new IOException("The bounded five-minute audio backlog is full. Recording stopped without dropping samples.");

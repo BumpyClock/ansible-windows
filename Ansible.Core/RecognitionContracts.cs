@@ -52,7 +52,7 @@ public interface IAudioCapture : IAsyncDisposable
 
 public interface IAudioCaptureFactory
 {
-    Task<IAudioCapture> StartAsync(CancellationToken cancellationToken);
+    Task<IAudioCapture> StartAsync(CancellationToken cancellationToken, int microphoneBoostDecibels = 0);
 }
 
 public sealed class CaptureOwnershipException(string message, IAudioCapture capture, Exception cause)

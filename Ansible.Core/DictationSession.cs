@@ -107,6 +107,9 @@ public sealed class DictationSession
     public void SetTypingGap(int milliseconds) =>
         ChangeSettings(state => state with { Settings = state.Settings with { TypingGapMilliseconds = milliseconds } },
             new(NoticeKind.Success, "Typing gap updated", $"Typed characters are sent {milliseconds} ms apart."));
+    public void SetMicrophoneBoost(int decibels) =>
+        ChangeSettings(state => state with { Settings = state.Settings with { MicrophoneBoostDecibels = decibels } },
+            new(NoticeKind.Success, "Microphone boost updated", "The boost applies to the next microphone dictation."));
     public Task<SessionOutcome> MaintainModelsAsync(
         Func<CancellationToken, Task> maintenance, string? directory = null)
     {
@@ -207,7 +210,10 @@ public sealed class DictationSession
             }
             var options = new RecognitionOptions(_state.Language,
                 model?.SupportsCustomDictionary == true ? _state.Settings.CustomDictionary : "", _state.Settings.Backend);
-            operation = new Operation(activity, model, options, path, initializeUsage, _timeout, _time);
+            operation = new Operation(activity, model, options, path, initializeUsage, _timeout, _time)
+            {
+                MicrophoneBoostDecibels = _state.Settings.MicrophoneBoostDecibels
+            };
             operation.SettingsWarning = initializeUsage ? _initialSettingsWarning : null;
             operation.Maintenance = maintenance;
             operation.TranscriptUpdates = transcriptUpdates;
@@ -457,7 +463,7 @@ public sealed class DictationSession
         {
             // Open the microphone while the model loads. Until the stream reads, speech waits in the capture's
             // bounded backlog, which stops recording at its five-minute limit rather than dropping samples.
-            operation.Capture = await _captureFactory.StartAsync(operation.Token);
+            operation.Capture = await _captureFactory.StartAsync(operation.Token, operation.MicrophoneBoostDecibels);
             operation.Token.ThrowIfCancellationRequested();
             lock (_gate) { EnsureCurrent(operation); }
             operation.LevelHandler = value => PublishLevel(operation, value);
@@ -936,6 +942,7 @@ public sealed class DictationSession
         public IRecognitionEngine? Candidate { get; set; }
         public IRecognitionEngine? Previous { get; set; }
         public IAudioCapture? Capture { get; set; }
+        public int MicrophoneBoostDecibels { get; init; }
         public Action<double>? LevelHandler { get; set; }
         public Channel<byte[]>? Pipe { get; set; }
         public Task? Producer { get; set; }

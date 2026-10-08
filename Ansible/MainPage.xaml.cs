@@ -81,6 +81,8 @@ public sealed partial class MainPage : Page
             PushToTalkChoice.IsEnabled = idle;
             PushToTalkChoice.SelectedIndex = _state.Settings.PushToTalk ? 0 : 1;
             RenderInsertion(idle);
+            MicrophoneBoostBox.IsEnabled = idle;
+            MicrophoneBoostBox.Value = _state.Settings.MicrophoneBoostDecibels;
         }
         finally { _rendering = false; }
     }
@@ -201,6 +203,16 @@ public sealed partial class MainPage : Page
         var gap = (int)Math.Round(Math.Clamp(args.NewValue, 0, AppSettings.MaxTypingGapMilliseconds));
         if (gap == _session.State.Settings.TypingGapMilliseconds) { return; }
         try { _session.SetTypingGap(gap); }
+        catch (Exception error) { _session.ReportUiError(error); Render(); }
+    }
+
+    private void MicrophoneBoostChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
+    {
+        if (_rendering) { return; }
+        if (double.IsNaN(args.NewValue)) { Render(); return; }
+        var boost = (int)Math.Round(Math.Clamp(args.NewValue, 0, MicrophoneBoost.MaxDecibels));
+        if (boost == _session.State.Settings.MicrophoneBoostDecibels) { Render(); return; }
+        try { _session.SetMicrophoneBoost(boost); }
         catch (Exception error) { _session.ReportUiError(error); Render(); }
     }
 

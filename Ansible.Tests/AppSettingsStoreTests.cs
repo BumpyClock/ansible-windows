@@ -16,7 +16,21 @@ public sealed class AppSettingsStoreTests : IDisposable
         var store = CreateStore();
 
         Assert.Equal(new AppSettings(), store.Load());
+        Assert.Equal(0, store.Load().MicrophoneBoostDecibels);
         Assert.False(File.Exists(store.Path));
+    }
+
+    [Fact]
+    public void SavedSettingsWithoutBoostUseZeroDecibels()
+    {
+        var store = CreateStore();
+        store.Save(new AppSettings { Language = "en" });
+        var document = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(store.Path))!.AsObject();
+        Assert.True(document.Remove("MicrophoneBoostDecibels"));
+        File.WriteAllText(store.Path, document.ToJsonString());
+
+        Assert.Equal(0, store.Load().MicrophoneBoostDecibels);
+        Assert.Equal("en", store.Load().Language);
     }
 
     [Fact]
@@ -32,7 +46,8 @@ public sealed class AppSettingsStoreTests : IDisposable
             CollectUsage = false,
             CustomDictionary = "NativeAOT\nWinUI",
             InsertionMethod = TextInsertionMethod.Type,
-            TypingGapMilliseconds = 35
+            TypingGapMilliseconds = 35,
+            MicrophoneBoostDecibels = 20
         };
         CreateStore().Save(settings);
 
@@ -93,6 +108,8 @@ public sealed class AppSettingsStoreTests : IDisposable
     [InlineData("{\"InsertionMethod\":7}", typeof(InvalidDataException))]
     [InlineData("{\"TypingGapMilliseconds\":-1}", typeof(InvalidDataException))]
     [InlineData("{\"TypingGapMilliseconds\":201}", typeof(InvalidDataException))]
+    [InlineData("{\"MicrophoneBoostDecibels\":-1}", typeof(InvalidDataException))]
+    [InlineData("{\"MicrophoneBoostDecibels\":25}", typeof(InvalidDataException))]
     public void CorruptSettingsAreReportedWithoutReplacingTheFile(string content, Type errorType)
     {
         var store = CreateStore();

@@ -8,6 +8,60 @@ public sealed class DictationSessionTests : IDisposable
     private readonly string _settingsDirectory = Path.Combine(Path.GetTempPath(), "LocalVoiceSettingsTests", Guid.NewGuid().ToString("N"));
     private string SettingsPath => Path.Combine(_settingsDirectory, "settings.json");
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(20)]
+    public async Task MicrophoneBoostPersistsAndAppliesWhenCaptureStarts(int decibels)
+    {
+        var initial = Create(new FakeEngine(), settings: new AppSettingsStore(SettingsPath));
+        await initial.InitializeAsync();
+        Assert.Equal(0, initial.State.Settings.MicrophoneBoostDecibels);
+        initial.SetMicrophoneBoost(decibels);
+        Assert.Throws<InvalidDataException>(() => initial.SetMicrophoneBoost(-1));
+        Assert.Throws<InvalidDataException>(() => initial.SetMicrophoneBoost(25));
+        Assert.Equal(decibels, initial.State.Settings.MicrophoneBoostDecibels);
+        await initial.CloseAsync();
+
+        var capture = new FakeCaptureFactory();
+        var session = Create(new FakeEngine(), capture, settings: new AppSettingsStore(SettingsPath));
+        await session.InitializeAsync();
+        Assert.Equal(decibels, session.State.Settings.MicrophoneBoostDecibels);
+        var recording = session.StartDictationAsync();
+        await WaitForStateAsync(session, DictationPhase.Recording);
+        Assert.Equal(decibels, capture.LastMicrophoneBoostDecibels);
+        Assert.Throws<InvalidOperationException>(() => session.SetMicrophoneBoost(6));
+        await session.FinishAsync();
+        Assert.Equal(SessionOutcomeKind.Completed, (await recording).Kind);
+        await session.CloseAsync();
+    }
+
+    [Fact]
+    public async Task MicrophoneBoostDoesNotChangeFileOrReplayAudio()
+    {
+        var received = new List<byte[]>();
+        var engine = new FakeEngine
+        {
+            Streaming = async (_, audio, token, ready) =>
+            {
+                ready?.Invoke();
+                await foreach (var packet in audio.ReadAllAsync(token)) { received.Add(packet); }
+                return new RecognitionResult("test", "test");
+            }
+        };
+        var session = Create(engine, input: new FakeInput
+        {
+            Replay = _ => Task.FromResult<byte[]>([100, 0, 156, 255]),
+            Recording = new WaveAudio([0.125f, -0.125f], 16000, 1)
+        });
+        await session.InitializeAsync();
+        session.SetMicrophoneBoost(20);
+        Assert.Equal(SessionOutcomeKind.Completed, (await session.TranscribeFileAsync("sample.wav")).Kind);
+        Assert.Equal(new float[] { 0.125f, -0.125f }, engine.LastAudio!.Samples);
+        Assert.Equal(SessionOutcomeKind.Completed, (await session.ReplayAsync("sample.wav")).Kind);
+        Assert.Equal(new byte[] { 100, 0, 156, 255 }, received.SelectMany(packet => packet).ToArray());
+        await session.CloseAsync();
+    }
+
     [Fact]
     public async Task BackendPreferencePersistsAndAppliesToFileAndLiveRecognition()
     {
@@ -1129,6 +1183,7 @@ public sealed class DictationSessionTests : IDisposable
         public string? LastLanguage;
         public string? LastDictionary;
         public RecognitionOptions? LastOptions;
+        public WaveAudio? LastAudio;
         public Task<IReadOnlyList<AudioModel>> ConnectAsync(CancellationToken token)
         {
             ConnectEntered.TrySetResult();
@@ -1137,6 +1192,7 @@ public sealed class DictationSessionTests : IDisposable
         public Task<RecognitionResult> TranscribeAsync(
             AudioModel model, WaveAudio audio, RecognitionOptions options, IProgress<TranscriptUpdate>? progress, CancellationToken token)
         {
+            LastAudio = audio;
             LastModel = model;
             LastLanguage = options.Language;
             LastDictionary = options.CustomDictionary;
@@ -1196,9 +1252,11 @@ public sealed class DictationSessionTests : IDisposable
         public int Starts;
         public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public Func<CancellationToken, Task<IAudioCapture>>? Starting { get; init; }
-        public Task<IAudioCapture> StartAsync(CancellationToken token)
+        public int LastMicrophoneBoostDecibels;
+        public Task<IAudioCapture> StartAsync(CancellationToken token, int microphoneBoostDecibels = 0)
         {
             token.ThrowIfCancellationRequested();
+            LastMicrophoneBoostDecibels = microphoneBoostDecibels;
             Starts++;
             Entered.TrySetResult();
             return Starting?.Invoke(token) ?? Task.FromResult<IAudioCapture>(new FakeCapture());
@@ -1235,9 +1293,10 @@ public sealed class DictationSessionTests : IDisposable
 
     private sealed class FakeInput : IAudioInputReader
     {
+        public WaveAudio Recording { get; init; } = new([0f], 16000, 1);
         public Func<CancellationToken, Task<byte[]>>? Replay { get; init; }
         public Task<WaveAudio> ReadRecordingAsync(string path, CancellationToken token) =>
-            Task.FromResult(new WaveAudio([0f], 16000, 1));
+            Task.FromResult(Recording);
         public Task<byte[]> ReadReplayAsync(string path, CancellationToken token) =>
             Replay?.Invoke(token) ?? Task.FromResult<byte[]>([0, 0]);
     }

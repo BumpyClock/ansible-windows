@@ -17,9 +17,9 @@ public sealed class WaveInCaptureFactory : IAudioCaptureFactory
 
     internal WaveInCaptureFactory(IWaveInApi api) => _api = api;
 
-    public async Task<IAudioCapture> StartAsync(CancellationToken cancellationToken)
+    public async Task<IAudioCapture> StartAsync(CancellationToken cancellationToken, int microphoneBoostDecibels = 0)
     {
-        var capture = new WaveInCapture(_api);
+        var capture = new WaveInCapture(_api, new MicrophoneBoost(microphoneBoostDecibels));
         try
         {
             await Task.Run(() => capture.Initialize(cancellationToken)).ConfigureAwait(false);

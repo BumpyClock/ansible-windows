@@ -81,6 +81,19 @@
                     </StackPanel>
                     <Border Height="1" Margin="0,12" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
                     <StackPanel Spacing="8">
+                        <NumberBox x:Name="MicrophoneBoostBox" Header="Microphone boost (dB)"
+                                   HorizontalAlignment="Left" MinWidth="180"
+                                   AutomationProperties.AutomationId="MicrophoneBoostBox"
+                                   AutomationProperties.Name="Microphone boost in decibels"
+                                   AutomationProperties.HelpText="0 is off. Applies to the next microphone dictation."
+                                   Minimum="0" Maximum="24" SmallChange="6" LargeChange="12"
+                                   SpinButtonPlacementMode="Inline" ValidationMode="InvalidInputOverwritten"
+                                   ValueChanged="MicrophoneBoostChanged" />
+                        <TextBlock Text="For quiet speech or whispering. 0 is off; try 6 or 12 dB first. Higher boost also raises background noise and can distort louder speech. Applies to the next microphone dictation."
+                                   TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}" />
+                    </StackPanel>
+                    <Border Height="1" Margin="0,12" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                    <StackPanel Spacing="8">
                         <TextBlock Text="Language hint" VerticalAlignment="Center"
                                    Style="{StaticResource BodyTextBlockStyle}" />
                         <TextBox x:Name="LanguageBox" MaxWidth="180" HorizontalAlignment="Stretch"

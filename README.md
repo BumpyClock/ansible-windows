@@ -72,7 +72,7 @@ or silently import that development data.
 
 All app preferences use one typed `AppSettings` document and one
 `AppSettingsStore`. The model, language hint, model folder, shortcut, activation
-mode, recognition processor, usage-collection toggle, and saved custom dictionary use the package's
+mode, recognition processor, microphone boost, usage-collection toggle, and saved custom dictionary use the package's
 `LocalState\settings.json` and return after restart. The session owns settings
 changes; pages and shortcut handling read the same immutable settings snapshot.
 Writes replace the file atomically. Usage records remain separate data in
@@ -92,6 +92,20 @@ This development consolidation starts with defaults. Older prototype preference
 files and Windows local-setting keys are neither imported nor written.
 Existing model weights and usage records are not deleted.
 Audio and transcript content remain in memory.
+
+### Quiet speech and microphone boost
+
+In **Settings > Microphone boost (dB)**, start with 6 or 12 dB for quiet speech.
+The range is 0–24 dB; 0 (the default) turns boost off. The saved value applies
+to the next microphone dictation, including speech buffered while the model loads.
+Finish recording before changing it. The level meter shows the boosted audio.
+File transcription and public-sample replay do not use this setting.
+
+Boost raises PCM sample amplitude before recognition; it does not remove noise
+or recover speech the microphone did not capture. Louder samples saturate at
+the PCM16 limits rather than wrapping around. Reduce boost if speech distorts.
+Whisper transcription accuracy depends on the microphone, noise, and model;
+this control does not establish whisper recognition accuracy.
 
 ### Custom dictionary
 

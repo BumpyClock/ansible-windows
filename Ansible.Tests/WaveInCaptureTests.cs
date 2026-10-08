@@ -8,6 +8,39 @@ namespace Ansible.Tests;
 
 public sealed class WaveInCaptureTests
 {
+    [Theory]
+    [InlineData(0)]
+    [InlineData(20)]
+    public async Task BoostedSamplesAndMeterRemainCurrentWithoutAnAudioReader(int decibels)
+    {
+        var api = new FakeWaveInApi();
+        await using var capture = await new WaveInCaptureFactory(api).StartAsync(CancellationToken.None, decibels);
+        var levels = new List<double>();
+        capture.LevelChanged += levels.Add;
+        var header = api.Headers[0];
+        // More than the inference pipe capacity: metering must not wait for its reader.
+        for (var index = 0; index < 20; index++)
+        {
+            api.Return(header, [0, 0, 100, 0, 156, 255, 160, 15, 96, 240]);
+            await api.WaitForRequeueAsync();
+        }
+        await capture.StopAsync();
+        byte[] expected = decibels == 0
+            ? [0, 0, 100, 0, 156, 255, 160, 15, 96, 240]
+            : [0, 0, 232, 3, 24, 252, 255, 127, 0, 128];
+        var expectedLevel = decibels == 0
+            ? Math.Sqrt((100.0 * 100 * 2 + 4000.0 * 4000 * 2) / 5) / 32768
+            : Math.Sqrt((1000.0 * 1000 * 2 + 32767.0 * 32767 + 32768.0 * 32768) / 5) / 32768;
+        Assert.Equal(20, levels.Count);
+        Assert.All(levels, level => Assert.Equal(expectedLevel, level, 10));
+        var packets = new List<byte[]>();
+        await foreach (var packet in capture.Audio.ReadAllAsync()) { packets.Add(packet); }
+        Assert.Equal(20, packets.Count);
+        Assert.All(packets, packet => Assert.Equal(expected, packet));
+        Assert.Equal(200 / 32000.0, capture.CapturedSeconds);
+        Assert.Equal(0, api.DriverCallsDuringCallback);
+    }
+
     [Fact]
     public async Task CapturesPcmAndRequeuesOutsideTheNativeCallback()
     {
