@@ -40,7 +40,8 @@ try
     for (var index = 4; index < args.Length; index++)
     {
         if (args[index] == "--file-only" && !fileOnly) { fileOnly = true; }
-        else if (args[index] == "--dictionary" && dictionary is null && index + 1 < args.Length)
+        else if (args[index] == "--dictionary" && dictionary is null && index + 1 < args.Length &&
+                 !args[index + 1].StartsWith("--", StringComparison.Ordinal))
             dictionary = args[++index];
         else if (!args[index].StartsWith("--", StringComparison.Ordinal) && modelId is null)
             modelId = args[index];

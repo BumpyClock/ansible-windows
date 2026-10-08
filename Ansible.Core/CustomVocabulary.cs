@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 
 namespace Ansible.Core;
@@ -20,7 +21,7 @@ public static class CustomVocabulary
             var entry = string.Join(" ", line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
                 .Normalize(NormalizationForm.FormC);
             if (entry.Length == 0) { continue; }
-            if (entry.Length > MaximumEntryCharacters || entry.Any(char.IsControl))
+            if (new StringInfo(entry).LengthInTextElements > MaximumEntryCharacters || entry.Any(char.IsControl))
                 throw new InvalidDataException("Each dictionary entry must be at most 100 characters and contain no control characters.");
             if (seen.Add(entry)) { entries.Add(entry); }
             if (entries.Count > MaximumEntries)

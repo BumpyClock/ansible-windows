@@ -218,6 +218,8 @@ public sealed partial class MainWindow : Window
         _captureTask = inspection;
         try
         {
+            // Let the hotkey adapter report an already-released chord before admitting recording.
+            await Task.Yield();
             var inspected = await inspection;
             if (_closing || _closed) { return; }
             if (!_captureCoordinator.IsCurrent(capture)) { return; }

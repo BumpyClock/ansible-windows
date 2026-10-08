@@ -64,12 +64,17 @@
                             </StackPanel>
                         </StackPanel>
 
-                        <Grid Grid.Row="1" Grid.ColumnSpan="2" ColumnSpacing="12">
+                        <Grid x:Name="ModelActions" Grid.Row="1" Grid.ColumnSpan="2" ColumnSpacing="12" RowSpacing="12"
+                              SizeChanged="ModelActionsSizeChanged">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <ComboBox x:Name="ModelBox" Header="Speech model" MinWidth="320" HorizontalAlignment="Left"
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <ComboBox x:Name="ModelBox" Header="Speech model" HorizontalAlignment="Stretch"
                                       SelectionChanged="ModelChanged" PlaceholderText="No installed models" />
                             <Button x:Name="FileButton" Grid.Column="1" VerticalAlignment="Bottom" MinHeight="32"
                                     Click="TranscribeClicked" AutomationProperties.Name="Transcribe a WAV file">
@@ -82,7 +87,8 @@
                     </Grid>
                 </Border>
 
-                <InfoBar x:Name="StatusInfo" IsOpen="False" IsClosable="True" Closing="StatusInfoClosing" />
+                <InfoBar x:Name="StatusInfo" IsOpen="False" IsClosable="True" Visibility="Collapsed"
+                         Closing="StatusInfoClosing" Closed="StatusInfoClosed" />
 
                 <Border x:Name="TranscriptCard" Style="{StaticResource CardStyle}" MinHeight="160" Visibility="Collapsed">
                     <Grid RowSpacing="8">

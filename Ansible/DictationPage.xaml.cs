@@ -172,16 +172,38 @@ public sealed partial class DictationPage : Page
     {
         var notice = _state.Notice;
         var attention = notice.Kind is NoticeKind.Warning or NoticeKind.Error;
-        if (!attention || ReferenceEquals(notice, _dismissedNotice)) { StatusInfo.IsOpen = false; return; }
+        if (!attention || ReferenceEquals(notice, _dismissedNotice))
+        {
+            StatusInfo.IsOpen = false;
+            StatusInfo.Visibility = Visibility.Collapsed;
+            return;
+        }
         StatusInfo.Severity = notice.Kind == NoticeKind.Error ? InfoBarSeverity.Error : InfoBarSeverity.Warning;
         StatusInfo.Title = notice.Title;
         StatusInfo.Message = notice.Message;
+        StatusInfo.Visibility = Visibility.Visible;
         StatusInfo.IsOpen = true;
     }
 
     private void StatusInfoClosing(InfoBar sender, InfoBarClosingEventArgs args)
     {
         if (args.Reason == InfoBarCloseReason.CloseButton) { _dismissedNotice = _state.Notice; }
+    }
+
+    private void StatusInfoClosed(InfoBar sender, InfoBarClosedEventArgs args)
+    {
+        if (!sender.IsOpen) { sender.Visibility = Visibility.Collapsed; }
+    }
+
+    private void ModelActionsSizeChanged(object sender, SizeChangedEventArgs args)
+    {
+        FileButton.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
+        var narrow = args.NewSize.Width < 320 + FileButton.DesiredSize.Width + ModelActions.ColumnSpacing;
+        Grid.SetColumnSpan(ModelBox, narrow ? 2 : 1);
+        Grid.SetColumn(FileButton, narrow ? 0 : 1);
+        Grid.SetRow(FileButton, narrow ? 1 : 0);
+        Grid.SetColumnSpan(FileButton, narrow ? 2 : 1);
+        FileButton.HorizontalAlignment = narrow ? HorizontalAlignment.Left : HorizontalAlignment.Stretch;
     }
 
     // The ring is a thin arc that rotates around the button. With animations off it stays as a static arc.

@@ -170,7 +170,7 @@ Then build and verify an unsigned NativeAOT package:
 ```
 
 The default output is
-`Ansible\bin\AppPackages\Ansible_1.0.0.0_x64_Test\Ansible_1.0.0.0_x64.msix`.
+`Ansible\bin\AppPackages\Ansible_1.0.1.0_x64_Test\Ansible_1.0.1.0_x64.msix`.
 `-OutputDirectory` changes the parent package directory. Packaging does not
 install the app, create certificates, change certificate trust, or enable
 Developer Mode. It never bundles downloaded models or development model paths.

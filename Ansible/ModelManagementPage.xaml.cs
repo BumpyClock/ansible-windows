@@ -59,25 +59,45 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         {
             var catalog = await NativeModelCatalog.LoadAsync(_paths.ModelCatalog, _lifetime.Token);
             var families = await NativeAudioEngine.GetSupportedFamiliesAsync(_paths.NativeLibrary, _lifetime.Token);
-            _manager = new ModelDownloadManager(catalog, families, _session.State.ModelsDirectory, _http);
-            _manager.Changed += ManagerChanged;
-            if (_cardList.Count == 0)
+            var candidate = new ModelDownloadManager(catalog, families, _session.State.ModelsDirectory, _http);
+            try
             {
-                _themeSettings = ThemeSettings.CreateForWindowId(
-                    Microsoft.UI.Win32Interop.GetWindowIdFromWindow(_windowHandle()));
-                foreach (var entry in catalog)
+                if (_cardList.Count == 0)
                 {
-                    var card = new ModelCard();
-                    card.Initialize(entry, _themeSettings);
-                    card.PrimaryRequested += OnPrimaryRequested;
-                    card.PauseRequested += OnPauseRequested;
-                    card.RemoveRequested += OnRemoveRequested;
-                    card.DiscardRequested += OnDiscardRequested;
-                    card.UseRequested += OnUseRequested;
-                    _cardList.Add(card);
+                    _themeSettings = ThemeSettings.CreateForWindowId(
+                        Microsoft.UI.Win32Interop.GetWindowIdFromWindow(_windowHandle()));
+                    foreach (var entry in catalog)
+                    {
+                        var card = new ModelCard();
+                        card.Initialize(entry, _themeSettings);
+                        card.PrimaryRequested += OnPrimaryRequested;
+                        card.PauseRequested += OnPauseRequested;
+                        card.RemoveRequested += OnRemoveRequested;
+                        card.DiscardRequested += OnDiscardRequested;
+                        card.UseRequested += OnUseRequested;
+                        _cardList.Add(card);
+                    }
+                    _ordered = _cardList.ToArray();
+                    LayoutCards(_ordered, ModelsGrid.ActualWidth >= TwoColumnThreshold ? 2 : 1);
                 }
-                _ordered = _cardList.ToArray();
-                LayoutCards(_ordered, ModelsGrid.ActualWidth >= TwoColumnThreshold ? 2 : 1);
+                candidate.Changed += ManagerChanged;
+                _manager = candidate;
+            }
+            finally
+            {
+                // A failure during card setup must leave no half-built page or leaked manager so a
+                // later Verify installed files retry can rebuild the catalog from a clean state.
+                if (_manager is null)
+                {
+                    foreach (var card in _cardList) { card.DetachThemeEvents(); }
+                    ModelsGrid.Children.Clear();
+                    _cardList.Clear();
+                    _ordered = [];
+                    _laidOut = [];
+                    _columns = 0;
+                    _themeSettings = null;
+                    await candidate.DisposeAsync();
+                }
             }
             await _manager.RefreshAsync(_lifetime.Token);
         }
@@ -117,7 +137,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         FolderText.Text = _manager?.DirectoryPath ?? state.ModelsDirectory;
         ToolTipService.SetToolTip(FolderMenuButton, FolderText.Text);
         FolderButton.IsEnabled = idle;
-        RefreshButton.IsEnabled = !managerBusy && !_dialogActive;
+        RefreshButton.IsEnabled = _initialization is not { IsCompleted: false } && !managerBusy && !_dialogActive;
         FolderMenuButton.IsEnabled = !_dialogActive;
         BackendText.Text = $"audio.cpp {state.BackendVersion} \u00B7 native CPU";
         BackendText.Visibility = string.IsNullOrEmpty(state.BackendVersion) ? Visibility.Collapsed : Visibility.Visible;
@@ -256,10 +276,12 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
 
     private async void RefreshClicked(object sender, RoutedEventArgs args)
     {
+        if (_closed || _initialization is { IsCompleted: false }) { return; }
         if (_manager is null)
         {
             _error = null;
             _initialization = InitializeAsync();
+            Render();
             await _initialization;
             Render();
             return;

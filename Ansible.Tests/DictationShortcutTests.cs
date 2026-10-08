@@ -20,6 +20,7 @@ public sealed class DictationShortcutTests
     [InlineData(4, 0x20)]
     [InlineData(0, 0x7B)]
     [InlineData(0x4000, 0x78)]
+    [InlineData(8, 0x4C)]
     public void CannotConsumeOrdinaryTypingOrReservedKeys(uint modifiers, uint key) =>
         Assert.False(new DictationShortcut(modifiers, key).IsValid);
 
@@ -29,6 +30,9 @@ public sealed class DictationShortcutTests
     [InlineData(2, 0x41)]
     [InlineData(1, 0x20)]
     [InlineData(8, 0x31)]
+    [InlineData(9, 0x44)]
+    [InlineData(9, 0x4C)]
+    [InlineData(2, 0x4C)]
     [InlineData(6, 0x44)]
     public void AcceptsFunctionKeysAndModifiedPrintableKeys(uint modifiers, uint key) =>
         Assert.True(new DictationShortcut(modifiers, key).IsValid);

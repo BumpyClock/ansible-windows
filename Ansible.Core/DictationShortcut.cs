@@ -19,20 +19,23 @@ public readonly record struct DictationShortcut(uint Modifiers, uint Key)
     private const uint VkSpace = 0x20;
     private const uint VkDigit0 = 0x30, VkDigit9 = 0x39;
     private const uint VkA = 0x41, VkZ = 0x5A;
+    private const uint VkL = 0x4C;
     private const uint VkF1 = 0x70, VkF11 = 0x7A;   // F12 (0x7B) is intentionally excluded.
     private const uint VkF9 = 0x78;
 
     public static DictationShortcut Default => new(0, VkF9);
 
     /// <summary>
-    /// True for a chord safe to register system-wide. Printable keys (A-Z, 0-9, Space) require a non-Shift
-    /// modifier (Ctrl/Alt/Win) so registration cannot swallow ordinary typing; F1-F11 are allowed bare.
-    /// Modifier bits outside the four supported flags (e.g. MOD_NOREPEAT) are rejected.
+    /// Validates chord structure and known exclusions, not whether RegisterHotKey succeeds.
+    /// Printable keys (A-Z, 0-9, Space) require a non-Shift modifier (Ctrl/Alt/Win);
+    /// F1-F11 are allowed bare. F12, Win+L, and unsupported modifier bits are rejected.
+    /// Other Windows-key chords remain subject to operating-system registration restrictions.
     /// </summary>
     [JsonIgnore]
     public bool IsValid =>
         (Modifiers & ~ValidModifierMask) == 0 &&
         IsSupportedPrimaryKey(Key) &&
+        !(Modifiers == ModWin && Key == VkL) &&
         (!IsPrintableKey(Key) || (Modifiers & NonShiftModifierMask) != 0);
 
     /// <summary>Stable label with a fixed modifier order (Ctrl, Win, Shift, Alt), e.g. "Ctrl + Alt + D" or "F9".</summary>

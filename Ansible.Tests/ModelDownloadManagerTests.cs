@@ -284,6 +284,31 @@ public sealed class ModelDownloadManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task CancelledInstalledVerificationKeepsTheFileAndCanBeVerifiedAgainWithoutDownloading()
+    {
+        Directory.CreateDirectory(_directory);
+        File.WriteAllBytes(Path.Combine(_directory, Entry.Filename), Weights);
+        using var http = Client(_ => throw new InvalidOperationException("Unexpected HTTP"));
+        await using var manager = Manager(http);
+        using var cancellation = new CancellationTokenSource();
+        void StopVerification()
+        {
+            if (manager.Get("tiny").State == ModelInstallState.Verifying) { cancellation.Cancel(); }
+        }
+        manager.Changed += StopVerification;
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => manager.RefreshAsync(cancellation.Token));
+        manager.Changed -= StopVerification;
+        var paused = manager.Get("tiny");
+        Assert.Equal(ModelInstallState.Failed, paused.State);
+        Assert.True(paused.HasModelFile);
+        Assert.False(paused.HasPartial);
+        Assert.Equal(Weights, File.ReadAllBytes(paused.Path));
+        await manager.RefreshAsync();
+        Assert.Equal(ModelInstallState.Installed, manager.Get("tiny").State);
+        Assert.True(manager.Get("tiny").HasModelFile);
+    }
+
+    [Fact]
     public async Task RemoveCannotBypassAResidentReadLease()
     {
         using var http = Client(_ => Response(Weights));

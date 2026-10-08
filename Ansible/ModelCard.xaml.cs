@@ -116,6 +116,9 @@ public sealed partial class ModelCard : UserControl
         DownloadProgress.Value = snapshot.Progress;
         // Verification reports no progress, so the bar shows activity rather than a fill level.
         DownloadProgress.IsIndeterminate = state == ModelInstallState.Verifying;
+        AutomationProperties.SetName(DownloadProgress, state == ModelInstallState.Verifying
+            ? $"File verification progress for {_name}"
+            : $"Model download progress for {_name}");
         ProgressHost.Visibility = showBar ? Visibility.Visible : Visibility.Collapsed;
         // Verifying shows the state and bar only; Ready to install is covered by the state and the Install button.
         ProgressText.Text = $"{FormatBytes(snapshot.DownloadedBytes)} / {FormatBytes(entry.Bytes)}" +

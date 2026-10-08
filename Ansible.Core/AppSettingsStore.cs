@@ -11,7 +11,7 @@ public sealed class AppSettingsStore(string path) : IAppSettingsStore
     {
         if (!File.Exists(Path)) { return new(); }
         var settings = JsonSerializer.Deserialize(File.ReadAllText(Path), AppSettingsJsonContext.Default.AppSettings)
-            ?? throw new InvalidDataException("The app settings file is empty.");
+            ?? throw new InvalidDataException("The app settings file does not contain a settings document.");
         settings.Validate();
         return settings;
     }
