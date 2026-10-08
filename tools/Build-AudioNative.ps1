@@ -1,5 +1,8 @@
 [CmdletBinding()]
 param(
+    [ValidateSet("cpu", "vulkan")]
+    [string]$Backend = "vulkan",
+    [string]$VulkanSdk = "",
     [ValidateRange(1, 8)]
     [int]$Jobs = 2,
     [switch]$StageRuntimeOnly,
@@ -12,9 +15,21 @@ $root = Split-Path $PSScriptRoot -Parent
 $runtime = Join-Path $root ".runtime"
 $tools = Join-Path $runtime "native-tools"
 $source = Join-Path $runtime "audio-native-src"
-$build = Join-Path $runtime "audio-native-build"
+$build = Join-Path $runtime "audio-native-build-$Backend"
 $output = Join-Path $runtime "native"
 if ($NativeDirectory) { $output = [IO.Path]::GetFullPath($NativeDirectory) }
+[string[]]$runtimeBackends = @("cpu")
+if ($Backend -eq "vulkan") { $runtimeBackends += "vulkan" }
+$sdkVersion = $null
+[object[]]$sourcePatches = @()
+if ($StageRuntimeOnly -or $VerifyRuntimeOnly) {
+    $recordPath = Join-Path $output "native-runtime.json"
+    if (-not (Test-Path -LiteralPath $recordPath)) { throw "Build the native runtime before staging or verifying it." }
+    $record = Get-Content -LiteralPath $recordPath -Raw | ConvertFrom-Json
+    $runtimeBackends = if ($record.backends) { @($record.backends) } else { @("cpu") }
+    $sdkVersion = $record.vulkan_sdk
+    $sourcePatches = if ($record.source_patches) { @($record.source_patches) } else { @() }
+}
 if (-not [Environment]::Is64BitProcess -or
     [Runtime.InteropServices.RuntimeInformation]::OSArchitecture -ne [Runtime.InteropServices.Architecture]::X64) {
     throw "The qualified native build and deployment path requires Windows x64."
@@ -66,6 +81,9 @@ function Test-NativeClosure {
         $path = $queue.Dequeue()
         if (-not $visited.Add($path)) { continue }
         $imports = @(Get-PeImports $path)
+        if ("vulkan-1.dll" -in $imports) {
+            throw "Vulkan must use the optional system loader so CPU recognition does not require a GPU driver. Rebuild the patched native runtime."
+        }
         $closure += [ordered]@{
             file = [IO.Path]::GetFileName($path)
             sha256 = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -115,7 +133,10 @@ function Test-NativeClosure {
         Copy-Item -LiteralPath $sample -Destination (Join-Path $validation "sample_16k.wav") -Force
         [ordered]@{
             source_commit = "795c45fbde0a7d29c93b22199728ff5caaec02e5"
-            architecture = "windows-x64-cpu"
+            architecture = "windows-x64"
+            backends = $runtimeBackends
+            vulkan_sdk = $sdkVersion
+            source_patches = $sourcePatches
             cpu_requirements = @("AVX2", "FMA", "F16C", "BMI1", "BMI2", "OS-enabled AVX state")
             windows_prerequisite = "Windows 10 or newer supplies UCRT and Windows API-set imports."
             redist_version = $redistRoot.Name
@@ -129,6 +150,7 @@ function Test-NativeClosure {
     if (-not (Test-Path -LiteralPath (Join-Path $output "native-runtime.json"))) { throw "The native deployment record is missing." }
     Write-Host "Verified x64 native PE import closure ($($visited.Count) app-local files). Windows 10+ system imports remain prerequisites."
     Write-Host "CPU requires AVX2/FMA/F16C/BMI1/BMI2. Clean-machine qualification has not been performed."
+    Write-Host "Compiled backends: $($runtimeBackends -join ', '). Vulkan recognition requires a compatible GPU driver; CPU remains available without it."
 }
 
 if ($VerifyRuntimeOnly) { Test-NativeClosure $false; return }
@@ -179,13 +201,41 @@ if ($LASTEXITCODE -ne 0 -or $commit -ne "795c45fbde0a7d29c93b22199728ff5caaec02e
     throw "The native source is not the expected audio.cpp v0.9.0 commit."
 }
 
+$patch = Join-Path $PSScriptRoot "patches\audio-vulkan-loader.patch"
+$patchCheck = & git -C $source apply --check $patch 2>&1
+if ($LASTEXITCODE -eq 0) {
+    & git -C $source apply $patch
+    if ($LASTEXITCODE -ne 0) { throw "Cannot apply the optional Vulkan loader patch." }
+} else {
+    $reverseCheck = & git -C $source apply --reverse --check $patch 2>&1
+    if ($LASTEXITCODE -ne 0) { throw "The pinned source does not match the Vulkan loader patch: $patchCheck" }
+}
+$sourcePatches = @(@{
+    file = "audio-vulkan-loader.patch"
+    sha256 = (Get-FileHash -LiteralPath $patch -Algorithm SHA256).Hash.ToLowerInvariant()
+})
+
+$vulkanFlags = "-DENGINE_ENABLE_VULKAN=OFF"
+if ($Backend -eq "vulkan") {
+    if (-not $VulkanSdk) { $VulkanSdk = $env:VULKAN_SDK }
+    if (-not $VulkanSdk) { $VulkanSdk = [Environment]::GetEnvironmentVariable("VULKAN_SDK", "Machine") }
+    if (-not $VulkanSdk) { $VulkanSdk = [Environment]::GetEnvironmentVariable("VULKAN_SDK", "User") }
+    if (-not $VulkanSdk -or -not (Test-Path -LiteralPath (Join-Path $VulkanSdk "Bin\glslc.exe"))) {
+        throw "The Vulkan SDK shader compiler is missing. Install KhronosGroup.VulkanSDK with winget, then pass -VulkanSdk <SDK directory> or set VULKAN_SDK."
+    }
+    $VulkanSdk = [IO.Path]::GetFullPath($VulkanSdk)
+    $env:VULKAN_SDK = $VulkanSdk
+    $sdkVersion = Split-Path $VulkanSdk -Leaf
+    $vulkanFlags = "-DENGINE_ENABLE_VULKAN=ON"
+}
+
 $vcvars = Join-Path $vs "VC\Auxiliary\Build\vcvars64.bat"
-$env:PATH = "$installer;" + ($env:PATH -replace '"', '')
+$env:PATH = "$installer;$ninjaRoot;" + ($env:PATH -replace '"', '')
 $configure = "`"$cmake`" -S `"$source`" -B `"$build`" -G Ninja " +
     "-DCMAKE_MAKE_PROGRAM=`"$ninja`" -DCMAKE_BUILD_TYPE=Release " +
     "-DAUDIOCPP_BUILD_C_API=ON -DAUDIOCPP_DEPLOYMENT_BUILD=ON " +
     "-DAUDIOCPP_MODEL_SET=custom -DAUDIOCPP_MODELS=moonshine_asr,vibevoice_asr,qwen3_asr,nemotron_asr " +
-    "-DENGINE_ENABLE_CUDA=OFF -DENGINE_ENABLE_HIP=OFF -DENGINE_ENABLE_VULKAN=OFF " +
+    "-DENGINE_ENABLE_CUDA=OFF -DENGINE_ENABLE_HIP=OFF $vulkanFlags " +
     "-DENGINE_ENABLE_METAL=OFF -DENGINE_ENABLE_NATIVE_CPU=OFF -DENGINE_ENABLE_LLAMAFILE=OFF " +
     "-DGGML_AVX=ON -DGGML_AVX2=ON -DGGML_BMI2=ON -DGGML_AVX512=OFF -DENGINE_BUILD_TESTS=OFF"
 $compile = "`"$cmake`" --build `"$build`" --target audiocpp --parallel $Jobs"

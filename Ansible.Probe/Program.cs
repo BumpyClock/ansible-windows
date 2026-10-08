@@ -26,7 +26,7 @@ if (args is ["--cpu-check"])
 
 if (args.Length < 4)
 {
-    Console.Error.WriteLine("Usage: Ansible.Probe --cpu-check | <native-dll> <models-directory> <catalog-json> <16k-mono-PCM16.wav> [model-id] [--file-only] [--dictionary <one-term-per-line>]");
+    Console.Error.WriteLine("Usage: Ansible.Probe --cpu-check | <native-dll> <models-directory> <catalog-json> <16k-mono-PCM16.wav> [model-id] [--file-only] [--dictionary <one-term-per-line>] [--backend cpu|vulkan] [--device <nonnegative-index>]");
     return 2;
 }
 
@@ -37,9 +37,21 @@ try
     string? modelId = null;
     string? dictionary = null;
     var fileOnly = false;
+    NativeBackend? backend = null;
+    int? deviceIndex = null;
     for (var index = 4; index < args.Length; index++)
     {
         if (args[index] == "--file-only" && !fileOnly) { fileOnly = true; }
+        else if (args[index] == "--backend" && backend is null && index + 1 < args.Length)
+            backend = args[++index] switch
+            {
+                "cpu" => NativeBackend.Cpu,
+                "vulkan" => NativeBackend.Vulkan,
+                _ => throw new ArgumentException("Backend must be cpu or vulkan.")
+            };
+        else if (args[index] == "--device" && deviceIndex is null && index + 1 < args.Length)
+            deviceIndex = int.TryParse(args[++index], out var device) && device >= 0
+                ? device : throw new ArgumentException("Device index must be a nonnegative integer.");
         else if (args[index] == "--dictionary" && dictionary is null && index + 1 < args.Length &&
                  !args[index + 1].StartsWith("--", StringComparison.Ordinal))
             dictionary = args[++index];
@@ -47,8 +59,10 @@ try
             modelId = args[index];
         else { throw new ArgumentException($"Unexpected or incomplete probe argument '{args[index]}'."); }
     }
-    var options = new RecognitionOptions(CustomDictionary: CustomVocabulary.Normalize(dictionary ?? ""));
+    var options = new RecognitionOptions(CustomDictionary: CustomVocabulary.Normalize(dictionary ?? ""),
+        Backend: backend ?? NativeBackend.Cpu, DeviceIndex: deviceIndex ?? 0);
     using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(3));
+    Console.WriteLine($"Requested backend={backend ?? NativeBackend.Cpu}; device={deviceIndex ?? 0}");
     await using var engine = new NativeAudioEngine(args[0], args[2], args[1], threads: 4, memoryHeadroomMB: 512);
     var models = await engine.ConnectAsync(timeout.Token);
     var model = modelId is not null

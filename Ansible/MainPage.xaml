@@ -56,6 +56,18 @@
                                  AutomationProperties.Name="Language hint" PlaceholderText="Model default"
                                  TextChanged="LanguageChanged" />
                     </StackPanel>
+                    <Border Height="1" Margin="0,12" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                    <StackPanel Spacing="8">
+                        <ComboBox x:Name="BackendChoice" Header="Recognition processor" MinWidth="180"
+                                  AutomationProperties.Name="Recognition processor"
+                                  AutomationProperties.AutomationId="BackendChoice"
+                                  SelectionChanged="BackendChanged">
+                            <x:String>CPU</x:String>
+                            <x:String>GPU (Vulkan)</x:String>
+                        </ComboBox>
+                        <TextBlock x:Name="BackendHint" Text="Applies to the next recognition. GPU requires a compatible driver. If it fails, select CPU to retry."
+                                   TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}" />
+                    </StackPanel>
                 </StackPanel>
             </Border>
 

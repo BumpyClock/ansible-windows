@@ -6,6 +6,37 @@ namespace Ansible.Tests;
 public sealed class NativeEngineTests
 {
     [Fact]
+    public async Task RejectsUnknownBackendBeforeLoadingNativeCode()
+    {
+        await using var engine = new NativeAudioEngine("missing.dll", "missing.json", "models");
+        var error = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            engine.TranscribeAsync(new() { Id = "test" }, new([], 16000, 1),
+                new(Backend: (NativeBackend)42), null, CancellationToken.None));
+        Assert.Equal("Backend", error.ParamName);
+    }
+
+    [Fact]
+    public async Task RejectsNegativeDeviceBeforeLoadingNativeCode()
+    {
+        await using var engine = new NativeAudioEngine("missing.dll", "missing.json", "models");
+        var error = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            engine.StreamAsync(new() { Id = "test" }, Channel.CreateUnbounded<byte[]>().Reader,
+                new(Backend: NativeBackend.Vulkan, DeviceIndex: -1), null, CancellationToken.None));
+        Assert.Equal("DeviceIndex", error.ParamName);
+    }
+
+    [Fact]
+    public async Task RejectsUnqualifiedNemotronVulkanStreamBeforeLoadingNativeCode()
+    {
+        await using var engine = new NativeAudioEngine("missing.dll", "missing.json", "models");
+        var error = await Assert.ThrowsAsync<NotSupportedException>(() =>
+            engine.StreamAsync(new() { Id = "nemotron-asr-0.6b-q8", Family = "nemotron_asr" },
+                Channel.CreateUnbounded<byte[]>().Reader, new(Backend: NativeBackend.Vulkan),
+                null, CancellationToken.None));
+        Assert.Contains("Select CPU", error.Message);
+    }
+
+    [Fact]
     [Trait("Category", "NativeIntegration")]
     public async Task RecognizesPublicSpeechThroughTheDllWithoutAnyService()
     {

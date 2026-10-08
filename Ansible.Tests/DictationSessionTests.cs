@@ -7,6 +7,36 @@ public sealed class DictationSessionTests : IDisposable
 {
     private readonly string _settingsDirectory = Path.Combine(Path.GetTempPath(), "LocalVoiceSettingsTests", Guid.NewGuid().ToString("N"));
     private string SettingsPath => Path.Combine(_settingsDirectory, "settings.json");
+
+    [Fact]
+    public async Task BackendPreferencePersistsAndAppliesToFileAndLiveRecognition()
+    {
+        var engine = new FakeEngine();
+        var session = Create(engine, settings: new AppSettingsStore(SettingsPath));
+        await session.InitializeAsync();
+        Assert.Equal(NativeBackend.Cpu, session.State.Settings.Backend);
+        session.SetBackend(NativeBackend.Vulkan);
+        Assert.Throws<InvalidDataException>(() => session.SetBackend((NativeBackend)42));
+        Assert.Equal(NativeBackend.Vulkan, session.State.Settings.Backend);
+        await session.TranscribeFileAsync("sample.wav");
+        Assert.Equal(NativeBackend.Vulkan, engine.LastOptions?.Backend);
+        var recording = session.StartDictationAsync();
+        await WaitForStateAsync(session, DictationPhase.Recording);
+        Assert.Equal(NativeBackend.Vulkan, engine.LastOptions?.Backend);
+        Assert.Equal(0, engine.LastOptions?.DeviceIndex);
+        Assert.Throws<InvalidOperationException>(() => session.SetBackend(NativeBackend.Cpu));
+        await session.FinishAsync();
+        await recording;
+        await session.CloseAsync();
+
+        var restarted = Create(engine = new FakeEngine(), settings: new AppSettingsStore(SettingsPath));
+        await restarted.InitializeAsync();
+        Assert.Equal(NativeBackend.Vulkan, restarted.State.Settings.Backend);
+        restarted.SetBackend(NativeBackend.Cpu);
+        await restarted.TranscribeFileAsync("sample.wav");
+        Assert.Equal(NativeBackend.Cpu, engine.LastOptions?.Backend);
+        await restarted.CloseAsync();
+    }
     public void Dispose()
     {
         if (Directory.Exists(_settingsDirectory)) { Directory.Delete(_settingsDirectory, recursive: true); }
@@ -545,6 +575,7 @@ public sealed class DictationSessionTests : IDisposable
     [InlineData("not json")]
     [InlineData("null")]
     [InlineData("""{"Language":null}""")]
+    [InlineData("""{"Backend":42}""")]
     [InlineData("""{"ModelId":" "}""")]
     [InlineData("""{"ModelsDirectory":"relative"}""")]
     [InlineData("""{"Shortcut":{"Modifiers":0,"Key":65}}""")]
@@ -975,6 +1006,7 @@ public sealed class DictationSessionTests : IDisposable
         public AudioModel? LastModel;
         public string? LastLanguage;
         public string? LastDictionary;
+        public RecognitionOptions? LastOptions;
         public Task<IReadOnlyList<AudioModel>> ConnectAsync(CancellationToken token)
         {
             ConnectEntered.TrySetResult();
@@ -986,6 +1018,7 @@ public sealed class DictationSessionTests : IDisposable
             LastModel = model;
             LastLanguage = options.Language;
             LastDictionary = options.CustomDictionary;
+            LastOptions = options;
             return Task.FromResult(Result);
         }
         public async Task<RecognitionResult> StreamAsync(
@@ -996,6 +1029,7 @@ public sealed class DictationSessionTests : IDisposable
             LastModel = model;
             LastLanguage = options.Language;
             LastDictionary = options.CustomDictionary;
+            LastOptions = options;
             LastProgress = progress;
             StreamEntered.TrySetResult();
             if (Streaming is not null) { return await Streaming(model, audio, token, onReady); }

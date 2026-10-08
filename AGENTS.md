@@ -26,7 +26,7 @@ The code map below describes the current layout, not required module boundaries.
 ## Current implementation
 
 - The app targets .NET 10 and uses single-project MSIX with self-contained .NET NativeAOT and Windows App SDK deployment.
-- The build scripts target Windows x64 and CPU inference. ARM64 and GPU support require separate qualification.
+- The build scripts target Windows x64 with CPU and Vulkan inference. Qualify each model/GPU combination separately; ARM64 and NPU support remain separate work.
 - Recognition runs in-process through the audio.cpp C ABI, using `audiocpp.dll`.
 - The native build pins audio.cpp v0.9.0. Upstream support does not imply support in this compiled backend.
 - The UI includes Dictation, Settings, Insights, and a floating dictation preview.

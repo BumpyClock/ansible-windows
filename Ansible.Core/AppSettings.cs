@@ -4,6 +4,7 @@ public sealed record AppSettings
 {
     public string? ModelId { get; init; }
     public string Language { get; init; } = "";
+    public NativeBackend Backend { get; init; } = NativeBackend.Cpu;
     public string? ModelsDirectory { get; init; }
     public DictationShortcut Shortcut { get; init; } = DictationShortcut.Default;
     public bool PushToTalk { get; init; } = true;
@@ -14,7 +15,7 @@ public sealed record AppSettings
     {
         if (Language is null || CustomDictionary is null || ModelId is not null && string.IsNullOrWhiteSpace(ModelId) ||
             ModelsDirectory is not null && !Path.IsPathFullyQualified(ModelsDirectory) ||
-            !Shortcut.IsValid)
+            !Shortcut.IsValid || Backend is not NativeBackend.Cpu and not NativeBackend.Vulkan)
             throw new InvalidDataException("The app settings contain invalid values.");
         if (CustomVocabulary.Normalize(CustomDictionary) != CustomDictionary)
             throw new InvalidDataException("The saved dictionary must contain normalized, unique entries.");

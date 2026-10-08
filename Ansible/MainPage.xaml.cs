@@ -59,6 +59,11 @@ public sealed partial class MainPage : Page
         {
             var idle = _state.IsIdle;
             LanguageBox.IsEnabled = _state.Phase == DictationPhase.Ready;
+            BackendChoice.IsEnabled = idle;
+            BackendChoice.SelectedIndex = _state.Settings.Backend == NativeBackend.Vulkan ? 1 : 0;
+            BackendHint.Text = _state.SelectedModel?.Family == "nemotron_asr"
+                ? "Nemotron dictation and replay require CPU in this build. GPU is available for WAV transcription."
+                : "Applies to the next recognition. GPU requires a compatible driver. If it fails, select CPU to retry.";
             if (LanguageBox.FocusState == FocusState.Unfocused) { LanguageBox.Text = _state.Language; }
             if (!_dictionaryDirty) { DictionaryBox.Text = _state.Settings.CustomDictionary; }
             DictionaryBox.IsEnabled = idle;
@@ -114,6 +119,13 @@ public sealed partial class MainPage : Page
     {
         if (args.Reason == InfoBarCloseReason.CloseButton) { _dismissedNotice = _state.Notice; }
         sender.Visibility = Visibility.Collapsed;
+    }
+
+    private void BackendChanged(object sender, SelectionChangedEventArgs args)
+    {
+        if (_rendering || BackendChoice is null || BackendChoice.SelectedIndex < 0) { return; }
+        try { _session.SetBackend(BackendChoice.SelectedIndex == 1 ? NativeBackend.Vulkan : NativeBackend.Cpu); }
+        catch (Exception error) { _session.ReportUiError(error); }
     }
 
     private void LanguageChanged(object sender, TextChangedEventArgs args)

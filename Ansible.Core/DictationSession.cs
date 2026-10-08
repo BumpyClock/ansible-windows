@@ -117,6 +117,10 @@ public sealed class DictationSession
         ChangeSettings(state => state with { Settings = state.Settings with { Language = language.Trim() } },
             new(NoticeKind.Success, "Language hint updated", "The language hint applies to the next recognition."));
 
+    public void SetBackend(NativeBackend backend) =>
+        ChangeSettings(state => state with { Settings = state.Settings with { Backend = backend } },
+            new(NoticeKind.Success, "Recognition processor updated", "The selected processor applies to the next recognition."));
+
     public void SetCustomDictionary(string text) =>
         ChangeSettings(state => state with
         {
@@ -183,7 +187,7 @@ public sealed class DictationSession
                 }
             }
             var options = new RecognitionOptions(_state.Language,
-                model?.SupportsCustomDictionary == true ? _state.Settings.CustomDictionary : "");
+                model?.SupportsCustomDictionary == true ? _state.Settings.CustomDictionary : "", _state.Settings.Backend);
             operation = new Operation(activity, model, options, path, initializeUsage, _timeout, _time);
             operation.SettingsWarning = initializeUsage ? _initialSettingsWarning : null;
             operation.Maintenance = maintenance;

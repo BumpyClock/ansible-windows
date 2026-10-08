@@ -139,7 +139,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         FolderButton.IsEnabled = idle;
         RefreshButton.IsEnabled = _initialization is not { IsCompleted: false } && !managerBusy && !_dialogActive;
         FolderMenuButton.IsEnabled = !_dialogActive;
-        BackendText.Text = $"audio.cpp {state.BackendVersion} \u00B7 native CPU";
+        BackendText.Text = $"audio.cpp {state.BackendVersion} \u00B7 selected: {(state.Settings.Backend == NativeBackend.Vulkan ? "GPU (Vulkan)" : "CPU")}";
         BackendText.Visibility = string.IsNullOrEmpty(state.BackendVersion) ? Visibility.Collapsed : Visibility.Visible;
 
         // Warnings and errors only. A missing catalog counts only after initialization finishes, so the

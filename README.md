@@ -72,7 +72,7 @@ or silently import that development data.
 
 All app preferences use one typed `AppSettings` document and one
 `AppSettingsStore`. The model, language hint, model folder, shortcut, activation
-mode, usage-collection toggle, and saved custom dictionary use the package's
+mode, recognition processor, usage-collection toggle, and saved custom dictionary use the package's
 `LocalState\settings.json` and return after restart. The session owns settings
 changes; pages and shortcut handling read the same immutable settings snapshot.
 Writes replace the file atomically. Usage records remain separate data in
@@ -151,6 +151,13 @@ development with C++ workload and single-project MSIX tools. The app is packaged
 as MSIX and includes its NativeAOT executable, Windows App SDK runtime, and native
 inference dependencies. Users do not need to install .NET separately.
 
+The default native build includes CPU and Vulkan GPU inference. Building it also
+requires the Vulkan SDK (validated with 1.4.363.0), including `glslc`. Install it
+with `winget install --id KhronosGroup.VulkanSDK --exact --version 1.4.363.0`.
+Pass `-VulkanSdk C:\VulkanSDK\1.4.363.0` if `VULKAN_SDK` is not available in the
+build environment. `Build-AudioNative.ps1 -Backend cpu` builds CPU only without
+the SDK; use the default Vulkan build to enable the app's GPU setting.
+
 From this folder:
 
 ```powershell
@@ -163,6 +170,11 @@ The setup script installs models only. The native build produces
 dependencies, records their import closure and redistributable notices, and
 copies the public validation WAV from the pinned audio.cpp source. Run the native
 build before building or launching `Ansible` in Visual Studio.
+The tracked `tools\patches\audio-vulkan-loader.patch` is applied idempotently to
+the pinned source. It loads Vulkan from Windows System32 only when available,
+so the DLL can still run CPU recognition without a Vulkan driver. The build
+records the patch hash and compiled backends in `native-runtime.json`; packaging
+rejects an unconditional `vulkan-1.dll` import. The app does not ship GPU drivers.
 Then build and verify an unsigned NativeAOT package:
 
 ```powershell
@@ -368,14 +380,37 @@ matching its length does not establish verified model identity.
 `-Models` on setup installs a subset without removing other files. Select the
 exact model ID in the app or probe. Failed requests do not select another model.
 
-### CPU and memory limits
+### Recognition processor and memory limits
+
+Choose **Settings > Recognition processor > GPU (Vulkan)** to use Vulkan device 0.
+CPU is the default, and the choice is saved for the next recognition operation.
+GPU recognition requires a compatible Vulkan driver and model operations. A
+failure is shown directly; the app does not silently retry on CPU or change the
+model. Select CPU explicitly to retry. The probe supports `--device <index>` for
+testing another Vulkan device. NPU acceleration is not included.
+
+Nemotron dictation and replay are blocked on Vulkan in this build. The Intel Arc
+140V validation run completed WAV transcription but terminated during streaming
+cleanup with a native `vk::DeviceLostError` from `vk::Queue::submit`. Select CPU
+for Nemotron streaming; the managed guard rejects this combination before native
+initialization. Nemotron WAV transcription remains available on Vulkan.
+
+Measured on 2026-10-08 with Intel Arc 140V, driver 32.0.101.8425, the public
+validation WAV, and the memory guard enabled: Moonshine Vulkan WAV and paced
+streaming both returned speech (4.252 s and 17.716 s, respectively; zero live
+previews). Nemotron Vulkan WAV returned speech in 8.121 s. These are individual
+integration runs, not comparative performance benchmarks. Other model/GPU
+combinations have not been validated by this change.
 
 The qualified native x64 build requires AVX2, FMA, F16C, BMI1/BMI2, and OS-enabled
 AVX state. Initialization checks eligibility before reaching native kernels.
 Other architectures and CPU profiles require their own build and qualification.
 
-The native harness uses CPU inference, four threads, and 512 MB of memory
-headroom. Models load lazily; keep at most one model resident.
+The native harness defaults to CPU inference, four threads, and 512 MB of memory
+headroom; `--backend vulkan` selects GPU inference. Models load lazily; keep at
+most one model resident. Host RAM/commit admission checks remain enabled on both
+backends. They are not a dedicated GPU-memory budget check; GPU allocation
+failures can still occur.
 Keep the memory guard enabled. Being listed in the installed catalog does not
 prove that a model can load or recognize speech.
 
@@ -459,6 +494,16 @@ dotnet run --project .\Ansible.Probe -- `
 The probe uses a blank language hint and a separate three-minute limit for each
 recognition operation. It reports the attempted model, stage, elapsed time, and
 failure message. `--file-only` skips live recognition; offline models always do.
+For Vulkan validation, run:
+
+```powershell
+dotnet run --project .\Ansible.Probe -- `
+  .\.runtime\native\audiocpp.dll .\.runtime\models .\tools\audio-models.json `
+  .\.runtime\validation\sample_16k.wav moonshine-tiny --backend vulkan --device 0
+```
+
+The probe prints the requested backend; native Vulkan diagnostics identify the
+GPU. A successful build or device listing alone does not validate recognition.
 `--dictionary` supplies a newline-separated vocabulary list to a supported model:
 
 ```powershell

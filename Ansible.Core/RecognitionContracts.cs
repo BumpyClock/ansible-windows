@@ -7,7 +7,22 @@ public sealed record RecognitionResult(string DisplayText, string? SpeechText)
     public int? SpokenWords => SpeechText is null ? null : AudioMeter.CountWords(SpeechText);
 }
 
-public sealed record RecognitionOptions(string? Language = null, string CustomDictionary = "");
+public enum NativeBackend
+{
+    Cpu,
+    Vulkan
+}
+
+public sealed record RecognitionOptions(string? Language = null, string CustomDictionary = "",
+    NativeBackend Backend = NativeBackend.Cpu, int DeviceIndex = 0)
+{
+    internal void ValidateBackend()
+    {
+        if (Backend is not NativeBackend.Cpu and not NativeBackend.Vulkan)
+            throw new ArgumentOutOfRangeException(nameof(Backend));
+        ArgumentOutOfRangeException.ThrowIfNegative(DeviceIndex);
+    }
+}
 
 public interface IRecognitionEngine : IAsyncDisposable
 {

@@ -111,7 +111,7 @@ public sealed class NativeAudioEngine : IRecognitionEngine
         var result = await RunExclusiveAsync(() => NativeOperation.Run(() =>
         {
             var bytes = NativeMemory.ValidateAudio(audio, cancellationToken);
-            EnsureSession(model, "offline", bytes, cancellationToken);
+            EnsureSession(model, "offline", bytes, options, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             using var request = CreateRequest(options, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
@@ -132,6 +132,9 @@ public sealed class NativeAudioEngine : IRecognitionEngine
     {
         ArgumentNullException.ThrowIfNull(audio);
         options = ValidateOptions(model, options);
+        if (options.Backend == NativeBackend.Vulkan && model.Family == "nemotron_asr")
+            throw new NotSupportedException(
+                "Nemotron streaming with Vulkan is disabled in this build after a native GPU device-loss failure. Select CPU for dictation or replay.");
         var result = await RunExclusiveAsync(() => NativeOperation.Run(
             () => StreamCore(model, audio, options, progress, cancellationToken, onReady), CleanupOperation), cancellationToken);
         progress?.Report(new TranscriptUpdate(result.DisplayText, true, result.SpeechText));
@@ -142,7 +145,7 @@ public sealed class NativeAudioEngine : IRecognitionEngine
         AudioModel model, ChannelReader<byte[]> audio, RecognitionOptions options,
         IProgress<TranscriptUpdate>? progress, CancellationToken token, Action? onReady)
     {
-        EnsureSession(model, "streaming", NativeMemory.MaximumStreamFrames * sizeof(float), token);
+        EnsureSession(model, "streaming", NativeMemory.MaximumStreamFrames * sizeof(float), options, token);
         token.ThrowIfCancellationRequested();
         using var request = CreateRequest(options, token);
         token.ThrowIfCancellationRequested();
@@ -303,7 +306,7 @@ public sealed class NativeAudioEngine : IRecognitionEngine
         return NativeTranscript.Normalize(family, text, segments, turns);
     }
 
-    private void EnsureSession(AudioModel model, string mode, long decodedBytes, CancellationToken token)
+    private void EnsureSession(AudioModel model, string mode, long decodedBytes, RecognitionOptions options, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
         if (_registry is null || _inventory is null)
@@ -352,21 +355,31 @@ public sealed class NativeAudioEngine : IRecognitionEngine
             if (NativeAudioApi.Supports(_model!.DangerousGetHandle(), "asr", mode) == 0)
                 throw new NotSupportedException($"{model.Id} does not support {mode} speech recognition.");
         });
-        var backend = new NativeAudioApi.BackendConfig { Threads = _threads };
-        NativeOperation.Step(token, () =>
+        var selectedBackend = options.Backend == NativeBackend.Vulkan ? "vulkan" : "cpu";
+        var backendName = Marshal.StringToCoTaskMemUTF8(selectedBackend);
+        try
         {
-            // A cached model handle does not retain session-owned execution weights.
-            NativeMemory.CheckBudget(entry.Bytes, decodedBytes, _headroom);
-            token.ThrowIfCancellationRequested();
-            NativeAudioApi.Check(NativeAudioApi.SessionCreate(_model!.DangerousGetHandle(), "asr", mode, in backend, 0, out var session),
-                "create the native recognition session");
-            _session = new NativeAudioHandle(session, NativeHandleKind.Session);
-        });
+            var backend = new NativeAudioApi.BackendConfig { Backend = backendName, Device = options.DeviceIndex, Threads = _threads };
+            NativeOperation.Step(token, () =>
+            {
+                // A cached model handle does not retain session-owned execution weights.
+                NativeMemory.CheckBudget(entry.Bytes, decodedBytes, _headroom);
+                token.ThrowIfCancellationRequested();
+                NativeAudioApi.Check(NativeAudioApi.SessionCreate(_model!.DangerousGetHandle(), "asr", mode, in backend, 0, out var session),
+                    $"create the native recognition session on {selectedBackend} device {options.DeviceIndex}");
+                _session = new NativeAudioHandle(session, NativeHandleKind.Session);
+            });
+        }
+        finally
+        {
+            Marshal.FreeCoTaskMem(backendName);
+        }
     }
 
     private static RecognitionOptions ValidateOptions(AudioModel model, RecognitionOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
+        options.ValidateBackend();
         var dictionary = CustomVocabulary.Normalize(options.CustomDictionary);
         if (dictionary.Length > 0 && !model.SupportsCustomDictionary)
             throw new NotSupportedException($"{model.Id} does not support custom dictionary hints in this native backend.");
