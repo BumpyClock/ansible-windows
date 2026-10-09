@@ -86,9 +86,12 @@ time includes audio delivery and is not pure inference latency.
   terminated with native `vk::DeviceLostError` from `vk::Queue::submit`. This can
   terminate the app. Use CPU for Nemotron dictation. Other model/GPU combinations
   require separate qualification.
-- VibeVoice streaming can return speaker annotations without authoritative speech
-  metadata. It is available for manual transcription, not shortcut insertion;
-  its speech-word count can be unknown.
+- VibeVoice streaming can return speaker annotations without speech metadata.
+  The app parses its speaker-attributed text for shortcut insertion. Unexpected
+  output remains unknown and is not inserted; its speech-word count stays unknown.
+- Offline VibeVoice 7B microphone dictation buffers at most five minutes of PCM16
+  in memory, then uses offline recognition after Finish. This does not enable
+  native streaming or live previews for that model.
 - Offline VibeVoice 7B recognition remains unvalidated in the recorded integration
   checks because the memory guard rejected loading. Its weights alone occupy
   about 9.18 GiB. Loading and decoding need additional memory.

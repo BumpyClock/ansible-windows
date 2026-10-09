@@ -44,9 +44,7 @@ public sealed partial class ModelCard : UserControl
         _name = entry.DisplayName ?? entry.Id;
         NameText.Text = _name;
         AutomationProperties.SetName(NameText, _name);
-        // A name such as "... (WAV only)" already states the behaviour, so the caption would repeat it.
         _behavior = BehaviorLabel(entry);
-        if (entry.Mode == "offline" && _name.Contains("WAV", StringComparison.OrdinalIgnoreCase)) { _behavior = ""; }
         var languages = entry.Languages ?? "Languages not specified";
         ToolTipService.SetToolTip(StatsText, MemoryEstimateTip);
 
@@ -259,6 +257,7 @@ public sealed partial class ModelCard : UserControl
     private void UseClicked(object sender, RoutedEventArgs e) => UseRequested?.Invoke(ModelId);
 
     private static string BehaviorLabel(NativeModelEntry entry) =>
+        entry.Family == "vibevoice_asr" && entry.Mode == "offline" ? "Text after you finish" :
         entry.Mode == "offline" ? "WAV files only" :
         entry.Preview == "live" ? "Live transcript" :
         entry.Preview == "buffered" ? "Buffered text" :

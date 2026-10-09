@@ -206,6 +206,42 @@ public sealed class NativeBoundaryTests
         Assert.Equal(6, result.SpokenWords);
     }
 
+    [Theory]
+    [InlineData("Speaker0: hello. Speaker 1: world.", "hello. world.")]
+    [InlineData(" Speaker 12 : I said Speaker 0. Speaker1: Speaker systems work. ", "I said Speaker 0. Speaker systems work.")]
+    [InlineData("Speaker0: hello.Speaker1: world.", "hello. world.")]
+    public void StreamingVibeVoiceLabelsYieldSpeechWithoutNativeMetadata(string display, string speech)
+    {
+        var result = NativeTranscript.Normalize("vibevoice_asr_streaming", display, [], []);
+        Assert.Equal(display, result.DisplayText);
+        Assert.Equal(speech, result.SpeechText);
+        Assert.NotNull(result.SpokenWords);
+    }
+
+    [Theory]
+    [InlineData("unattributed speech Speaker0: hello")]
+    [InlineData("hello")]
+    [InlineData("Speaker0:")]
+    [InlineData("Speaker0: hello Speaker1:")]
+    [InlineData("Speaker0: Speaker1: hello")]
+    [InlineData("Speaker: hello")]
+    [InlineData("Speaker-1: hello")]
+    [InlineData("Speaker０: hello")]
+    public void UnrecognizedOrIncompleteStreamingAnnotationsKeepSpeechUnknown(string display)
+    {
+        var result = NativeTranscript.Normalize("vibevoice_asr_streaming", display, [], []);
+        Assert.Null(result.SpeechText);
+        Assert.Null(result.SpokenWords);
+    }
+
+    [Fact]
+    public void StreamingFallbackDoesNotReplaceIncompleteMetadataOrOtherFamilies()
+    {
+        Assert.Null(NativeTranscript.Normalize("vibevoice_asr_streaming", "Speaker0: hello", ["hello", ""], []).SpeechText);
+        Assert.Null(NativeTranscript.Normalize("vibevoice_asr", "Speaker0: hello", [], []).SpeechText);
+        Assert.Equal("authoritative", NativeTranscript.Normalize("vibevoice_asr_streaming", "Speaker0: display", ["authoritative"], []).SpeechText);
+    }
+
     [Fact]
     public void MemoryAdmissionAlwaysIncludesWeightsAlongsideInputCopies()
     {

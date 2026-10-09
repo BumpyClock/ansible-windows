@@ -126,7 +126,7 @@ public sealed partial class DictationPage : Page
             DictationPhase.Connecting => ("Loading models", "Opening the native backend."),
             DictationPhase.Ready when _state.CanStart => ("Ready to dictate", ""),
             DictationPhase.Ready when _state.SelectedModel is null => ("Choose a speech model", "Pick an installed model to begin."),
-            DictationPhase.Ready => ("File transcription only", "Choose a WAV file, or pick a streaming model to dictate."),
+            DictationPhase.Ready => ("File transcription only", "Choose a WAV file, or pick a model that supports microphone dictation."),
             DictationPhase.Preparing => ("Preparing", "Loading the model before audio starts."),
             DictationPhase.Recording when _state.IsReplay => ("Replaying WAV", "No microphone is open."),
             DictationPhase.Recording => ("Listening", preview switch

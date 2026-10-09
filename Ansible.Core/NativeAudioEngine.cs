@@ -133,6 +133,17 @@ public sealed class NativeAudioEngine : IRecognitionEngine
     {
         ArgumentNullException.ThrowIfNull(audio);
         options = ValidateOptions(model, options);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!model.SupportsMicrophone)
+            throw new NotSupportedException($"{model.Id} does not support microphone dictation.");
+        if (model.Mode == "offline")
+        {
+            await PrepareAsync(model, options, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            onReady?.Invoke();
+            var recording = await DictationAudioBuffer.ReadAsync(audio, cancellationToken);
+            return await TranscribeAsync(model, recording, options, progress, cancellationToken);
+        }
         var result = await RunExclusiveAsync(() => NativeOperation.Run(
             () => StreamCore(model, audio, options, progress, cancellationToken, onReady), CleanupStream), cancellationToken);
         progress?.Report(new TranscriptUpdate(result.DisplayText, true, result.SpeechText));
@@ -145,7 +156,8 @@ public sealed class NativeAudioEngine : IRecognitionEngine
         options = ValidateOptions(model, options with { CustomDictionary = "" });
         return RunExclusiveAsync(() => NativeOperation.Run(() =>
         {
-            EnsureSession(model, "streaming", NativeMemory.MaximumStreamFrames * sizeof(float), options, cancellationToken);
+            EnsureSession(model, model.Mode == "offline" ? "offline" : "streaming",
+                NativeMemory.MaximumStreamFrames * sizeof(float), options, cancellationToken);
             return true;
         }, success => { if (!success) { ReleaseModel(); } }), cancellationToken);
     }

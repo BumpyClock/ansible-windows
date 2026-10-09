@@ -17,20 +17,20 @@ public sealed class AudioModelCapabilityTests
         Assert.True(Model("moonshine_asr", "streaming", "final-only").CanInsertDictation);
         Assert.True(Model("qwen3_asr", "streaming", "buffered").CanInsertDictation);
 
-        // A "live" display preview does not qualify a family that carries no authoritative speech content.
-        Assert.False(Model("vibevoice_asr_streaming", "streaming", "live").CanInsertDictation);
+        Assert.True(Model("vibevoice_asr_streaming", "streaming", "live").CanInsertDictation);
 
-        // Offline/annotated families are excluded regardless of preview.
-        Assert.False(Model("vibevoice_asr", "offline", "final-only").CanInsertDictation);
+        Assert.True(Model("vibevoice_asr", "offline", "final-only").CanInsertDictation);
+        Assert.False(Model("unknown", "streaming", "live").CanInsertDictation);
+        Assert.False(Model("moonshine_asr", "offline", "final-only").CanInsertDictation);
     }
 
     [Fact]
-    public void LivePreviewLabelAloneDoesNotEstablishAuthoritativeSpeech()
+    public void AnnotatedVibeVoiceSupportsInsertionWithoutBeingPlainSpeech()
     {
         var vibevoice = Model("vibevoice_asr_streaming", "streaming", "live");
         Assert.Equal("live", vibevoice.Preview);
         Assert.False(vibevoice.HasPlainSpeechText);
-        Assert.False(vibevoice.CanInsertDictation);
+        Assert.True(vibevoice.CanInsertDictation);
     }
 
     [Theory]

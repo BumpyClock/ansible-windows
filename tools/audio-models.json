@@ -40,8 +40,8 @@
     },
     {
       "id": "vibevoice-asr-7b-q8",
-      "display_name": "VibeVoice ASR 7B Q8 (WAV only)",
-      "description": "Large offline file transcription model. No microphone dictation; loading requires substantial free memory.",
+      "display_name": "VibeVoice ASR 7B Q8",
+      "description": "Large offline speech model. Microphone dictation is buffered and recognized after Finish; loading requires substantial free memory.",
       "languages": "Multilingual upstream model; individual languages are not qualified by this app.",
       "precision": "Q8_0",
       "license_notes": "MIT model weights. The weights license is separate from the audio.cpp license.",

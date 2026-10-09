@@ -8,6 +8,22 @@ public sealed class FinalTextDeliveryTests
         new(SessionOutcomeKind.Completed, new RecognitionResult("Speaker 0: display", speech));
 
     [Fact]
+    public async Task VibeVoiceFinalInsertsCleanedSpeechOnce()
+    {
+        var result = NativeTranscript.Normalize("vibevoice_asr_streaming",
+            "Speaker0: Hello there. Speaker1: Good morning.", [], []);
+        var inserted = new List<string>();
+        var delivery = new FinalTextDelivery((text, _) =>
+        {
+            inserted.Add(text);
+            return Task.FromResult(TextDeliveryOutcome.Sent("ok"));
+        }, () => true, () => false);
+        await delivery.RunAsync(Task.FromResult(new SessionOutcome(SessionOutcomeKind.Completed, result)), CancellationToken.None);
+        Assert.Equal(["Hello there. Good morning."], inserted);
+        Assert.True(delivery.Sent);
+    }
+
+    [Fact]
     public async Task WaitsForRecognitionThenInsertsOnlyTheAuthoritativeFinalText()
     {
         var operation = new TaskCompletionSource<SessionOutcome>();

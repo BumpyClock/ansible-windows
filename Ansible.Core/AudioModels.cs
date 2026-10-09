@@ -28,15 +28,19 @@ public sealed record AudioModel
     /// </summary>
     public bool HasPlainSpeechText => SpeechContent.IsPlainSpeechFamily(Family);
 
-    /// <summary>Accepts microphone input and returns authoritative speech for final shortcut insertion.</summary>
-    public bool CanInsertDictation => HasPlainSpeechText && Mode == "streaming";
+    /// <summary>Accepts microphone input, buffered until Finish for offline VibeVoice.</summary>
+    public bool SupportsMicrophone => Mode == "streaming" || Family == "vibevoice_asr" && Mode == "offline";
+
+    /// <summary>Can supply final speech through plain text, metadata, or VibeVoice speaker parsing.</summary>
+    public bool CanInsertDictation => SupportsMicrophone &&
+        (HasPlainSpeechText || Family is "vibevoice_asr" or "vibevoice_asr_streaming");
 
     public override string ToString() => Id;
 }
 
 /// <summary>
 /// Classifies which native families expose authoritative spoken text as plain display text. This is the single
-/// source of truth shared by transcript normalization and shortcut capability, so both stay in agreement.
+/// source of truth for the plain-text fallback in transcript normalization.
 /// </summary>
 public static class SpeechContent
 {

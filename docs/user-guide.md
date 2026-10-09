@@ -34,14 +34,16 @@ and in the [catalog](../tools/audio-models.json).
 | `moonshine-tiny` | Microphone and WAV | Final only; English only | Yes |
 | `qwen3-asr-0.6b-q8` | Microphone and WAV | Buffered | Yes |
 | `nemotron-asr-0.6b-q8` | Microphone and WAV | Can produce live previews | Yes, after final recognition |
-| `vibevoice-streaming-1.5b-q4` | Microphone and WAV | Can produce live previews with annotations | No; manual transcription only |
-| `vibevoice-asr-7b-q8` | WAV only | Final only | No |
+| `vibevoice-streaming-1.5b-q4` | Microphone and WAV | Can produce live previews with annotations | Yes, after final recognition |
+| `vibevoice-asr-7b-q8` | Microphone and WAV | Buffered until Finish; final only | Yes, after final recognition |
 
 Live previews can appear in the main transcript, but a short recording may end
-before any preview arrives. VibeVoice output can contain speaker labels; its
-streaming adapter does not provide the authoritative speech needed for shortcut
-insertion. Installed weights do not prove that a model can load or run on your
-hardware.
+before any preview arrives. VibeVoice output can contain speaker labels. Shortcut
+insertion uses speech metadata or parses the streaming model's speaker format to
+remove labels. Unrecognized output is not inserted. The offline 7B model keeps
+microphone audio in memory until Finish, then runs offline recognition; it has no
+live preview and still requires substantial free memory. Installed weights do not
+prove that a model can load or run on your hardware.
 
 ## Dictate into another app
 
@@ -108,7 +110,7 @@ audio. Unsupported or malformed WAV formats produce an error. App operations
 have a five-minute timeout that includes model preparation; native cleanup can
 continue after cancellation.
 
-The app preloads the selected streaming model and reuses its native session.
+The app preloads the selected microphone-capable model and reuses its native session.
 After ten idle minutes it unloads them. Microphone capture begins while the model
 loads, with a bounded backlog. A full backlog stops capture with an error rather
 than dropping samples. Preloading failures appear as warnings.

@@ -197,13 +197,13 @@ public sealed partial class MainWindow : Window
         if (!state.CanStart)
         {
             if (state.IsIdle)
-                _session.Notify(NoticeKind.Warning, "Dictation unavailable", "Choose a streaming speech model before using the shortcut.");
+                _session.Notify(NoticeKind.Warning, "Dictation unavailable", "Choose a speech model that supports microphone dictation before using the shortcut.");
             return;
         }
         if (state.SelectedModel?.CanInsertDictation != true)
         {
             _session.Notify(NoticeKind.Warning, "Speech text required",
-                "This model does not return authoritative speech text in this backend. Choose Moonshine, Qwen3, or Nemotron for shortcut insertion. Manual transcription remains available.");
+                "This model does not support speech text extraction for shortcut insertion. Choose another speech model. Manual transcription remains available.");
             return;
         }
         var capture = _captureCoordinator.TryBeginCapture(state.Settings.PushToTalk, _deliveryTask is { IsCompleted: false });

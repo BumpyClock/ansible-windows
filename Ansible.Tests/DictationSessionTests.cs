@@ -679,6 +679,27 @@ public sealed class DictationSessionTests : IDisposable
     }
 
     [Fact]
+    public async Task OfflineVibeVoiceSupportsMicrophoneAndReplayAndPreloading()
+    {
+        var model = Model with { Id = "vibevoice-asr-7b-q4", Family = "vibevoice_asr", Mode = "offline" };
+        var engine = new FakeEngine { Connecting = _ => Task.FromResult<IReadOnlyList<AudioModel>>([model]) };
+        var session = Create(engine);
+        await session.InitializeAsync();
+        await engine.PrepareCalled.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.Equal(model, engine.PreparedModel);
+        Assert.True(session.State.CanStart);
+        var recording = session.StartDictationAsync();
+        await WaitForStateAsync(session, DictationPhase.Recording);
+        Assert.False(recording.IsCompleted);
+        await session.FinishAsync();
+        Assert.Equal(SessionOutcomeKind.Completed, (await recording).Kind);
+        Assert.Equal(model, engine.LastModel);
+        Assert.Equal(SessionOutcomeKind.Completed, (await session.ReplayAsync("sample.wav")).Kind);
+        Assert.Equal(2, engine.FinishedStreams);
+        await session.CloseAsync();
+    }
+
+    [Fact]
     public async Task ClearingLanguageAndChangingModelPreservesBothPreferencesOnRestart()
     {
         var models = new[] { Model, Model with { Id = "other" } };

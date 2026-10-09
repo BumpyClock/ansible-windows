@@ -203,7 +203,7 @@ public sealed class DictationSession
             if (activity is SessionActivity.Dictation or SessionActivity.Replay or SessionActivity.File)
             {
                 if (_engine is null || model is null ||
-                    activity is SessionActivity.Dictation or SessionActivity.Replay && model.Mode != "streaming")
+                    activity is SessionActivity.Dictation or SessionActivity.Replay && !model.SupportsMicrophone)
                 {
                     throw new InvalidOperationException("Choose an installed model that supports this recognition mode.");
                 }
@@ -499,7 +499,7 @@ public sealed class DictationSession
             UpdateCurrent(operation, state => state with
             {
                 Phase = DictationPhase.Recording,
-                Notice = new(NoticeKind.Information, "Live verification", "A WAV recording feeds the native stream; no microphone is open.")
+                Notice = new(NoticeKind.Information, "Live verification", "A WAV recording feeds microphone-style recognition; no microphone is open.")
             });
         }
         operation.Result = await operation.Inference;
@@ -511,7 +511,7 @@ public sealed class DictationSession
 
     private async Task WaitForStreamAsync(Operation operation, Task ready)
     {
-        if (await Task.WhenAny(ready, operation.Inference!) == operation.Inference)
+        if (await Task.WhenAny(ready, operation.Inference!) == operation.Inference && !ready.IsCompletedSuccessfully)
         {
             await operation.Inference;
             throw new InvalidOperationException("The native stream completed before audio input was admitted.");
@@ -521,11 +521,11 @@ public sealed class DictationSession
         lock (_gate) { EnsureCurrent(operation); }
     }
 
-    // Requires _gate. Prepares the selected streaming model in the background and restarts the idle countdown.
+    // Requires _gate. Prepares the selected dictation model in the background and restarts the idle countdown.
     private void KeepEngineWarm()
     {
         if (_closing || _engine is null || _operation is not null || _recovery is not null) { return; }
-        if (_state.SelectedModel is { Mode: "streaming" } model)
+        if (_state.SelectedModel is { SupportsMicrophone: true } model)
         {
             var options = new RecognitionOptions(_state.Language, "", _state.Settings.Backend);
             QueueEngineWork((engine, token) => engine.PrepareAsync(model, options, token),

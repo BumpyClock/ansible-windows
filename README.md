@@ -66,9 +66,9 @@ options and checks.
 - CPU is the default recognition processor. GPU support depends on the model
   and driver. Nemotron GPU streaming has a reported native crash; use CPU for
   Nemotron dictation. See [native validation](docs/native-validation.md#known-limits).
-- VibeVoice streaming supports manual transcription but is excluded from
-  shortcut insertion. The offline 7B model accepts WAV files only and needs
-  substantial free memory.
+- Both VibeVoice models support shortcut dictation with speaker labels removed.
+  The offline 7B model buffers microphone audio and recognizes it after Finish;
+  it needs substantial free memory.
 - Insertion supports regular desktop text fields. Elevated apps and the secure
   desktop are unsupported. Check the destination after insertion.
 
