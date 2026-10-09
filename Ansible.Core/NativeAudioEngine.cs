@@ -5,7 +5,7 @@ using System.Threading.Channels;
 
 namespace Ansible.Core;
 
-public sealed class NativeAudioEngine : IRecognitionEngine
+public sealed class NativeAudioEngine : IRecognitionEngine, IMeetingRecognitionEngine
 {
     private readonly string _libraryPath;
     private readonly string _catalogPath;
@@ -167,9 +167,10 @@ public sealed class NativeAudioEngine : IRecognitionEngine
 
     private RecognitionResult StreamCore(
         AudioModel model, ChannelReader<byte[]> audio, RecognitionOptions options,
-        IProgress<TranscriptUpdate>? progress, CancellationToken token, Action? onReady)
+        IProgress<TranscriptUpdate>? progress, CancellationToken token, Action? onReady,
+        long maximumFrames = NativeMemory.MaximumStreamFrames, int historySteps = 0)
     {
-        EnsureSession(model, "streaming", NativeMemory.MaximumStreamFrames * sizeof(float), options, token);
+        EnsureSession(model, "streaming", NativeMemory.MaximumStreamFrames * sizeof(float), options, token, historySteps);
         token.ThrowIfCancellationRequested();
         using var request = CreateRequest(options, token);
         token.ThrowIfCancellationRequested();
@@ -209,8 +210,10 @@ public sealed class NativeAudioEngine : IRecognitionEngine
                 if (packet is null || packet.Length == 0 || packet.Length % 2 != 0)
                     throw new InvalidDataException("Dictation requires complete PCM16 samples.");
                 receivedFrames = checked(receivedFrames + packet.Length / 2);
-                if (receivedFrames > NativeMemory.MaximumStreamFrames)
-                    throw new InvalidDataException("Dictation audio exceeds the five-minute limit.");
+                if (receivedFrames > maximumFrames)
+                    throw new InvalidDataException(historySteps == 0
+                        ? "Dictation audio exceeds the five-minute limit."
+                        : "Meeting audio exceeds the two-hour limit.");
                 var index = 0;
                 while (index < packet.Length)
                 {
@@ -330,7 +333,7 @@ public sealed class NativeAudioEngine : IRecognitionEngine
         return NativeTranscript.Normalize(family, text, segments, turns);
     }
 
-    private void EnsureSession(AudioModel model, string mode, long decodedBytes, RecognitionOptions options, CancellationToken token)
+    private void EnsureSession(AudioModel model, string mode, long decodedBytes, RecognitionOptions options, CancellationToken token, int historySteps = 0)
     {
         token.ThrowIfCancellationRequested();
         if (_registry is null || _inventory is null)
@@ -379,7 +382,7 @@ public sealed class NativeAudioEngine : IRecognitionEngine
             if (NativeAudioApi.Supports(_model!.DangerousGetHandle(), "asr", mode) == 0)
                 throw new NotSupportedException($"{model.Id} does not support {mode} speech recognition.");
         });
-        var key = new SessionKey(model.Id, mode, options.Backend, options.DeviceIndex);
+        var key = new SessionKey(model.Id, mode, options.Backend, options.DeviceIndex, historySteps);
         if (_session is not null && _sessionKey == key) { return; }
         _session?.Dispose();
         _session = null;
@@ -388,17 +391,29 @@ public sealed class NativeAudioEngine : IRecognitionEngine
         var backendName = Marshal.StringToCoTaskMemUTF8(selectedBackend);
         try
         {
-            var backend = new NativeAudioApi.BackendConfig { Backend = backendName, Device = options.DeviceIndex, Threads = _threads };
-            NativeOperation.Step(token, () =>
+            var sessionOptions = historySteps > 0 ? NativeAudioApi.OptionsCreate() : 0;
+            try
             {
-                // A cached model handle does not retain session-owned execution weights.
-                NativeMemory.CheckBudget(entry.Bytes, decodedBytes, _headroom);
-                token.ThrowIfCancellationRequested();
-                NativeAudioApi.Check(NativeAudioApi.SessionCreate(_model!.DangerousGetHandle(), "asr", mode, in backend, 0, out var session),
-                    $"create the native recognition session on {selectedBackend} device {options.DeviceIndex}");
-                _session = new NativeAudioHandle(session, NativeHandleKind.Session);
-                _sessionKey = key;
-            });
+                if (historySteps > 0)
+                {
+                    if (sessionOptions == 0) throw new InvalidOperationException("Cannot create native meeting options.");
+                    NativeAudioApi.Check(NativeAudioApi.OptionsSet(sessionOptions,
+                        "vibevoice_asr_streaming.max_history_steps", historySteps.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+                        "bound the meeting recognition history");
+                }
+                var backend = new NativeAudioApi.BackendConfig { Backend = backendName, Device = options.DeviceIndex, Threads = _threads };
+                NativeOperation.Step(token, () =>
+                {
+                    // A cached model handle does not retain session-owned execution weights.
+                    NativeMemory.CheckBudget(entry.Bytes, decodedBytes, _headroom);
+                    token.ThrowIfCancellationRequested();
+                    NativeAudioApi.Check(NativeAudioApi.SessionCreate(_model!.DangerousGetHandle(), "asr", mode, in backend, sessionOptions, out var session),
+                        $"create the native recognition session on {selectedBackend} device {options.DeviceIndex}");
+                    _session = new NativeAudioHandle(session, NativeHandleKind.Session);
+                    _sessionKey = key;
+                });
+            }
+            finally { if (sessionOptions != 0) NativeAudioApi.OptionsFree(sessionOptions); }
         }
         finally
         {
@@ -538,5 +553,17 @@ public sealed class NativeAudioEngine : IRecognitionEngine
         }
     }
 
-    private sealed record SessionKey(string ModelId, string Mode, NativeBackend Backend, int DeviceIndex);
+    public async Task StreamMeetingAsync(AudioModel model, ChannelReader<byte[]> audio, RecognitionOptions options,
+        IProgress<TranscriptUpdate> progress, CancellationToken cancellationToken, Action? onReady = null)
+    {
+        if (model.Family != "vibevoice_asr_streaming" || model.Mode != "streaming")
+            throw new NotSupportedException("Meetings require the installed VibeVoice streaming model.");
+        options = ValidateOptions(model, options);
+        var result = await RunExclusiveAsync(() => NativeOperation.Run(
+            () => StreamCore(model, audio, options, progress, cancellationToken, onReady,
+                16000L * 120 * 60, 4096), CleanupStream), cancellationToken);
+        progress.Report(new TranscriptUpdate(result.DisplayText, true, result.SpeechText));
+    }
+
+    private sealed record SessionKey(string ModelId, string Mode, NativeBackend Backend, int DeviceIndex, int HistorySteps = 0);
 }

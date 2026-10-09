@@ -5,11 +5,12 @@ WinUI 3, .NET 10, and [audio.cpp](https://github.com/0xShug0/audio.cpp) through 
 in-process native DLL. Release MSIX packages use .NET NativeAOT.
 
 Focus a text field, hold F9, speak, and release the key. Ansible inserts the final
-speech after recognition succeeds. The app also provides manual transcription,
+speech after recognition succeeds. The app also provides manual transcription, meeting transcripts,
 model downloads, custom vocabulary for supported models, and local usage insights.
 
-Recognition runs on the device. The app does not save recordings or transcripts
-or upload them. Text you copy or insert is subject to the clipboard and destination
+Recognition runs on the device. Meeting transcripts save automatically on this
+device; dictation transcripts remain in memory. The app never saves audio or
+uploads speech. Text you copy or insert is subject to the clipboard and destination
 app's storage policies. Model downloads require network access.
 
 ## Build and run
@@ -56,6 +57,14 @@ certificate trust. See the [development guide](docs/development.md) for build
 options and checks.
 
 ## Current limits
+
+- Meetings start manually from **Meetings** and use VibeVoice ASR Streaming 1.5B.
+  Capture includes the default microphone and either a selected application
+  process tree or explicitly selected system playback. Browser capture includes
+  other tabs in that browser's process tree. Pause/Resume keeps one recognition
+  stream; End meeting finishes pending speech. Audio stays in bounded memory.
+  The capture limit is two hours; long-session speaker accuracy and the 5–10
+  second update target need qualification on each model/backend combination.
 
 - Windows x64 only. ARM64 and NPU support are separate work.
 - File transcription accepts WAV only, up to five minutes, 100 MiB on disk,

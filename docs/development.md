@@ -115,6 +115,30 @@ a native rebuild.
 
 ## Source and ownership
 
+Meeting capture, persistence, speaker parsing, and lifecycle tests live in
+`MeetingCaptureTests`, `MeetingStoreTests`, `MeetingTranscriptTests`, and
+`MeetingSessionTests`. Live capture tests are marked `NativeIntegration` and
+generate an in-memory tone; they require microphone access and an output device.
+`NativeMeetingTests` exercises the installed VibeVoice streaming model with the
+public sample and checks that speech appears before input ends. Set
+`DICTATION_MODELS_DIRECTORY` when using an existing model folder. Run native
+probes sequentially.
+
+`MeetingSession` owns the meeting operation and reserves `DictationSession`
+before loading its own native engine. Reservation joins/unloads dictation
+preparation and prevents dictation/settings/model maintenance until all meeting
+capture and inference resources are released. Pause gates the same channel
+reader; it does not reset the native stream. Capture writes 16 kHz mono PCM16
+into bounded queues. Transcripts use atomic source-generated JSON saves; audio
+never reaches disk. Startup marks unfinished saved documents Interrupted.
+
+The meeting path bounds the VibeVoice native history with
+`vibevoice_asr_streaming.max_history_steps=4096` and admits at most two hours of
+audio. The model's rolling history can affect speaker continuity. The app parses
+native speaker labels and records approximate processing-window timestamps;
+it does not manufacture speaker matching or word alignment. Update latency,
+memory over two hours, and multi-speaker accuracy require separate qualification.
+
 | Location | Responsibility |
 | --- | --- |
 | `Ansible` | WinUI pages, floating waveform, shortcuts, text insertion, composition and UI dispatch |

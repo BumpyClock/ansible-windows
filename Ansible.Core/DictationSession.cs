@@ -90,6 +90,35 @@ public sealed class DictationSession
         Begin(SessionActivity.Dictation, transcriptUpdates: transcriptUpdates);
     public Task<SessionOutcome> ReplayAsync(string path) => Begin(SessionActivity.Replay, path);
     public Task<SessionOutcome> TranscribeFileAsync(string path) => Begin(SessionActivity.File, path);
+    public async Task ReserveMeetingAsync()
+    {
+        SessionSnapshot state;
+        lock (_gate)
+        {
+            RequireIdle();
+            StopIdleTimer();
+            state = SetState(_state with { MeetingActive = true });
+        }
+        Publish(state);
+        try
+        {
+            await StopEngineWorkAsync();
+            if (_engine is not null) await _engine.UnloadAsync(CancellationToken.None);
+        }
+        catch { await ReleaseMeetingAsync(); throw; }
+    }
+
+    public Task ReleaseMeetingAsync()
+    {
+        SessionSnapshot state;
+        lock (_gate)
+        {
+            state = SetState(_state with { MeetingActive = false });
+            KeepEngineWarm();
+        }
+        Publish(state);
+        return Task.CompletedTask;
+    }
     public void SetUsageEnabled(bool enabled) =>
         ChangeSettings(state => state with { Settings = state.Settings with { CollectUsage = enabled } },
             new(NoticeKind.Success, "Settings saved", "Local usage collection was updated."));
@@ -524,7 +553,7 @@ public sealed class DictationSession
     // Requires _gate. Prepares the selected dictation model in the background and restarts the idle countdown.
     private void KeepEngineWarm()
     {
-        if (_closing || _engine is null || _operation is not null || _recovery is not null) { return; }
+        if (_closing || _state.MeetingActive || _engine is null || _operation is not null || _recovery is not null) { return; }
         if (_state.SelectedModel is { SupportsMicrophone: true } model)
         {
             var options = new RecognitionOptions(_state.Language, "", _state.Settings.Backend);
@@ -600,7 +629,7 @@ public sealed class DictationSession
     {
         lock (_gate)
         {
-            if (generation != _idleGeneration || _closing || _engine is null || _operation is not null || _recovery is not null) { return; }
+            if (generation != _idleGeneration || _closing || _state.MeetingActive || _engine is null || _operation is not null || _recovery is not null) { return; }
             StopIdleTimer();
             QueueEngineWork((engine, token) => engine.UnloadAsync(token),
                 "Model still loaded", "The idle model could not be released and stays in memory.");
@@ -708,6 +737,8 @@ public sealed class DictationSession
         lock (_gate)
         {
             if (_closeTask is not null) { return _closeTask; }
+            if (_state.MeetingActive)
+                throw new InvalidOperationException("End the meeting and release its resources before closing dictation.");
             _closing = true;
             operation = _operation;
             state = SetState(_state with { Phase = DictationPhase.Closing,
@@ -897,7 +928,7 @@ public sealed class DictationSession
     private void RequireIdle()
     {
         ObjectDisposedException.ThrowIf(_closing, this);
-        if (_operation is not null || _recovery is not null)
+        if (_state.MeetingActive || _operation is not null || _recovery is not null)
         {
             throw new InvalidOperationException("The current operation must release its resources before new work starts.");
         }

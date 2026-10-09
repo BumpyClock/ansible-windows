@@ -104,4 +104,3 @@ internal sealed unsafe partial class MeetingTestTone : IDisposable
     [LibraryImport("winmm.dll", EntryPoint = "waveOutUnprepareHeader")] private static partial uint Unprepare(nint device, nint header, uint size);
     [LibraryImport("winmm.dll", EntryPoint = "waveOutClose")] private static partial uint Close(nint device);
 }
-

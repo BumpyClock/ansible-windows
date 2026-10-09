@@ -163,10 +163,47 @@ The host-memory guard runs on both backends; it does not guarantee sufficient
 GPU memory. The offline 7B model has about 9.86 GB of weights and needs additional
 memory to load and decode. Keep the guard enabled.
 
+## Meeting transcripts
+
+Open **Meetings > Start meeting**. Select the meeting application, or explicitly
+choose **All system audio**, then start. The app captures the Windows default
+microphone and playback together. Application capture includes its child-process
+tree; a browser selection can include audio from other tabs. Windows build 20348
+or later is required for application capture. Use headphones: echo cancellation
+is not implemented.
+
+Install **VibeVoice ASR Streaming 1.5B Q4_K** in **Speech models** first. Meetings
+use this model independently of the dictation selection, with the configured
+CPU/Vulkan backend, language hint, and custom vocabulary. Dictation and model
+changes are unavailable while a meeting owns the recognition resources.
+
+Text appears throughout the meeting as native chunks finish. Speaker labels come
+from the model; rename a speaker by selecting its heading. The app does not infer
+real names or label microphone speech as "You". Timestamps are approximate chunk
+processing positions, not word alignment. Labels and text are provisional until
+finalization. Update latency and long-session speaker continuity depend on the
+model/backend and have not been qualified for two-hour meetings.
+
+**Pause** stops capture and transcript updates. **Resume** continues the same
+meeting and processes retained pending speech. Speech during the pause is not
+captured. **End meeting** stops capture and processes pending chunks before
+releasing resources; the window stays open for review. Closing an active meeting
+offers finishing or explicitly discarding pending speech. Closing the main app
+finishes its active meeting before shutting down.
+
+Transcripts and title/speaker edits save automatically. The Meetings list supports
+reopening saved text; each transcript window offers Copy, text export, and Delete.
+Capture is limited to two hours. A full 30-second recognition queue or capture
+failure stops the meeting with an error and keeps text already produced. Native
+steps must finish before resources can be released. After a crash, previous
+unfinished meetings are marked Interrupted; unfinished speech cannot be recovered
+because audio is never written to disk.
+
 ## Local data and privacy
 
-The app keeps captured audio and transcript content in memory. Recognition does
-not upload them. Model download requests are the app's network activity.
+Captured audio always stays in memory. Dictation transcripts stay in memory;
+meeting transcripts, titles, and speaker names save locally. Recognition does
+not upload speech. Model download requests are the app's network activity.
 **Copy** uses the ordinary clipboard; Windows clipboard features and destination
 apps can retain text you copy or insert. Automatic shortcut paste requests
 clipboard-history and cloud-sync exclusions, but those requests are not a storage
@@ -179,6 +216,7 @@ Per-user files are in Windows package storage, normally
 | --- | --- |
 | `settings.json` | Preferences, chosen model folder, and custom vocabulary |
 | `usage.json` | Session IDs, completion timestamps, model IDs, session type, speech-word counts, and durations |
+| `meetings\<id>.json` | Meeting titles, dates, transcript turns, approximate timestamps, and speaker names; no audio |
 | `models\` | Default location for downloaded model weights |
 | `startup-error.log` | Startup failure diagnostics, when a startup error occurs |
 

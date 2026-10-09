@@ -13,7 +13,8 @@ public sealed partial class MeetingTranscript
         if (!double.IsFinite(processedSeconds) || processedSeconds < _processedSeconds || processedSeconds > TimeSpan.MaxValue.TotalSeconds)
             throw new ArgumentOutOfRangeException(nameof(processedSeconds));
 
-        var text = IncompleteLabel().Replace(cumulativeText.TrimEnd(), "");
+        var text = cumulativeText.TrimEnd();
+        if (!isFinal) text = IncompleteLabel().Replace(text, "");
         var labels = SpeakerLabel().Matches(text);
         var parsed = new List<(string SpeakerId, string Text)>();
         var start = 0;
@@ -52,9 +53,9 @@ public sealed partial class MeetingTranscript
         return trimmed.Length == 0 ? "0" : trimmed;
     }
 
-    [GeneratedRegex(@"(?<!\S)Speaker ([0-9]+):", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"(?<!\S)Speaker\s*([0-9]+)\s*:", RegexOptions.CultureInvariant)]
     private static partial Regex SpeakerLabel();
 
-    [GeneratedRegex(@"(?<!\S)(?:S|Sp|Spe|Spea|Speak|Speake|Speaker(?: [0-9]*)?)$", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"(?<!\S)(?:S|Sp|Spe|Spea|Speak|Speake|Speaker(?:\s*[0-9]*)?)$", RegexOptions.CultureInvariant)]
     private static partial Regex IncompleteLabel();
 }

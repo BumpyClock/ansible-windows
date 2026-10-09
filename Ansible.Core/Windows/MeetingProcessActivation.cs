@@ -87,4 +87,3 @@ internal sealed unsafe class MeetingProcessActivation
         [FieldOffset(16)] internal nint Data;
     }
 }
-

@@ -77,6 +77,20 @@ session timing. A public-sample transcript does not establish accuracy across
 speakers, languages, microphones, or noise conditions. Paced streaming elapsed
 time includes audio delivery and is not pure inference latency.
 
+## Meeting qualification
+
+On 2026-10-09, live microphone plus system/application loopback tests captured an
+in-memory 440 Hz tone in both modes and released their native resources. Core
+tests cover incremental transcript saving, Pause/Resume, finalization, bounded
+backlog failure, retained ownership, and crash recovery.
+
+The VibeVoice CPU meeting smoke test was blocked before loading by the existing
+memory guard: estimated 3.3 GiB required, 12.2 GiB physical available, but only
+0.9 GiB commit capacity available. No safeguards were changed to force loading.
+Run `NativeMeetingTests` with installed streaming weights and adequate available
+commit capacity to qualify live partial/final recognition. Two-hour memory,
+latency, and speaker accuracy remain unqualified.
+
 ## Known limits
 
 - Moonshine streaming input is final-only; Qwen buffers input. Neither promises
@@ -99,7 +113,12 @@ time includes audio delivery and is not pure inference latency.
   workspace and reserve headroom; they do not bound every allocation or check a
   dedicated GPU-memory budget. Keep safeguards enabled. Do not close unrelated
   apps to force a model load.
-- App recognition operations have a five-minute timeout; the probe uses three
+- The dedicated meeting path uses VibeVoice streaming with a 4096-step rolling
+  native history and a two-hour capture limit. It processes chunks throughout,
+  preserving one stream across Pause/Resume. This limit is not evidence of
+  two-hour speaker accuracy or latency. Validate CPU and Vulkan separately with
+  `NativeMeetingTests`, then qualify long meetings and multiple speakers.
+- Dictation/file recognition operations have a five-minute timeout; the probe uses three
   minutes. WAV input is limited to five minutes, 100 MiB on disk, and 64 MiB of
   decoded floats. Native calls can outlast these deadlines while cleanup waits.
 - ARM64, NPU, clean-machine deployment, and physical microphone-driver failure

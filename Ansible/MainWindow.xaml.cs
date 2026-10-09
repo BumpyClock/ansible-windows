@@ -16,12 +16,17 @@ public sealed partial class MainWindow : Window
     private readonly DictationPage _dictation;
     private readonly MainPage _settings;
     private readonly ModelManagementPage _models;
+    private readonly MeetingsPage _meetings;
+    private readonly MeetingStore _meetingStore;
+    private readonly AppPaths _paths;
+    private readonly List<(MeetingSession session, MeetingWindow window, Guid? savedId)> _meetingWindows = [];
     private readonly UiSessionObserver _observer;
     private GlobalDictationHotkey? _hotkey;
     private DictationShortcut _configuredHotkey = DictationShortcut.Default;
     private volatile bool _shortcutHeld;
     private FloatingDictationWindow? _floating;
     private bool _initialized;
+    private bool _meetingRecoveryComplete;
     private bool _closed;
     private bool _allowClose;
     private bool _closing;
@@ -38,6 +43,9 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
         _session = session;
+        _paths = paths;
+        _meetingStore = new MeetingStore(Path.Combine(Path.GetDirectoryName(paths.Settings)!, "meetings"));
+        _meetings = new MeetingsPage(_meetingStore, OpenMeetingAsync);
         _insights = new InsightsPage(session);
         _dictation = new DictationPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this));
         _settings = new MainPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this),
@@ -53,6 +61,7 @@ public sealed partial class MainWindow : Window
         AppWindow.Resize(size);
         AppWindow.Move(new Windows.Graphics.PointInt32(area.X + (area.Width - size.Width) / 2, area.Y + (area.Height - size.Height) / 2));
         MainContent.Loaded += Initialize;
+        Activated += async (_, _) => { if (!_closed && !_closing) await _meetings.RefreshAsync(); };
         AppWindow.Closing += CloseRequested;
         Closed += WindowClosed;
         Navigate("dictation");
@@ -65,6 +74,16 @@ public sealed partial class MainWindow : Window
         _initialized = true;
         try
         {
+            Exception? meetingRecoveryError = null;
+            try
+            {
+                await _meetingStore.MarkInterruptedSessionsAsync();
+                _meetingRecoveryComplete = true;
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+            {
+                meetingRecoveryError = error;
+            }
             await _session.InitializeAsync();
             if (_closed || _closing) { return; }
             if (_session.State.Phase == DictationPhase.Disconnected && _session.State.Models.Count == 0)
@@ -76,6 +95,8 @@ public sealed partial class MainWindow : Window
                     _configuredHotkey, HotkeyChanged);
             }
             catch (Exception error) { _session.Notify(NoticeKind.Error, "Shortcut unavailable", error.Message); }
+            if (meetingRecoveryError is not null)
+                _session.Notify(NoticeKind.Error, "Meeting recovery failed", meetingRecoveryError.Message);
         }
         catch (Exception error) { _session.ReportUiError(error); }
     }
@@ -84,10 +105,11 @@ public sealed partial class MainWindow : Window
 
     private void Navigate(string page)
     {
-        MainContent.Content = page switch { "settings" => _settings, "dictation" => _dictation, "models" => _models, _ => _insights };
+        MainContent.Content = page switch { "settings" => _settings, "dictation" => _dictation, "models" => _models, "meetings" => _meetings, _ => _insights };
         foreach (var (button, indicator) in new[]
         {
             (DictationNav, DictationIndicator), (ModelsNav, ModelsIndicator),
+            (MeetingsNav, MeetingsIndicator),
             (InsightsNav, InsightsIndicator), (SettingsNav, SettingsIndicator),
         })
         {
@@ -98,6 +120,38 @@ public sealed partial class MainWindow : Window
             AutomationProperties.SetHelpText(button, selected ? "Current page" : "");
             AutomationProperties.SetItemStatus(button, selected ? "Current page" : "");
         }
+    }
+
+    private Task OpenMeetingAsync(MeetingDocument? document)
+    {
+        var existing = _meetingWindows.FirstOrDefault(item => document is null
+            ? item.savedId is null
+            : item.savedId == document.Id || item.session.Document?.Id == document.Id);
+        if (existing.window is not null) { existing.window.Activate(); return Task.CompletedTask; }
+        var state = _session.State;
+        var meeting = new MeetingSession(
+            () => new NativeAudioEngine(_paths.NativeLibrary, _paths.ModelCatalog, state.ModelsDirectory),
+            new Ansible.Core.Windows.MeetingCaptureFactory(), _meetingStore,
+            new RecognitionOptions(state.Language, state.Settings.CustomDictionary, state.Settings.Backend),
+            reserve: async () =>
+            {
+                if (!_meetingRecoveryComplete)
+                    throw new InvalidOperationException("Meeting storage must initialize successfully before starting a meeting.");
+                if (_closing || _captureCoordinator.HasPendingCapture || _deliveryTask is { IsCompleted: false })
+                    throw new InvalidOperationException("Finish dictation before starting a meeting.");
+                await _session.ReserveMeetingAsync();
+            },
+            release: _session.ReleaseMeetingAsync);
+        var window = new MeetingWindow(meeting, _meetingStore, document);
+        _meetingWindows.Add((meeting, window, document?.Id));
+        window.Closed += async (_, _) =>
+        {
+            _meetingWindows.RemoveAll(item => ReferenceEquals(item.window, window));
+            try { await meeting.DisposeAsync(); await _meetings.RefreshAsync(); }
+            catch (Exception error) { _session.ReportUiError(error); }
+        };
+        window.Activate();
+        return Task.CompletedTask;
     }
 
     private void ChangeHotkey(DictationShortcut choice)
@@ -316,6 +370,9 @@ public sealed partial class MainWindow : Window
         _deliveryCancellation.Cancel();
         try
         {
+            foreach (var meeting in _meetingWindows.ToArray())
+                await meeting.session.DisposeAsync();
+            foreach (var meeting in _meetingWindows.ToArray()) meeting.window.Close();
             await Task.WhenAll(_session.CloseAsync(), _models.DisposeAsync().AsTask());
             if (_captureTask is { } capture)
             {

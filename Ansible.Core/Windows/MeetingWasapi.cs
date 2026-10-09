@@ -77,4 +77,3 @@ internal static unsafe partial class MeetingWasapi
         internal ushort Align, Bits, Extra;
     }
 }
-

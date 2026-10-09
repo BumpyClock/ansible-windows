@@ -89,6 +89,12 @@ internal static partial class NativeAudioApi
     [LibraryImport(Library, EntryPoint = "audiocpp_result_speaker_turn")]
     internal static partial int SpeakerTurn(nint result, nuint index, nint start, nint end,
         nint speakerId, nint confidence, out nint text);
+    [LibraryImport(Library, EntryPoint = "audiocpp_options_create")]
+    internal static partial nint OptionsCreate();
+    [LibraryImport(Library, EntryPoint = "audiocpp_options_set", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial int OptionsSet(nint options, string key, string value);
+    [LibraryImport(Library, EntryPoint = "audiocpp_options_free")]
+    internal static partial void OptionsFree(nint options);
     [LibraryImport(Library, EntryPoint = "audiocpp_result_free")]
     internal static partial void ResultFree(nint result);
     [LibraryImport(Library, EntryPoint = "audiocpp_stream_policy")]

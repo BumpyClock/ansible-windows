@@ -141,5 +141,3 @@ internal static class MeetingPcmMixer
         return (short)(source.Dequeue() | source.Dequeue() << 8);
     }
 }
-
-

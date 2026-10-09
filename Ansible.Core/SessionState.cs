@@ -16,6 +16,7 @@ public sealed record SessionSnapshot
 {
     public required long Version { get; init; }
     public Guid? OperationId { get; init; }
+    public bool MeetingActive { get; init; }
     public required DictationPhase Phase { get; init; }
     public required SessionActivity Activity { get; init; }
     public required SessionNotice Notice { get; init; }
@@ -30,9 +31,9 @@ public sealed record SessionSnapshot
     public UsageDocument? Usage { get; init; }
     public string? UsageError { get; init; }
     public AudioModel? SelectedModel => SelectedIndex >= 0 && SelectedIndex < Models.Count ? Models[SelectedIndex] : null;
-    public bool IsIdle => Phase is DictationPhase.Ready or DictationPhase.Disconnected;
+    public bool IsIdle => !MeetingActive && Phase is DictationPhase.Ready or DictationPhase.Disconnected;
     public bool IsReplay => Activity == SessionActivity.Replay;
-    public bool CanStart => Phase == DictationPhase.Ready && SelectedModel?.SupportsMicrophone == true;
+    public bool CanStart => !MeetingActive && Phase == DictationPhase.Ready && SelectedModel?.SupportsMicrophone == true;
     public bool CanFinish => Phase == DictationPhase.Recording && Activity == SessionActivity.Dictation;
     public bool CanCancel => Phase is DictationPhase.Preparing or DictationPhase.Recording or DictationPhase.Finishing or DictationPhase.Transcribing;
     public bool IsLiveOperation => Activity is SessionActivity.Dictation or SessionActivity.Replay &&

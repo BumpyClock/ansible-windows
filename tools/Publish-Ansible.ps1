@@ -71,7 +71,8 @@ try {
     if (-not $resourceMap) { throw "The package resource index has no map for '$($identity.Name)'." }
     foreach ($xaml in @(
         "App.xbf", "MainWindow.xbf", "FloatingDictationWindow.xbf", "MainPage.xbf",
-        "DictationPage.xbf", "InsightsPage.xbf", "ModelManagementPage.xbf", "ModelCard.xbf"
+        "DictationPage.xbf", "InsightsPage.xbf", "ModelManagementPage.xbf", "ModelCard.xbf",
+        "MeetingsPage.xbf", "MeetingWindow.xbf"
     )) {
         # MSIX embeds compiled XAML in the PRI instead of shipping loose .xbf files.
         if (-not $resourceMap.SelectSingleNode(".//NamedResource[@name='$xaml']/Candidate[@type='EmbeddedData']")) {

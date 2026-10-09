@@ -50,6 +50,17 @@
                             </StackPanel>
                         </Grid>
                     </Button>
+                    <Button x:Name="MeetingsNav" Tag="meetings" Click="NavigateClicked" Style="{StaticResource NavigationButtonStyle}">
+                        <Grid>
+                            <Border x:Name="MeetingsIndicator" Width="3" Height="16" CornerRadius="1.5" Margin="-8,0,0,0"
+                                    HorizontalAlignment="Left" VerticalAlignment="Center"
+                                    Background="{ThemeResource AccentGraphicBrush}" Visibility="Collapsed" />
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <FontIcon Glyph="&#xE8F2;" FontSize="16" />
+                                <TextBlock Text="Meetings" Style="{StaticResource BodyTextBlockStyle}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Grid>
+                    </Button>
                     <Button x:Name="ModelsNav" Tag="models" Click="NavigateClicked" Style="{StaticResource NavigationButtonStyle}">
                         <Grid>
                             <Border x:Name="ModelsIndicator" Width="3" Height="16" CornerRadius="1.5" Margin="-8,0,0,0"

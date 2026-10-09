@@ -1,0 +1,69 @@
+<Window x:Class="Ansible.MeetingWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid x:Name="Root" Background="{ThemeResource LayerFillColorDefaultBrush}" RowSpacing="0">
+        <Grid.RowDefinitions><RowDefinition Height="48"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <Grid x:Name="TitleBar" Margin="24,0,140,0"><TextBlock Text="Meeting transcript" VerticalAlignment="Center" Style="{StaticResource CaptionSecondaryStyle}"/></Grid>
+        <StackPanel Grid.Row="1" Margin="32,20,32,20" Spacing="12">
+            <TextBox x:Name="MeetingTitle" Text="New meeting" FontSize="30" FontFamily="Georgia" Background="Transparent" BorderThickness="0" Padding="0" MaxLength="200" LostFocus="TitleLostFocus" AutomationProperties.Name="Meeting title"/>
+            <TextBlock x:Name="MeetingDate" Style="{StaticResource CaptionSecondaryStyle}"/>
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Transcript" Style="{StaticResource BodyStrongTextBlockStyle}" VerticalAlignment="Center"/>
+                <Button Grid.Column="1" Content="More" AutomationProperties.Name="Transcript actions">
+                    <Button.Flyout><MenuFlyout>
+                        <MenuFlyoutItem Text="Copy transcript" Click="CopyClicked"/>
+                        <MenuFlyoutItem Text="Export as text" Click="ExportClicked"/>
+                        <MenuFlyoutSeparator/>
+                        <MenuFlyoutItem x:Name="DeleteMenuItem" Text="Delete meeting" Click="DeleteClicked"/>
+                    </MenuFlyout></Button.Flyout>
+                </Button>
+            </Grid>
+        </StackPanel>
+        <StackPanel Grid.Row="2" Margin="32,0,32,16" Spacing="12">
+            <Border Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}" CornerRadius="8" Padding="14,12">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <FontIcon Glyph="&#xE916;" FontSize="14"/>
+                    <TextBlock x:Name="ElapsedText" Grid.Column="1" Text="0:00" Style="{StaticResource BodyTextBlockStyle}"/>
+                    <TextBlock x:Name="StateText" Grid.Column="2" Text="Ready" Style="{StaticResource CaptionSecondaryStyle}" VerticalAlignment="Center"/>
+                </Grid>
+            </Border>
+            <TextBlock x:Name="DelayText" Visibility="Collapsed" Style="{StaticResource CaptionSecondaryStyle}"/>
+            <InfoBar x:Name="ErrorBar" Severity="Error" IsOpen="False" IsClosable="True"/>
+        </StackPanel>
+        <Grid Grid.Row="3" Margin="32,0,32,0">
+            <ScrollViewer x:Name="TranscriptScroll" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel x:Name="TranscriptRows" Spacing="16" Padding="0,0,0,24"/>
+            </ScrollViewer>
+            <StackPanel x:Name="EmptyState" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="10" MaxWidth="400">
+                <TextBlock x:Name="EmptyTitle" Text="Ready when you are" Style="{StaticResource SubtitleTextBlockStyle}" TextAlignment="Center"/>
+                <TextBlock x:Name="EmptyDescription" Text="Choose your meeting app below. Speaker-labelled text will appear here as you talk." Style="{StaticResource PageSubtitleStyle}" TextAlignment="Center"/>
+            </StackPanel>
+        </Grid>
+        <Border Grid.Row="4" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" BorderThickness="0,1,0,0" Padding="32,20,32,24">
+            <StackPanel Spacing="12">
+                <StackPanel x:Name="CaptureSetup" Spacing="12">
+                    <ComboBox x:Name="AudioSourceChoice" Header="Meeting audio" HorizontalAlignment="Stretch" SelectionChanged="AudioSourceChanged">
+                        <ComboBoxItem Content="Selected meeting app"/>
+                        <ComboBoxItem Content="All system audio (includes notifications and other apps)"/>
+                    </ComboBox>
+                    <Grid x:Name="ProcessSelector" ColumnSpacing="8">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <ComboBox x:Name="ProcessChoice" Header="Meeting app" HorizontalAlignment="Stretch"/>
+                        <Button Grid.Column="1" Content="Refresh" Click="RefreshProcessesClicked" VerticalAlignment="Bottom"/>
+                    </Grid>
+                    <TextBlock Text="Microphone: Windows default input" Style="{StaticResource CaptionSecondaryStyle}"/>
+                </StackPanel>
+                <TextBlock x:Name="PrivacyText" Text="Get consent before transcribing others. Audio stays in memory; only text is saved." Style="{StaticResource CaptionSecondaryStyle}"/>
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <Button x:Name="StartButton" Content="Start meeting" Click="StartClicked" Style="{StaticResource AccentButtonStyle}" MinHeight="44"/>
+                    <Button x:Name="PauseButton" Content="Pause" Click="PauseClicked" Visibility="Collapsed" MinHeight="44"/>
+                    <TextBlock x:Name="SaveText" Grid.Column="1" Text="Saved locally" VerticalAlignment="Center" Style="{StaticResource CaptionSecondaryStyle}"/>
+                    <Button x:Name="EndButton" Grid.Column="2" Content="End meeting" Click="EndClicked" Visibility="Collapsed" MinHeight="44"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

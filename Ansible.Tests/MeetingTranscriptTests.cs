@@ -73,4 +73,30 @@ public sealed class MeetingTranscriptTests
         Assert.Throws<ArgumentOutOfRangeException>(() => transcript.Update("Speech", 4));
         Assert.Throws<ArgumentOutOfRangeException>(() => transcript.Update("Speech", double.NaN));
     }
+
+    [Fact]
+    public void FinalSpeechPreservesTrailingWordThatResemblesIncompleteLabel()
+    {
+        var transcript = new MeetingTranscript();
+        Assert.Equal("Please say", Assert.Single(transcript.Update("Speaker 0: Please say Speaker", 5)).Text);
+        var final = Assert.Single(transcript.Update("Speaker 0: Please say Speaker", 10, true));
+        Assert.Equal("Please say Speaker", final.Text);
+        Assert.False(final.IsProvisional);
+    }
+
+    [Fact]
+    public void FinalUnlabelledFragmentIsPreservedWithoutInventedAttribution()
+    {
+        var final = Assert.Single(new MeetingTranscript().Update("Speaker 12", 5, true));
+        Assert.Equal("Unknown speaker", final.SpeakerId);
+        Assert.Equal("Speaker 12", final.Text);
+    }
+
+    [Fact]
+    public void NativeWhitespaceFormsPreserveStableSpeakerIds()
+    {
+        var turns = new MeetingTranscript().Update("Speaker\t00 : First\nSpeaker1: Second", 5, true);
+        Assert.Equal(new[] { "Speaker 0", "Speaker 1" }, turns.Select(turn => turn.SpeakerId));
+        Assert.Equal(new[] { "First", "Second" }, turns.Select(turn => turn.Text));
+    }
 }
