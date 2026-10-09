@@ -51,6 +51,10 @@ the **Ansible (Packaged)** launch profile. Packaged development deployment
 requires Windows Developer Mode. F5 uses managed code for debugging; the
 Release package workflow below verifies NativeAOT output.
 
+The solution's Any CPU platform maps the WinUI app to x64 because the app has
+no Any CPU project configuration. ARM64 and x86 map to their named project
+configurations, but the deployment checks reject them until separately qualified.
+
 ## Build and verify a package
 
 ```powershell

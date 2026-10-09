@@ -21,8 +21,10 @@
     <Platform Solution="*|x86" Project="x86" />
   </Project>
   <Project Path="Ansible/Ansible.csproj">
+    <Platform Solution="*|Any CPU" Project="x64" />
     <Platform Solution="*|ARM64" Project="ARM64" />
     <Platform Solution="*|x64" Project="x64" />
+    <Platform Solution="*|x86" Project="x86" />
     <Deploy Solution="Debug|x64" />
   </Project>
 </Solution>
