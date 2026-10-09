@@ -214,9 +214,11 @@ not sent to the destination. Moonshine's final-only output and Qwen's buffered
 output do not require live recognition to use the shortcut. Models must support
 microphone input; WAV-only models remain available for file transcription.
 
-Insertion never sees raw model output. `Ansible.Core\SpeechExtraction.cs` is the
-one place that knows how each native family encodes speech, and it turns the
-raw output into display text plus speech text. Moonshine, Qwen3, and Nemotron
+Neither insertion nor the transcript view sees raw model output.
+`Ansible.Core\SpeechExtraction.cs` is the one place that knows how each native
+family encodes speech, and it turns the raw output into display text plus
+speech text. The transcript box, live preview, and **Copy transcript** show the
+speech text, and fall back to the raw text only when speech is unknown. Moonshine, Qwen3, and Nemotron
 return plain speech. The VibeVoice streaming adapter returns `Speaker N:`
 diarization labels in its text and no speech metadata, so its labels are
 removed and the remaining text is inserted. The offline VibeVoice model reads
@@ -498,8 +500,8 @@ Streaming times include preparation, paced audio upload, and final decoding:
 - `qwen3-asr-0.6b-q8`: WAV 8.227 seconds, live 22.169 seconds,
   zero previews during upload. Buffered recognition is not a live preview.
 - `vibevoice-streaming-1.5b-q4`: WAV 33.582 seconds, live 41.364 seconds,
-  four previews during upload. Display text includes a `Speaker 0:` label; the
-  label is removed from the inserted speech text.
+  four previews during upload. Raw model text includes a `Speaker 0:` label; the
+  label is removed from the transcript shown, copied, and inserted.
 - `moonshine-tiny`: earlier native baseline WAV 1.083 seconds,
   live 18.051 seconds, zero previews during upload.
 - `vibevoice-asr-7b-q8`: installed and verified; the memory guard rejects the

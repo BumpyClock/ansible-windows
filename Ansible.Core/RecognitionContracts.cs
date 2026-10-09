@@ -2,9 +2,16 @@ using System.Threading.Channels;
 
 namespace Ansible.Core;
 
+/// <summary>
+/// <paramref name="DisplayText"/> is the raw model text kept for diagnostics. <paramref name="SpeechText"/> is the
+/// cleaned speech that insertion, word counts, and the on-screen transcript use; null when the family's output
+/// cannot be read as speech, in which case the raw text is the only thing worth showing.
+/// </summary>
 public sealed record RecognitionResult(string DisplayText, string? SpeechText)
 {
     public int? SpokenWords => SpeechText is null ? null : AudioMeter.CountWords(SpeechText);
+    /// <summary>What the user sees and copies: cleaned speech, or raw text when speech is unknown.</summary>
+    public string Transcript => SpeechText ?? DisplayText;
 }
 
 public enum NativeBackend

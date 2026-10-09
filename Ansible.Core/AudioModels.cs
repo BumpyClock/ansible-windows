@@ -27,4 +27,8 @@ public sealed record AudioModel
     public override string ToString() => Id;
 }
 
-public sealed record TranscriptUpdate(string Text, bool IsFinal, string? SpeechText = null);
+public sealed record TranscriptUpdate(string Text, bool IsFinal, string? SpeechText = null)
+{
+    /// <summary>What the live preview shows: cleaned speech so far, or raw text when speech is unknown.</summary>
+    public string Transcript => SpeechText ?? Text;
+}

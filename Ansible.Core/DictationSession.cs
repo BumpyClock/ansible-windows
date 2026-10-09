@@ -848,7 +848,7 @@ public sealed class DictationSession
             if (!ReferenceEquals(_operation, operation) || _closing || operation.Token.IsCancellationRequested || operation.HasFinal) { return; }
             operation.HasFinal = update.IsFinal;
         }
-        UpdateCurrent(operation, state => state with { Transcript = update.Text });
+        UpdateCurrent(operation, state => state with { Transcript = update.Transcript });
         bool report;
         lock (_gate)
             report = !update.IsFinal && ReferenceEquals(_operation, operation) &&
@@ -857,7 +857,7 @@ public sealed class DictationSession
     });
 
     private void UpdateResult(Operation operation) =>
-        UpdateCurrent(operation, state => state with { Transcript = operation.Result!.DisplayText, Result = operation.Result });
+        UpdateCurrent(operation, state => state with { Transcript = operation.Result!.Transcript, Result = operation.Result });
 
     private void PublishLevel(Operation operation, double level)
     {

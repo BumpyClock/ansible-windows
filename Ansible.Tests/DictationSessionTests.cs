@@ -247,7 +247,8 @@ public sealed class DictationSessionTests : IDisposable
         await session.FinishAsync();
         var outcome = await recording;
         Assert.Equal(SessionOutcomeKind.Completed, outcome.Kind);
-        Assert.Equal("Speaker 0: hello world", session.State.Transcript);
+        Assert.Equal("hello world", session.State.Transcript);
+        Assert.Equal("Speaker 0: hello world", session.State.Result?.DisplayText);
         Assert.Equal(2, Assert.Single(usage.Document.Entries).Words);
         Assert.Equal(10, usage.Document.Entries[0].RecordingSeconds);
         Assert.Equal(1, source.Disposals);
@@ -1059,7 +1060,7 @@ public sealed class DictationSessionTests : IDisposable
         engine.LastProgress!.Report(new("Speaker 0: hello", false, "hello"));
         Assert.False(recording.IsCompleted);
         Assert.Equal("hello", Assert.Single(updates).SpeechText);
-        Assert.Equal("Speaker 0: hello", session.State.Transcript);
+        Assert.Equal("hello", session.State.Transcript);
         engine.LastProgress.Report(new("Speaker 0: hello world", false, "hello world"));
         Assert.Equal(2, updates.Count);
         engine.LastProgress.Report(new("final display", true, "final speech"));
