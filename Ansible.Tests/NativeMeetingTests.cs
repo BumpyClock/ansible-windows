@@ -8,6 +8,32 @@ namespace Ansible.Tests;
 public sealed class NativeMeetingTests(ITestOutputHelper output)
 {
     [Fact, Trait("Category", "NativeIntegration")]
+    public async Task NemotronCpuAnchorsUnchangedPublicSamplePhrase()
+    {
+        var root = FindWorkspace();
+        var directory = Environment.GetEnvironmentVariable("DICTATION_MODELS_DIRECTORY")
+            ?? Path.Combine(root, ".runtime", "models");
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(3));
+        await using var aligner = new NativeAudioEngine(Path.Combine(root, ".runtime", "native", "audiocpp.dll"),
+            Path.Combine(root, "tools", "audio-models.json"), directory);
+        var audio = await new AudioInputReader().ReadRecordingAsync(
+            Path.Combine(root, ".runtime", "validation", "sample_16k.wav"), timeout.Token);
+        var model = (await aligner.ConnectAsync(timeout.Token)).First(candidate => candidate.Family == "nemotron_asr");
+        await aligner.PrepareAlignmentAsync(model, timeout.Token);
+        var tokens = await aligner.ReadAlignmentTokensAsync(model, audio, timeout.Token);
+        var turn = new MeetingTurn("Speaker 0", 0, audio.Samples.Length / 16000.0,
+            "some call me nature") { TimingQuality = MeetingTimingQuality.Chunk };
+        var result = Assert.Single(MeetingWordAlignment.Align([turn], tokens, audio.Samples.Length / 16000.0, timeout.Token));
+        Assert.Equal(turn.Text, result.Text);
+        Assert.Equal(turn.SpeakerId, result.SpeakerId);
+        Assert.Equal(MeetingTimingQuality.Aligned, result.TimingQuality);
+        Assert.True(result.EndSeconds > result.StartSeconds);
+        Assert.InRange(result.StartSeconds, 0, turn.EndSeconds);
+        Assert.InRange(result.EndSeconds, 0, turn.EndSeconds);
+        output.WriteLine($"Unchanged public phrase anchored at {result.StartSeconds:F2}–{result.EndSeconds:F2}s.");
+    }
+
+    [Fact, Trait("Category", "NativeIntegration")]
     public async Task VibeVoiceMeetingProducesSpeechBeforeInputEndsAndFinalizes()
     {
         var root = FindWorkspace();

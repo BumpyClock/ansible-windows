@@ -30,6 +30,9 @@
                 </Grid>
             </Border>
             <TextBlock x:Name="DelayText" Visibility="Collapsed" Style="{StaticResource CaptionSecondaryStyle}"/>
+            <TextBlock x:Name="NamingStatusText" Visibility="Collapsed" Style="{StaticResource CaptionSecondaryStyle}" AutomationProperties.LiveSetting="Polite"/>
+            <TextBlock x:Name="RefinementStatusText" Visibility="Collapsed" Style="{StaticResource CaptionSecondaryStyle}" AutomationProperties.LiveSetting="Polite"/>
+            <TextBlock x:Name="CleanupStatusText" Visibility="Collapsed" Style="{StaticResource CaptionSecondaryStyle}" AutomationProperties.LiveSetting="Polite"/>
             <InfoBar x:Name="ErrorBar" Severity="Error" IsOpen="False" IsClosable="True"/>
         </StackPanel>
         <Grid Grid.Row="3" Margin="32,0,32,0">
@@ -50,9 +53,10 @@
                     </ComboBox>
                     <Grid x:Name="ProcessSelector" ColumnSpacing="8">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                        <ComboBox x:Name="ProcessChoice" Header="Meeting app" HorizontalAlignment="Stretch"/>
+                        <ComboBox x:Name="ProcessChoice" Header="Meeting app" HorizontalAlignment="Stretch" SelectionChanged="MeetingProcessChanged"/>
                         <Button Grid.Column="1" Content="Refresh" Click="RefreshProcessesClicked" VerticalAlignment="Bottom"/>
                     </Grid>
+                    <TextBlock x:Name="NamingHelpText" Text="Automatic speaker names are available for selected Teams meetings. Other speakers keep editable model labels." Style="{StaticResource CaptionSecondaryStyle}"/>
                     <TextBlock Text="Microphone: Windows default input" Style="{StaticResource CaptionSecondaryStyle}"/>
                 </StackPanel>
                 <TextBlock x:Name="PrivacyText" Text="Get consent before transcribing others. Audio stays in memory; only text is saved." Style="{StaticResource CaptionSecondaryStyle}"/>
@@ -60,8 +64,11 @@
                     <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                     <Button x:Name="StartButton" Content="Start meeting" Click="StartClicked" Style="{StaticResource AccentButtonStyle}" MinHeight="44"/>
                     <Button x:Name="PauseButton" Content="Pause" Click="PauseClicked" Visibility="Collapsed" MinHeight="44"/>
+                    <Button x:Name="CleanupButton" Content="Clean up wording" Click="CleanupClicked" Visibility="Collapsed" MinHeight="44"/>
+                    <Button x:Name="CancelCleanupButton" Content="Cancel cleanup" Click="CancelCleanupClicked" Visibility="Collapsed" MinHeight="44"/>
                     <TextBlock x:Name="SaveText" Grid.Column="1" Text="Saved locally" VerticalAlignment="Center" Style="{StaticResource CaptionSecondaryStyle}"/>
                     <Button x:Name="EndButton" Grid.Column="2" Content="End meeting" Click="EndClicked" Visibility="Collapsed" MinHeight="44"/>
+                    <Button x:Name="RevertCleanupButton" Grid.Column="2" Content="Restore original" Click="RevertCleanupClicked" Visibility="Collapsed" MinHeight="44"/>
                 </Grid>
             </StackPanel>
         </Border>

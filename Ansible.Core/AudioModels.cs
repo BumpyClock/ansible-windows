@@ -48,4 +48,7 @@ public static class SpeechContent
         family is "moonshine_asr" or "qwen3_asr" or "nemotron_asr";
 }
 
-public sealed record TranscriptUpdate(string Text, bool IsFinal, string? SpeechText = null);
+public sealed record TranscriptUpdate(string Text, bool IsFinal, string? SpeechText = null)
+{
+    public long? ProcessedSamples { get; init; }
+}

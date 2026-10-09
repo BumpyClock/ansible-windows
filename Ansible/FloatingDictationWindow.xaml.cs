@@ -33,6 +33,7 @@ public sealed partial class FloatingDictationWindow : Window
     private bool _sizing;
     private bool _reducedMotion;
     private bool _replay;
+    private bool? _capturePrivacy;
     private (int Left, int Top, int Width, int Height) _windowShape;
 
     internal FloatingDictationWindow(DictationSession session, MainWindow owner)
@@ -123,6 +124,8 @@ public sealed partial class FloatingDictationWindow : Window
     private void Render()
     {
         if (_closed) { return; }
+        try { ApplyCapturePrivacy(_state.Settings.HideFromCapture); }
+        catch (Exception error) { _session.Notify(NoticeKind.Warning, "Screen capture privacy unavailable", error.Message); }
         var presentation = FloatingPreviewPresentation.From(_state);
         if (_state.IsLiveOperation) { _replay = _state.IsReplay; }
         var source = _replay ? "Public WAV replay. No microphone is open." : "Microphone audio. On-device recognition.";
@@ -141,6 +144,21 @@ public sealed partial class FloatingDictationWindow : Window
             HidePreview();
         }
         QueueLayout();
+    }
+
+    internal void ApplyCapturePrivacy(bool enabled)
+    {
+        if (_closed) return;
+        var failures = new List<Exception>();
+        if (_capturePrivacy != enabled)
+        {
+            _capturePrivacy = enabled;
+            try { Ansible.Core.Windows.WindowCapturePrivacy.Apply(WinRT.Interop.WindowNative.GetWindowHandle(this), enabled); }
+            catch (Exception error) { failures.Add(error); }
+        }
+        try { _pill?.ApplyCapturePrivacy(enabled); }
+        catch (Exception error) { failures.Add(error); }
+        if (failures.Count > 0) throw new AggregateException("Windows could not update capture privacy for the dictation overlay.", failures);
     }
 
     private void PreviewLoaded(object sender, RoutedEventArgs args)
@@ -223,6 +241,8 @@ public sealed partial class FloatingDictationWindow : Window
             }
             _pill ??= new NativeCompositionPill(WinRT.Interop.WindowNative.GetWindowHandle(_owner),
                 QueueTerminalDismiss, _cleanupTasks.Add);
+            try { _pill.ApplyCapturePrivacy(_state.Settings.HideFromCapture); }
+            catch (Exception error) { _session.Notify(NoticeKind.Warning, "Screen capture privacy unavailable", error.Message); }
             var foreground = ((SolidColorBrush)PillBorder.BorderBrush).Color;
             _pill.Configure(bounds.X + shape.Item1, bounds.Y + shape.Item2, pillWidth, pillHeight,
                 scale, foreground, PreviewRoot.ActualTheme == ElementTheme.Dark, _accessibility.HighContrast,
@@ -311,6 +331,7 @@ public sealed partial class FloatingDictationWindow : Window
         private readonly Action<Task> _retainCleanup;
         private bool _disposed;
         private bool _animated;
+        private bool? _capturePrivacy;
         private double _scale;
         // Logical pixels. The bar row is centred in the pill.
         private const double BarWidth = 3, BarGap = 3;
@@ -383,6 +404,13 @@ public sealed partial class FloatingDictationWindow : Window
                 catch (Exception error) { _retainCleanup(Task.FromException(error)); }
                 throw;
             }
+        }
+
+        public void ApplyCapturePrivacy(bool enabled)
+        {
+            if (_disposed || _capturePrivacy == enabled) return;
+            _capturePrivacy = enabled;
+            Ansible.Core.Windows.WindowCapturePrivacy.Apply(_handle, enabled);
         }
 
         public void Configure(int x, int y, int width, int height, double scale,

@@ -104,6 +104,24 @@ public sealed class MeetingStoreTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task CleanupAndRevertPreserveOriginalWordsSpeakerAndTiming()
+    {
+        var store = new MeetingStore(_directory);
+        var meeting = new MeetingDocument { Status = MeetingStatus.Completed, Turns =
+            [new("Speaker 0", 1, 5, "raw words") { Source = MeetingAudioSource.Playback, TimingQuality = MeetingTimingQuality.Aligned }] };
+        await store.SaveAsync(meeting);
+        var first = await store.ApplyCleanupAsync(meeting.Id, ["Raw words."]);
+        var second = await store.ApplyCleanupAsync(meeting.Id, ["Raw words!"]);
+        Assert.Equal("raw words", first.Turns[0].OriginalText);
+        Assert.Equal("raw words", second.Turns[0].OriginalText);
+        Assert.Equal(meeting.Turns[0] with { Text = "Raw words!", OriginalText = "raw words" }, second.Turns[0]);
+        var reverted = await store.RevertCleanupAsync(meeting.Id);
+        Assert.Equal(meeting.Turns, reverted.Turns);
+        await Assert.ThrowsAsync<ArgumentException>(() => store.ApplyCleanupAsync(meeting.Id, []));
+        Assert.Equal(meeting.Turns, (await store.LoadAsync(meeting.Id)).Turns);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_directory)) Directory.Delete(_directory, recursive: true);

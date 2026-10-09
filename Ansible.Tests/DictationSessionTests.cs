@@ -8,6 +8,28 @@ public sealed class DictationSessionTests : IDisposable
     private readonly string _settingsDirectory = Path.Combine(Path.GetTempPath(), "LocalVoiceSettingsTests", Guid.NewGuid().ToString("N"));
     private string SettingsPath => Path.Combine(_settingsDirectory, "settings.json");
 
+    [Fact]
+    public async Task CapturePrivacyCanChangeDuringRecordingAndPersistsAcrossRestart()
+    {
+        var session = Create(new FakeEngine(), new FakeCaptureFactory(), settings: new AppSettingsStore(SettingsPath));
+        await session.InitializeAsync();
+        var recording = session.StartDictationAsync();
+        await WaitForStateAsync(session, DictationPhase.Recording);
+        session.SetHideFromCapture(true);
+        Assert.True(session.State.Settings.HideFromCapture);
+        Assert.Equal(DictationPhase.Recording, session.State.Phase);
+        Assert.True(new AppSettingsStore(SettingsPath).Load().HideFromCapture);
+        session.SetHideFromCapture(false);
+        Assert.False(session.State.Settings.HideFromCapture);
+        await session.FinishAsync();
+        Assert.Equal(SessionOutcomeKind.Completed, (await recording).Kind);
+        await session.CloseAsync();
+        var restarted = Create(new FakeEngine(), settings: new AppSettingsStore(SettingsPath));
+        await restarted.InitializeAsync();
+        Assert.False(restarted.State.Settings.HideFromCapture);
+        await restarted.CloseAsync();
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(20)]

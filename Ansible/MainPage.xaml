@@ -138,6 +138,19 @@
             </Border>
 
             <Border Style="{StaticResource CardStyle}">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="Screen capture privacy" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                    <CheckBox x:Name="HideFromCaptureChoice"
+                              AutomationProperties.AutomationId="HideFromCaptureChoice"
+                              Checked="HideFromCaptureChanged" Unchecked="HideFromCaptureChanged">
+                        <TextBlock Text="Hide dictation overlay and meeting windows from capture" TextWrapping="Wrap" />
+                    </CheckBox>
+                    <TextBlock Text="Applies to supported Windows screenshots and screen sharing. The main window remains visible. Some recorders can still capture protected windows."
+                               Style="{StaticResource CaptionSecondaryStyle}" />
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource CardStyle}">
                 <Grid x:Name="UsageRow" ColumnSpacing="16" Background="Transparent">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                     <StackPanel VerticalAlignment="Center">

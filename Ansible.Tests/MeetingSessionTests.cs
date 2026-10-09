@@ -64,6 +64,27 @@ public sealed class MeetingSessionTests : IDisposable
     }
 
     [Fact]
+    public async Task NewCumulativeUpdateOnResumeSupersedesOlderPausedUpdate()
+    {
+        var engine = new Engine();
+        await using var session = Create(engine, new());
+        await session.StartAsync(Request);
+        engine.Report("Speaker 0: First");
+        await session.PauseAsync();
+        engine.Report("Speaker 0: First older pending");
+        var injected = false;
+        session.StateChanged += state =>
+        {
+            if (state.Phase != MeetingSessionPhase.Recording || injected) return;
+            injected = true;
+            engine.Report("Speaker 0: First older pending newest words");
+        };
+        await session.ResumeAsync();
+        Assert.Equal("First older pending newest words", Assert.Single(session.Document!.Turns).Text);
+        await session.EndAsync();
+    }
+
+    [Fact]
     public async Task DiscardCancelsRecognitionAndKeepsAlreadySavedTranscript()
     {
         var engine = new Engine();
@@ -179,6 +200,108 @@ public sealed class MeetingSessionTests : IDisposable
     private MeetingSession Create(Engine engine, CaptureFactory captures) => new(() => engine, captures, new(_directory), new());
 
     [Fact]
+    public async Task TimingRefinementRetainsAnchorsAndCleanupPreservesOriginalAndNames()
+    {
+        var engine = new Engine();
+        var captures = new CaptureFactory();
+        var aligner = new Aligner();
+        await using var session = new MeetingSession(() => engine, captures, new(_directory), new(), alignerFactory: () => aligner);
+        await session.StartAsync(Request);
+        captures.Captures[0].Send(16000 * 2 * 3);
+        await WaitUntilAsync(() => engine.ReadBytes == 96000);
+        engine.Report("Speaker 0: Hello there");
+        var turn = Assert.Single(session.Document!.Turns);
+        Assert.Equal(MeetingTimingQuality.Chunk, turn.TimingQuality);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => session.ApplyCleanupAsync(["Hello."]));
+        await session.RenameSpeakerAsync("Speaker 0", "Alex");
+        await session.EndAsync();
+        Assert.True(aligner.Disposed);
+        Assert.Equal(0.5, session.Document!.Turns[0].StartSeconds);
+        await session.ApplyCleanupAsync(["Hello, there."]);
+        var saved = await new MeetingStore(_directory).LoadAsync(session.Document.Id);
+        Assert.Equal("Hello there", saved.Turns[0].OriginalText);
+        Assert.Equal("Hello, there.", saved.Turns[0].Text);
+        Assert.Equal("Alex", saved.GetSpeakerName("Speaker 0"));
+        Assert.Equal(0.5, saved.Turns[0].StartSeconds);
+    }
+
+    [Fact]
+    public async Task OptionalAlignmentFailureDoesNotStopLocalTranscription()
+    {
+        var engine = new Engine();
+        var captures = new CaptureFactory();
+        var aligner = new Aligner { FailInitialization = true };
+        await using var session = new MeetingSession(() => engine, captures, new(_directory), new(), alignerFactory: () => aligner);
+        await session.StartAsync(Request);
+        captures.Captures[0].Send(32000);
+        await WaitUntilAsync(() => engine.ReadBytes == 32000);
+        engine.Report("Speaker 0: Local speech");
+        await session.EndAsync();
+        Assert.Contains("unavailable", session.State.RefinementStatus);
+        Assert.Equal(MeetingSessionPhase.Completed, session.State.Phase);
+        Assert.Equal("Local speech", session.Document!.Turns[0].Text);
+        Assert.Equal(MeetingTimingQuality.Chunk, session.Document.Turns[0].TimingQuality);
+        Assert.True(aligner.Disposed);
+    }
+
+    private sealed class Aligner : IMeetingWordAligner
+    {
+        public bool FailInitialization { get; init; }
+        public bool Disposed { get; private set; }
+        public Task InitializeAsync(CancellationToken token) => FailInitialization
+            ? Task.FromException(new InvalidOperationException("Alignment weights missing")) : Task.CompletedTask;
+        public Task<IReadOnlyList<MeetingTurn>> AlignAsync(WaveAudio audio, IReadOnlyList<MeetingTurn> turns, CancellationToken token)
+            => Task.FromResult<IReadOnlyList<MeetingTurn>>(turns.Select(turn => turn with
+                { StartSeconds = 0.5, EndSeconds = 1.5, TimingQuality = MeetingTimingQuality.Aligned }).ToArray());
+        public ValueTask DisposeAsync() { Disposed = true; return ValueTask.CompletedTask; }
+    }
+
+    [Fact]
+    public async Task TeamsEvidenceNamesTwoExclusiveAlignedTurnsAndManualNameWins()
+    {
+        var engine = new Engine();
+        var captures = new CaptureFactory();
+        var observer = new Observer();
+        await using var session = new MeetingSession(() => engine, captures, new(_directory), new(),
+            observerFactory: () => observer, alignerFactory: () => new TwoTurnAligner());
+        await session.StartAsync(new(MeetingPlaybackSource.MeetingApp, 42));
+        captures.Captures[0].PlaybackRms = 0.2;
+        captures.Captures[0].Send(9 * 32000);
+        await WaitUntilAsync(() => engine.ReadBytes == 9 * 32000);
+        for (var second = 0; second <= 8; second++) observer.Report(new(second * 16000, ["Alex"], null, MeetingSpeakerReadStatus.Readable));
+        engine.Report("Speaker 0: First words Speaker 0: Second words");
+        Assert.Empty(session.Document!.AutoSpeakerNames);
+        await session.EndAsync();
+        Assert.Equal("Alex", session.Document!.GetSpeakerName("Speaker 0"));
+        Assert.All(session.Document.Turns, turn => Assert.Equal(MeetingAudioSource.Playback, turn.Source));
+        Assert.True(observer.Disposed);
+        await session.RenameSpeakerAsync("Speaker 0", "Corrected name");
+        Assert.Equal("Corrected name", session.Document.GetSpeakerName("Speaker 0"));
+    }
+
+    private sealed class TwoTurnAligner : IMeetingWordAligner
+    {
+        public Task InitializeAsync(CancellationToken token) => Task.CompletedTask;
+        public Task<IReadOnlyList<MeetingTurn>> AlignAsync(WaveAudio audio, IReadOnlyList<MeetingTurn> turns, CancellationToken token)
+            => Task.FromResult<IReadOnlyList<MeetingTurn>>(turns.Select(turn => turn with
+                { StartSeconds = turn.Text.StartsWith("First", StringComparison.Ordinal) ? 1 : 5,
+                    EndSeconds = turn.Text.StartsWith("First", StringComparison.Ordinal) ? 3 : 7,
+                    TimingQuality = MeetingTimingQuality.Aligned }).ToArray());
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    private sealed class Observer : IMeetingSpeakerObserver
+    {
+        private Action<MeetingSpeakerObservation>? _report;
+        public bool Disposed { get; private set; }
+        public Task StartAsync(int processId, Func<long> position, Action<MeetingSpeakerObservation> report, CancellationToken token)
+        { _report = report; return Task.CompletedTask; }
+        public void Report(MeetingSpeakerObservation observation) => _report!(observation);
+        public Task StopAsync() => Task.CompletedTask;
+        public ValueTask DisposeAsync() { Disposed = true; return ValueTask.CompletedTask; }
+    }
+
+    [Fact]
     public async Task MeetingReservationBlocksDictationAndSecondReservationUntilReleased()
     {
         var dictation = new DictationSession(_ => throw new InvalidOperationException("Engine must remain unused"),
@@ -269,17 +392,25 @@ public sealed class MeetingSessionTests : IDisposable
         }
     }
 
-    private sealed class Capture : IAudioCapture
+    private sealed class Capture : IAudioCapture, IMeetingAudioSourceMetadata
     {
         private readonly Channel<byte[]> _audio = Channel.CreateUnbounded<byte[]>();
         public ChannelReader<byte[]> Audio => _audio.Reader;
         public double CapturedSeconds { get; private set; }
         public bool IsReleased { get; private set; }
         public bool BlockRelease { get; set; }
+        public double PlaybackRms { get; set; }
+        public long ClockSamplePosition => (long)(CapturedSeconds * 16000);
+        public event Action<MeetingAudioActivity>? Activity;
         public TaskCompletionSource? StopBarrier { get; set; }
         public TaskCompletionSource StopEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public event Action<double>? LevelChanged { add { } remove { } }
-        public void Send(int bytes) { CapturedSeconds += bytes / 32000.0; _audio.Writer.TryWrite(new byte[bytes]); }
+        public void Send(int bytes)
+        {
+            Activity?.Invoke(new(ClockSamplePosition, bytes / 2, 0, PlaybackRms));
+            CapturedSeconds += bytes / 32000.0;
+            _audio.Writer.TryWrite(new byte[bytes]);
+        }
         public async Task StopAsync()
         {
             StopEntered.TrySetResult();

@@ -84,12 +84,31 @@ in-memory 440 Hz tone in both modes and released their native resources. Core
 tests cover incremental transcript saving, Pause/Resume, finalization, bounded
 backlog failure, retained ownership, and crash recovery.
 
-The VibeVoice CPU meeting smoke test was blocked before loading by the existing
-memory guard: estimated 3.3 GiB required, 12.2 GiB physical available, but only
-0.9 GiB commit capacity available. No safeguards were changed to force loading.
+An initial VibeVoice CPU smoke attempt was blocked by the memory guard with
+only 0.9 GiB commit capacity available. A later run passed the unchanged guard
+and produced speech while the input stream remained open. For the 14.07-second
+public sample, first speech arrived 20.00 seconds after test start and finalization
+completed at 39.72 seconds; observed working set was 2,441.8 MiB at first speech
+(78.1 MiB initially). These include startup and unpaced sample input, not a
+measured live meeting update interval. No safeguards were changed to force loading.
 Run `NativeMeetingTests` with installed streaming weights and adequate available
-commit capacity to qualify live partial/final recognition. Two-hour memory,
-latency, and speaker accuracy remain unqualified.
+commit capacity. Two-hour memory, latency, and speaker accuracy remain unqualified.
+
+Optional Nemotron CPU timing refinement uses recognized subword-token anchors,
+not forced alignment. Only uniquely covered phrases receive refined bounds;
+ambiguous/repeated/missing phrases keep approximate times. Deterministic tests
+verify abstention and unchanged text. On 2026-10-09, native Nemotron CPU token
+anchors matched an unchanged phrase from the public Mother Nature sample.
+Decoder padding punctuation outside the clip is excluded; out-of-range lexical
+anchors still abstain. English numeral comparison preserves original wording;
+long-turn endpoint matching requires unique endpoints and at least 80% word
+agreement, with previously aligned spans reserved. On 2026-10-09 the combined
+CPU pipeline produced speech before End at 13.23 seconds and finalized at
+33.22 seconds with one aligned turn for the 14.07-second public sample.
+These include startup and unpaced input; live throughput still requires
+separate performance qualification.
+Teams UIA initialization/teardown passed, but the available Teams process had no
+visible eligible meeting window. Live name attribution remains unqualified.
 
 ## Known limits
 

@@ -51,7 +51,7 @@ internal static unsafe partial class MeetingWasapi
     }
     internal static void Start(nint client) => Check(((delegate* unmanaged[Stdcall]<nint, int>)Slot(client, 10))(client));
     internal static void Stop(nint client) => Check(((delegate* unmanaged[Stdcall]<nint, int>)Slot(client, 11))(client));
-    internal static byte[]? Read(nint capture, ref bool firstPacket)
+    internal static MeetingCapturePacket? Read(nint capture, ref bool firstPacket)
     {
         uint count = 0;
         Check(((delegate* unmanaged[Stdcall]<nint, uint*, int>)Slot(capture, 5))(capture, &count));
@@ -63,10 +63,14 @@ internal static unsafe partial class MeetingWasapi
         try
         {
             if ((flags & 1) != 0 && !firstPacket) throw new IOException("Meeting audio capture reported a discontinuity. Audio may have been lost.");
+            if ((flags & 4) != 0 || clock == 0 || clock > long.MaxValue)
+                throw new IOException("Meeting capture reported an invalid audio timestamp.");
+            if (count is 0 or > MeetingPacketTimeline.CapacitySamples)
+                throw new IOException("Meeting capture returned an invalid native packet size.");
             firstPacket = false;
             var bytes = new byte[checked((int)count * 2)];
             if ((flags & 2) == 0) Marshal.Copy(data, bytes, 0, bytes.Length);
-            return bytes;
+            return new(bytes, clock, position);
         }
         finally { Check(((delegate* unmanaged[Stdcall]<nint, uint, int>)Slot(capture, 4))(capture, count)); }
     }

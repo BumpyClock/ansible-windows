@@ -9,15 +9,15 @@ public sealed class MeetingCaptureTests
     [Fact]
     public void MixedAudioSaturatesAndPreservesSingleSource()
     {
-        var microphone = new Queue<byte>(new byte[] { 0x30, 0x75, 0x00, 0x80, 0xD2, 0x04 });
-        var playback = new Queue<byte>(new byte[] { 0x30, 0x75, 0x00, 0x80 });
-        Assert.Equal(new byte[] { 0xFF, 0x7F, 0x00, 0x80, 0xD2, 0x04 }, MeetingPcmMixer.Mix(microphone, playback, 3));
+        byte[] microphone = [0x30, 0x75, 0x00, 0x80, 0xD2, 0x04];
+        byte[] playback = [0x30, 0x75, 0x00, 0x80, 0, 0];
+        Assert.Equal(new byte[] { 0xFF, 0x7F, 0x00, 0x80, 0xD2, 0x04 }, MeetingPcmMixer.Mix(microphone, playback, out _, out _));
     }
 
     [Fact]
     public void MissingAudioProducesSilence()
     {
-        Assert.Equal(new byte[8], MeetingPcmMixer.Mix(new(), new(), 4));
+        Assert.Equal(new byte[8], MeetingPcmMixer.Mix(new byte[8], new byte[8], out _, out _));
     }
 
     [Fact]
@@ -36,11 +36,12 @@ public sealed class MeetingCaptureTests
             new(processOnly ? MeetingPlaybackSource.MeetingApp : MeetingPlaybackSource.SystemAudio,
                 processOnly ? Environment.ProcessId : null), timeout.Token);
         using var tone = new MeetingTestTone();
+        var metadata = Assert.IsAssignableFrom<IMeetingAudioSourceMetadata>(capture);
         var maximumToneAmplitude = 0.0;
         for (var index = 0; index < 50; index++)
         {
             var bytes = await capture.Audio.ReadAsync(timeout.Token);
-            Assert.Equal(640, bytes.Length);
+            Assert.Equal(1280, bytes.Length);
             double sine = 0, cosine = 0;
             for (var sampleIndex = 0; sampleIndex < bytes.Length / 2; sampleIndex++)
             {
@@ -53,7 +54,15 @@ public sealed class MeetingCaptureTests
                 2 * Math.Sqrt(sine * sine + cosine * cosine) / (bytes.Length / 2));
         }
         Assert.True(maximumToneAmplitude > 0.01, "The generated 440 Hz tone must reach the meeting capture stream.");
+        Assert.True(metadata.ClockSamplePosition >= capture.CapturedSeconds * 16000);
         await capture.StopAsync();
+        var stoppedPosition = metadata.ClockSamplePosition;
+        long flushedSamples = 0;
+        await foreach (var packet in capture.Audio.ReadAllAsync(timeout.Token)) flushedSamples += packet.Length / 2;
+        Assert.True(flushedSamples > 0, "Stop must emit pending holdback audio.");
+        Assert.Equal(stoppedPosition, (long)Math.Round(capture.CapturedSeconds * 16000));
+        await Task.Delay(20, timeout.Token);
+        Assert.Equal(stoppedPosition, metadata.ClockSamplePosition);
         Assert.True(capture.IsReleased);
     }
 }

@@ -17,6 +17,7 @@ public sealed class AppSettingsStoreTests : IDisposable
 
         Assert.Equal(new AppSettings(), store.Load());
         Assert.Equal(0, store.Load().MicrophoneBoostDecibels);
+        Assert.False(store.Load().HideFromCapture);
         Assert.False(File.Exists(store.Path));
     }
 
@@ -47,7 +48,8 @@ public sealed class AppSettingsStoreTests : IDisposable
             CustomDictionary = "NativeAOT\nWinUI",
             InsertionMethod = TextInsertionMethod.Type,
             TypingGapMilliseconds = 35,
-            MicrophoneBoostDecibels = 20
+            MicrophoneBoostDecibels = 20,
+            HideFromCapture = true
         };
         CreateStore().Save(settings);
 
@@ -60,6 +62,19 @@ public sealed class AppSettingsStoreTests : IDisposable
         Assert.False(shortcut.TryGetProperty("IsValid", out _));
         Assert.Equal("Type", document.RootElement.GetProperty("InsertionMethod").GetString());
         Assert.Equal(35, document.RootElement.GetProperty("TypingGapMilliseconds").GetInt32());
+        Assert.True(document.RootElement.GetProperty("HideFromCapture").GetBoolean());
+    }
+
+    [Fact]
+    public void ExistingSettingsWithoutCapturePrivacyKeepWindowsVisible()
+    {
+        var store = CreateStore();
+        store.Save(new AppSettings { Language = "en" });
+        var document = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(store.Path))!.AsObject();
+        Assert.True(document.Remove("HideFromCapture"));
+        File.WriteAllText(store.Path, document.ToJsonString());
+        Assert.False(store.Load().HideFromCapture);
+        Assert.Equal("en", store.Load().Language);
     }
 
     [Fact]

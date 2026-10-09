@@ -82,6 +82,10 @@ internal static partial class NativeAudioApi
     internal static partial int ResultText(nint result, out nint text, out nint language);
     [LibraryImport(Library, EntryPoint = "audiocpp_result_segment_count")]
     internal static partial nuint SegmentCount(nint result);
+    [LibraryImport(Library, EntryPoint = "audiocpp_result_word_count")]
+    internal static partial nuint WordCount(nint result);
+    [LibraryImport(Library, EntryPoint = "audiocpp_result_word")]
+    internal static partial int Word(nint result, nuint index, out nint text, out long start, out long end, nint confidence);
     [LibraryImport(Library, EntryPoint = "audiocpp_result_segment")]
     internal static partial int Segment(nint result, nuint index, nint start, nint end, nint confidence, out nint text);
     [LibraryImport(Library, EntryPoint = "audiocpp_result_speaker_turn_count")]

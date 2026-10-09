@@ -178,11 +178,25 @@ CPU/Vulkan backend, language hint, and custom vocabulary. Dictation and model
 changes are unavailable while a meeting owns the recognition resources.
 
 Text appears throughout the meeting as native chunks finish. Speaker labels come
-from the model; rename a speaker by selecting its heading. The app does not infer
-real names or label microphone speech as "You". Timestamps are approximate chunk
-processing positions, not word alignment. Labels and text are provisional until
-finalization. Update latency and long-session speaker continuity depend on the
-model/backend and have not been qualified for two-hour meetings.
+from VibeVoice; rename a speaker by selecting its heading. When Teams is selected,
+the app reads visible speaking markers through Windows accessibility. Names require
+two consistent, nonoverlapping final turns with an exclusive microphone/playback
+source and full observation coverage. Ambiguous evidence retains model labels;
+manual names take precedence. Other meeting apps retain editable model labels.
+Hidden windows, unsupported layouts, and unsupported marker languages can prevent
+automatic names. No voiceprints or calendar-name guesses are used.
+
+Install **Nemotron ASR** weights to enable optional timing refinement on CPU.
+It compares recognized token anchors with finalized, unchanged VibeVoice turns in a rolling
+30-second audio buffer held only in memory. Confident matches show **ASR-aligned**;
+missing or repeated phrases retain **approximate chunk time**. English digits
+can match spoken quantities without changing wording.
+Long turns can use unique endpoint phrases with at least 80% word agreement;
+previously aligned spans cannot be reused by another turn. These are ASR token
+anchors, not precise acoustic word boundaries. Missing weights or insufficient
+memory disable this optional pass without replacing the speech model. Chunk
+timestamps use native input sample positions; audio during pauses is excluded.
+Update latency and long-session speaker continuity remain unqualified.
 
 **Pause** stops capture and transcript updates. **Resume** continues the same
 meeting and processes retained pending speech. Speech during the pause is not
@@ -199,11 +213,30 @@ steps must finish before resources can be released. After a crash, previous
 unfinished meetings are marked Interrupted; unfinished speech cannot be recovered
 because audio is never written to disk.
 
+After **End meeting**, **Clean up wording** can send transcript text to GitHub
+Copilot CLI. Install and authenticate Copilot CLI first if prompted. Choose the
+model and reasoning effort in the dialog; defaults are `gpt-6-luna` and `high`.
+Cleanup preserves speaker labels and timing, keeps original wording, and supports
+**Restore original**. Model output can be wrong; review the result. Failed or
+cancelled requests keep the existing transcript. CLI requests run with tools,
+hooks, memory, and custom instructions disabled, in temporary app-owned state
+directories removed after the process exits. Copilot's service can still retain
+requests under its own policies; local session isolation does not change those policies.
+
 ## Local data and privacy
+
+**Settings > Screen capture privacy** can exclude the floating dictation overlay
+and meeting windows from supported Windows screenshots and screen sharing.
+The option is off by default, persists across restarts, and applies to open and
+new windows, including during a recording. The main window stays visible.
+Windows 10 version 2004 or later is required. Some capture tools do not honor
+Windows capture exclusion; this is not protection against every recorder or a
+camera. The app reports a warning if Windows cannot apply or verify the setting.
 
 Captured audio always stays in memory. Dictation transcripts stay in memory;
 meeting transcripts, titles, and speaker names save locally. Recognition does
-not upload speech. Model download requests are the app's network activity.
+not upload audio. Optional Copilot cleanup uploads transcript text after the
+explicit **Send text and clean up** action. Model downloads also use the network.
 **Copy** uses the ordinary clipboard; Windows clipboard features and destination
 apps can retain text you copy or insert. Automatic shortcut paste requests
 clipboard-history and cloud-sync exclusions, but those requests are not a storage
@@ -216,7 +249,7 @@ Per-user files are in Windows package storage, normally
 | --- | --- |
 | `settings.json` | Preferences, chosen model folder, and custom vocabulary |
 | `usage.json` | Session IDs, completion timestamps, model IDs, session type, speech-word counts, and durations |
-| `meetings\<id>.json` | Meeting titles, dates, transcript turns, approximate timestamps, and speaker names; no audio |
+| `meetings\<id>.json` | Titles, dates, transcript turns, timing quality, manual/automatic names, and original wording after cleanup; no audio |
 | `models\` | Default location for downloaded model weights |
 | `startup-error.log` | Startup failure diagnostics, when a startup error occurs |
 

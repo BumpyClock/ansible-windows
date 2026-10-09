@@ -34,7 +34,8 @@ public sealed partial class MeetingTranscript
             var previous = index < _turns.Count && _turns[index].SpeakerId == item.SpeakerId ? _turns[index] : null;
             // Native text has no word times. Retain approximate processing-window bounds across cumulative updates.
             turns[index] = new MeetingTurn(item.SpeakerId, previous?.StartSeconds ?? _processedSeconds,
-                previous?.Text == item.Text ? previous.EndSeconds : processedSeconds, item.Text, !isFinal);
+                previous?.Text == item.Text ? previous.EndSeconds : processedSeconds, item.Text, !isFinal && index == parsed.Count - 1)
+                { TimingQuality = MeetingTimingQuality.Chunk };
         }
         _processedSeconds = processedSeconds;
         _turns = turns;

@@ -127,7 +127,8 @@ probes sequentially.
 `MeetingSession` owns the meeting operation and reserves `DictationSession`
 before loading its own native engine. Reservation joins/unloads dictation
 preparation and prevents dictation/settings/model maintenance until all meeting
-capture and inference resources are released. Pause gates the same channel
+capture and inference resources are released. Capture privacy is a visual
+setting that can change during a meeting. Pause gates the same channel
 reader; it does not reset the native stream. Capture writes 16 kHz mono PCM16
 into bounded queues. Transcripts use atomic source-generated JSON saves; audio
 never reaches disk. Startup marks unfinished saved documents Interrupted.
@@ -135,8 +136,9 @@ never reaches disk. Startup marks unfinished saved documents Interrupted.
 The meeting path bounds the VibeVoice native history with
 `vibevoice_asr_streaming.max_history_steps=4096` and admits at most two hours of
 audio. The model's rolling history can affect speaker continuity. The app parses
-native speaker labels and records approximate processing-window timestamps;
-it does not manufacture speaker matching or word alignment. Update latency,
+native speaker labels and records approximate native input-window timestamps.
+Optional Nemotron token anchors refine confident bounds; Teams observation
+matching names only supported, source-exclusive aligned turns. Update latency,
 memory over two hours, and multi-speaker accuracy require separate qualification.
 
 | Location | Responsibility |
@@ -161,6 +163,15 @@ exit. Failed native teardown retains the resource owners and blocks new work;
 it must not turn into a false idle state. Native cancellation waits for the
 current blocking kernel before release. Keep capture queues and memory
 admission bounded.
+
+Meeting naming uses the selected Teams process's cached UI Automation tree on
+a dedicated worker. Tests cover marker parsing and conservative matching; a
+visible live call is still required to qualify real Teams layouts. Optional
+Nemotron timing runs on CPU through the existing C ABI; deterministic alignment
+tests do not prove live ASR accuracy. Keep its 30-second audio ring in memory.
+Copilot cleanup uses JSONL process output, validates a complete text-only result,
+and isolates CLI home/cache/log/work directories. Test it with synthetic text;
+never use personal meeting text in diagnostics or print authentication values.
 
 Preserve NativeAOT compatibility: use `LibraryImport` and source-generated
 JSON, with no reflection-dependent serialization or runtime code generation.

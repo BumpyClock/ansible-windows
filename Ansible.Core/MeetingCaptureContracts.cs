@@ -18,3 +18,11 @@ public interface IMeetingCaptureFactory
 {
     Task<IAudioCapture> StartAsync(MeetingCaptureRequest request, CancellationToken cancellationToken);
 }
+
+public sealed record MeetingAudioActivity(long StartSample, int Samples, double MicrophoneRms, double PlaybackRms);
+
+public interface IMeetingAudioSourceMetadata
+{
+    long ClockSamplePosition { get; }
+    event Action<MeetingAudioActivity>? Activity;
+}

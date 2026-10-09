@@ -85,6 +85,23 @@ public sealed class MeetingStore(string directory)
         }, cancellationToken);
     }
 
+    public Task<MeetingDocument> ApplyCleanupAsync(Guid id, IReadOnlyList<string> texts, CancellationToken cancellationToken = default) =>
+        UpdateAsync(id, document =>
+        {
+            ArgumentNullException.ThrowIfNull(texts);
+            if (document.Status != MeetingStatus.Completed || document.Turns.Any(turn => turn.IsProvisional))
+                throw new InvalidOperationException("End the meeting and finish transcription before cleaning the transcript.");
+            if (texts.Count != document.Turns.Count || texts.Any(text => text is null || text.Contains('\0')) ||
+                texts.Where((text, index) => !string.IsNullOrWhiteSpace(document.Turns[index].Text)).Any(string.IsNullOrWhiteSpace))
+                throw new ArgumentException("Cleanup must contain one text result for every original turn.", nameof(texts));
+            return document with { Turns = document.Turns.Select((turn, index) => turn with
+                { OriginalText = turn.OriginalText ?? turn.Text, Text = texts[index] }).ToArray() };
+        }, cancellationToken);
+
+    public Task<MeetingDocument> RevertCleanupAsync(Guid id, CancellationToken cancellationToken = default) =>
+        UpdateAsync(id, document => document with { Turns = document.Turns.Select(turn => turn.OriginalText is { } original
+            ? turn with { Text = original, OriginalText = null } : turn).ToArray() }, cancellationToken);
+
     public static string ExportText(MeetingDocument document)
     {
         document.Validate();

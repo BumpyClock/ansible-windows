@@ -5,7 +5,7 @@ using System.Threading.Channels;
 
 namespace Ansible.Core;
 
-public sealed class NativeAudioEngine : IRecognitionEngine, IMeetingRecognitionEngine
+public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingRecognitionEngine
 {
     private readonly string _libraryPath;
     private readonly string _catalogPath;
@@ -257,7 +257,7 @@ public sealed class NativeAudioEngine : IRecognitionEngine, IMeetingRecognitionE
             {
                 NativeAudioApi.Check(NativeAudioApi.StreamPush(session, pointer, (nuint)frames, 16000, 1, offset, out var streamEvent),
                     "process a dictation audio chunk");
-                AppendEvent(streamEvent, family, transcript, progress, token);
+                AppendEvent(streamEvent, family, transcript, progress, token, offset + frames);
             }
             token.ThrowIfCancellationRequested();
             while (true)
@@ -268,7 +268,7 @@ public sealed class NativeAudioEngine : IRecognitionEngine, IMeetingRecognitionE
                 {
                     break;
                 }
-                AppendEvent(streamEvent, family, transcript, progress, token);
+                AppendEvent(streamEvent, family, transcript, progress, token, offset + frames);
             }
         }
         finally
@@ -278,7 +278,7 @@ public sealed class NativeAudioEngine : IRecognitionEngine, IMeetingRecognitionE
     }
 
     private static void AppendEvent(nint pointer, string family, StreamingTranscript transcript,
-        IProgress<TranscriptUpdate>? progress, CancellationToken token)
+        IProgress<TranscriptUpdate>? progress, CancellationToken token, long processedSamples)
     {
         if (pointer == 0)
         {
@@ -291,7 +291,7 @@ public sealed class NativeAudioEngine : IRecognitionEngine, IMeetingRecognitionE
         {
             var speechMetadata = NativeAudioApi.SegmentCount(resultPointer) > 0 ||
                 NativeAudioApi.SpeakerTurnCount(resultPointer) > 0;
-            progress?.Report(transcript.Append(result, speechMetadata));
+            progress?.Report(transcript.Append(result, speechMetadata) with { ProcessedSamples = processedSamples });
         }
     }
 

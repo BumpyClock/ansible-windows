@@ -31,6 +31,8 @@ public sealed partial class MainWindow : Window
     private bool _allowClose;
     private bool _closing;
     private bool _popupFailed;
+    private bool _creatingFloating;
+    private bool? _capturePrivacy;
     private readonly ShortcutCaptureCoordinator _captureCoordinator = new();
     private readonly CancellationTokenSource _deliveryCancellation = new();
     private Task<(bool available, CapturedTextTarget? target, string reason)>? _captureTask;
@@ -141,8 +143,12 @@ public sealed partial class MainWindow : Window
                     throw new InvalidOperationException("Finish dictation before starting a meeting.");
                 await _session.ReserveMeetingAsync();
             },
-            release: _session.ReleaseMeetingAsync);
+            release: _session.ReleaseMeetingAsync,
+            observerFactory: () => new Ansible.Core.Windows.TeamsSpeakerObserver(),
+            alignerFactory: () => new NativeMeetingWordAligner(_paths.NativeLibrary, _paths.ModelCatalog, state.ModelsDirectory));
         var window = new MeetingWindow(meeting, _meetingStore, document);
+        try { window.ApplyCapturePrivacy(state.Settings.HideFromCapture); }
+        catch (Exception error) { _session.Notify(NoticeKind.Warning, "Screen capture privacy unavailable", error.Message); }
         _meetingWindows.Add((meeting, window, document?.Id));
         window.Closed += async (_, _) =>
         {
@@ -187,11 +193,26 @@ public sealed partial class MainWindow : Window
     private void SessionChanged(SessionSnapshot state)
     {
         if (_closed) { return; }
+        if (_capturePrivacy != state.Settings.HideFromCapture)
+        {
+            _capturePrivacy = state.Settings.HideFromCapture;
+            var failures = new List<string>();
+            foreach (var meeting in _meetingWindows.ToArray())
+            {
+                try { meeting.window.ApplyCapturePrivacy(state.Settings.HideFromCapture); }
+                catch (Exception error) { failures.Add(error.Message); }
+            }
+            try { _floating?.ApplyCapturePrivacy(state.Settings.HideFromCapture); }
+            catch (Exception error) { failures.Add(error.Message); }
+            if (failures.Count > 0)
+                _session.Notify(NoticeKind.Warning, "Screen capture privacy unavailable", string.Join(" ", failures.Distinct()));
+        }
         var showWaveform = state.Phase is DictationPhase.Preparing or DictationPhase.Recording &&
             (_delivery is null || !state.Settings.PushToTalk || _shortcutHeld);
         if (!showWaveform) { _popupFailed = false; }
-        if (showWaveform && _floating is null && !_popupFailed)
+        if (showWaveform && _floating is null && !_popupFailed && !_creatingFloating)
         {
+            _creatingFloating = true;
             try
             {
                 _floating = new FloatingDictationWindow(_session, this);
@@ -202,6 +223,7 @@ public sealed partial class MainWindow : Window
                 _popupFailed = true;
                 _session.ReportUiError(new InvalidOperationException("The floating preview could not be opened.", error));
             }
+            finally { _creatingFloating = false; }
         }
         if (showWaveform) { _floating?.ShowPreview(); }
         else { _floating?.HidePreview(); }
@@ -370,8 +392,9 @@ public sealed partial class MainWindow : Window
         _deliveryCancellation.Cancel();
         try
         {
-            foreach (var meeting in _meetingWindows.ToArray())
-                await meeting.session.DisposeAsync();
+            var meetings = _meetingWindows.ToArray();
+            await Task.WhenAll(meetings.Select(meeting => meeting.window.BeginShutdownAsync()));
+            foreach (var meeting in meetings) await meeting.session.DisposeAsync();
             foreach (var meeting in _meetingWindows.ToArray()) meeting.window.Close();
             await Task.WhenAll(_session.CloseAsync(), _models.DisposeAsync().AsTask());
             if (_captureTask is { } capture)

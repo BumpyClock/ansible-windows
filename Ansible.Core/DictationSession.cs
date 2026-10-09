@@ -176,6 +176,22 @@ public sealed class DictationSession
             Settings = state.Settings with { CustomDictionary = CustomVocabulary.Normalize(text) }
         }, new(NoticeKind.Success, "Dictionary updated", "Vocabulary hints apply to the next recognition with a supported model."));
 
+    public void SetHideFromCapture(bool enabled)
+    {
+        SessionSnapshot state;
+        lock (_gate)
+        {
+            if (_state.Phase is DictationPhase.Closing or DictationPhase.Closed)
+                throw new InvalidOperationException("The app is closing.");
+            var settings = _state.Settings with { HideFromCapture = enabled };
+            state = SetState(_state with { Settings = settings,
+                Notice = SaveSettings(settings) ?? new(NoticeKind.Information, "Capture privacy updated",
+                    enabled ? "Capture exclusion requested for meeting windows and the dictation overlay."
+                        : "Meeting windows and the dictation overlay can appear in captures.") });
+        }
+        Publish(state);
+    }
+
     private void ChangeSettings(Func<SessionSnapshot, SessionSnapshot> change, SessionNotice notice)
     {
         SessionSnapshot state;

@@ -10,8 +10,9 @@ model downloads, custom vocabulary for supported models, and local usage insight
 
 Recognition runs on the device. Meeting transcripts save automatically on this
 device; dictation transcripts remain in memory. The app never saves audio or
-uploads speech. Text you copy or insert is subject to the clipboard and destination
-app's storage policies. Model downloads require network access.
+uploads audio. Optional **Clean up wording** sends transcript text to GitHub
+Copilot CLI only when requested. Text you copy or insert is subject to the
+clipboard and destination app's storage policies. Model downloads require network access.
 
 ## Build and run
 
@@ -65,6 +66,10 @@ options and checks.
   stream; End meeting finishes pending speech. Audio stays in bounded memory.
   The capture limit is two hours; long-session speaker accuracy and the 5–10
   second update target need qualification on each model/backend combination.
+  Teams names use visible accessibility evidence matched to confident local
+  timing anchors; unsupported windows retain editable speaker labels. Optional
+  Nemotron CPU timing refinement needs its installed weights and additional memory.
+  Copilot wording cleanup requires an installed, authenticated CLI and keeps originals.
 
 - Windows x64 only. ARM64 and NPU support are separate work.
 - File transcription accepts WAV only, up to five minutes, 100 MiB on disk,

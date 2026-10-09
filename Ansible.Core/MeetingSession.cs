@@ -2,16 +2,21 @@ using System.Threading.Channels;
 
 namespace Ansible.Core;
 
-public enum MeetingSessionPhase { Idle, Starting, Recording, Paused, Finishing, Completed, Failed }
+public enum MeetingSessionPhase { Idle, Starting, Recording, Paused, Finishing, Completed, Failed, Refining }
 
 public sealed record MeetingSessionSnapshot(long Version, MeetingSessionPhase Phase, MeetingDocument? Document,
-    double CapturedSeconds, double PendingSeconds, string? Error);
+    double CapturedSeconds, double PendingSeconds, string? Error)
+{
+    public string? NamingStatus { get; init; }
+    public string? RefinementStatus { get; init; }
+}
 
 public sealed class MeetingSession : IAsyncDisposable
 {
     private const int PacketBytes = 3200;
     private const long MaximumSamples = 16000L * 120 * 60;
     private readonly object _gate = new();
+    private readonly object _updates = new();
     private readonly SemaphoreSlim _commands = new(1, 1);
     private readonly SemaphoreSlim _saving = new(1, 1);
     private readonly SemaphoreSlim _resources = new(1, 1);
@@ -21,6 +26,13 @@ public sealed class MeetingSession : IAsyncDisposable
     private readonly RecognitionOptions _options;
     private readonly Func<Task> _reserve;
     private readonly Func<Task> _release;
+    private readonly Func<IMeetingSpeakerObserver>? _observerFactory;
+    private readonly Func<IMeetingWordAligner>? _alignerFactory;
+    private IMeetingSpeakerObserver? _observer;
+    private IMeetingWordAligner? _aligner;
+    private bool _alignmentUnavailable;
+    private MeetingAudioTimeline _timeline = new();
+    private MeetingSpeakerMatcher _speakerMatcher = new();
     private MeetingSessionSnapshot _state = new(0, MeetingSessionPhase.Idle, null, 0, 0, null);
     private MeetingCaptureRequest? _request;
     private IMeetingRecognitionEngine? _engine;
@@ -33,13 +45,15 @@ public sealed class MeetingSession : IAsyncDisposable
     private Task _pump = Task.CompletedTask;
     private Task _recognition = Task.CompletedTask;
     private long _capturedSamples;
+    private long _captureClockBase;
     private bool _reserved;
     private bool _disposed;
     private int _disposing;
     private bool _discarding;
 
     public MeetingSession(Func<IMeetingRecognitionEngine> engineFactory, IMeetingCaptureFactory captureFactory,
-        MeetingStore store, RecognitionOptions options, Func<Task>? reserve = null, Func<Task>? release = null)
+        MeetingStore store, RecognitionOptions options, Func<Task>? reserve = null, Func<Task>? release = null,
+        Func<IMeetingSpeakerObserver>? observerFactory = null, Func<IMeetingWordAligner>? alignerFactory = null)
     {
         _engineFactory = engineFactory;
         _captureFactory = captureFactory;
@@ -47,6 +61,8 @@ public sealed class MeetingSession : IAsyncDisposable
         _options = options;
         _reserve = reserve ?? (() => Task.CompletedTask);
         _release = release ?? (() => Task.CompletedTask);
+        _observerFactory = observerFactory;
+        _alignerFactory = alignerFactory;
     }
 
     public event Action<MeetingSessionSnapshot>? StateChanged;
@@ -74,6 +90,9 @@ public sealed class MeetingSession : IAsyncDisposable
             _request = request;
             _capturedSamples = 0;
             _transcript = new();
+            _timeline = new();
+            _speakerMatcher = new();
+            _alignmentUnavailable = false;
             _discarding = false;
             _recognition = Task.CompletedTask;
             _pump = Task.CompletedTask;
@@ -81,14 +100,16 @@ public sealed class MeetingSession : IAsyncDisposable
             _cancellation = new();
             _audio = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(300)
             { SingleWriter = true, SingleReader = true, AllowSynchronousContinuations = false });
-            _reader = new PausableReader(_audio.Reader);
+            _reader = new PausableReader(_audio.Reader, _timeline.Append);
             await SaveAsync();
             _engine = _engineFactory();
             var models = await _engine.ConnectAsync(_cancellation.Token);
             var model = models.FirstOrDefault(candidate => candidate.Family == "vibevoice_asr_streaming" && candidate.Mode == "streaming")
                 ?? throw new InvalidOperationException("Install VibeVoice ASR Streaming 1.5B in Speech models before starting a meeting.");
             _capture = await _captureFactory.StartAsync(request, _cancellation.Token);
+            AttachSourceMetadata(_capture);
             _pump = PumpAsync(_capture, _cancellation.Token);
+            await StartObserverAsync();
             var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             _recognition = RecognizeAsync(model, ready);
             if (await Task.WhenAny(ready.Task, _recognition) == _recognition)
@@ -151,8 +172,10 @@ public sealed class MeetingSession : IAsyncDisposable
             RequirePhase(MeetingSessionPhase.Paused);
             if (_capture is not null) throw new InvalidOperationException("Release the previous capture before resuming the meeting.");
             _capture = await _captureFactory.StartAsync(_request!, _cancellation!.Token);
+            AttachSourceMetadata(_capture);
+            await StartObserverAsync();
             SetPhase(MeetingSessionPhase.Recording, MeetingStatus.Recording);
-            FlushPendingUpdate();
+            await Task.Run(FlushPendingUpdate);
             _reader!.Resume();
             _pump = PumpAsync(_capture, _cancellation.Token);
             await SaveAsync();
@@ -189,10 +212,16 @@ public sealed class MeetingSession : IAsyncDisposable
             }
             _reader!.Resume();
             await StopCaptureAsync();
-            if (!discard) FlushPendingUpdate();
+            if (!discard) await Task.Run(FlushPendingUpdate);
             else { lock (_gate) _pendingUpdate = null; }
             _audio!.Writer.TryComplete();
             await _recognition;
+            if (!discard && State.Error is null)
+            {
+                SetPhase(MeetingSessionPhase.Refining, MeetingStatus.Finishing);
+                lock (_gate) _state = _state with { Document = _speakerMatcher.Refine(_state.Document!) };
+                Publish();
+            }
             await ReleaseResourcesAsync();
             if (State.Error is null)
                 SetPhase(MeetingSessionPhase.Completed, discard ? MeetingStatus.Interrupted : MeetingStatus.Completed);
@@ -290,10 +319,14 @@ public sealed class MeetingSession : IAsyncDisposable
 
     private void ReceiveUpdate(TranscriptUpdate update)
     {
-        lock (_gate)
+        lock (_updates)
         {
-            if (_discarding) return;
-            if (_state.Phase == MeetingSessionPhase.Paused) { _pendingUpdate = update; return; }
+            lock (_gate)
+            {
+                if (_discarding) return;
+                if (_state.Phase == MeetingSessionPhase.Paused) { _pendingUpdate = update; return; }
+                _pendingUpdate = null;
+            }
             ApplyUpdate(update);
         }
         Publish();
@@ -302,18 +335,43 @@ public sealed class MeetingSession : IAsyncDisposable
 
     private void ApplyUpdate(TranscriptUpdate update)
     {
-        var turns = _transcript.Update(update.Text, _reader!.ReadSamples / 16000.0, update.IsFinal);
-        _state = _state with { Version = _state.Version + 1,
-            Document = _state.Document! with { Turns = turns, UpdatedAt = DateTimeOffset.UtcNow },
-            PendingSeconds = Math.Max(0, (_capturedSamples - _reader.ReadSamples) / 16000.0) };
+        var processed = update.ProcessedSamples ?? _reader!.ReadSamples;
+        if (processed < 0 || processed > _reader!.ReadSamples)
+            throw new InvalidDataException("Recognition returned a timestamp outside the consumed audio.");
+        var turns = _transcript.Update(update.Text, processed / 16000.0, update.IsFinal).ToArray();
+        var previous = Document!.Turns;
+        for (var index = 0; index < turns.Length; index++)
+        {
+            var old = index < previous.Count ? previous[index] : null;
+            if (old?.SpeakerId == turns[index].SpeakerId && old.Text == turns[index].Text)
+                turns[index] = old with { IsProvisional = turns[index].IsProvisional };
+        }
+        RefineTiming(turns, processed);
+        for (var index = 0; index < turns.Length; index++)
+            if (turns[index].TimingQuality == MeetingTimingQuality.Aligned &&
+                !(index < previous.Count && previous[index].Text == turns[index].Text && previous[index].TimingQuality == MeetingTimingQuality.Aligned))
+                turns[index] = turns[index] with { Source = _timeline.Source(turns[index].StartSeconds, turns[index].EndSeconds) };
+        lock (_gate)
+        {
+            if (_discarding) return;
+            if (_state.Phase == MeetingSessionPhase.Paused) { _pendingUpdate = update; return; }
+            var document = _state.Document! with { Turns = turns, UpdatedAt = DateTimeOffset.UtcNow };
+            _state = _state with { Version = _state.Version + 1, Document = _speakerMatcher.Refine(document),
+                PendingSeconds = Math.Max(0, (_capturedSamples - _reader!.ReadSamples) / 16000.0) };
+        }
     }
 
     private void FlushPendingUpdate()
     {
-        lock (_gate)
+        lock (_updates)
         {
-            if (_pendingUpdate is not { } update) return;
-            _pendingUpdate = null;
+            TranscriptUpdate update;
+            lock (_gate)
+            {
+                if (_pendingUpdate is not { } pending) return;
+                update = pending;
+                _pendingUpdate = null;
+            }
             ApplyUpdate(update);
         }
         Publish();
@@ -323,25 +381,149 @@ public sealed class MeetingSession : IAsyncDisposable
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(title);
         if (title.Trim().Length > 500) throw new ArgumentException("Meeting titles can contain at most 500 characters.");
-        lock (_gate) _state = _state with { Version = _state.Version + 1,
-            Document = (_state.Document ?? throw new InvalidOperationException("Start a meeting first.")) with { Title = title.Trim(), UpdatedAt = DateTimeOffset.UtcNow } };
+        await _commands.WaitAsync();
+        try
+        {
+            lock (_gate) _state = _state with { Version = _state.Version + 1,
+                Document = (_state.Document ?? throw new InvalidOperationException("Start a meeting first.")) with { Title = title.Trim(), UpdatedAt = DateTimeOffset.UtcNow } };
+            Publish();
+            await SaveAsync();
+        }
+        finally { _commands.Release(); }
+    }
+
+    public async Task ApplyCleanupAsync(IReadOnlyList<string> texts)
+    {
+        await _commands.WaitAsync();
+        try
+        {
+            if (IsActive || Document?.Status != MeetingStatus.Completed || Document.Turns.Any(turn => turn.IsProvisional))
+                throw new InvalidOperationException("End the meeting before cleaning its transcript.");
+            MeetingDocument updated;
+            lock (_gate)
+            {
+                var document = _state.Document ?? throw new InvalidOperationException("No meeting transcript is open.");
+                if (texts.Count != document.Turns.Count || texts.Any(text => string.IsNullOrWhiteSpace(text) || text.Contains('\0')))
+                    throw new ArgumentException("Cleanup must retain every existing transcript turn.");
+                var turns = document.Turns.Select((turn, index) => turn with
+                    { OriginalText = turn.OriginalText ?? turn.Text, Text = texts[index] }).ToArray();
+                updated = document with { Turns = turns, UpdatedAt = DateTimeOffset.UtcNow };
+            }
+            await _saving.WaitAsync();
+            try
+            {
+                await _store.SaveAsync(updated);
+                lock (_gate)
+                {
+                    _state = _state with { Version = _state.Version + 1, Document = updated };
+                }
+            }
+            finally { _saving.Release(); }
+            Publish();
+        }
+        finally { _commands.Release(); }
+    }
+
+    private void AttachSourceMetadata(IAudioCapture capture)
+    {
+        var start = Interlocked.Read(ref _capturedSamples);
+        Interlocked.Exchange(ref _captureClockBase, start);
+        if (capture is IMeetingAudioSourceMetadata metadata)
+            metadata.Activity += activity => _timeline.Observe(activity with { StartSample = start + activity.StartSample });
+    }
+
+    private async Task StartObserverAsync()
+    {
+        if (_observerFactory is null || _request?.ProcessId is not > 0)
+        {
+            UpdateRefinementStatus(naming: "Automatic names require a selected Teams meeting window.");
+            return;
+        }
+        _observer ??= _observerFactory();
+        try
+        {
+            await _observer.StartAsync(_request.ProcessId.Value, ObservationSamplePosition, observation =>
+            {
+                _speakerMatcher.Observe(observation);
+                UpdateRefinementStatus(naming: observation.Status switch
+                {
+                    MeetingSpeakerReadStatus.Readable => "Teams speaker evidence available; names require consistent timed turns.",
+                    MeetingSpeakerReadStatus.Ambiguous => "Teams speaker evidence is ambiguous; keeping speaker labels.",
+                    _ => "Teams speaker names unavailable in this window; keeping speaker labels."
+                });
+            }, _cancellation!.Token);
+        }
+        catch (Exception error) when (error is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or System.Runtime.InteropServices.COMException)
+        {
+            UpdateRefinementStatus(naming: "Automatic names unavailable for the selected app; keeping editable model labels.");
+        }
+    }
+
+    private long ObservationSamplePosition() => _capture is IMeetingAudioSourceMetadata metadata
+        ? Interlocked.Read(ref _captureClockBase) + metadata.ClockSamplePosition
+        : Interlocked.Read(ref _capturedSamples);
+
+    private void RefineTiming(MeetingTurn[] turns, long processed)
+    {
+        if (_alignerFactory is null || _alignmentUnavailable) return;
+        var clip = _timeline.Clip(processed);
+        if (clip is null) return;
+        var origin = clip.Value.StartSample / 16000.0;
+        var indices = Enumerable.Range(0, turns.Length).Where(index =>
+            !turns[index].IsProvisional && (turns[index].TimingQuality == MeetingTimingQuality.Aligned
+                ? turns[index].EndSeconds > origin : turns[index].StartSeconds >= origin)).ToArray();
+        if (!indices.Any(index => turns[index].TimingQuality != MeetingTimingQuality.Aligned)) return;
+        try
+        {
+            _aligner ??= _alignerFactory();
+            _aligner.InitializeAsync(_cancellation!.Token).GetAwaiter().GetResult();
+            var candidates = indices.Select(index => turns[index] with
+                { StartSeconds = Math.Max(0, turns[index].StartSeconds - origin), EndSeconds = turns[index].EndSeconds - origin }).ToArray();
+            var aligned = _aligner.AlignAsync(clip.Value.Audio, candidates, _cancellation.Token).GetAwaiter().GetResult();
+            for (var index = 0; index < indices.Length; index++)
+                if (turns[indices[index]].TimingQuality != MeetingTimingQuality.Aligned && aligned[index].TimingQuality == MeetingTimingQuality.Aligned)
+                    turns[indices[index]] = aligned[index] with
+                        { StartSeconds = aligned[index].StartSeconds + origin, EndSeconds = aligned[index].EndSeconds + origin };
+            UpdateRefinementStatus(refinement: "Local ASR anchors refine confident turns; other times remain approximate.");
+        }
+        catch (OperationCanceledException) when (_cancellation!.IsCancellationRequested) { }
+        catch (Exception error)
+        {
+            _alignmentUnavailable = true;
+            UpdateRefinementStatus(refinement: $"Optional timing refinement unavailable: {error.Message}");
+        }
+    }
+
+    private void UpdateRefinementStatus(string? naming = null, string? refinement = null)
+    {
+        lock (_gate)
+        {
+            var nextNaming = naming ?? _state.NamingStatus;
+            var nextRefinement = refinement ?? _state.RefinementStatus;
+            if (nextNaming == _state.NamingStatus && nextRefinement == _state.RefinementStatus) return;
+            _state = _state with { Version = _state.Version + 1, NamingStatus = nextNaming, RefinementStatus = nextRefinement };
+        }
         Publish();
-        await SaveAsync();
     }
 
     public async Task RenameSpeakerAsync(string id, string name)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        lock (_gate)
+        await _commands.WaitAsync();
+        try
         {
-            var document = _state.Document ?? throw new InvalidOperationException("Start a meeting first.");
-            if (!document.Turns.Any(turn => turn.SpeakerId == id)) throw new ArgumentException("This speaker does not appear in the meeting.");
-            var names = document.SpeakerNames.ToDictionary(pair => pair.Key, pair => pair.Value);
-            names[id] = name.Trim();
-            _state = _state with { Version = _state.Version + 1, Document = document with { SpeakerNames = names, UpdatedAt = DateTimeOffset.UtcNow } };
+            lock (_gate)
+            {
+                var document = _state.Document ?? throw new InvalidOperationException("Start a meeting first.");
+                if (!document.Turns.Any(turn => turn.SpeakerId == id)) throw new ArgumentException("This speaker does not appear in the meeting.");
+                var names = document.SpeakerNames.ToDictionary(pair => pair.Key, pair => pair.Value);
+                names[id] = name.Trim();
+                _state = _state with { Version = _state.Version + 1, Document = document with { SpeakerNames = names, UpdatedAt = DateTimeOffset.UtcNow } };
+            }
+            Publish();
+            await SaveAsync();
         }
-        Publish();
-        await SaveAsync();
+        finally { _commands.Release(); }
     }
 
     private async Task SaveAsync()
@@ -360,6 +542,11 @@ public sealed class MeetingSession : IAsyncDisposable
 
     private async Task StopCaptureCoreAsync()
     {
+        if (_observer is not null)
+        {
+            await _observer.StopAsync();
+            _speakerMatcher.Observe(new(ObservationSamplePosition(), [], null, MeetingSpeakerReadStatus.Unavailable));
+        }
         var capture = _capture;
         if (capture is null) return;
         await capture.StopAsync();
@@ -376,6 +563,9 @@ public sealed class MeetingSession : IAsyncDisposable
         {
             await StopCaptureCoreAsync();
             if (_engine is { } engine) { await engine.DisposeAsync(); _engine = null; }
+            if (_aligner is { } aligner) { await aligner.DisposeAsync(); _aligner = null; }
+            if (_observer is { } observer) { await observer.DisposeAsync(); _observer = null; }
+            _timeline = new();
             if (IsActive)
             {
                 await _release();
@@ -418,7 +608,7 @@ public sealed class MeetingSession : IAsyncDisposable
         public void Report(TranscriptUpdate value) => report(value);
     }
 
-    private sealed class PausableReader(ChannelReader<byte[]> reader) : ChannelReader<byte[]>
+    private sealed class PausableReader(ChannelReader<byte[]> reader, Action<byte[]> consumed) : ChannelReader<byte[]>
     {
         private readonly object _gate = new();
         private TaskCompletionSource? _resume;
@@ -434,6 +624,7 @@ public sealed class MeetingSession : IAsyncDisposable
                 if (_resume is null && reader.TryRead(out item!))
                 {
                     Interlocked.Add(ref _readSamples, item.Length / 2);
+                    consumed(item);
                     return true;
                 }
                 item = null!;

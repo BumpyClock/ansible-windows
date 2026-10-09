@@ -32,7 +32,7 @@ The code map below describes the current layout, not required module boundaries.
 - The UI includes Dictation, Settings, Insights, Speech models, and a floating waveform pill.
 - Microphone capture uses Windows `waveIn` with 16 kHz mono PCM16 and bounded audio queues.
 - The session preloads the selected streaming model and a reusable native session, unloads them after 10 idle minutes, and opens the microphone before the model is ready so early speech is buffered, not lost.
-- Transcripts and captured audio stay in memory. Local Insights persist session metadata, not transcript text or recordings.
+- Dictation transcripts and captured audio stay in memory. Meeting transcripts save locally; audio is never saved. Optional Copilot CLI wording cleanup sends transcript text only after explicit user action. Local Insights persist session metadata, not transcript text or recordings.
 - Shortcut insertion sends authoritative final speech once after successful recognition. Clipboard paste is the default; it backs up supported formats, requests history and cloud-sync exclusions, and reports restoration failures. Paced Unicode typing is the alternative; burst typing garbles slow targets such as Windows 11 Notepad. Manual Copy uses the ordinary clipboard.
 
 Start with `README.md`. Use `docs/user-guide.md` for app workflows, `docs/development.md` for builds and tests, and `docs/native-validation.md` for model probes and native limits.

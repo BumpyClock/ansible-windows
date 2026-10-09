@@ -71,6 +71,7 @@ public sealed partial class MainPage : Page
             RenderDictionaryStatus();
             RenderNotice();
             UsageToggle.IsOn = _state.Settings.CollectUsage;
+            HideFromCaptureChoice.IsChecked = _state.Settings.HideFromCapture;
             UsageToggle.IsEnabled = idle;
             ToolTipService.SetToolTip(UsageRow, $"Stored on this device. Never audio or text. Session dates, model, word counts, and timing. File: {_session.UsagePath}");
             AutomationProperties.SetHelpText(UsageToggle, _session.UsagePath);
@@ -174,6 +175,13 @@ public sealed partial class MainPage : Page
     {
         if (_rendering) { return; }
         try { _session.SetUsageEnabled(UsageToggle.IsOn); }
+        catch (Exception error) { _session.ReportUiError(error); Render(); }
+    }
+
+    private void HideFromCaptureChanged(object sender, RoutedEventArgs args)
+    {
+        if (_rendering || HideFromCaptureChoice.IsChecked is not bool enabled || enabled == _session.State.Settings.HideFromCapture) return;
+        try { _session.SetHideFromCapture(enabled); }
         catch (Exception error) { _session.ReportUiError(error); Render(); }
     }
 
