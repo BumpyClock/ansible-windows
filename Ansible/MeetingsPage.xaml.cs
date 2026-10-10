@@ -1,6 +1,7 @@
 using Ansible.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Windows.Storage.Pickers;
 
 namespace Ansible;
 
@@ -8,20 +9,34 @@ public sealed partial class MeetingsPage : Page
 {
     private readonly MeetingStore _store;
     private readonly Func<MeetingDocument?, Task> _openMeeting;
+    private readonly Func<nint> _windowHandle;
+    private CancellationTokenSource _shutdown = new();
+    private Task? _exportTask;
+    private Task? _refreshTask;
 
-    internal MeetingsPage(MeetingStore store, Func<MeetingDocument?, Task> openMeeting)
+    internal MeetingsPage(MeetingStore store, Func<MeetingDocument?, Task> openMeeting, Func<nint> windowHandle)
     {
         InitializeComponent();
         _store = store;
         _openMeeting = openMeeting;
+        _windowHandle = windowHandle;
         Loaded += async (_, _) => await RefreshAsync();
     }
 
-    internal async Task RefreshAsync()
+    internal Task RefreshAsync()
+    {
+        if (_shutdown.IsCancellationRequested || _exportTask is { IsCompleted: false }) return Task.CompletedTask;
+        if (_refreshTask is { IsCompleted: false }) return _refreshTask;
+        return _refreshTask = RefreshCoreAsync();
+    }
+
+    private async Task RefreshCoreAsync()
     {
         try
         {
-            var documents = await _store.ListAsync();
+            var result = await _store.ListAsync(_shutdown.Token);
+            if (_shutdown.IsCancellationRequested) return;
+            var documents = result.Documents;
             MeetingList.Items.Clear();
             foreach (var document in documents)
             {
@@ -34,10 +49,72 @@ public sealed partial class MeetingsPage : Page
                 });
                 MeetingList.Items.Add(new ListViewItem { Content = row, Tag = document, HorizontalContentAlignment = HorizontalAlignment.Stretch });
             }
-            EmptyState.Visibility = documents.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            UnreadableMeetings.Children.Clear();
+            foreach (var failure in result.Failures)
+            {
+                var row = new StackPanel { Spacing = 8, Padding = new Thickness(12) };
+                row.Children.Add(new TextBlock { Text = "Saved transcript needs attention", Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"] });
+                row.Children.Add(new TextBlock { Text = $"File: {failure.Id:N}.json", TextWrapping = TextWrapping.Wrap, Style = (Style)Application.Current.Resources["CaptionSecondaryStyle"] });
+                row.Children.Add(new TextBlock { Text = failure.Message, TextWrapping = TextWrapping.Wrap });
+                row.Children.Add(new TextBlock { Text = "Save the original transcript file somewhere safe, then remove it from Ansible. New meetings remain available.", TextWrapping = TextWrapping.Wrap });
+                var export = new Button { Content = "Export and remove", Tag = failure.Id };
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(export, $"Export and remove transcript {failure.Id:N}");
+                export.Click += ExportUnreadableClicked;
+                row.Children.Add(export);
+                UnreadableMeetings.Children.Add(row);
+            }
+            UnreadableMeetings.Visibility = result.Failures.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+            EmptyState.Visibility = documents.Count == 0 && result.Failures.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
             MeetingList.Visibility = documents.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
         }
+        catch (OperationCanceledException) when (_shutdown.IsCancellationRequested) { }
         catch (Exception error) { ShowError(error); }
+    }
+
+    private async void ExportUnreadableClicked(object sender, RoutedEventArgs args)
+    {
+        if (_shutdown.IsCancellationRequested || _exportTask is { IsCompleted: false } || sender is not Button { Tag: Guid id }) return;
+        _exportTask = ExportUnreadableAsync(id);
+        await _exportTask;
+    }
+
+    private async Task ExportUnreadableAsync(Guid id)
+    {
+        var buttons = UnreadableMeetings.Children.OfType<StackPanel>().SelectMany(row => row.Children.OfType<Button>()).ToArray();
+        foreach (var button in buttons) button.IsEnabled = false;
+        try
+        {
+            if (_refreshTask is not null) await _refreshTask;
+            _shutdown.Token.ThrowIfCancellationRequested();
+            var picker = new FileSavePicker { SuggestedFileName = $"Meeting-{id:N}" };
+            picker.FileTypeChoices.Add("Original transcript file", [".json"]);
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, _windowHandle());
+            var file = await picker.PickSaveFileAsync().AsTask(_shutdown.Token);
+            if (file is null) return;
+            await _store.ExportAndRemoveAsync(id, file.Path, _shutdown.Token);
+            ErrorBar.Title = "Transcript exported";
+            ErrorBar.Message = "The original file was saved to your chosen location and removed from Ansible.";
+            ErrorBar.Severity = InfoBarSeverity.Success;
+            ErrorBar.IsOpen = true;
+            await RefreshCoreAsync();
+            NewMeetingButton.Focus(FocusState.Programmatic);
+        }
+        catch (OperationCanceledException) when (_shutdown.IsCancellationRequested) { }
+        catch (Exception error) { ShowError(error); }
+        finally { foreach (var button in buttons) button.IsEnabled = true; }
+    }
+
+    internal async Task BeginShutdownAsync()
+    {
+        _shutdown.Cancel();
+        if (_exportTask is not null) await _exportTask;
+        if (_refreshTask is not null) await _refreshTask;
+    }
+
+    internal void ResumeAfterFailedShutdown()
+    {
+        _shutdown.Dispose();
+        _shutdown = new CancellationTokenSource();
     }
 
     private async void NewMeetingClicked(object sender, RoutedEventArgs args)
@@ -55,6 +132,7 @@ public sealed partial class MeetingsPage : Page
 
     private void ShowError(Exception error)
     {
+        ErrorBar.Severity = InfoBarSeverity.Error;
         ErrorBar.Title = "Meeting unavailable";
         ErrorBar.Message = error.Message;
         ErrorBar.IsOpen = true;

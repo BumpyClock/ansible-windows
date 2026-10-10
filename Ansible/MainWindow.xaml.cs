@@ -67,7 +67,7 @@ public sealed partial class MainWindow : Window
         _microphonePermission = microphonePermission;
         _paths = paths;
         _meetingStore = new MeetingStore(Path.Combine(Path.GetDirectoryName(paths.Settings)!, "meetings"));
-        _meetings = new MeetingsPage(_meetingStore, OpenMeetingAsync);
+        _meetings = new MeetingsPage(_meetingStore, OpenMeetingAsync, () => WinRT.Interop.WindowNative.GetWindowHandle(this));
         _insights = new InsightsPage(session);
         _dictation = new DictationPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this));
         _settings = new MainPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this),
@@ -125,12 +125,13 @@ public sealed partial class MainWindow : Window
             _permissionCheckComplete = true;
             RenderMicrophonePermission();
             Exception? meetingRecoveryError = null;
+            IReadOnlyList<MeetingReadFailure> meetingRecoveryFailures = [];
             try
             {
-                await _meetingStore.MarkInterruptedSessionsAsync();
+                meetingRecoveryFailures = await _meetingStore.MarkInterruptedSessionsAsync(token);
                 _meetingRecoveryComplete = true;
             }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+            catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or System.Text.Json.JsonException)
             {
                 meetingRecoveryError = error;
             }
@@ -150,6 +151,9 @@ public sealed partial class MainWindow : Window
             catch (Exception error) { _session.Notify(NoticeKind.Error, "Shortcut unavailable", error.Message); }
             if (meetingRecoveryError is not null)
                 _session.Notify(NoticeKind.Error, "Meeting recovery failed", meetingRecoveryError.Message);
+            else if (meetingRecoveryFailures.Count > 0)
+                _session.Notify(NoticeKind.Warning, "Some saved transcripts unavailable",
+                    "Open Meetings to export and remove unreadable files. New meetings are still available.");
             StartMeetingDetection();
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
@@ -648,6 +652,7 @@ public sealed partial class MainWindow : Window
             if (_startupTask is not null) await _startupTask;
             if (_permissionRetryTask is not null) await _permissionRetryTask;
             if (_microphoneSettingsTask is not null) await _microphoneSettingsTask;
+            await _meetings.BeginShutdownAsync();
             HideMeetingSuggestion();
             _detectionCancellation?.Cancel();
             if (_detectionTask is not null) await _detectionTask;
@@ -674,6 +679,7 @@ public sealed partial class MainWindow : Window
             ShutdownError.Visibility = Visibility.Visible;
             ShutdownError.IsOpen = true;
             _closing = false;
+            _meetings.ResumeAfterFailedShutdown();
             // All launch/retry tasks above have been joined; allow a fresh permission retry after failed shutdown.
             _startupCancellation.Dispose();
             _startupCancellation = new CancellationTokenSource();

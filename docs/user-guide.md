@@ -239,6 +239,15 @@ steps must finish before resources can be released. After a crash, previous
 unfinished meetings are marked Interrupted; unfinished speech cannot be recovered
 because audio is never written to disk.
 
+Meetings saved before automatic speaker naming remain readable. Unreadable
+transcripts appear separately in **Meetings**; dictation, healthy transcripts,
+and new meeting capture remain available. Choose **Export and remove** to save
+the original JSON file to a location outside Ansible's meeting folder. Ansible
+removes its copy only after the export succeeds. Cancelling or a failed export
+keeps the app's copy. The export preserves the original file, including any
+format errors; it does not repair the transcript or contain audio. A failure
+accessing the meeting folder itself can still prevent capture.
+
 After **End meeting**, **Clean up wording** can send transcript text to GitHub
 Copilot CLI. Install and authenticate Copilot CLI first if prompted. Choose the
 model and reasoning effort in the dialog; defaults are `gpt-6-luna` and `high`.

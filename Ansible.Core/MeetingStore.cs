@@ -4,6 +4,10 @@ using System.Text.Json;
 
 namespace Ansible.Core;
 
+public sealed record MeetingReadFailure(Guid Id, string Message);
+
+public sealed record MeetingListResult(IReadOnlyList<MeetingDocument> Documents, IReadOnlyList<MeetingReadFailure> Failures);
+
 public sealed class MeetingStore(string directory)
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -27,17 +31,27 @@ public sealed class MeetingStore(string directory)
         return document;
     }
 
-    public async Task<IReadOnlyList<MeetingDocument>> ListAsync(CancellationToken cancellationToken = default)
+    public async Task<MeetingListResult> ListAsync(CancellationToken cancellationToken = default)
     {
-        if (!Directory.Exists(DirectoryPath)) return [];
+        cancellationToken.ThrowIfCancellationRequested();
+        string[] paths;
+        try { paths = Directory.GetFiles(DirectoryPath, "*.json"); }
+        catch (DirectoryNotFoundException) { return new([], []); }
         var documents = new List<MeetingDocument>();
-        foreach (var path in Directory.EnumerateFiles(DirectoryPath, "*.json"))
+        var failures = new List<MeetingReadFailure>();
+        foreach (var path in paths)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (Guid.TryParseExact(Path.GetFileNameWithoutExtension(path), "N", out var id))
-                documents.Add(await LoadAsync(id, cancellationToken));
+            if (!Guid.TryParseExact(Path.GetFileNameWithoutExtension(path), "N", out var id)) continue;
+            try { documents.Add(await LoadAsync(id, cancellationToken)); }
+            catch (Exception error) when (error is InvalidDataException or JsonException or IOException or UnauthorizedAccessException)
+            {
+                failures.Add(new(id, error is InvalidDataException or JsonException
+                    ? "The saved meeting transcript has an unsupported or invalid format."
+                    : "The saved meeting transcript could not be read."));
+            }
         }
-        return documents.OrderByDescending(document => document.CreatedAt).ToArray();
+        return new(documents.OrderByDescending(document => document.CreatedAt).ToArray(), failures);
     }
 
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
@@ -47,12 +61,13 @@ public sealed class MeetingStore(string directory)
         finally { _gate.Release(); }
     }
 
-    public async Task MarkInterruptedSessionsAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<MeetingReadFailure>> MarkInterruptedSessionsAsync(CancellationToken cancellationToken = default)
     {
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            foreach (var document in await ListAsync(cancellationToken))
+            var result = await ListAsync(cancellationToken);
+            foreach (var document in result.Documents)
             {
                 if (document.Status is MeetingStatus.Starting or MeetingStatus.Recording or MeetingStatus.Paused or MeetingStatus.Finishing)
                 {
@@ -61,8 +76,43 @@ public sealed class MeetingStore(string directory)
                         UpdatedAt = now > document.UpdatedAt ? now : document.UpdatedAt }, cancellationToken);
                 }
             }
+            return result.Failures;
         }
         finally { _gate.Release(); }
+    }
+
+    public async Task ExportAndRemoveAsync(Guid id, string destinationPath, CancellationToken cancellationToken = default)
+    {
+        var sourcePath = GetPath(id);
+        var destination = Path.GetFullPath(destinationPath);
+        var relative = Path.GetRelativePath(DirectoryPath, destination);
+        if (!Path.IsPathRooted(relative) && relative != ".." &&
+            !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+            throw new ArgumentException("Choose an export location outside the app's meeting storage.", nameof(destinationPath));
+
+        await _gate.WaitAsync(cancellationToken);
+        var temporaryPath = destination + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            await using (var source = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                await using (var output = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                {
+                    await source.CopyToAsync(output, cancellationToken);
+                    await output.FlushAsync(cancellationToken);
+                    output.Flush(flushToDisk: true);
+                }
+                cancellationToken.ThrowIfCancellationRequested();
+                File.Move(temporaryPath, destination, overwrite: true);
+            }
+            cancellationToken.ThrowIfCancellationRequested();
+            File.Delete(sourcePath);
+        }
+        finally
+        {
+            try { if (File.Exists(temporaryPath)) File.Delete(temporaryPath); }
+            finally { _gate.Release(); }
+        }
     }
 
     public Task<MeetingDocument> RenameAsync(Guid id, string title, CancellationToken cancellationToken = default)

@@ -131,7 +131,11 @@ capture and inference resources are released. Capture privacy is a visual
 setting that can change during a meeting. Pause gates the same channel
 reader; it does not reset the native stream. Capture writes 16 kHz mono PCM16
 into bounded queues. Transcripts use atomic source-generated JSON saves; audio
-never reaches disk. Startup marks unfinished saved documents Interrupted.
+never reaches disk. Startup marks unfinished readable documents Interrupted.
+Listing isolates unreadable files and returns their identifiers separately, so
+they do not block healthy history or capture. The Meetings recovery action
+exports the original bytes, flushes and completes the destination file, then
+removes the app copy. Cancellation or export failure preserves the source.
 
 The meeting path bounds the VibeVoice native history with
 `vibevoice_asr_streaming.max_history_steps=4096` and admits at most two hours of

@@ -24,7 +24,12 @@ public sealed record MeetingDocument
     public MeetingStatus Status { get; init; } = MeetingStatus.Recording;
     public IReadOnlyList<MeetingTurn> Turns { get; init; } = [];
     public IReadOnlyDictionary<string, string> SpeakerNames { get; init; } = new Dictionary<string, string>();
-    public IReadOnlyDictionary<string, string> AutoSpeakerNames { get; init; } = new Dictionary<string, string>();
+    public IReadOnlyDictionary<string, string> AutoSpeakerNames
+    {
+        get;
+        // Source-generated deserialization supplies null for this field in older saved meetings.
+        init => field = value ?? new Dictionary<string, string>();
+    } = new Dictionary<string, string>();
 
     public string GetSpeakerName(string speakerId) => SpeakerNames.TryGetValue(speakerId, out var name) ? name
         : AutoSpeakerNames.TryGetValue(speakerId, out var automaticName) ? automaticName : speakerId;
