@@ -18,6 +18,7 @@ public sealed class AppSettingsStoreTests : IDisposable
         Assert.Equal(new AppSettings(), store.Load());
         Assert.Equal(0, store.Load().MicrophoneBoostDecibels);
         Assert.False(store.Load().HideFromCapture);
+        Assert.True(store.Load().AutoDetectMeetings);
         Assert.False(File.Exists(store.Path));
     }
 
@@ -49,7 +50,8 @@ public sealed class AppSettingsStoreTests : IDisposable
             InsertionMethod = TextInsertionMethod.Type,
             TypingGapMilliseconds = 35,
             MicrophoneBoostDecibels = 20,
-            HideFromCapture = true
+            HideFromCapture = true,
+            AutoDetectMeetings = false
         };
         CreateStore().Save(settings);
 
@@ -63,6 +65,7 @@ public sealed class AppSettingsStoreTests : IDisposable
         Assert.Equal("Type", document.RootElement.GetProperty("InsertionMethod").GetString());
         Assert.Equal(35, document.RootElement.GetProperty("TypingGapMilliseconds").GetInt32());
         Assert.True(document.RootElement.GetProperty("HideFromCapture").GetBoolean());
+        Assert.False(document.RootElement.GetProperty("AutoDetectMeetings").GetBoolean());
     }
 
     [Fact]
@@ -74,6 +77,18 @@ public sealed class AppSettingsStoreTests : IDisposable
         Assert.True(document.Remove("HideFromCapture"));
         File.WriteAllText(store.Path, document.ToJsonString());
         Assert.False(store.Load().HideFromCapture);
+        Assert.Equal("en", store.Load().Language);
+    }
+
+    [Fact]
+    public void ExistingSettingsWithoutMeetingDetectionEnableSuggestions()
+    {
+        var store = CreateStore();
+        store.Save(new AppSettings { Language = "en", AutoDetectMeetings = false });
+        var document = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(store.Path))!.AsObject();
+        Assert.True(document.Remove("AutoDetectMeetings"));
+        File.WriteAllText(store.Path, document.ToJsonString());
+        Assert.True(store.Load().AutoDetectMeetings);
         Assert.Equal("en", store.Load().Language);
     }
 
@@ -135,7 +150,7 @@ public sealed class AppSettingsStoreTests : IDisposable
         var error = Record.Exception(() => store.Load());
 
         Assert.NotNull(error);
-        Assert.IsType(errorType, error);
+        Assert.IsAssignableFrom(errorType, error);
         Assert.Equal(previousDocument, File.ReadAllBytes(store.Path));
     }
 

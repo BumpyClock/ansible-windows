@@ -110,6 +110,13 @@ separate performance qualification.
 Teams UIA initialization/teardown passed, but the available Teams process had no
 visible eligible meeting window. Live name attribution remains unqualified.
 
+On 2026-10-10, automatic detection's native capture-session enumeration passed
+without recording audio or reading participant names. No active Teams owner was
+found in that check. Deterministic tests cover process ancestry, PID reuse,
+debouncing, dismissal, and failure gaps. This does not qualify actual Teams
+join/mute behavior. Its two-second enumeration budget is checked between native
+calls; a blocked Windows call can delay shutdown while its owned worker is joined.
+
 ## Known limits
 
 - Moonshine streaming input is final-only; Qwen buffers input. Neither promises

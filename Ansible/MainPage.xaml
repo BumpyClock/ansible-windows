@@ -151,6 +151,18 @@
             </Border>
 
             <Border Style="{StaticResource CardStyle}">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="Meeting suggestions" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                    <CheckBox x:Name="AutoDetectMeetingsChoice" AutomationProperties.AutomationId="AutoDetectMeetingsChoice"
+                              Checked="AutoDetectMeetingsChanged" Unchecked="AutoDetectMeetingsChanged">
+                        <TextBlock Text="Suggest notetaking when Teams uses the microphone" TextWrapping="Wrap" />
+                    </CheckBox>
+                    <TextBlock Text="Detection checks app activity without recording audio. Suggestions open the notetaker; you must click Start to capture your meeting. Calendar access is not used."
+                               Style="{StaticResource CaptionSecondaryStyle}" />
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource CardStyle}">
                 <Grid x:Name="UsageRow" ColumnSpacing="16" Background="Transparent">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                     <StackPanel VerticalAlignment="Center">

@@ -165,6 +165,17 @@ memory to load and decode. Keep the guard enabled.
 
 ## Meeting transcripts
 
+Automatic Teams detection is enabled by default while Ansible is open. After
+stable microphone activity, a prompt in the main window offers **Open notetaker**
+with Teams selected. Click **Start** in that window to capture audio. Detection
+reads Windows audio-session metadata, never microphone samples. Microphone use
+can include a Teams test call or another audio workflow; it is not proof of a
+scheduled meeting. Muted calls without an active capture session may be missed.
+Dismissal suppresses the same process until its activity has ended for ten
+seconds. Disable **Suggest notetaking when Teams uses the microphone** in
+Settings. Other apps still start
+manually; detection does not fetch calendar events or automatically end recording.
+
 Open **Meetings > Start meeting**. Select the meeting application, or explicitly
 choose **All system audio**, then start. The app captures the Windows default
 microphone and playback together. Application capture includes its child-process

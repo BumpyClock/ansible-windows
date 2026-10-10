@@ -40,6 +40,18 @@ public sealed partial class MainWindow : Window
     private FinalTextDelivery? _delivery;
     private Task<SessionOutcome>? _deliveryOperation;
     private Guid? _deliveryOperationId;
+    private readonly IMeetingDetector _meetingDetector = new Ansible.Core.Windows.TeamsMeetingDetector();
+    private readonly MeetingDetectionTracker _meetingDetection = new();
+    private readonly Stopwatch _detectionClock = Stopwatch.StartNew();
+    private CancellationTokenSource? _detectionCancellation;
+    private Task? _detectionTask;
+    private MeetingDetectionCandidate? _detectedMeeting;
+    private MeetingDetectionCandidate? _offeredMeeting;
+    private bool _detectionUnavailableReported;
+    private bool _openingSuggestedMeeting;
+    private Task? _detectionActionTask;
+    private bool _hasDetectionObservation;
+    private bool? _detectionEnabled;
 
     internal MainWindow(DictationSession session, AppPaths paths, HttpClient modelDownloads)
     {
@@ -99,6 +111,7 @@ public sealed partial class MainWindow : Window
             catch (Exception error) { _session.Notify(NoticeKind.Error, "Shortcut unavailable", error.Message); }
             if (meetingRecoveryError is not null)
                 _session.Notify(NoticeKind.Error, "Meeting recovery failed", meetingRecoveryError.Message);
+            StartMeetingDetection();
         }
         catch (Exception error) { _session.ReportUiError(error); }
     }
@@ -126,10 +139,16 @@ public sealed partial class MainWindow : Window
 
     private Task OpenMeetingAsync(MeetingDocument? document)
     {
+        OpenMeeting(document).Activate();
+        return Task.CompletedTask;
+    }
+
+    private MeetingWindow OpenMeeting(MeetingDocument? document)
+    {
         var existing = _meetingWindows.FirstOrDefault(item => document is null
-            ? item.savedId is null
+            ? item.savedId is null && (item.session.IsActive || item.session.Document is null)
             : item.savedId == document.Id || item.session.Document?.Id == document.Id);
-        if (existing.window is not null) { existing.window.Activate(); return Task.CompletedTask; }
+        if (existing.window is not null) return existing.window;
         var state = _session.State;
         var meeting = new MeetingSession(
             () => new NativeAudioEngine(_paths.NativeLibrary, _paths.ModelCatalog, state.ModelsDirectory),
@@ -150,14 +169,149 @@ public sealed partial class MainWindow : Window
         try { window.ApplyCapturePrivacy(state.Settings.HideFromCapture); }
         catch (Exception error) { _session.Notify(NoticeKind.Warning, "Screen capture privacy unavailable", error.Message); }
         _meetingWindows.Add((meeting, window, document?.Id));
+        meeting.StateChanged += state => DispatcherQueue.TryEnqueue(() =>
+        {
+            if (_closed || _closing) return;
+            if (meeting.IsActive && _detectedMeeting is { } detected && window.SelectedMeetingIdentity == detected)
+                _meetingDetection.Dismiss(detected);
+            RefreshMeetingSuggestion();
+        });
         window.Closed += async (_, _) =>
         {
             _meetingWindows.RemoveAll(item => ReferenceEquals(item.window, window));
             try { await meeting.DisposeAsync(); await _meetings.RefreshAsync(); }
             catch (Exception error) { _session.ReportUiError(error); }
         };
-        window.Activate();
-        return Task.CompletedTask;
+        return window;
+    }
+
+    private bool MeetingDetectionBusy => _closed || _closing || !_meetingRecoveryComplete || !_session.State.IsIdle ||
+        _captureCoordinator.HasPendingCapture || _deliveryTask is { IsCompleted: false } ||
+        _meetingWindows.Any(meeting => meeting.session.IsActive);
+
+    private void StartMeetingDetection()
+    {
+        if (_closing || _closed || _detectionTask is { IsCompleted: false }) return;
+        _detectionCancellation?.Dispose();
+        _detectionCancellation = new CancellationTokenSource();
+        var token = _detectionCancellation.Token;
+        _detectionTask = Task.Run(() => MonitorMeetingsAsync(token));
+    }
+
+    private async Task MonitorMeetingsAsync(CancellationToken token)
+    {
+        try
+        {
+            while (!token.IsCancellationRequested)
+            {
+                if (_session.State.Settings.AutoDetectMeetings)
+                {
+                    try
+                    {
+                        var candidate = await _meetingDetector.ReadAsync(token);
+                        DispatcherQueue.TryEnqueue(() =>
+                        {
+                            if (_closed || _closing || token.IsCancellationRequested) return;
+                            _detectionUnavailableReported = false;
+                            _hasDetectionObservation = true;
+                            _detectedMeeting = candidate;
+                            if (candidate is not null && _meetingWindows.Any(meeting => meeting.session.IsActive && meeting.window.SelectedMeetingIdentity == candidate))
+                                _meetingDetection.Dismiss(candidate);
+                            _meetingDetection.Update(candidate, _detectionClock.Elapsed,
+                                _session.State.Settings.AutoDetectMeetings, MeetingDetectionBusy);
+                            RefreshMeetingSuggestion();
+                        });
+                    }
+                    catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+                    catch (Exception error)
+                    {
+                        DispatcherQueue.TryEnqueue(() =>
+                        {
+                            if (_closed || _closing || token.IsCancellationRequested) return;
+                            _hasDetectionObservation = false;
+                            _meetingDetection.InvalidateObservation();
+                            HideMeetingSuggestion(); // A failed scan does not end or reset the detected episode.
+                            if (_detectionUnavailableReported) return;
+                            _detectionUnavailableReported = true;
+                            _session.Notify(NoticeKind.Warning, "Meeting detection unavailable",
+                                $"{error.Message} You can start notetaking from Meetings. Detection will retry.");
+                        });
+                    }
+                }
+                await Task.Delay(TimeSpan.FromSeconds(2), token);
+            }
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+    }
+
+    private void RefreshMeetingSuggestion()
+    {
+        if (_closed || _closing) { HideMeetingSuggestion(); return; }
+        var enabled = _session.State.Settings.AutoDetectMeetings;
+        if (_detectionEnabled != enabled)
+        {
+            _detectionEnabled = enabled;
+            _hasDetectionObservation = false;
+            _meetingDetection.InvalidateObservation();
+        }
+        if (!enabled || MeetingDetectionBusy || !_hasDetectionObservation)
+        {
+            _meetingDetection.InvalidateObservation();
+            HideMeetingSuggestion();
+            return;
+        }
+        var offer = _meetingDetection.CurrentOffer;
+        _offeredMeeting = offer;
+        MeetingSuggestion.IsOpen = offer is not null;
+        MeetingSuggestion.Visibility = offer is null ? Visibility.Collapsed : Visibility.Visible;
+        OpenSuggestedMeetingButton.IsEnabled = !_openingSuggestedMeeting && offer is not null;
+    }
+
+    private void HideMeetingSuggestion()
+    {
+        _offeredMeeting = null;
+        MeetingSuggestion.IsOpen = false;
+        MeetingSuggestion.Visibility = Visibility.Collapsed;
+    }
+
+    private void MeetingSuggestionDismissed(InfoBar sender, object args)
+    {
+        if (_offeredMeeting is { } candidate) _meetingDetection.Dismiss(candidate);
+        HideMeetingSuggestion();
+    }
+
+    private async void OpenSuggestedMeetingClicked(object sender, RoutedEventArgs args)
+    {
+        if (_detectionActionTask is { IsCompleted: false }) return;
+        _detectionActionTask = OpenSuggestedMeetingAsync();
+        await _detectionActionTask;
+    }
+
+    private async Task OpenSuggestedMeetingAsync()
+    {
+        if (_openingSuggestedMeeting || MeetingDetectionBusy || !_session.State.Settings.AutoDetectMeetings ||
+            _offeredMeeting is not { } expected || _detectionCancellation is null) return;
+        _openingSuggestedMeeting = true;
+        OpenSuggestedMeetingButton.IsEnabled = false;
+        try
+        {
+            var current = await Task.Run(() => _meetingDetector.ReadAsync(_detectionCancellation.Token));
+            if (current != expected || MeetingDetectionBusy || !_session.State.Settings.AutoDetectMeetings || _offeredMeeting != expected)
+            { HideMeetingSuggestion(); return; }
+            var window = OpenMeeting(null);
+            if (!window.SelectDetectedMeeting(expected))
+            {
+                HideMeetingSuggestion();
+                _session.Notify(NoticeKind.Information, "Meeting changed", "The detected Teams app is no longer available. Select your meeting app from Meetings.");
+                return;
+            }
+            _meetingDetection.Dismiss(expected);
+            HideMeetingSuggestion();
+            window.Activate(); // Only the explicit action activates the notetaker; it never starts capture.
+        }
+        catch (OperationCanceledException) when (_closing || _closed) { }
+        catch (Exception error) { HideMeetingSuggestion(); _session.Notify(NoticeKind.Warning, "Meeting detection unavailable", error.Message); }
+        finally { _openingSuggestedMeeting = false; }
     }
 
     private void ChangeHotkey(DictationShortcut choice)
@@ -193,6 +347,7 @@ public sealed partial class MainWindow : Window
     private void SessionChanged(SessionSnapshot state)
     {
         if (_closed) { return; }
+        RefreshMeetingSuggestion();
         if (_capturePrivacy != state.Settings.HideFromCapture)
         {
             _capturePrivacy = state.Settings.HideFromCapture;
@@ -392,6 +547,10 @@ public sealed partial class MainWindow : Window
         _deliveryCancellation.Cancel();
         try
         {
+            HideMeetingSuggestion();
+            _detectionCancellation?.Cancel();
+            if (_detectionTask is not null) await _detectionTask;
+            if (_detectionActionTask is not null) await _detectionActionTask;
             var meetings = _meetingWindows.ToArray();
             await Task.WhenAll(meetings.Select(meeting => meeting.window.BeginShutdownAsync()));
             foreach (var meeting in meetings) await meeting.session.DisposeAsync();
@@ -414,6 +573,7 @@ public sealed partial class MainWindow : Window
             ShutdownError.Visibility = Visibility.Visible;
             ShutdownError.IsOpen = true;
             _closing = false;
+            StartMeetingDetection();
         }
     }
 
@@ -422,6 +582,7 @@ public sealed partial class MainWindow : Window
         _closed = true;
         _hotkey?.Dispose();
         _deliveryCancellation.Dispose();
+        _detectionCancellation?.Dispose();
         _observer.Dispose();
         AppWindow.Closing -= CloseRequested;
     }

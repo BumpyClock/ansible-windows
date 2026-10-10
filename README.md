@@ -60,6 +60,8 @@ options and checks.
 ## Current limits
 
 - Meetings start manually from **Meetings** and use VibeVoice ASR Streaming 1.5B.
+  Automatic Teams detection offers a notetaker prompt when Teams holds an active
+  microphone session; it never starts recording. Disable it in Settings.
   Capture includes the default microphone and either a selected application
   process tree or explicitly selected system playback. Browser capture includes
   other tabs in that browser's process tree. Pause/Resume keeps one recognition

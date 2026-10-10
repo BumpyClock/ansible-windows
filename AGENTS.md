@@ -30,6 +30,7 @@ The code map below describes the current layout, not required module boundaries.
 - Recognition runs in-process through the audio.cpp C ABI, using `audiocpp.dll`.
 - The native build pins audio.cpp v0.9.0. Upstream support does not imply support in this compiled backend.
 - The UI includes Dictation, Settings, Insights, Speech models, and a floating waveform pill.
+- Automatic Teams detection reads active Windows capture-session metadata and offers a notetaker prompt; only an explicit Start captures meeting audio.
 - Microphone capture uses Windows `waveIn` with 16 kHz mono PCM16 and bounded audio queues.
 - The session preloads the selected streaming model and a reusable native session, unloads them after 10 idle minutes, and opens the microphone before the model is ready so early speech is buffered, not lost.
 - Dictation transcripts and captured audio stay in memory. Meeting transcripts save locally; audio is never saved. Optional Copilot CLI wording cleanup sends transcript text only after explicit user action. Local Insights persist session metadata, not transcript text or recordings.

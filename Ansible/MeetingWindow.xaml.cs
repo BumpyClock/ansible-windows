@@ -32,6 +32,39 @@ public sealed partial class MeetingWindow : Window
     private string _cleanupModel = "gpt-6-luna";
     private string _cleanupEffort = "high";
     private bool? _capturePrivacy;
+    private MeetingDetectionCandidate? _selectedDetectedMeeting;
+    private bool _refreshingProcesses;
+    internal MeetingDetectionCandidate? SelectedMeetingIdentity =>
+        (ProcessChoice.SelectedItem as ComboBoxItem)?.Tag is MeetingProcessChoice { IsTeams: true } choice
+            ? new MeetingDetectionCandidate(choice.Id, choice.StartedUtc) : null;
+
+    internal bool SelectDetectedMeeting(MeetingDetectionCandidate candidate)
+    {
+        if (_savedMeeting || _document is not null || _session.IsActive || _closing || _closed || _shutdownPending) return false;
+        try
+        {
+            using var process = Process.GetProcessById(candidate.ProcessId);
+            if (process.StartTime.ToUniversalTime() != candidate.ProcessStartedUtc ||
+                !(process.ProcessName.Equals("ms-teams", StringComparison.OrdinalIgnoreCase) ||
+                  process.ProcessName.Equals("msteams", StringComparison.OrdinalIgnoreCase) ||
+                  process.ProcessName.Equals("Teams", StringComparison.OrdinalIgnoreCase))) return false;
+            AudioSourceChoice.SelectedIndex = 0;
+            RefreshProcesses();
+            var item = ProcessChoice.Items.OfType<ComboBoxItem>().FirstOrDefault(item =>
+                item.Tag is MeetingProcessChoice choice && choice.Id == candidate.ProcessId);
+            // A valid Teams capture process may not own the app's visible top-level window.
+            if (item is null)
+            {
+                item = new ComboBoxItem { Content = $"{process.ProcessName} · detected microphone activity",
+                    Tag = new MeetingProcessChoice(process.Id, process.ProcessName, true, candidate.ProcessStartedUtc) };
+                ProcessChoice.Items.Add(item);
+            }
+            ProcessChoice.SelectedItem = item;
+            _selectedDetectedMeeting = candidate;
+            return true;
+        }
+        catch (Exception error) when (error is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception) { return false; }
+    }
 
     internal MeetingWindow(MeetingSession session, MeetingStore store, MeetingDocument? document = null)
     {
@@ -198,6 +231,25 @@ public sealed partial class MeetingWindow : Window
         var system = AudioSourceChoice.SelectedIndex == 1;
         var process = (ProcessChoice.SelectedItem as ComboBoxItem)?.Tag as MeetingProcessChoice;
         if (!system && process is null) throw new InvalidOperationException("Select a meeting app, or explicitly choose all system audio.");
+        if (_selectedDetectedMeeting is { } detected)
+        {
+            var valid = false;
+            try
+            {
+                using var current = Process.GetProcessById(detected.ProcessId);
+                valid = current.StartTime.ToUniversalTime() == detected.ProcessStartedUtc &&
+                    (current.ProcessName.Equals("ms-teams", StringComparison.OrdinalIgnoreCase) ||
+                     current.ProcessName.Equals("msteams", StringComparison.OrdinalIgnoreCase) ||
+                     current.ProcessName.Equals("Teams", StringComparison.OrdinalIgnoreCase));
+            }
+            catch (Exception error) when (error is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception) { }
+            if (!valid)
+            {
+                _selectedDetectedMeeting = null;
+                ProcessChoice.SelectedIndex = 0;
+                throw new InvalidOperationException("The detected Teams process changed or closed. Select your meeting app again before starting.");
+            }
+        }
         var title = MeetingTitle.Text;
         await _session.StartAsync(new MeetingCaptureRequest(system ? MeetingPlaybackSource.SystemAudio : MeetingPlaybackSource.MeetingApp,
             system ? process is { IsTeams: true } ? process.Id : null : process?.Id));
@@ -495,7 +547,11 @@ public sealed partial class MeetingWindow : Window
         if (system && ProcessChoice.Items.Count > 0) ProcessChoice.SelectedIndex = 0;
         RefreshProcesses();
     }
-    private void MeetingProcessChanged(object sender, SelectionChangedEventArgs args) => UpdateNamingHelp();
+    private void MeetingProcessChanged(object sender, SelectionChangedEventArgs args)
+    {
+        if (!_refreshingProcesses && _selectedDetectedMeeting != SelectedMeetingIdentity) _selectedDetectedMeeting = null;
+        UpdateNamingHelp();
+    }
     private void UpdateNamingHelp()
     {
         if (NamingHelpText is null) return;
@@ -519,12 +575,13 @@ public sealed partial class MeetingWindow : Window
                         choices.Add(new MeetingProcessChoice(process.Id, $"{process.ProcessName} · {process.MainWindowTitle}",
                             process.ProcessName.Equals("ms-teams", StringComparison.OrdinalIgnoreCase) ||
                             process.ProcessName.Equals("msteams", StringComparison.OrdinalIgnoreCase) ||
-                            process.ProcessName.Equals("Teams", StringComparison.OrdinalIgnoreCase)));
+                            process.ProcessName.Equals("Teams", StringComparison.OrdinalIgnoreCase), process.StartTime.ToUniversalTime()));
                 }
                 catch (InvalidOperationException) { }
                 catch (System.ComponentModel.Win32Exception) { }
             }
         }
+        _refreshingProcesses = true;
         ProcessChoice.Items.Clear();
         var system = AudioSourceChoice.SelectedIndex == 1;
         ProcessChoice.Items.Add(new ComboBoxItem { Content = system ? "None — use model speaker labels" : "Select a meeting app" });
@@ -532,10 +589,12 @@ public sealed partial class MeetingWindow : Window
         {
             var item = new ComboBoxItem { Content = choice.DisplayName, Tag = choice };
             ProcessChoice.Items.Add(item);
-            if (choice.Id == selected?.Id) ProcessChoice.SelectedItem = item;
+            if (selected is not null && choice.Id == selected.Id && choice.StartedUtc == selected.StartedUtc) ProcessChoice.SelectedItem = item;
         }
         if (ProcessChoice.SelectedItem is null)
             ProcessChoice.SelectedIndex = AudioSourceChoice.SelectedIndex == 0 && choices.Any(p => p.IsTeams) ? 1 : 0;
+        _refreshingProcesses = false;
+        if (_selectedDetectedMeeting != SelectedMeetingIdentity) _selectedDetectedMeeting = null;
         UpdateNamingHelp();
     }
     private void ShowError(string message) { ErrorBar.Title = "Meeting needs attention"; ErrorBar.Message = message; ErrorBar.IsOpen = true; }
@@ -546,5 +605,5 @@ public sealed partial class MeetingWindow : Window
         MeetingTimingQuality.Chunk => $"≈ {FormatTime(turn.StartSeconds)} · approximate chunk time",
         _ => "Time unavailable"
     };
-    private sealed record MeetingProcessChoice(int Id, string DisplayName, bool IsTeams);
+    private sealed record MeetingProcessChoice(int Id, string DisplayName, bool IsTeams, DateTime StartedUtc);
 }

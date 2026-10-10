@@ -173,6 +173,20 @@ Copilot cleanup uses JSONL process output, validates a complete text-only result
 and isolates CLI home/cache/log/work directories. Test it with synthetic text;
 never use personal meeting text in diagnostics or print authentication values.
 
+Automatic Teams detection enumerates active WASAPI capture sessions without
+reading audio. It resolves capture owners through a bounded process ancestry
+snapshot, checking creation-time order before identifying a Teams root. It
+identifies Teams by process ID and start time, debounces a
+candidate for three seconds, and rearms dismissed identities after ten seconds
+of observed absence. Failed or disabled scans are not evidence of absence.
+The UI polls off-thread, suppresses suggestions during owned speech operations,
+and joins the monitor before shutdown. Detection opens a configured notetaker;
+the user still starts capture. Test policy separately from the tagged native
+enumeration smoke test; real Teams join/mute behavior requires live qualification.
+Microsoft documents that session enumeration can race with newly created
+sessions; this polling detector is best-effort. See
+[GetSessionEnumerator](https://learn.microsoft.com/en-us/windows/win32/api/audiopolicy/nf-audiopolicy-iaudiosessionmanager2-getsessionenumerator).
+
 Preserve NativeAOT compatibility: use `LibraryImport` and source-generated
 JSON, with no reflection-dependent serialization or runtime code generation.
 When adding models, update catalog capabilities, compiled families, affected

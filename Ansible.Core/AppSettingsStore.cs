@@ -10,8 +10,11 @@ public sealed class AppSettingsStore(string path) : IAppSettingsStore
     public AppSettings Load()
     {
         if (!File.Exists(Path)) { return new(); }
-        var settings = JsonSerializer.Deserialize(File.ReadAllText(Path), AppSettingsJsonContext.Default.AppSettings)
+        using var document = JsonDocument.Parse(File.ReadAllText(Path));
+        var settings = JsonSerializer.Deserialize(document.RootElement, AppSettingsJsonContext.Default.AppSettings)
             ?? throw new InvalidDataException("The app settings file does not contain a settings document.");
+        if (!document.RootElement.TryGetProperty(nameof(AppSettings.AutoDetectMeetings), out _))
+            settings = settings with { AutoDetectMeetings = true };
         settings.Validate();
         return settings;
     }

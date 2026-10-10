@@ -72,6 +72,7 @@ public sealed partial class MainPage : Page
             RenderNotice();
             UsageToggle.IsOn = _state.Settings.CollectUsage;
             HideFromCaptureChoice.IsChecked = _state.Settings.HideFromCapture;
+            AutoDetectMeetingsChoice.IsChecked = _state.Settings.AutoDetectMeetings;
             UsageToggle.IsEnabled = idle;
             ToolTipService.SetToolTip(UsageRow, $"Stored on this device. Never audio or text. Session dates, model, word counts, and timing. File: {_session.UsagePath}");
             AutomationProperties.SetHelpText(UsageToggle, _session.UsagePath);
@@ -182,6 +183,13 @@ public sealed partial class MainPage : Page
     {
         if (_rendering || HideFromCaptureChoice.IsChecked is not bool enabled || enabled == _session.State.Settings.HideFromCapture) return;
         try { _session.SetHideFromCapture(enabled); }
+        catch (Exception error) { _session.ReportUiError(error); Render(); }
+    }
+
+    private void AutoDetectMeetingsChanged(object sender, RoutedEventArgs args)
+    {
+        if (_rendering || AutoDetectMeetingsChoice.IsChecked is not bool enabled || enabled == _session.State.Settings.AutoDetectMeetings) return;
+        try { _session.SetAutoDetectMeetings(enabled); }
         catch (Exception error) { _session.ReportUiError(error); Render(); }
     }
 

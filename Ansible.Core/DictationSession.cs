@@ -192,6 +192,22 @@ public sealed class DictationSession
         Publish(state);
     }
 
+    public void SetAutoDetectMeetings(bool enabled)
+    {
+        SessionSnapshot state;
+        lock (_gate)
+        {
+            if (_state.Phase is DictationPhase.Closing or DictationPhase.Closed)
+                throw new InvalidOperationException("The app is closing.");
+            var settings = _state.Settings with { AutoDetectMeetings = enabled };
+            state = SetState(_state with { Settings = settings,
+                Notice = SaveSettings(settings) ?? new(NoticeKind.Information, "Meeting detection updated",
+                    enabled ? "Ansible can offer local notetaking when Teams uses the microphone. Recording starts only when you click Start."
+                        : "Automatic meeting suggestions are off. You can still start notetaking from Meetings.") });
+        }
+        Publish(state);
+    }
+
     private void ChangeSettings(Func<SessionSnapshot, SessionSnapshot> change, SessionNotice notice)
     {
         SessionSnapshot state;

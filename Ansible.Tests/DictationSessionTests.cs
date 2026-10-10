@@ -9,6 +9,29 @@ public sealed class DictationSessionTests : IDisposable
     private string SettingsPath => Path.Combine(_settingsDirectory, "settings.json");
 
     [Fact]
+    public async Task MeetingDetectionCanChangeDuringRecordingAndPersistsAcrossRestart()
+    {
+        var session = Create(new FakeEngine(), new FakeCaptureFactory(), settings: new AppSettingsStore(SettingsPath));
+        await session.InitializeAsync();
+        var recording = session.StartDictationAsync();
+        await WaitForStateAsync(session, DictationPhase.Recording);
+        session.SetAutoDetectMeetings(false);
+        Assert.False(session.State.Settings.AutoDetectMeetings);
+        Assert.Equal(DictationPhase.Recording, session.State.Phase);
+        Assert.False(new AppSettingsStore(SettingsPath).Load().AutoDetectMeetings);
+        await session.FinishAsync();
+        Assert.Equal(SessionOutcomeKind.Completed, (await recording).Kind);
+        await session.CloseAsync();
+        Assert.Throws<InvalidOperationException>(() => session.SetAutoDetectMeetings(true));
+        var restarted = Create(new FakeEngine(), settings: new AppSettingsStore(SettingsPath));
+        await restarted.InitializeAsync();
+        Assert.False(restarted.State.Settings.AutoDetectMeetings);
+        restarted.SetAutoDetectMeetings(true);
+        Assert.True(new AppSettingsStore(SettingsPath).Load().AutoDetectMeetings);
+        await restarted.CloseAsync();
+    }
+
+    [Fact]
     public async Task CapturePrivacyCanChangeDuringRecordingAndPersistsAcrossRestart()
     {
         var session = Create(new FakeEngine(), new FakeCaptureFactory(), settings: new AppSettingsStore(SettingsPath));

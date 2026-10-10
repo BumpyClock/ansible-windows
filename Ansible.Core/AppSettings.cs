@@ -23,6 +23,7 @@ public sealed record AppSettings
     public bool PushToTalk { get; init; } = true;
     public bool CollectUsage { get; init; } = true;
     public bool HideFromCapture { get; init; }
+    public bool AutoDetectMeetings { get; init; } = true;
     public string CustomDictionary { get; init; } = "";
     [JsonConverter(typeof(JsonStringEnumConverter<TextInsertionMethod>))]
     public TextInsertionMethod InsertionMethod { get; init; } = TextInsertionMethod.Paste;
