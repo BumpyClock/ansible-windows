@@ -40,14 +40,14 @@ public sealed partial class MeetingsPage : Page
             MeetingList.Items.Clear();
             foreach (var document in documents)
             {
-                var row = new StackPanel { Spacing = 6, Padding = new Thickness(12, 16, 12, 16) };
+                var row = new StackPanel { Tag = document, Spacing = 6, Padding = new Thickness(12, 16, 12, 16) };
                 row.Children.Add(new TextBlock { Text = document.Title, Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"] });
                 row.Children.Add(new TextBlock
                 {
                     Text = $"{document.CreatedAt.ToLocalTime():MMM d, yyyy · h:mm tt} · {document.Status}",
                     Style = (Style)Application.Current.Resources["CaptionSecondaryStyle"]
                 });
-                MeetingList.Items.Add(new ListViewItem { Content = row, Tag = document, HorizontalContentAlignment = HorizontalAlignment.Stretch });
+                MeetingList.Items.Add(row);
             }
             UnreadableMeetings.Children.Clear();
             foreach (var failure in result.Failures)
@@ -125,7 +125,7 @@ public sealed partial class MeetingsPage : Page
 
     private async void MeetingClicked(object sender, ItemClickEventArgs args)
     {
-        if (args.ClickedItem is not ListViewItem { Tag: MeetingDocument document }) return;
+        if (args.ClickedItem is not FrameworkElement { Tag: MeetingDocument document }) return;
         try { await _openMeeting(await _store.LoadAsync(document.Id)); }
         catch (Exception error) { ShowError(error); }
     }

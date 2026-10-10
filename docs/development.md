@@ -51,6 +51,12 @@ the **Ansible (Packaged)** launch profile. Packaged development deployment
 requires Windows Developer Mode. F5 uses managed code for debugging; the
 Release package workflow below verifies NativeAOT output.
 
+Building alone does not refresh an already registered development app. Launch
+**Ansible (Packaged)** from Visual Studio to deploy current files before testing
+from the Start menu. NativeAOT compilation requires optimization: unoptimized
+Debug AOT can deadlock inside WinUI reference tracking during garbage collection.
+The build rejects that configuration; use the Release package workflow for AOT.
+
 The solution's Any CPU platform maps the WinUI app to x64 because the app has
 no Any CPU project configuration. ARM64 and x86 map to their named project
 configurations, but the deployment checks reject them until separately qualified.
