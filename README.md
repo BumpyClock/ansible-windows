@@ -8,6 +8,9 @@ Focus a text field, hold F9, speak, and release the key. Ansible inserts the fin
 speech after recognition succeeds. The app also provides manual transcription, meeting transcripts,
 model downloads, custom vocabulary for supported models, and local usage insights.
 
+Microphone permission is checked at launch. Ansible requests missing consent
+before recording and offers Windows Settings guidance when access is blocked.
+
 Recognition runs on the device. Meeting transcripts save automatically on this
 device; dictation transcripts remain in memory. The app never saves audio or
 uploads audio. Optional **Clean up wording** sends transcript text to GitHub

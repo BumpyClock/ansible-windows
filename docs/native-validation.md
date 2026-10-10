@@ -119,6 +119,12 @@ calls; a blocked Windows call can delay shutdown while its owned worker is joine
 
 ## Known limits
 
+- On 2026-10-10, a read-only `AppCapability.CheckAccess` probe ran under
+  Ansible's registered package identity and returned `Allowed`. It did not
+  request permission, open a capture device, or change the running app.
+  Deterministic tests cover prompt-required, denied, unavailable, concurrent,
+  cancelled, and revoked permission paths. Actual first-time consent UI and
+  deny/Settings recovery still need interactive packaged validation.
 - Moonshine streaming input is final-only; Qwen buffers input. Neither promises
   continuously updated recognition text.
 - Nemotron GPU streaming has a recorded failure on Intel Arc 140V with driver

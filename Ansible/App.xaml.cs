@@ -19,11 +19,12 @@ public partial class App : Application
         try
         {
             var paths = AppPaths.Create(AppContext.BaseDirectory, LocalDataDirectory);
+            var microphonePermission = new MicrophonePermissionPreflight(new WindowsMicrophonePermission());
             var session = new DictationSession(
                 directory => new NativeAudioEngine(paths.NativeLibrary, paths.ModelCatalog, directory),
-                new WaveInCaptureFactory(), new AudioInputReader(), new UsageStore(paths.Usage), paths.ModelsDirectory,
+                new PermissionCheckedAudioCaptureFactory(new WaveInCaptureFactory(), microphonePermission), new AudioInputReader(), new UsageStore(paths.Usage), paths.ModelsDirectory,
                 settingsStore: new AppSettingsStore(paths.Settings));
-            Window = new MainWindow(session, paths, ModelDownloadManager.CreateHttpClient());
+            Window = new MainWindow(session, paths, ModelDownloadManager.CreateHttpClient(), microphonePermission);
             Window.Activate();
         }
         catch (Exception error)

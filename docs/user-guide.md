@@ -2,6 +2,21 @@
 
 See the [README](../README.md#build-and-run) to build and launch the app.
 
+## Microphone access
+
+Ansible checks microphone permission at launch, before recording can start. If
+Windows requires consent, the app requests it then. Already granted access does
+not prompt again. If Windows blocks access, the main window shows **Open
+microphone settings** and **Check again**. Enable the applicable microphone
+access settings, then return to Ansible. Policy restrictions may require your
+administrator. File transcription and model management remain available.
+
+This check does not open a microphone or capture audio. Recording checks access
+again to catch permission changes, without opening another consent prompt.
+Older Windows versions without the capability-request API show Settings guidance
+when access cannot be confirmed. Camera, screen-recording, and calendar access
+are not requested because these features do not use them.
+
 ## Choose a model
 
 Open **Speech models**. Select **Download** on a model card, or open **Model folder**

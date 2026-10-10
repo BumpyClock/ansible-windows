@@ -109,6 +109,14 @@
             </Border>
         </Grid>
         <StackPanel Grid.Row="2" Spacing="8" Margin="16,8,16,16">
+            <InfoBar x:Name="MicrophonePermissionNotice" IsOpen="False" IsClosable="False" Visibility="Collapsed"
+                     Severity="Warning" Title="Microphone access needs attention" AutomationProperties.AutomationId="MicrophonePermissionNotice"
+                     AutomationProperties.LiveSetting="Polite">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Content="Open microphone settings" Click="OpenMicrophoneSettingsClicked" />
+                    <Button x:Name="CheckMicrophonePermissionButton" Content="Check again" Click="CheckMicrophonePermissionClicked" />
+                </StackPanel>
+            </InfoBar>
             <InfoBar x:Name="MeetingSuggestion" IsOpen="False" Visibility="Collapsed"
                      Severity="Informational" Title="Teams microphone is active."
                      Message="Start local notetaking? Recording starts only when you click Start."

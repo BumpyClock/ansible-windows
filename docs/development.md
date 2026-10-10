@@ -158,6 +158,16 @@ Pages share a session; `UiSessionObserver` dispatches versioned snapshots.
 Capture, downloads and inference run off the UI thread. The session owns each
 operation and rejects overlapping work or unsafe settings changes.
 
+Launch owns a microphone permission preflight before initializing the session,
+shortcut, and meeting detector. `AppCapability.CheckAccess` is passive;
+`RequestAccessAsync` runs on the UI thread only for `UserPromptRequired`.
+Both capture factories recheck admission without requesting permission. The
+permission request, explicit retry, and Settings launch remain owned through
+shutdown. Permission denial leaves file/model workflows available. Windows below
+build 18362 use a passive `DeviceAccessInformation` check and Settings guidance;
+no capture device is opened merely to provoke consent. See Microsoft's
+[permission request API](https://learn.microsoft.com/en-us/uwp/api/windows.security.authorization.appcapabilityaccess.appcapability.requestaccessasync).
+
 Closing the main window rejects new work and joins owned operations before
 exit. Failed native teardown retains the resource owners and blocks new work;
 it must not turn into a false idle state. Native cancellation waits for the
