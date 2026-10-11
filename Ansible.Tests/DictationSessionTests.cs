@@ -8,6 +8,24 @@ public sealed class DictationSessionTests : IDisposable
     private readonly string _settingsDirectory = Path.Combine(Path.GetTempPath(), "LocalVoiceSettingsTests", Guid.NewGuid().ToString("N"));
     private string SettingsPath => Path.Combine(_settingsDirectory, "settings.json");
 
+    [Theory]
+    [InlineData(NoticeKind.Success)]
+    [InlineData(NoticeKind.Information)]
+    public async Task ExplicitDeliveryNoticeRemainsVisibleUntilReplaced(NoticeKind kind)
+    {
+        var session = Create(new FakeEngine());
+        session.Notify(kind, "Delivery outcome", "Check the destination.", showInStatus: true);
+
+        Assert.True(session.State.Notice.ShouldDisplay);
+        Assert.Equal(kind, session.State.Notice.Kind);
+        Assert.Equal("Delivery outcome", session.State.Notice.Title);
+        Assert.Equal("Check the destination.", session.State.Notice.Message);
+
+        session.Notify(NoticeKind.Information, "Ready", "Choose a model.");
+        Assert.False(session.State.Notice.ShouldDisplay);
+        await session.CloseAsync();
+    }
+
     [Fact]
     public async Task PasteShortcutChangesOnlyWhileIdleAndPersists()
     {

@@ -118,19 +118,22 @@ public sealed partial class MainPage : Page
             ? $"{count} · Not used by {model.DisplayName ?? model.Id}." : count;
     }
 
-    // Warnings and errors stay until dismissed. Success and information notices are shown once for a few
-    // seconds while the session is idle; a notice closed with the close button is not reopened.
     private void RenderNotice()
     {
         var notice = _state.Notice;
-        var attention = notice.Kind is NoticeKind.Warning or NoticeKind.Error;
-        if (!attention || ReferenceEquals(notice, _dismissedNotice))
+        if (!notice.ShouldDisplay || ReferenceEquals(notice, _dismissedNotice))
         {
             StatusInfo.IsOpen = false;
             StatusInfo.Visibility = Visibility.Collapsed;
             return;
         }
-        StatusInfo.Severity = notice.Kind == NoticeKind.Error ? InfoBarSeverity.Error : InfoBarSeverity.Warning;
+        StatusInfo.Severity = notice.Kind switch
+        {
+            NoticeKind.Error => InfoBarSeverity.Error,
+            NoticeKind.Warning => InfoBarSeverity.Warning,
+            NoticeKind.Success => InfoBarSeverity.Success,
+            _ => InfoBarSeverity.Informational
+        };
         StatusInfo.Title = notice.Title;
         StatusInfo.Message = notice.Message;
         StatusInfo.IsOpen = true;

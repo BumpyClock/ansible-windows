@@ -89,6 +89,12 @@ transcript text. Reduced-motion mode uses a level meter.
 
 ### Text insertion
 
+After shortcut insertion, open **Dictation** or **Settings** to see the delivery
+outcome in the status bar. **Insertion verified** means the app observed the
+exact expected change. **Text sent; unverified** means input was queued but the
+change could not be verified; check the destination before inserting again.
+The notice stays until dismissed or replaced by the next session notice.
+
 **Settings > Text insertion** offers two methods:
 
 - **Paste (replaces clipboard)** is the default. Ansible puts the speech text on

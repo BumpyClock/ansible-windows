@@ -240,13 +240,13 @@ public sealed class DictationSession
         }
     }
 
-    public void Notify(NoticeKind kind, string title, string message)
+    public void Notify(NoticeKind kind, string title, string message, bool showInStatus = false)
     {
         SessionSnapshot state;
         lock (_gate)
         {
             if (_closing) { return; }
-            state = SetState(_state with { Notice = new(kind, title, message) });
+            state = SetState(_state with { Notice = new(kind, title, message, showInStatus) });
         }
         Publish(state);
     }

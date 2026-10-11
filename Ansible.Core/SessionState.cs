@@ -9,7 +9,10 @@ public enum DictationPhase
 public enum SessionActivity { None, Connecting, Dictation, Replay, File, ModelMaintenance }
 public enum NoticeKind { Information, Success, Warning, Error }
 public enum SessionOutcomeKind { Completed, Cancelled, TimedOut, Failed }
-public sealed record SessionNotice(NoticeKind Kind, string Title, string Message);
+public sealed record SessionNotice(NoticeKind Kind, string Title, string Message, bool ShowInStatus = false)
+{
+    public bool ShouldDisplay => ShowInStatus || Kind is NoticeKind.Warning or NoticeKind.Error;
+}
 public sealed record SessionOutcome(SessionOutcomeKind Kind, RecognitionResult? Result = null, Exception? Error = null);
 
 public sealed record SessionSnapshot

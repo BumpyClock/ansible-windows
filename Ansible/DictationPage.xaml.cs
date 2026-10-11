@@ -167,19 +167,22 @@ public sealed partial class DictationPage : Page
         LiveText.Text = text;
     }
 
-    // Only warnings and errors interrupt. Success and information are already reflected by the hero status,
-    // the transcript, or the control that was used.
     private void RenderNotice()
     {
         var notice = _state.Notice;
-        var attention = notice.Kind is NoticeKind.Warning or NoticeKind.Error;
-        if (!attention || ReferenceEquals(notice, _dismissedNotice))
+        if (!notice.ShouldDisplay || ReferenceEquals(notice, _dismissedNotice))
         {
             StatusInfo.IsOpen = false;
             StatusInfo.Visibility = Visibility.Collapsed;
             return;
         }
-        StatusInfo.Severity = notice.Kind == NoticeKind.Error ? InfoBarSeverity.Error : InfoBarSeverity.Warning;
+        StatusInfo.Severity = notice.Kind switch
+        {
+            NoticeKind.Error => InfoBarSeverity.Error,
+            NoticeKind.Warning => InfoBarSeverity.Warning,
+            NoticeKind.Success => InfoBarSeverity.Success,
+            _ => InfoBarSeverity.Informational
+        };
         StatusInfo.Title = notice.Title;
         StatusInfo.Message = notice.Message;
         StatusInfo.Visibility = Visibility.Visible;

@@ -640,9 +640,9 @@ public sealed partial class MainWindow : Window
             else if (delivery.Sent)
                 _session.Notify(delivery.Delivery?.Status == TextDeliveryStatus.Verified ? NoticeKind.Success : NoticeKind.Information,
                     delivery.Delivery?.Status == TextDeliveryStatus.Verified ? "Insertion verified" : "Text sent; unverified",
-                    delivery.Delivery?.Message ?? "The insertion input was sent. Check the destination.");
+                    delivery.Delivery?.Message ?? "The insertion input was sent. Check the destination.", showInStatus: true);
             else
-                _session.Notify(NoticeKind.Information, "No speech to insert", "The model returned no speech text.");
+                _session.Notify(NoticeKind.Information, "No speech to insert", "The model returned no speech text.", showInStatus: true);
         }
         catch (OperationCanceledException) when (_deliveryCancellation.IsCancellationRequested) { }
         catch (Exception error) { _session.ReportUiError(error); }
