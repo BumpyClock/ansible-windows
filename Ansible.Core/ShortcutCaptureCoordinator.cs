@@ -16,8 +16,31 @@ namespace Ansible.Core;
 /// </summary>
 public sealed class ShortcutCaptureCoordinator
 {
+    public static readonly TimeSpan ReleaseTail = TimeSpan.FromMilliseconds(500);
     private readonly object _sync = new();
+    private readonly Func<TimeSpan, CancellationToken, Task> _releaseDelay;
     private Capture? _active;
+    private Release? _release;
+
+    public ShortcutCaptureCoordinator(Func<TimeSpan, CancellationToken, Task>? releaseDelay = null) =>
+        _releaseDelay = releaseDelay ?? Task.Delay;
+
+    public sealed class Release
+    {
+        internal Release() { }
+    }
+
+    public void NotePressed()
+    {
+        lock (_sync) { _release = null; }
+    }
+
+    public async Task<bool> WaitForReleaseTailAsync(Release release, CancellationToken cancellationToken)
+    {
+        await _releaseDelay(ReleaseTail, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_sync) { return ReferenceEquals(_release, release); }
+    }
 
     public sealed class Capture
     {
@@ -50,11 +73,13 @@ public sealed class ShortcutCaptureCoordinator
     /// Records a shortcut release. A push-to-talk release marks the active capture stale so its pending
     /// inspection cannot start recording; a toggle-mode release leaves the capture able to start.
     /// </summary>
-    public void NoteReleased()
+    public Release NoteReleased()
     {
         lock (_sync)
         {
             if (_active is { PushToTalk: true } active) { active.Released = true; }
+            _release = new Release();
+            return _release;
         }
     }
 

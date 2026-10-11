@@ -76,8 +76,15 @@ recognition. Cancelling or failing recognition inserts no text. Held Ctrl, Alt,
 Shift, or Win keys delay insertion until released. Model loading and recognition
 can continue after capture stops.
 
+In **Hold to talk** mode, the microphone stays open for **500 ms after key
+release** to capture the end of the phrase. The waveform remains visible until
+capture stops. Pressing the shortcut again during that tail keeps the current
+recording open; its next release starts a new 500 ms tail. Cancellation and
+window shutdown do not wait for the tail. **Press to start and stop** and manual
+Finish keep their immediate-stop behavior.
+
 The waveform pill shows microphone energy while capture is active. It hides when
-capture stops, including when the hold-to-talk key is released. It does not show
+capture stops, including after the hold-to-talk release tail. It does not show
 transcript text. Reduced-motion mode uses a level meter.
 
 ### Text insertion

@@ -37,6 +37,7 @@ public sealed partial class MainWindow : Window
     private readonly CancellationTokenSource _deliveryCancellation = new();
     private Task<(bool available, CapturedTextTarget? target, string reason)>? _captureTask;
     private Task? _deliveryTask;
+    private Task? _releaseTailTask;
     private FinalTextDelivery? _delivery;
     private Task<SessionOutcome>? _deliveryOperation;
     private Guid? _deliveryOperationId;
@@ -463,8 +464,7 @@ public sealed partial class MainWindow : Window
             if (failures.Count > 0)
                 _session.Notify(NoticeKind.Warning, "Screen capture privacy unavailable", string.Join(" ", failures.Distinct()));
         }
-        var showWaveform = state.Phase is DictationPhase.Preparing or DictationPhase.Recording &&
-            (_delivery is null || !state.Settings.PushToTalk || _shortcutHeld);
+        var showWaveform = state.Phase is DictationPhase.Preparing or DictationPhase.Recording;
         if (!showWaveform) { _popupFailed = false; }
         if (showWaveform && _floating is null && !_popupFailed && !_creatingFloating)
         {
@@ -489,6 +489,7 @@ public sealed partial class MainWindow : Window
     {
         _shortcutHeld = pressed;
         if (_closed || _closing) { return; }
+        if (pressed) { _captureCoordinator.NotePressed(); }
         try
         {
             if (!pressed) { await HandleReleaseAsync(); }
@@ -498,18 +499,34 @@ public sealed partial class MainWindow : Window
     }
 
     // Shortcut release. Marks a pending push-to-talk capture stale so its inspection cannot start a late
-    // recording, and finishes or cancels dictation from a single State snapshot so a Preparing->Recording transition
-    // cannot be read inconsistently across two reads.
+    // recording. Once admitted, capture retains a short tail owned by this release and delivery operation.
     private async Task HandleReleaseAsync()
     {
         var state = _session.State;
-        if (state.Settings.PushToTalk) { _floating?.HidePreview(); }
-        _captureCoordinator.NoteReleased();
+        var release = _captureCoordinator.NoteReleased();
         if (state.Settings.PushToTalk && _delivery is not null)
         {
+            var task = FinishReleasedDictationAsync(release, _delivery, state.OperationId);
+            _releaseTailTask = _releaseTailTask is { IsCompleted: false } previous
+                ? Task.WhenAll(previous, task) : task;
+            await task;
+        }
+    }
+
+    private async Task FinishReleasedDictationAsync(
+        ShortcutCaptureCoordinator.Release release, FinalTextDelivery delivery, Guid? operationId)
+    {
+        try
+        {
+            if (!await _captureCoordinator.WaitForReleaseTailAsync(release, _deliveryCancellation.Token)) { return; }
+            if (_closing || _closed || _shortcutHeld || !ReferenceEquals(_delivery, delivery)) { return; }
+            var state = _session.State;
+            if (state.OperationId != operationId || !state.Settings.PushToTalk) { return; }
             if (state.CanFinish) { await _session.FinishAsync(); }
             else if (state.Phase == DictationPhase.Preparing) { await _session.CancelAsync(); }
         }
+        catch (OperationCanceledException) when (_deliveryCancellation.IsCancellationRequested) { }
+        catch (Exception error) { _session.ReportUiError(error); }
     }
 
     // Shortcut press. Admits at most one interaction to own the target inspection; a press arriving while an
@@ -671,6 +688,7 @@ public sealed partial class MainWindow : Window
                 catch (Exception error) { Debug.WriteLine($"Ansible: target inspection failed during close: {error.Message}"); }
             }
             if (_deliveryTask is not null) { await _deliveryTask; }
+            if (_releaseTailTask is not null) { await _releaseTailTask; }
             if (_floating is not null) { await _floating.ClosePreviewAsync(); }
             _allowClose = true;
             Close();
