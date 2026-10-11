@@ -19,7 +19,7 @@ public sealed class WindowsTextTargetTests
         var target = new CapturedTextTarget(1, 2, null);
 
         Assert.True(target.Matches(1, 2, null));
-        Assert.True(new CapturedTextTarget(1, 2, [3]).Matches(1, 2, null));
+        Assert.False(new CapturedTextTarget(1, 2, [3]).Matches(1, 2, null));
         Assert.False(target.Matches(5, 2, null));
         Assert.False(target.Matches(1, 6, null));
     }
@@ -104,11 +104,11 @@ public sealed class WindowsTextTargetTests
     }
 
     [Fact]
-    public void PartialSendRemainsRejectedAndNeverRestoresOldClipboard()
+    public void PartialSendNeverRestoresOldClipboard()
     {
         var clipboard = "old clipboard";
         var sends = 0;
-        var failure = TextDeliveryOutcome.Rejected("Partial send.");
+        var failure = TextDeliveryOutcome.Partial("Partial send.");
 
         var result = WindowsTextTarget.PasteWithClipboard(
             () => { clipboard = "final speech"; return null; },

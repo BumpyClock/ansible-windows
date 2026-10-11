@@ -85,7 +85,7 @@ transcript text. Reduced-motion mode uses a level meter.
 **Settings > Text insertion** offers two methods:
 
 - **Paste (replaces clipboard)** is the default. Ansible puts the speech text on
-  the clipboard immediately and sends Ctrl+V. The text remains available for
+  the clipboard immediately and sends the selected paste shortcut. The text remains available for
   asynchronous readers, including hosted editors. The previous clipboard content
   is replaced, not backed up or restored. It requests exclusion from Windows
   clipboard history, clipboard monitors, and cloud sync. Publication failures
@@ -95,22 +95,39 @@ transcript text. Reduced-motion mode uses a level meter.
   garble text in slow targets such as Notepad. Use paced typing for apps that
   block Ctrl+V.
 
-Use **Type characters** to preserve your clipboard or for apps that block Ctrl+V,
-including terminals that require a different paste shortcut. Ansible does not
+**Destination paste shortcut** selects **Ctrl+V** (default), **Shift+Insert**, or
+**Ctrl+Shift+V**. Choose the chord accepted by the actual editor or terminal;
+the choice applies to all paste dictation, not an automatically detected app.
+The same application can contain fields with different shortcut behavior.
+Paste holds the selected chord briefly before releasing its keys in reverse
+order. Ansible never resends the paste to recover a failed key release.
+
+Use **Type characters** to preserve your clipboard or for apps that block paste.
+Ansible does not
 restrict clipboard readers to the destination window's process, and does not
 use clipboard reads or a timeout as proof of insertion. Another app or a later
 dictation can replace the clipboard before a delayed paste reads it. Check the
 destination before starting another dictation.
 
-Ansible checks the original window and focused native handle before insertion.
-When available, it also checks the field's UI Automation identity. Some editors
+Ansible checks the original window and focused native handle before insertion,
+and refreshes the field's UI Automation identity before sending input. Losing a
+previously available field identity stops insertion rather than downgrading the
+check. Some editors
 do not expose that identity, so a move between fields in the same window can go
 undetected. Known password and read-only fields are rejected. Elevated apps and
 the secure desktop are unsupported.
 
-If focus changes or insertion fails, the app does not retry a potentially partial
-send. Check the destination, then use **Copy** on the Dictation page to recover
-the text manually. Windows cannot confirm that an app accepted typed characters.
+Where the destination exposes usable text and selection through UI Automation,
+Ansible compares bounded before/after snapshots to the exact expected insertion.
+Those snapshots stay in memory; no field contents are logged or saved. Password
+fields are not read. Unsupported, ambiguous or truncated snapshots do not prove
+failure and never trigger another insertion.
+
+**Insertion verified** means the expected text change was observed in the same
+field. **Text sent; unverified** means input was sent but the destination could
+not be confirmed. Partial input and key-release failures produce warnings and
+are not automatically retried. Check the destination before using **Copy** to
+recover text manually; repeating an uncertain send can duplicate speech.
 
 ## Transcribe without automatic insertion
 

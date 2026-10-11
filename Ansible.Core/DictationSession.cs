@@ -136,6 +136,9 @@ public sealed class DictationSession
     public void SetTypingGap(int milliseconds) =>
         ChangeSettings(state => state with { Settings = state.Settings with { TypingGapMilliseconds = milliseconds } },
             new(NoticeKind.Success, "Typing gap updated", $"Typed characters are sent {milliseconds} ms apart."));
+    public void SetPasteShortcut(PasteShortcut shortcut) =>
+        ChangeSettings(state => state with { Settings = state.Settings with { PasteShortcut = shortcut } },
+            new(NoticeKind.Success, "Paste shortcut updated", "The selected paste shortcut applies to the next dictation. Check that the destination accepts it."));
     public void SetMicrophoneBoost(int decibels) =>
         ChangeSettings(state => state with { Settings = state.Settings with { MicrophoneBoostDecibels = decibels } },
             new(NoticeKind.Success, "Microphone boost updated", "The boost applies to the next microphone dictation."));

@@ -9,6 +9,23 @@ public sealed class DictationSessionTests : IDisposable
     private string SettingsPath => Path.Combine(_settingsDirectory, "settings.json");
 
     [Fact]
+    public async Task PasteShortcutChangesOnlyWhileIdleAndPersists()
+    {
+        var session = Create(new FakeEngine(), new FakeCaptureFactory(), settings: new AppSettingsStore(SettingsPath));
+        await session.InitializeAsync();
+        session.SetPasteShortcut(PasteShortcut.ShiftInsert);
+        Assert.Equal(PasteShortcut.ShiftInsert, session.State.Settings.PasteShortcut);
+        Assert.Equal(PasteShortcut.ShiftInsert, new AppSettingsStore(SettingsPath).Load().PasteShortcut);
+        Assert.Throws<InvalidDataException>(() => session.SetPasteShortcut((PasteShortcut)7));
+        var recording = session.StartDictationAsync();
+        await WaitForStateAsync(session, DictationPhase.Recording);
+        Assert.Throws<InvalidOperationException>(() => session.SetPasteShortcut(PasteShortcut.ControlV));
+        await session.FinishAsync();
+        await recording;
+        await session.CloseAsync();
+    }
+
+    [Fact]
     public async Task MeetingDetectionCanChangeDuringRecordingAndPersistsAcrossRestart()
     {
         var session = Create(new FakeEngine(), new FakeCaptureFactory(), settings: new AppSettingsStore(SettingsPath));

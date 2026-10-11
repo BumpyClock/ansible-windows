@@ -96,7 +96,10 @@ public sealed partial class MainPage : Page
         InsertionChoice.IsEnabled = idle;
         InsertionHelpText.Text = typing
             ? "Types one character at a time. Use this for apps that block paste."
-            : "Replaces your clipboard with dictated text and sends Ctrl+V. The text stays available for apps that paste later. Requests exclusion from clipboard history and cloud sync. Use Type characters to preserve your clipboard.";
+            : "Replaces your clipboard with dictated text and sends the selected paste shortcut. The text stays available for apps that paste later. Requests exclusion from clipboard history and cloud sync. Use Type characters to preserve your clipboard.";
+        PasteShortcutRow.Visibility = typing ? Visibility.Collapsed : Visibility.Visible;
+        PasteShortcutChoice.IsEnabled = idle;
+        PasteShortcutChoice.SelectedIndex = (int)_state.Settings.PasteShortcut;
         TypingGapRow.Visibility = typing ? Visibility.Visible : Visibility.Collapsed;
         TypingGapBox.IsEnabled = idle;
         TypingGapBox.Value = _state.Settings.TypingGapMilliseconds;
@@ -219,6 +222,15 @@ public sealed partial class MainPage : Page
         var gap = (int)Math.Round(Math.Clamp(args.NewValue, 0, AppSettings.MaxTypingGapMilliseconds));
         if (gap == _session.State.Settings.TypingGapMilliseconds) { return; }
         try { _session.SetTypingGap(gap); }
+        catch (Exception error) { _session.ReportUiError(error); Render(); }
+    }
+
+    private void PasteShortcutChanged(object sender, SelectionChangedEventArgs args)
+    {
+        if (_rendering || PasteShortcutChoice.SelectedIndex < 0) { return; }
+        var shortcut = (PasteShortcut)PasteShortcutChoice.SelectedIndex;
+        if (shortcut == _session.State.Settings.PasteShortcut) { return; }
+        try { _session.SetPasteShortcut(shortcut); }
         catch (Exception error) { _session.ReportUiError(error); Render(); }
     }
 

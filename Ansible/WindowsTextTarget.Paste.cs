@@ -14,9 +14,10 @@ internal static unsafe partial class WindowsTextTarget
     private static readonly Lock s_classLock = new();
     private static bool s_classRegistered;
 
-    private static TextDeliveryOutcome? Paste(string text, Func<TextDeliveryOutcome?> recheck)
+    private static TextDeliveryOutcome? Paste(string text, PasteShortcut shortcut,
+        CancellationToken cancellationToken, Func<bool> stillCurrent,
+        Func<TextDeliveryOutcome?> recheck, Func<TextDeliveryOutcome?> prepareSend)
     {
-        if (recheck() is { } early) { return early; }
         var window = CreatePasteWindow();
         uint sequence = 0;
         try
@@ -31,18 +32,11 @@ internal static unsafe partial class WindowsTextTarget
                 recheck,
                 () =>
                 {
+                    if (prepareSend() is { } veto) { return veto; }
                     if (GetClipboardOwner() != window || GetClipboardSequenceNumber() != sequence)
                         return TextDeliveryOutcome.Rejected("Another app changed the clipboard before insertion. No paste shortcut was sent. Use Copy transcript instead.");
-                    var keys = new[]
-                    {
-                        KeyboardEvent.Virtual(VkControl, 0), KeyboardEvent.Virtual(VkV, 0),
-                        KeyboardEvent.Virtual(VkV, KeyUp), KeyboardEvent.Virtual(VkControl, KeyUp)
-                    };
-                    var sent = SendInput((uint)keys.Length, keys, Marshal.SizeOf<KeyboardEvent>());
-                    if (sent == keys.Length) { return null; }
-                    var error = Marshal.GetLastPInvokeError();
-                    if (sent > 0) { _ = SendInput(2, [keys[2], keys[3]], Marshal.SizeOf<KeyboardEvent>()); }
-                    return TextDeliveryOutcome.Rejected($"Windows sent {sent} of {keys.Length} paste key events (error {error}). Check the field before retrying. Dictated text remains on the clipboard unless another app changed it.");
+                    return SendPasteChord(shortcut, NativeSend, Thread.Sleep,
+                        () => cancellationToken.IsCancellationRequested || !stillCurrent());
                 });
         }
         finally { DestroyWindow(window); }

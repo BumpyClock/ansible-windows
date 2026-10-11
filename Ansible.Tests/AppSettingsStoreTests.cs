@@ -19,6 +19,7 @@ public sealed class AppSettingsStoreTests : IDisposable
         Assert.Equal(0, store.Load().MicrophoneBoostDecibels);
         Assert.False(store.Load().HideFromCapture);
         Assert.True(store.Load().AutoDetectMeetings);
+        Assert.Equal(PasteShortcut.ControlV, store.Load().PasteShortcut);
         Assert.False(File.Exists(store.Path));
     }
 
@@ -48,6 +49,7 @@ public sealed class AppSettingsStoreTests : IDisposable
             CollectUsage = false,
             CustomDictionary = "NativeAOT\nWinUI",
             InsertionMethod = TextInsertionMethod.Type,
+            PasteShortcut = PasteShortcut.ShiftInsert,
             TypingGapMilliseconds = 35,
             MicrophoneBoostDecibels = 20,
             HideFromCapture = true,
@@ -63,6 +65,7 @@ public sealed class AppSettingsStoreTests : IDisposable
         Assert.False(shortcut.TryGetProperty("DisplayText", out _));
         Assert.False(shortcut.TryGetProperty("IsValid", out _));
         Assert.Equal("Type", document.RootElement.GetProperty("InsertionMethod").GetString());
+        Assert.Equal("ShiftInsert", document.RootElement.GetProperty("PasteShortcut").GetString());
         Assert.Equal(35, document.RootElement.GetProperty("TypingGapMilliseconds").GetInt32());
         Assert.True(document.RootElement.GetProperty("HideFromCapture").GetBoolean());
         Assert.False(document.RootElement.GetProperty("AutoDetectMeetings").GetBoolean());
@@ -90,6 +93,28 @@ public sealed class AppSettingsStoreTests : IDisposable
         File.WriteAllText(store.Path, document.ToJsonString());
         Assert.True(store.Load().AutoDetectMeetings);
         Assert.Equal("en", store.Load().Language);
+    }
+
+    [Fact]
+    public void ExistingSettingsWithoutPasteShortcutUseControlV()
+    {
+        var store = CreateStore();
+        store.Save(new AppSettings { PasteShortcut = PasteShortcut.ControlShiftV });
+        var document = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(store.Path))!.AsObject();
+        Assert.True(document.Remove("PasteShortcut"));
+        File.WriteAllText(store.Path, document.ToJsonString());
+
+        Assert.Equal(PasteShortcut.ControlV, store.Load().PasteShortcut);
+    }
+
+    [Theory]
+    [InlineData(PasteShortcut.ControlV)]
+    [InlineData(PasteShortcut.ShiftInsert)]
+    [InlineData(PasteShortcut.ControlShiftV)]
+    public void PasteShortcutRoundTrips(PasteShortcut shortcut)
+    {
+        CreateStore().Save(new AppSettings { PasteShortcut = shortcut });
+        Assert.Equal(shortcut, CreateStore().Load().PasteShortcut);
     }
 
     [Fact]
@@ -136,6 +161,8 @@ public sealed class AppSettingsStoreTests : IDisposable
     [InlineData("{\"ModelsDirectory\":\"relative-models\"}", typeof(InvalidDataException))]
     [InlineData("{\"InsertionMethod\":\"Dictate\"}", typeof(JsonException))]
     [InlineData("{\"InsertionMethod\":7}", typeof(InvalidDataException))]
+    [InlineData("{\"PasteShortcut\":\"Unknown\"}", typeof(JsonException))]
+    [InlineData("{\"PasteShortcut\":7}", typeof(InvalidDataException))]
     [InlineData("{\"TypingGapMilliseconds\":-1}", typeof(InvalidDataException))]
     [InlineData("{\"TypingGapMilliseconds\":201}", typeof(InvalidDataException))]
     [InlineData("{\"MicrophoneBoostDecibels\":-1}", typeof(InvalidDataException))]
