@@ -5,7 +5,7 @@ namespace Ansible.Core;
 /// <summary>How dictated text reaches the destination field.</summary>
 public enum TextInsertionMethod
 {
-    /// <summary>Back up the clipboard, paste the text with Ctrl+V, then restore the clipboard.</summary>
+    /// <summary>Place the text on the clipboard and send Ctrl+V, leaving it available for delayed readers.</summary>
     Paste,
     /// <summary>Send each character as a Unicode keystroke, separated by the typing gap.</summary>
     Type

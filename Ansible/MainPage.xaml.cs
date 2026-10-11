@@ -96,7 +96,7 @@ public sealed partial class MainPage : Page
         InsertionChoice.IsEnabled = idle;
         InsertionHelpText.Text = typing
             ? "Types one character at a time. Use this for apps that block paste."
-            : "Fastest and most reliable in most apps. Your clipboard is backed up and restored after each paste, and dictated text stays out of clipboard history.";
+            : "Replaces your clipboard with dictated text and sends Ctrl+V. The text stays available for apps that paste later. Requests exclusion from clipboard history and cloud sync. Use Type characters to preserve your clipboard.";
         TypingGapRow.Visibility = typing ? Visibility.Visible : Visibility.Collapsed;
         TypingGapBox.IsEnabled = idle;
         TypingGapBox.Value = _state.Settings.TypingGapMilliseconds;

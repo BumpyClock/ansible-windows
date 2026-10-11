@@ -84,21 +84,23 @@ transcript text. Reduced-motion mode uses a level meter.
 
 **Settings > Text insertion** offers two methods:
 
-- **Paste, then restore clipboard** is the default. Ansible backs up the clipboard,
-  offers the speech text, sends Ctrl+V, and restores the backup after the target
-  reads it. It requests exclusion from Windows clipboard history and cloud sync.
-  Clipboard or restoration failures are reported. If another app copies content
-  during the paste, that new content is kept.
+- **Paste (replaces clipboard)** is the default. Ansible puts the speech text on
+  the clipboard immediately and sends Ctrl+V. The text remains available for
+  asynchronous readers, including hosted editors. The previous clipboard content
+  is replaced, not backed up or restored. It requests exclusion from Windows
+  clipboard history, clipboard monitors, and cloud sync. Publication failures
+  are reported and prevent the paste shortcut from being sent.
 - **Type characters** sends Unicode keystrokes. **Gap between characters (ms)**
   ranges from 0 to 200, with a default of 20. A zero gap sends a burst that can
   garble text in slow targets such as Notepad. Use paced typing for apps that
   block Ctrl+V.
 
-Paste is rejected if the clipboard contains formats that cannot be backed up or
-the backup exceeds 256 MiB. Large clipboard content can delay insertion. If the
-target does not read the offered text within three seconds, Ansible restores the
-clipboard and reports failure. A target that processes Ctrl+V later can paste the
-restored content instead. Check the field; use **Type characters** for that app.
+Use **Type characters** to preserve your clipboard or for apps that block Ctrl+V,
+including terminals that require a different paste shortcut. Ansible does not
+restrict clipboard readers to the destination window's process, and does not
+use clipboard reads or a timeout as proof of insertion. Another app or a later
+dictation can replace the clipboard before a delayed paste reads it. Check the
+destination before starting another dictation.
 
 Ansible checks the original window and focused native handle before insertion.
 When available, it also checks the field's UI Automation identity. Some editors
@@ -273,7 +275,8 @@ meeting transcripts, titles, and speaker names save locally. Recognition does
 not upload audio. Optional Copilot cleanup uploads transcript text after the
 explicit **Send text and clean up** action. Model downloads also use the network.
 **Copy** uses the ordinary clipboard; Windows clipboard features and destination
-apps can retain text you copy or insert. Automatic shortcut paste requests
+apps can retain text you copy or insert. Automatic shortcut paste leaves dictated
+text on the clipboard until replaced. It requests
 clipboard-history and cloud-sync exclusions, but those requests are not a storage
 guarantee for other apps.
 

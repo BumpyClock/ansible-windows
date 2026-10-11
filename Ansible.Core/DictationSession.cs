@@ -131,7 +131,7 @@ public sealed class DictationSession
     public void SetInsertionMethod(TextInsertionMethod method) =>
         ChangeSettings(state => state with { Settings = state.Settings with { InsertionMethod = method } },
             new(NoticeKind.Success, "Text insertion updated", method == TextInsertionMethod.Paste
-                ? "Dictated text is pasted. Your clipboard is restored after each paste."
+                ? "Dictated text replaces the clipboard and remains available after the paste shortcut is sent."
                 : "Dictated text is typed one character at a time."));
     public void SetTypingGap(int milliseconds) =>
         ChangeSettings(state => state with { Settings = state.Settings with { TypingGapMilliseconds = milliseconds } },

@@ -620,7 +620,7 @@ public sealed partial class MainWindow : Window
                 _session.Notify(NoticeKind.Warning, "Insertion stopped",
                     $"{delivery.Error} Use Copy transcript for the final text.");
             else if (delivery.Sent)
-                _session.Notify(NoticeKind.Success, "Text sent", "The final transcript was inserted.");
+                _session.Notify(NoticeKind.Success, "Text sent", "The insertion input was sent. Check the destination; Windows cannot confirm that the app accepted it.");
             else
                 _session.Notify(NoticeKind.Information, "No speech to insert", "The model returned no speech text.");
         }

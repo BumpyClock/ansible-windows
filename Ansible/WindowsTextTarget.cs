@@ -87,7 +87,7 @@ internal static unsafe partial class WindowsTextTarget
         }
 
         var failure = method == TextInsertionMethod.Paste
-            ? Paste(text, ReaderProcesses(target), Recheck)
+            ? Paste(text, Recheck)
             : Type(text, typingGapMilliseconds, Recheck);
         if (failure is { } outcome) { return outcome; }
         return TextDeliveryOutcome.Sent(target.RuntimeId is null || runtimeId is null
@@ -140,15 +140,6 @@ internal static unsafe partial class WindowsTextTarget
         if (sent == input.Length) { return null; }
         var error = Marshal.GetLastPInvokeError();
         return TextDeliveryOutcome.Rejected($"Windows sent {sent} of {input.Length} keyboard events (error {error}). Some text may have been inserted. Check the field before using Copy transcript.");
-    }
-
-    // The process that owns the focused field reads the clipboard; for hosted apps it can differ from the
-    // foreground frame window's process.
-    private static uint[] ReaderProcesses(CapturedTextTarget target)
-    {
-        _ = GetWindowThreadProcessId(target.Window, out var windowProcess);
-        _ = GetWindowThreadProcessId(target.FocusWindow, out var focusProcess);
-        return [windowProcess, focusProcess];
     }
 
     private static bool ShortcutModifiersReleased()

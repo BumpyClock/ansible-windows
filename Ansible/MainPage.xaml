@@ -59,7 +59,7 @@
                             <RadioButtons.Resources>
                                 <Thickness x:Key="RadioButtonsTopHeaderMargin">0</Thickness>
                             </RadioButtons.Resources>
-                            <x:String>Paste, then restore clipboard</x:String>
+                            <x:String>Paste (replaces clipboard)</x:String>
                             <x:String>Type characters</x:String>
                         </RadioButtons>
                         <TextBlock x:Name="InsertionHelpText" TextWrapping="Wrap"
