@@ -15,8 +15,9 @@ internal static partial class NativeAudioApi
         if (status != 0)
         {
             var detail = Marshal.PtrToStringUTF8(LastError()) ?? $"native status {status}";
-            throw new InvalidOperationException($"audio.cpp could not {operation}: {detail}");
+            throw new NativeExecutionException($"audio.cpp could not {operation}: {detail}", operation, status);
         }
+
     }
 
     [StructLayout(LayoutKind.Sequential)]

@@ -15,6 +15,8 @@ public sealed class AppSettingsStore(string path) : IAppSettingsStore
             ?? throw new InvalidDataException("The app settings file does not contain a settings document.");
         if (!document.RootElement.TryGetProperty(nameof(AppSettings.AutoDetectMeetings), out _))
             settings = settings with { AutoDetectMeetings = true };
+        if (!document.RootElement.TryGetProperty(nameof(AppSettings.Backend), out _))
+            settings = settings with { Backend = NativeBackend.Auto };
         settings.Validate();
         return settings;
     }

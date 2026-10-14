@@ -608,7 +608,17 @@ public sealed class DictationSession
         {
             await previous;
             if (token.IsCancellationRequested) { return; }
-            try { await work(engine, token); }
+            try
+            {
+                await work(engine, token);
+                SessionSnapshot? state = null;
+                lock (_gate)
+                {
+                    if (!_closing && ReferenceEquals(_engine, engine) && !token.IsCancellationRequested)
+                        state = SetState(_state);
+                }
+                if (state is not null) { Publish(state); }
+            }
             catch (Exception) when (token.IsCancellationRequested) { }
             catch (Exception error) { ReportEngineWorkFailure(title, $"{consequence} {error.Message}"); }
         });
@@ -969,7 +979,11 @@ public sealed class DictationSession
         }
     }
 
-    private SessionSnapshot SetState(SessionSnapshot state) => _state = state with { Version = ++_version };
+    private SessionSnapshot SetState(SessionSnapshot state) => _state = state with
+    {
+        Version = ++_version,
+        DeviceSelectionSummary = _engine?.DeviceSelectionSummary ?? ""
+    };
     private void Publish(SessionSnapshot state) => StateChanged?.Invoke(state);
 
     private sealed class InlineProgress<T>(Action<T> report) : IProgress<T>

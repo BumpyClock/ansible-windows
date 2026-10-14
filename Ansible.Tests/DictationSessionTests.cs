@@ -148,7 +148,7 @@ public sealed class DictationSessionTests : IDisposable
         var engine = new FakeEngine();
         var session = Create(engine, settings: new AppSettingsStore(SettingsPath));
         await session.InitializeAsync();
-        Assert.Equal(NativeBackend.Cpu, session.State.Settings.Backend);
+        Assert.Equal(NativeBackend.Auto, session.State.Settings.Backend);
         session.SetBackend(NativeBackend.Vulkan);
         Assert.Throws<InvalidDataException>(() => session.SetBackend((NativeBackend)42));
         Assert.Equal(NativeBackend.Vulkan, session.State.Settings.Backend);
@@ -263,13 +263,24 @@ public sealed class DictationSessionTests : IDisposable
         await session.InitializeAsync();
         await engine.PrepareCalled.Task.WaitAsync(TimeSpan.FromSeconds(2));
         Assert.Equal(Model, engine.PreparedModel);
-        Assert.Equal(NativeBackend.Cpu, engine.PreparedOptions?.Backend);
+        Assert.Equal(NativeBackend.Auto, engine.PreparedOptions?.Backend);
 
         session.SetBackend(NativeBackend.Vulkan);
         await WaitUntilAsync(() => engine.PreparedOptions?.Backend == NativeBackend.Vulkan);
 
         await session.CloseAsync();
         Assert.Equal(0, engine.Unloads);
+    }
+
+    [Fact]
+    public async Task PreloadPublishesMeasuredDeviceSummaryInANewSnapshot()
+    {
+        var engine = new FakeEngine { PreparedDeviceSummary = "Auto selected Vulkan. CPU: 100.0 ms; Vulkan: 80.0 ms." };
+        var session = Create(engine);
+        await session.InitializeAsync();
+        await WaitUntilAsync(() => session.State.DeviceSelectionSummary == engine.PreparedDeviceSummary);
+        Assert.Equal(engine.PreparedDeviceSummary, session.State.DeviceSelectionSummary);
+        await session.CloseAsync();
     }
 
     [Fact]
@@ -1266,6 +1277,8 @@ public sealed class DictationSessionTests : IDisposable
 
     private sealed class FakeEngine : IRecognitionEngine
     {
+        public string DeviceSelectionSummary { get; private set; } = "";
+        public string PreparedDeviceSummary { get; init; } = "";
         public string ModelsDirectory { get; init; } = "models";
         public string Version => "test";
         public RecognitionResult Result { get; init; } = new("hello world", "hello world");
@@ -1333,6 +1346,7 @@ public sealed class DictationSessionTests : IDisposable
             PreparedOptions = options;
             PrepareCalled.TrySetResult();
             if (Preparing is not null) { await Preparing(token); }
+            DeviceSelectionSummary = PreparedDeviceSummary;
         }
         public Task UnloadAsync(CancellationToken token)
         {

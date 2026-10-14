@@ -16,6 +16,7 @@ public sealed class AppSettingsStoreTests : IDisposable
         var store = CreateStore();
 
         Assert.Equal(new AppSettings(), store.Load());
+        Assert.Equal(NativeBackend.Auto, store.Load().Backend);
         Assert.Equal(0, store.Load().MicrophoneBoostDecibels);
         Assert.False(store.Load().HideFromCapture);
         Assert.True(store.Load().AutoDetectMeetings);
@@ -34,6 +35,28 @@ public sealed class AppSettingsStoreTests : IDisposable
 
         Assert.Equal(0, store.Load().MicrophoneBoostDecibels);
         Assert.Equal("en", store.Load().Language);
+    }
+
+    [Theory]
+    [InlineData(NativeBackend.Auto)]
+    [InlineData(NativeBackend.Cpu)]
+    [InlineData(NativeBackend.Vulkan)]
+    public void RecognitionProcessorRoundTrips(NativeBackend backend)
+    {
+        CreateStore().Save(new AppSettings { Backend = backend });
+        Assert.Equal(backend, CreateStore().Load().Backend);
+    }
+
+    [Fact]
+    public void SavedSettingsWithoutProcessorUseAuto()
+    {
+        var store = CreateStore();
+        store.Save(new AppSettings { Backend = NativeBackend.Cpu });
+        var document = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(store.Path))!.AsObject();
+        Assert.True(document.Remove("Backend"));
+        File.WriteAllText(store.Path, document.ToJsonString());
+
+        Assert.Equal(NativeBackend.Auto, store.Load().Backend);
     }
 
     [Fact]

@@ -15,5 +15,7 @@ public sealed class AppPathsTests
         Assert.Equal(Path.Combine(baseDirectory, "audio-models.json"), paths.ModelCatalog);
         Assert.Equal(Path.Combine(localData, "settings.json"), paths.Settings);
         Assert.Equal(Path.Combine(localData, "usage.json"), paths.Usage);
+        Assert.Equal(Path.Combine(baseDirectory, "DeviceProbe", "Ansible.DeviceProbe.exe"), paths.DeviceProbe);
+        Assert.Equal(Path.Combine(localData, "device-benchmarks.json"), paths.DeviceBenchmarks);
     }
 }

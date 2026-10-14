@@ -61,10 +61,20 @@ public sealed partial class MainPage : Page
             var idle = _state.IsIdle;
             LanguageBox.IsEnabled = _state.Phase == DictationPhase.Ready;
             BackendChoice.IsEnabled = idle;
-            BackendChoice.SelectedIndex = _state.Settings.Backend == NativeBackend.Vulkan ? 1 : 0;
-            BackendHint.Text = _state.SelectedModel?.Family == "nemotron_asr"
-                ? "Nemotron dictation and replay require CPU in this build. GPU is available for WAV transcription."
-                : "Applies to the next recognition. GPU requires a compatible driver. If it fails, select CPU to retry.";
+            BackendChoice.SelectedIndex = _state.Settings.Backend switch
+            {
+                NativeBackend.Auto => 0,
+                NativeBackend.Cpu => 1,
+                NativeBackend.Vulkan => 2,
+                _ => throw new InvalidDataException("The recognition processor setting is invalid.")
+            };
+            BackendHint.Text = _state.Settings.Backend == NativeBackend.Auto
+                ? string.IsNullOrEmpty(_state.DeviceSelectionSummary)
+                    ? "Auto compares CPU and GPU using a bundled speech sample, then remembers the faster working device for each model. The first preparation takes longer. Audio stays local."
+                    : $"Last device comparison: {_state.DeviceSelectionSummary}"
+                : _state.Settings.Backend == NativeBackend.Vulkan && _state.SelectedModel?.Family == "nemotron_asr"
+                    ? "Nemotron GPU streaming has a known native crash in this build. Choose Auto or CPU for dictation and replay."
+                    : "Manual selection applies to the next recognition. Choose Auto to compare devices and recover from a failed GPU qualification.";
             if (LanguageBox.FocusState == FocusState.Unfocused) { LanguageBox.Text = _state.Language; }
             if (!_dictionaryDirty) { DictionaryBox.Text = _state.Settings.CustomDictionary; }
             DictionaryBox.IsEnabled = idle;
@@ -149,7 +159,16 @@ public sealed partial class MainPage : Page
     private void BackendChanged(object sender, SelectionChangedEventArgs args)
     {
         if (_rendering || BackendChoice is null || BackendChoice.SelectedIndex < 0) { return; }
-        try { _session.SetBackend(BackendChoice.SelectedIndex == 1 ? NativeBackend.Vulkan : NativeBackend.Cpu); }
+        try
+        {
+            _session.SetBackend(BackendChoice.SelectedIndex switch
+            {
+                0 => NativeBackend.Auto,
+                1 => NativeBackend.Cpu,
+                2 => NativeBackend.Vulkan,
+                _ => throw new InvalidOperationException("Choose a recognition processor.")
+            });
+        }
         catch (Exception error) { _session.ReportUiError(error); }
     }
 

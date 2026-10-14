@@ -252,7 +252,9 @@ public sealed partial class MainWindow : Window
         if (existing.window is not null) return existing.window;
         var state = _session.State;
         var meeting = new MeetingSession(
-            () => new NativeAudioEngine(_paths.NativeLibrary, _paths.ModelCatalog, state.ModelsDirectory),
+            () => new NativeAudioEngine(_paths.NativeLibrary, _paths.ModelCatalog, state.ModelsDirectory,
+                deviceProbePath: _paths.DeviceProbe, benchmarkSamplePath: _paths.PublicSample,
+                benchmarkCachePath: _paths.DeviceBenchmarks),
             new PermissionCheckedMeetingCaptureFactory(new Ansible.Core.Windows.MeetingCaptureFactory(), _microphonePermission), _meetingStore,
             new RecognitionOptions(state.Language, state.Settings.CustomDictionary, state.Settings.Backend),
             reserve: async () =>

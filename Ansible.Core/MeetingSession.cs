@@ -9,6 +9,7 @@ public sealed record MeetingSessionSnapshot(long Version, MeetingSessionPhase Ph
 {
     public string? NamingStatus { get; init; }
     public string? RefinementStatus { get; init; }
+    public string DeviceSelectionSummary { get; init; } = "";
 }
 
 public sealed class MeetingSession : IAsyncDisposable
@@ -106,6 +107,7 @@ public sealed class MeetingSession : IAsyncDisposable
             var models = await _engine.ConnectAsync(_cancellation.Token);
             var model = models.FirstOrDefault(candidate => candidate.Family == "vibevoice_asr_streaming" && candidate.Mode == "streaming")
                 ?? throw new InvalidOperationException("Install VibeVoice ASR Streaming 1.5B in Speech models before starting a meeting.");
+            await _engine.PrepareMeetingAsync(model, _options, _cancellation.Token);
             _capture = await _captureFactory.StartAsync(request, _cancellation.Token);
             AttachSourceMetadata(_capture);
             _pump = PumpAsync(_capture, _cancellation.Token);
@@ -588,6 +590,7 @@ public sealed class MeetingSession : IAsyncDisposable
     private void SetPhase(MeetingSessionPhase phase, MeetingStatus status, string? error = null)
     {
         lock (_gate) _state = _state with { Version = _state.Version + 1, Phase = phase, Error = error ?? _state.Error,
+            DeviceSelectionSummary = _engine?.DeviceSelectionSummary ?? _state.DeviceSelectionSummary,
             Document = _state.Document is { } document ? document with { Status = status, UpdatedAt = DateTimeOffset.UtcNow } : null };
         Publish();
     }

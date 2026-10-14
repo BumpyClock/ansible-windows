@@ -9,16 +9,17 @@ public sealed record RecognitionResult(string DisplayText, string? SpeechText)
 
 public enum NativeBackend
 {
-    Cpu,
-    Vulkan
+    Cpu = 0,
+    Vulkan = 1,
+    Auto = 2
 }
 
 public sealed record RecognitionOptions(string? Language = null, string CustomDictionary = "",
-    NativeBackend Backend = NativeBackend.Cpu, int DeviceIndex = 0)
+    NativeBackend Backend = NativeBackend.Auto, int DeviceIndex = 0)
 {
     internal void ValidateBackend()
     {
-        if (Backend is not NativeBackend.Cpu and not NativeBackend.Vulkan)
+        if (Backend is not NativeBackend.Cpu and not NativeBackend.Vulkan and not NativeBackend.Auto)
             throw new ArgumentOutOfRangeException(nameof(Backend));
         ArgumentOutOfRangeException.ThrowIfNegative(DeviceIndex);
     }
@@ -28,6 +29,7 @@ public interface IRecognitionEngine : IAsyncDisposable
 {
     string ModelsDirectory { get; }
     string Version { get; }
+    string DeviceSelectionSummary => "";
     Task<IReadOnlyList<AudioModel>> ConnectAsync(CancellationToken cancellationToken);
     Task<RecognitionResult> TranscribeAsync(
         AudioModel model, WaveAudio audio, RecognitionOptions options,

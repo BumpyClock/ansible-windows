@@ -159,7 +159,8 @@ continue after cancellation.
 
 The app preloads the selected microphone-capable model and reuses its native session.
 After ten idle minutes it unloads them. Microphone capture begins while the model
-loads, with a bounded backlog. A full backlog stops capture with an error rather
+loads, including a first Auto qualification, with a bounded backlog so early
+speech is kept. A full backlog stops capture with an error rather
 than dropping samples. Preloading failures appear as warnings.
 
 ## Recognition settings
@@ -200,12 +201,34 @@ The app does not rewrite completed transcripts or text already inserted.
 
 ### Recognition processor
 
-CPU is the default. **GPU (Vulkan)** selects device 0 and requires a Vulkan build,
-a compatible driver, and supported model operations. Failures are shown without
-an automatic CPU retry. Select CPU explicitly to retry.
+**Auto (recommended)** is the default. Settings without a processor field load
+Auto. An explicit saved CPU or GPU choice is kept until you change it. Auto
+runs CPU, then GPU, sequentially in an isolated `Ansible.DeviceProbe` process
+against the bundled public speech sample. It does not use microphone, meeting,
+or other user audio, and it does not save that audio. Compared times exclude
+loading and warmup. Each device has a five-minute deadline that includes load,
+warmup, recognition, and teardown. Cancelling stops the worker, then joins and
+drains it. Auto measures the mode required for the next work: offline WAV, live
+dictation, or meeting history. The first preparation for a model and mode takes
+longer. Results are cached for model, native, and sample hashes, hardware and
+driver, mode and history, device, threads, and headroom. When both devices work
+and GPU is within five percent of CPU, Auto selects GPU. Settings shows the last
+comparison, including the selected processor and device timings, after a
+qualification runs.
 
-Use CPU for Nemotron dictation: its GPU streaming path has a reported native
-crash that can terminate the app. See [known native limits](native-validation.md#known-limits).
+A GPU worker crash or timeout disqualifies GPU; a successful CPU result is used.
+Shared validation, integrity, memory, protocol, or ownership errors abort
+calibration and do not write a device result to the cache. If neither device
+works, the app shows an error. Auto does not replay consumed live audio. A
+failed live operation reports the error, and the next attempt may use CPU.
+Qualification cannot catch a later in-process native driver crash.
+
+**CPU** and **GPU (Vulkan)** remain available as manual choices. Vulkan uses
+device 0 and needs a Vulkan build, a compatible driver, and supported model
+operations. Manual GPU failures are shown without an automatic CPU retry.
+
+Auto selects CPU for Nemotron dictation because its GPU streaming path has a
+reported native crash that can terminate the app. See [known native limits](native-validation.md#known-limits).
 The host-memory guard runs on both backends; it does not guarantee sufficient
 GPU memory. The offline 7B model has about 9.86 GB of weights and needs additional
 memory to load and decode. Keep the guard enabled.
@@ -224,16 +247,21 @@ Settings. Other apps still start
 manually; detection does not fetch calendar events or automatically end recording.
 
 Open **Meetings > Start meeting**. Select the meeting application, or explicitly
-choose **All system audio**, then start. The app captures the Windows default
-microphone and playback together. Application capture includes its child-process
-tree; a browser selection can include audio from other tabs. Windows build 20348
-or later is required for application capture. Use headphones: echo cancellation
-is not implemented.
+choose **All system audio**, then start. After Start, the window shows
+**Preparing**. Wait until it shows **Transcribing** before speaking. A cold Auto
+run benchmarks and loads the meeting model before capture opens, so the
+30-second recognition backlog does not fill during qualification. That first
+preparation can take longer than later meetings that reuse a cached device
+choice. The caption shows the selected processor and the CPU/GPU comparison.
+The app then captures the Windows default microphone and playback together.
+Application capture includes its child-process tree; a browser selection can
+include audio from other tabs. Windows build 20348 or later is required for
+application capture. Use headphones: echo cancellation is not implemented.
 
 Install **VibeVoice ASR Streaming 1.5B Q4_K** in **Speech models** first. Meetings
 use this model independently of the dictation selection, with the configured
-CPU/Vulkan backend, language hint, and custom vocabulary. Dictation and model
-changes are unavailable while a meeting owns the recognition resources.
+recognition processor (Auto, CPU, or GPU), language hint, and custom vocabulary.
+Dictation and model changes are unavailable while a meeting owns the recognition resources.
 
 Text appears throughout the meeting as native chunks finish. Speaker labels come
 from VibeVoice; rename a speaker by selecting its heading. When Teams is selected,
@@ -302,8 +330,10 @@ camera. The app reports a warning if Windows cannot apply or verify the setting.
 
 Captured audio always stays in memory. Dictation transcripts stay in memory;
 meeting transcripts, titles, and speaker names save locally. Recognition does
-not upload audio. Optional Copilot cleanup uploads transcript text after the
-explicit **Send text and clean up** action. Model downloads also use the network.
+not upload audio. Auto device qualification uses only the bundled public sample
+in a local process; it does not send or save user audio. Optional Copilot cleanup
+uploads transcript text after the explicit **Send text and clean up** action.
+Model downloads also use the network.
 **Copy** uses the ordinary clipboard; Windows clipboard features and destination
 apps can retain text you copy or insert. Automatic shortcut paste leaves dictated
 text on the clipboard until replaced. It requests
@@ -316,6 +346,7 @@ Per-user files are in Windows package storage, normally
 | Path | Contents |
 | --- | --- |
 | `settings.json` | Preferences, chosen model folder, and custom vocabulary |
+| `device-benchmarks.json` | Cached Auto device timings for model, runtime, hardware, and mode; no user audio |
 | `usage.json` | Session IDs, completion timestamps, model IDs, session type, speech-word counts, and durations |
 | `meetings\<id>.json` | Titles, dates, transcript turns, timing quality, manual/automatic names, and original wording after cleanup; no audio |
 | `models\` | Default location for downloaded model weights |

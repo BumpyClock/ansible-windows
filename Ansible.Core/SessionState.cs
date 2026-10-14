@@ -27,6 +27,7 @@ public sealed record SessionSnapshot
     public required int SelectedIndex { get; init; }
     public required string ModelsDirectory { get; init; }
     public required string BackendVersion { get; init; }
+    public string DeviceSelectionSummary { get; init; } = "";
     public AppSettings Settings { get; init; } = new();
     public string Language => Settings.Language;
     public required string Transcript { get; init; }

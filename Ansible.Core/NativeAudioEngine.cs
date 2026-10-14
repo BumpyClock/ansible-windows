@@ -24,7 +24,8 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
     private bool _streamStartAttempted;
     private bool _disposed;
 
-    public NativeAudioEngine(string libraryPath, string catalogPath, string modelsDirectory, int threads = 4, int memoryHeadroomMB = 512)
+    public NativeAudioEngine(string libraryPath, string catalogPath, string modelsDirectory, int threads = 4, int memoryHeadroomMB = 512,
+        string? deviceProbePath = null, string? benchmarkSamplePath = null, string? benchmarkCachePath = null)
     {
         if (threads is < 1 or > 64 || memoryHeadroomMB < 0)
         {
@@ -35,6 +36,9 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
         ModelsDirectory = Path.GetFullPath(modelsDirectory);
         _threads = threads;
         _headroom = memoryHeadroomMB;
+        _deviceProbePath = deviceProbePath is null ? null : Path.GetFullPath(deviceProbePath);
+        _benchmarkSamplePath = benchmarkSamplePath is null ? null : Path.GetFullPath(benchmarkSamplePath);
+        _benchmarkCachePath = benchmarkCachePath is null ? null : Path.GetFullPath(benchmarkCachePath);
     }
 
     public string ModelsDirectory { get; }
@@ -109,10 +113,22 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
         IProgress<TranscriptUpdate>? progress, CancellationToken cancellationToken)
     {
         options = ValidateOptions(model, options);
-        var result = await RunExclusiveAsync(() => NativeOperation.Run(() =>
+        var result = await RunExclusiveAsync(() =>
         {
             var bytes = NativeMemory.ValidateAudio(audio, cancellationToken);
-            EnsureSession(model, "offline", bytes, options, cancellationToken);
+            var selected = ResolveBackend(model, "offline", 0, bytes, options, cancellationToken);
+            return NativeAutoRecovery.Run(options.Backend == NativeBackend.Auto, selected, cancellationToken,
+                backend => RunOffline(model, audio, backend, cancellationToken),
+                error => RejectSelectedGpu(model, "offline", 0, error));
+        }, cancellationToken);
+        progress?.Report(new TranscriptUpdate(result.DisplayText, true, result.SpeechText));
+        return result;
+    }
+
+    private RecognitionResult RunOffline(AudioModel model, WaveAudio audio, RecognitionOptions options, CancellationToken cancellationToken) =>
+        NativeOperation.Run(() =>
+        {
+            EnsureSession(model, "offline", NativeMemory.ValidateAudio(audio, cancellationToken), options, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             using var request = CreateRequest(options, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
@@ -122,10 +138,7 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
             using var owned = new NativeAudioHandle(pointer, NativeHandleKind.Result);
             cancellationToken.ThrowIfCancellationRequested();
             return ReadResult(pointer, model.Family!, cancellationToken);
-        }, CleanupOperation), cancellationToken);
-        progress?.Report(new TranscriptUpdate(result.DisplayText, true, result.SpeechText));
-        return result;
-    }
+        }, CleanupOperation);
 
     public async Task<RecognitionResult> StreamAsync(
         AudioModel model, ChannelReader<byte[]> audio, RecognitionOptions options,
@@ -144,22 +157,42 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
             var recording = await DictationAudioBuffer.ReadAsync(audio, cancellationToken);
             return await TranscribeAsync(model, recording, options, progress, cancellationToken);
         }
-        var result = await RunExclusiveAsync(() => NativeOperation.Run(
-            () => StreamCore(model, audio, options, progress, cancellationToken, onReady), CleanupStream), cancellationToken);
+        var result = await RunExclusiveAsync(() => RunAutoStream(model, audio, options, progress, cancellationToken, onReady), cancellationToken);
         progress?.Report(new TranscriptUpdate(result.DisplayText, true, result.SpeechText));
         return result;
     }
 
     public Task PrepareAsync(AudioModel model, RecognitionOptions options, CancellationToken cancellationToken)
+        => PrepareForModeAsync(model, options, model.Mode == "offline" ? "offline" : "streaming", 0, cancellationToken);
+
+    public Task PrepareMeetingAsync(AudioModel model, RecognitionOptions options, CancellationToken token)
+    {
+        if (model.Family != "vibevoice_asr_streaming" || model.Mode != "streaming")
+            throw new NotSupportedException("Meetings require the installed VibeVoice streaming model.");
+        return PrepareForModeAsync(model, options, "streaming", 4096, token);
+    }
+
+    private Task PrepareForModeAsync(AudioModel model, RecognitionOptions options, string mode, int history, CancellationToken cancellationToken)
     {
         // Request text such as the dictionary is per stream; only the model and backend shape the session.
         options = ValidateOptions(model, options with { CustomDictionary = "" });
-        return RunExclusiveAsync(() => NativeOperation.Run(() =>
+        return RunExclusiveAsync(() =>
         {
-            EnsureSession(model, model.Mode == "offline" ? "offline" : "streaming",
-                NativeMemory.MaximumStreamFrames * sizeof(float), options, cancellationToken);
-            return true;
-        }, success => { if (!success) { ReleaseModel(); } }), cancellationToken);
+            var selected = ResolveBackend(model, mode, history, NativeMemory.MaximumStreamFrames * sizeof(float), options, cancellationToken);
+            bool Prepare() => NativeOperation.Run(() =>
+            {
+                EnsureSession(model, mode, NativeMemory.MaximumStreamFrames * sizeof(float), selected, cancellationToken, history);
+                return true;
+            }, success => { if (!success) ReleaseModel(); });
+            try { return Prepare(); }
+            catch (NativeExecutionException error) when (options.Backend == NativeBackend.Auto &&
+                selected.Backend == NativeBackend.Vulkan && !cancellationToken.IsCancellationRequested && error.CanRetry)
+            {
+                RejectSelectedGpu(model, mode, history, error);
+                selected = selected with { Backend = NativeBackend.Cpu };
+                return Prepare();
+            }
+        }, cancellationToken);
     }
 
     public Task UnloadAsync(CancellationToken cancellationToken) =>
@@ -206,6 +239,7 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
         {
             while (audio.TryRead(out var packet))
             {
+                _streamConsumed = true;
                 token.ThrowIfCancellationRequested();
                 if (packet is null || packet.Length == 0 || packet.Length % 2 != 0)
                     throw new InvalidDataException("Dictation requires complete PCM16 samples.");
@@ -559,9 +593,7 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
         if (model.Family != "vibevoice_asr_streaming" || model.Mode != "streaming")
             throw new NotSupportedException("Meetings require the installed VibeVoice streaming model.");
         options = ValidateOptions(model, options);
-        var result = await RunExclusiveAsync(() => NativeOperation.Run(
-            () => StreamCore(model, audio, options, progress, cancellationToken, onReady,
-                16000L * 120 * 60, 4096), CleanupStream), cancellationToken);
+        var result = await RunExclusiveAsync(() => RunAutoStream(model, audio, options, progress, cancellationToken, onReady, 4096), cancellationToken);
         progress.Report(new TranscriptUpdate(result.DisplayText, true, result.SpeechText));
     }
 

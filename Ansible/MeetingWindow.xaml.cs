@@ -144,6 +144,8 @@ public sealed partial class MeetingWindow : Window
         };
         DelayText.Visibility = state.PendingSeconds >= 10 ? Visibility.Visible : Visibility.Collapsed;
         DelayText.Text = $"{FormatTime(state.PendingSeconds)} of captured audio awaiting transcription";
+        DeviceStatusText.Visibility = string.IsNullOrEmpty(state.DeviceSelectionSummary) ? Visibility.Collapsed : Visibility.Visible;
+        DeviceStatusText.Text = state.DeviceSelectionSummary;
         NamingStatusText.Visibility = string.IsNullOrWhiteSpace(state.NamingStatus) ? Visibility.Collapsed : Visibility.Visible;
         NamingStatusText.Text = state.NamingStatus ?? "";
         RefinementStatusText.Visibility = string.IsNullOrWhiteSpace(state.RefinementStatus) ? Visibility.Collapsed : Visibility.Visible;

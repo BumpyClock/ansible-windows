@@ -24,7 +24,7 @@ public sealed record AppSettings
 
     public string? ModelId { get; init; }
     public string Language { get; init; } = "";
-    public NativeBackend Backend { get; init; } = NativeBackend.Cpu;
+    public NativeBackend Backend { get; init; } = NativeBackend.Auto;
     public string? ModelsDirectory { get; init; }
     public DictationShortcut Shortcut { get; init; } = DictationShortcut.Default;
     public bool PushToTalk { get; init; } = true;
@@ -44,7 +44,7 @@ public sealed record AppSettings
     {
         if (Language is null || CustomDictionary is null || ModelId is not null && string.IsNullOrWhiteSpace(ModelId) ||
             ModelsDirectory is not null && !Path.IsPathFullyQualified(ModelsDirectory) ||
-            !Shortcut.IsValid || Backend is not NativeBackend.Cpu and not NativeBackend.Vulkan ||
+            !Shortcut.IsValid || Backend is not NativeBackend.Auto and not NativeBackend.Cpu and not NativeBackend.Vulkan ||
             !Enum.IsDefined(InsertionMethod) || !Enum.IsDefined(PasteShortcut) ||
             TypingGapMilliseconds is < 0 or > MaxTypingGapMilliseconds ||
             MicrophoneBoostDecibels is < 0 or > MicrophoneBoost.MaxDecibels)
