@@ -159,7 +159,11 @@ probes sequentially.
 `MeetingSession` owns the meeting operation and reserves `DictationSession`
 before loading its own native engine. Reservation joins/unloads dictation
 preparation and prevents dictation/settings/model maintenance until all meeting
-capture and inference resources are released. Capture privacy is a visual
+capture and inference resources are released. Recognition, including final
+transcript callbacks and their saves, runs without the UI synchronization
+context. End joins this work before releasing the reservation. Session tests
+exercise completion from a single-thread UI context to catch save/refinement
+deadlocks. Capture privacy is a visual
 setting that can change during a meeting. Pause gates the same channel
 reader; it does not reset the native stream. Capture writes 16 kHz mono PCM16
 into bounded queues. Transcripts use atomic source-generated JSON saves; audio

@@ -200,6 +200,74 @@ public sealed class MeetingSessionTests : IDisposable
     private MeetingSession Create(Engine engine, CaptureFactory captures) => new(() => engine, captures, new(_directory), new());
 
     [Fact]
+    public async Task EndFromUiContextFinalizesAndReleasesNativeResourcesOffUi()
+    {
+        using var context = new MeetingUiContext();
+        var engine = new Engine { RequireBackgroundFinalization = true };
+        var captures = new CaptureFactory();
+        var aligner = new Aligner { YieldInitialization = true };
+        var store = new MeetingStore(_directory);
+        await context.RunAsync(async () =>
+        {
+            await using var session = new MeetingSession(() => engine, captures, store, new(), alignerFactory: () => aligner);
+            await session.StartAsync(Request);
+            captures.Captures[0].Send(96000);
+            await WaitUntilAsync(() => engine.ReadBytes == 96000);
+            await Task.Run(() => engine.Report("Speaker 0: Final meeting words"));
+            await session.EndAsync();
+            Assert.Null(session.State.Error);
+            Assert.Equal(MeetingSessionPhase.Completed, session.State.Phase);
+            Assert.False(session.IsActive);
+            Assert.True(captures.Captures[0].IsReleased);
+            Assert.True(engine.Disposed);
+            Assert.Null(engine.DisposalContext);
+            Assert.True(aligner.Disposed);
+            Assert.Null(aligner.DisposalContext);
+            var saved = await store.LoadAsync(session.Document!.Id);
+            Assert.Equal(MeetingStatus.Completed, saved.Status);
+            var turn = Assert.Single(saved.Turns);
+            Assert.Equal("Final meeting words", turn.Text);
+            Assert.False(turn.IsProvisional);
+            Assert.Equal(MeetingTimingQuality.Aligned, turn.TimingQuality);
+        }).WaitAsync(TimeSpan.FromSeconds(10));
+    }
+
+    private sealed class MeetingUiContext : SynchronizationContext, IDisposable
+    {
+        private readonly System.Collections.Concurrent.BlockingCollection<Action> _queue = new();
+        private readonly Thread _thread;
+
+        public MeetingUiContext()
+        {
+            _thread = new Thread(() =>
+            {
+                SetSynchronizationContext(this);
+                foreach (var action in _queue.GetConsumingEnumerable()) action();
+            }) { IsBackground = true };
+            _thread.Start();
+        }
+
+        public override void Post(SendOrPostCallback callback, object? state) => _queue.Add(() => callback(state));
+
+        public Task RunAsync(Func<Task> action)
+        {
+            var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            Post(async _ =>
+            {
+                try { await action(); completion.SetResult(); }
+                catch (Exception error) { completion.SetException(error); }
+            }, null);
+            return completion.Task;
+        }
+
+        public void Dispose()
+        {
+            _queue.CompleteAdding();
+            if (_thread.Join(TimeSpan.FromSeconds(5))) _queue.Dispose();
+        }
+    }
+
+    [Fact]
     public async Task TimingRefinementRetainsAnchorsAndCleanupPreservesOriginalAndNames()
     {
         var engine = new Engine();
@@ -247,13 +315,18 @@ public sealed class MeetingSessionTests : IDisposable
     private sealed class Aligner : IMeetingWordAligner
     {
         public bool FailInitialization { get; init; }
+        public bool YieldInitialization { get; init; }
         public bool Disposed { get; private set; }
-        public Task InitializeAsync(CancellationToken token) => FailInitialization
-            ? Task.FromException(new InvalidOperationException("Alignment weights missing")) : Task.CompletedTask;
+        public SynchronizationContext? DisposalContext { get; private set; }
+        public async Task InitializeAsync(CancellationToken token)
+        {
+            if (FailInitialization) throw new InvalidOperationException("Alignment weights missing");
+            if (YieldInitialization) await Task.Yield();
+        }
         public Task<IReadOnlyList<MeetingTurn>> AlignAsync(WaveAudio audio, IReadOnlyList<MeetingTurn> turns, CancellationToken token)
             => Task.FromResult<IReadOnlyList<MeetingTurn>>(turns.Select(turn => turn with
                 { StartSeconds = 0.5, EndSeconds = 1.5, TimingQuality = MeetingTimingQuality.Aligned }).ToArray());
-        public ValueTask DisposeAsync() { Disposed = true; return ValueTask.CompletedTask; }
+        public ValueTask DisposeAsync() { DisposalContext = SynchronizationContext.Current; Disposed = true; return ValueTask.CompletedTask; }
     }
 
     [Fact]
@@ -355,6 +428,8 @@ public sealed class MeetingSessionTests : IDisposable
         public int StreamCalls { get; private set; }
         public bool Disposed { get; private set; }
         public bool Canceled { get; private set; }
+        public bool RequireBackgroundFinalization { get; init; }
+        public SynchronizationContext? DisposalContext { get; private set; }
         public bool BlockReads { get; init; }
         public Exception? ConnectFailure { get; init; }
         public TaskCompletionSource AllowReads { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -371,12 +446,15 @@ public sealed class MeetingSessionTests : IDisposable
             {
                 if (BlockReads) await AllowReads.Task.WaitAsync(cancellationToken);
                 await foreach (var packet in audio.ReadAllAsync(cancellationToken)) Interlocked.Add(ref _readBytes, packet.Length);
+                // Fail before invoking a blocking callback so the regression cannot deadlock the test runner.
+                if (RequireBackgroundFinalization && SynchronizationContext.Current is not null)
+                    throw new InvalidOperationException("Final recognition callback ran on the UI context.");
                 progress.Report(new(_text, true));
             }
             catch (OperationCanceledException) { Canceled = true; throw; }
         }
         public void Report(string text) { _text = text; _progress!.Report(new(text, false)); }
-        public ValueTask DisposeAsync() { Disposed = true; return ValueTask.CompletedTask; }
+        public ValueTask DisposeAsync() { DisposalContext = SynchronizationContext.Current; Disposed = true; return ValueTask.CompletedTask; }
     }
 
     private sealed class CaptureFactory : IMeetingCaptureFactory

@@ -113,7 +113,7 @@ public sealed class MeetingSession : IAsyncDisposable
             _pump = PumpAsync(_capture, _cancellation.Token);
             await StartObserverAsync();
             var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            _recognition = RecognizeAsync(model, ready);
+            _recognition = Task.Run(() => RecognizeAsync(model, ready));
             if (await Task.WhenAny(ready.Task, _recognition) == _recognition)
             {
                 await _recognition;
@@ -564,8 +564,8 @@ public sealed class MeetingSession : IAsyncDisposable
         try
         {
             await StopCaptureCoreAsync();
-            if (_engine is { } engine) { await engine.DisposeAsync(); _engine = null; }
-            if (_aligner is { } aligner) { await aligner.DisposeAsync(); _aligner = null; }
+            if (_engine is { } engine) { await Task.Run(async () => await engine.DisposeAsync()); _engine = null; }
+            if (_aligner is { } aligner) { await Task.Run(async () => await aligner.DisposeAsync()); _aligner = null; }
             if (_observer is { } observer) { await observer.DisposeAsync(); _observer = null; }
             _timeline = new();
             if (IsActive)
