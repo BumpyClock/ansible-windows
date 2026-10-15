@@ -53,7 +53,8 @@ internal static class DeviceBenchmark
     {
         if (!prior.Cpu.Working) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(error);
         return Select(prior.Key, prior.Cpu,
-            new(NativeBackend.Vulkan, null, $"real recognition failed after qualification: {error.Message}"));
+            new(NativeBackend.Vulkan, null, $"real recognition failed after qualification: {error.Message}"))
+            with { MeasuredAt = prior.MeasuredAt };
     }
 
     internal static string? TryUpdateCache(string? path, string key, DeviceBenchmarkSelection? selection)

@@ -301,6 +301,20 @@ public sealed class DeviceBenchmarkTests
     }
 
     [Fact]
+    public void CpuFallbackPreservesTheOriginalBenchmarkTimestamp()
+    {
+        var measuredAt = new DateTimeOffset(2026, 10, 1, 12, 30, 0, TimeSpan.Zero);
+        var prior = DeviceBenchmark.Select("key", new(NativeBackend.Cpu, 100, null), new(NativeBackend.Vulkan, 90, null))
+            with { MeasuredAt = measuredAt };
+
+        var fallback = DeviceBenchmark.CpuFallback(prior, new NativeExecutionException("GPU failed", "transcribe the recording"));
+
+        Assert.Equal(NativeBackend.Cpu, fallback.Backend);
+        Assert.Equal(measuredAt, fallback.MeasuredAt);
+        Assert.Equal(100, fallback.Cpu.Milliseconds);
+    }
+
+    [Fact]
     public void UnwritableCacheDoesNotPreventQualifiedCpuRecovery()
     {
         var directory = Path.Combine(Path.GetTempPath(), "Ansible-device-cache-" + Guid.NewGuid().ToString("N"));
