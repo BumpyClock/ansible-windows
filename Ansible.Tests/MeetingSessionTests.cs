@@ -8,6 +8,47 @@ public sealed class MeetingSessionTests : IDisposable
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "Ansible-meeting-session-" + Guid.NewGuid().ToString("N"));
     private static readonly MeetingCaptureRequest Request = new(MeetingPlaybackSource.SystemAudio);
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DiscardAndDisposeCancelPreparationAndJoinBeforeReleasingReservation(bool dispose)
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var cancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var join = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var engine = new Engine { Preparing = async token =>
+        {
+            entered.SetResult();
+            try { await Task.Delay(Timeout.Infinite, token); }
+            catch (OperationCanceledException)
+            {
+                cancelled.SetResult();
+                await join.Task;
+                throw;
+            }
+        } };
+        var captures = new CaptureFactory();
+        var releases = 0;
+        var session = new MeetingSession(() => engine, captures, new(_directory), new(),
+            release: () => { releases++; return Task.CompletedTask; });
+        var start = session.StartAsync(Request);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var finish = dispose ? session.DisposeAsync().AsTask() : session.DiscardAsync();
+        await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.False(finish.IsCompleted);
+        Assert.True(session.IsActive);
+        Assert.Equal(0, releases);
+        Assert.Empty(captures.Captures);
+        join.SetResult();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => start);
+        await finish.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Empty(captures.Captures);
+        Assert.True(engine.Disposed);
+        Assert.Equal(1, releases);
+        Assert.False(session.IsActive);
+        if (!dispose) await session.DisposeAsync();
+    }
+
     [Fact]
     public async Task PauseFreezesUpdatesAndCaptureResumeUsesSameStreamAndEndSavesFinal()
     {
@@ -432,6 +473,9 @@ public sealed class MeetingSessionTests : IDisposable
         public SynchronizationContext? DisposalContext { get; private set; }
         public bool BlockReads { get; init; }
         public Exception? ConnectFailure { get; init; }
+        public Func<CancellationToken, Task>? Preparing { get; init; }
+        public Task PrepareMeetingAsync(AudioModel model, RecognitionOptions options, CancellationToken token) =>
+            Preparing?.Invoke(token) ?? Task.CompletedTask;
         public TaskCompletionSource AllowReads { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public Task<IReadOnlyList<AudioModel>> ConnectAsync(CancellationToken cancellationToken) => ConnectFailure is { } error
             ? Task.FromException<IReadOnlyList<AudioModel>>(error)

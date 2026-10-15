@@ -35,6 +35,43 @@ internal static class DeviceBenchmark
     internal static readonly TimeSpan DeviceDeadline = TimeSpan.FromMinutes(5);
     private const int OutputLimit = 65536;
 
+    internal static async Task<DeviceBenchmarkSelection> QualifyAsync(string key, string? family, string mode,
+        Func<NativeBackend, Task<DeviceBenchmarkResult>> probe, CancellationToken token)
+    {
+        var cpu = await probe(NativeBackend.Cpu).ConfigureAwait(false);
+        if (cpu.Fatal) throw new InvalidDataException($"CPU device qualification failed: {cpu.Error}");
+        token.ThrowIfCancellationRequested();
+        // An isolated success cannot qualify a combination known to crash in-process.
+        var gpu = family == "nemotron_asr" && mode == "streaming"
+            ? new DeviceBenchmarkResult(NativeBackend.Vulkan, null, "Nemotron Vulkan streaming is unsafe in-process; qualification skipped.")
+            : await probe(NativeBackend.Vulkan).ConfigureAwait(false);
+        token.ThrowIfCancellationRequested();
+        return Select(key, cpu, gpu);
+    }
+
+    internal static DeviceBenchmarkSelection CpuFallback(DeviceBenchmarkSelection prior, NativeExecutionException error)
+    {
+        if (!prior.Cpu.Working) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(error);
+        return Select(prior.Key, prior.Cpu,
+            new(NativeBackend.Vulkan, null, $"real recognition failed after qualification: {error.Message}"));
+    }
+
+    internal static string? TryUpdateCache(string? path, string key, DeviceBenchmarkSelection? selection)
+    {
+        try
+        {
+            var entries = ReadCache(path);
+            entries.RemoveAll(value => value.Key == key);
+            if (selection is not null) entries.Add(selection);
+            WriteCache(path, entries);
+            return null;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or InvalidDataException or InvalidOperationException)
+        {
+            return $"Device cache could not be updated: {error.Message}";
+        }
+    }
+
     internal static DeviceBenchmarkSelection Select(string key, DeviceBenchmarkResult cpu, DeviceBenchmarkResult gpu)
     {
         if (cpu.Backend != NativeBackend.Cpu || gpu.Backend != NativeBackend.Vulkan)
@@ -52,7 +89,7 @@ internal static class DeviceBenchmark
     internal static string Key(DeviceBenchmarkRequest request, string modelHash, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
-        var identity = new StringBuilder($"benchmark-v2|{modelHash}|{request.ModelId}|{request.Mode}|{request.History}|" +
+        var identity = new StringBuilder($"benchmark-v3|{modelHash}|{request.ModelId}|{request.Mode}|{request.History}|" +
             $"{request.Device}|{request.Threads}|{request.Headroom}|{Environment.OSVersion}|{Environment.ProcessorCount}|");
         identity.Append(HashFile(request.Library, token)).Append('|').Append(HashFile(request.Sample, token));
         // Native dependencies and their contents are part of the compiled backend identity.
@@ -100,14 +137,19 @@ internal static class DeviceBenchmark
         if (path is null || !File.Exists(path)) return [];
         NativeModelIntegrity.RejectLinks(path);
         using var file = File.OpenRead(path);
-        if (file.Length > 1024 * 1024) throw new InvalidDataException("Device benchmark cache exceeds its size limit.");
-        var entries = JsonSerializer.Deserialize(file, DeviceBenchmarkJson.Default.ListDeviceBenchmarkSelection)
-            ?? throw new InvalidDataException("Device benchmark cache is null.");
-        if (entries.Count > 128 || entries.Any(entry => entry is null ||
-            string.IsNullOrWhiteSpace(entry.Key) || entry.Cpu is null || entry.Gpu is null ||
-            Select(entry.Key, entry.Cpu, entry.Gpu).Backend != entry.Backend))
-            throw new InvalidDataException("Device benchmark cache contains invalid results.");
-        return entries;
+        if (file.Length > 1024 * 1024) return [];
+        try
+        {
+            var entries = JsonSerializer.Deserialize(file, DeviceBenchmarkJson.Default.ListDeviceBenchmarkSelection);
+            if (entries is null || entries.Count > 128 || entries.Any(entry => entry is null ||
+                string.IsNullOrWhiteSpace(entry.Key) || entry.Cpu is null || entry.Gpu is null ||
+                Select(entry.Key, entry.Cpu, entry.Gpu).Backend != entry.Backend)) return [];
+            return entries;
+        }
+        catch (Exception error) when (error is JsonException or InvalidDataException or InvalidOperationException)
+        {
+            return [];
+        }
     }
 
     internal static void WriteCache(string? path, List<DeviceBenchmarkSelection> entries)
@@ -175,7 +217,11 @@ internal static class DeviceBenchmark
         if (timedOut) return new(backend, null, "isolated probe timed out and was terminated");
         var output = await stdout;
         var line = output.Split('\n').LastOrDefault(value => value.StartsWith(ResultPrefix, StringComparison.Ordinal));
-        if (line is null) return new(backend, null, $"isolated probe exited {process.ExitCode} without a result (crash or protocol failure)");
+        if (line is null)
+        {
+            if (process.ExitCode == 0) throw new InvalidDataException("Device probe exited successfully without a result.");
+            return new(backend, null, $"isolated probe exited {process.ExitCode} without a result (crash)");
+        }
         DeviceBenchmarkResult result;
         try
         {

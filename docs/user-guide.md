@@ -84,7 +84,8 @@ window shutdown do not wait for the tail. **Press to start and stop** and manual
 Finish keep their immediate-stop behavior.
 
 The waveform pill shows microphone energy while capture is active. It hides when
-capture stops, including after the hold-to-talk release tail. It does not show
+capture stops, including after the hold-to-talk release tail. If stopping fails,
+it remains visible until capture is released. It does not show
 transcript text. Reduced-motion mode uses a level meter.
 
 ### Text insertion
@@ -94,6 +95,7 @@ outcome in the status bar. **Insertion verified** means the app observed the
 exact expected change. **Text sent; unverified** means input was queued but the
 change could not be verified; check the destination before inserting again.
 The notice stays until dismissed or replaced by the next session notice.
+Dismissing it on either page also dismisses it on the other page.
 
 **Settings > Text insertion** offers two methods:
 
@@ -211,7 +213,9 @@ warmup, recognition, and teardown. Cancelling stops the worker, then joins and
 drains it. Auto measures the mode required for the next work: offline WAV, live
 dictation, or meeting history. The first preparation for a model and mode takes
 longer. Results are cached for model, native, and sample hashes, hardware and
-driver, mode and history, device, threads, and headroom. When both devices work
+driver, mode and history, device, threads, and headroom. Malformed cache content
+is ignored; Auto qualifies the devices again.
+When both devices work
 and GPU is within five percent of CPU, Auto selects GPU. Settings shows the last
 comparison, including the selected processor and device timings, after a
 qualification runs.
@@ -221,6 +225,8 @@ Shared validation, integrity, memory, protocol, or ownership errors abort
 calibration and do not write a device result to the cache. If neither device
 works, the app shows an error. Auto does not replay consumed live audio. A
 failed live operation reports the error, and the next attempt may use CPU.
+CPU fallback requires a successful CPU qualification. A failed cache update
+is reported but does not prevent that qualified fallback in the current session.
 Qualification cannot catch a later in-process native driver crash.
 
 **CPU** and **GPU (Vulkan)** remain available as manual choices. Vulkan uses
@@ -289,7 +295,9 @@ meeting and processes retained pending speech. Speech during the pause is not
 captured. **End meeting** stops capture and processes pending chunks before
 releasing resources; the window stays open for review. Closing an active meeting
 offers finishing or explicitly discarding pending speech. Closing the main app
-finishes its active meeting before shutting down.
+finishes its active meeting before shutting down. If the meeting is still
+preparing, discarding it or closing the main app cancels preparation, waits for
+its workers to exit, and keeps capture closed.
 
 Transcripts and title/speaker edits save automatically. The Meetings list supports
 reopening saved text; each transcript window offers Copy, text export, and Delete.

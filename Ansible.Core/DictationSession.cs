@@ -251,6 +251,17 @@ public sealed class DictationSession
         Publish(state);
     }
 
+    public void DismissNotice(SessionNotice notice)
+    {
+        SessionSnapshot state;
+        lock (_gate)
+        {
+            if (_closing || !ReferenceEquals(_state.Notice, notice) || notice.IsDismissed) { return; }
+            state = SetState(_state with { Notice = notice with { IsDismissed = true } });
+        }
+        Publish(state);
+    }
+
     public void ReportUiError(Exception error) => Notify(NoticeKind.Error, "Operation failed", error.Message);
 
     private Task<SessionOutcome> Begin(
@@ -528,6 +539,7 @@ public sealed class DictationSession
             // Open the microphone while the model loads. Until the stream reads, speech waits in the capture's
             // bounded backlog, which stops recording at its five-minute limit rather than dropping samples.
             operation.Capture = await _captureFactory.StartAsync(operation.Token, operation.MicrophoneBoostDecibels);
+            RefreshCaptureState(operation);
             operation.Token.ThrowIfCancellationRequested();
             lock (_gate) { EnsureCurrent(operation); }
             operation.LevelHandler = value => PublishLevel(operation, value);
@@ -695,7 +707,7 @@ public sealed class DictationSession
         if (operation.Capture is not null)
         {
             if (operation.LevelHandler is not null) { operation.Capture.LevelChanged -= operation.LevelHandler; }
-            try { await operation.Capture.DisposeAsync(); }
+            try { await operation.Capture.DisposeAsync(); RefreshCaptureState(operation); }
             catch (Exception error) { AddError(errors, error); }
         }
         await ObserveAsync(operation.Producer, operation.Token, errors);
@@ -874,12 +886,18 @@ public sealed class DictationSession
         return completion.Task;
     }
 
-    private static async Task CompleteStopAsync(Operation operation, TaskCompletionSource completion)
+    private async Task CompleteStopAsync(Operation operation, TaskCompletionSource completion)
     {
         try
         {
             await operation.Capture!.StopAsync();
-            completion.TrySetResult();
+            SessionSnapshot state;
+            lock (_gate)
+            {
+                completion.TrySetResult();
+                state = SetState(_state);
+            }
+            Publish(state);
         }
         catch (Exception error)
         {
@@ -887,6 +905,17 @@ public sealed class DictationSession
             operation.RequestCancellation();
             completion.TrySetException(error);
         }
+    }
+
+    private void RefreshCaptureState(Operation operation)
+    {
+        SessionSnapshot state;
+        lock (_gate)
+        {
+            if (!ReferenceEquals(_operation, operation) && !ReferenceEquals(_recovery, operation)) { return; }
+            state = SetState(_state);
+        }
+        Publish(state);
     }
 
     private static void AddError(List<Exception> errors, Exception error)
@@ -982,6 +1011,8 @@ public sealed class DictationSession
     private SessionSnapshot SetState(SessionSnapshot state) => _state = state with
     {
         Version = ++_version,
+        IsCaptureOpen = (_operation ?? _recovery) is { Capture.IsReleased: false } owner &&
+            owner.StopWork?.IsCompletedSuccessfully != true,
         DeviceSelectionSummary = _engine?.DeviceSelectionSummary ?? ""
     };
     private void Publish(SessionSnapshot state) => StateChanged?.Invoke(state);

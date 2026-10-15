@@ -18,7 +18,6 @@ public sealed partial class MainPage : Page
     private readonly Action<bool> _captureShortcut;
     private bool _recordingShortcut;
     private DictationShortcut? _pendingShortcut;
-    private SessionNotice? _dismissedNotice;
     private UiSessionObserver? _observer;
     private SessionSnapshot _state;
     private bool _rendering;
@@ -131,7 +130,7 @@ public sealed partial class MainPage : Page
     private void RenderNotice()
     {
         var notice = _state.Notice;
-        if (!notice.ShouldDisplay || ReferenceEquals(notice, _dismissedNotice))
+        if (!notice.ShouldDisplay)
         {
             StatusInfo.IsOpen = false;
             StatusInfo.Visibility = Visibility.Collapsed;
@@ -152,7 +151,7 @@ public sealed partial class MainPage : Page
 
     private void StatusInfoClosing(InfoBar sender, InfoBarClosingEventArgs args)
     {
-        if (args.Reason == InfoBarCloseReason.CloseButton) { _dismissedNotice = _state.Notice; }
+        if (args.Reason == InfoBarCloseReason.CloseButton) { _session.DismissNotice(_state.Notice); }
         sender.Visibility = Visibility.Collapsed;
     }
 

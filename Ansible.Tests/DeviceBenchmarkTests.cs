@@ -186,8 +186,16 @@ public sealed class DeviceBenchmarkTests
             Assert.Equal(NativeBackend.Vulkan, entries.Single(value => value.Key == "offline-hash").Backend);
             Assert.Equal(NativeBackend.Cpu, entries.Single(value => value.Key == "streaming-hash").Backend);
             Assert.DoesNotContain(entries, value => value.Key == "changed-native-hash");
-            File.WriteAllText(path, "{broken");
-            Assert.Throws<System.Text.Json.JsonException>(() => DeviceBenchmark.ReadCache(path));
+            foreach (var corrupt in new[] { "{broken", "null", "[null]", "[{}]", new string('x', 1024 * 1024 + 1) })
+            {
+                File.WriteAllText(path, corrupt);
+                Assert.Empty(DeviceBenchmark.ReadCache(path));
+                DeviceBenchmark.WriteCache(path, [offline]);
+                Assert.Equal(offline, Assert.Single(DeviceBenchmark.ReadCache(path)));
+            }
+            DeviceBenchmark.WriteCache(path, [offline with { Cpu = new(NativeBackend.Cpu, null, "failed"),
+                Gpu = new(NativeBackend.Vulkan, null, "failed") }]);
+            Assert.Empty(DeviceBenchmark.ReadCache(path));
         }
         finally { Directory.Delete(directory, true); }
     }
@@ -256,8 +264,63 @@ public sealed class DeviceBenchmarkTests
         Assert.Equal(NativeBackend.Cpu, DeviceBenchmark.Select("crashed-gpu",
             new(NativeBackend.Cpu, 100, null), crash).Backend);
         await Assert.ThrowsAsync<InvalidDataException>(() => DeviceBenchmark.RunProcessAsync(
+            PowerShell("exit 0"), NativeBackend.Vulkan, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidDataException>(() => DeviceBenchmark.RunProcessAsync(
             PowerShell("Write-Output 'ANSIBLE_DEVICE_RESULT:{\"Backend\":1,\"Milliseconds\":0,\"Error\":null,\"Fatal\":false}'"),
             NativeBackend.Vulkan, CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData("nemotron_asr", "streaming", false)]
+    [InlineData("nemotron_asr", "offline", true)]
+    [InlineData("moonshine_asr", "streaming", true)]
+    public async Task QualificationDoesNotLaunchIneligibleGpu(string family, string mode, bool gpuEligible)
+    {
+        var attempts = new List<NativeBackend>();
+        var selection = await DeviceBenchmark.QualifyAsync("key", family, mode, backend =>
+        {
+            attempts.Add(backend);
+            return Task.FromResult(new DeviceBenchmarkResult(backend, 100, null));
+        }, CancellationToken.None);
+        Assert.Equal(gpuEligible ? [NativeBackend.Cpu, NativeBackend.Vulkan] : new[] { NativeBackend.Cpu }, attempts);
+        Assert.Equal(gpuEligible ? NativeBackend.Vulkan : NativeBackend.Cpu, selection.Backend);
+        if (!gpuEligible) Assert.Contains("qualification skipped", selection.Gpu.Error);
+    }
+
+    [Fact]
+    public void GpuFailureWithoutQualifiedCpuPreservesOriginalErrorAndDoesNotRetry()
+    {
+        var prior = DeviceBenchmark.Select("key", new(NativeBackend.Cpu, null, "CPU failed"), new(NativeBackend.Vulkan, 100, null));
+        var failure = new NativeExecutionException("GPU failed", "transcribe the recording");
+        var attempts = 0;
+        var actual = Assert.Throws<NativeExecutionException>(() => NativeAutoRecovery.Run<int>(true,
+            new(Backend: NativeBackend.Vulkan), CancellationToken.None,
+            _ => { attempts++; throw failure; }, error => DeviceBenchmark.CpuFallback(prior, error)));
+        Assert.Same(failure, actual);
+        Assert.Equal(1, attempts);
+    }
+
+    [Fact]
+    public void UnwritableCacheDoesNotPreventQualifiedCpuRecovery()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "Ansible-device-cache-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var prior = DeviceBenchmark.Select("key", new(NativeBackend.Cpu, 100, null), new(NativeBackend.Vulkan, 90, null));
+            string? warning = null;
+            var attempts = new List<NativeBackend>();
+            var result = NativeAutoRecovery.Run(true, new(Backend: NativeBackend.Vulkan), CancellationToken.None, options =>
+            {
+                attempts.Add(options.Backend);
+                if (options.Backend == NativeBackend.Vulkan) throw new NativeExecutionException("GPU failed", "transcribe the recording");
+                return "recognized speech";
+            }, error => warning = DeviceBenchmark.TryUpdateCache(directory, prior.Key, DeviceBenchmark.CpuFallback(prior, error)));
+            Assert.Equal("recognized speech", result);
+            Assert.Equal([NativeBackend.Vulkan, NativeBackend.Cpu], attempts);
+            Assert.Contains("could not be updated", warning);
+        }
+        finally { Directory.Delete(directory, true); }
     }
 
     [Fact]

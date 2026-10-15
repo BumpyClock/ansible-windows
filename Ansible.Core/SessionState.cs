@@ -9,9 +9,9 @@ public enum DictationPhase
 public enum SessionActivity { None, Connecting, Dictation, Replay, File, ModelMaintenance }
 public enum NoticeKind { Information, Success, Warning, Error }
 public enum SessionOutcomeKind { Completed, Cancelled, TimedOut, Failed }
-public sealed record SessionNotice(NoticeKind Kind, string Title, string Message, bool ShowInStatus = false)
+public sealed record SessionNotice(NoticeKind Kind, string Title, string Message, bool ShowInStatus = false, bool IsDismissed = false)
 {
-    public bool ShouldDisplay => ShowInStatus || Kind is NoticeKind.Warning or NoticeKind.Error;
+    public bool ShouldDisplay => !IsDismissed && (ShowInStatus || Kind is NoticeKind.Warning or NoticeKind.Error);
 }
 public sealed record SessionOutcome(SessionOutcomeKind Kind, RecognitionResult? Result = null, Exception? Error = null);
 
@@ -20,6 +20,7 @@ public sealed record SessionSnapshot
     public required long Version { get; init; }
     public Guid? OperationId { get; init; }
     public bool MeetingActive { get; init; }
+    public bool IsCaptureOpen { get; init; }
     public required DictationPhase Phase { get; init; }
     public required SessionActivity Activity { get; init; }
     public required SessionNotice Notice { get; init; }

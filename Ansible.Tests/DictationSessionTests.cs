@@ -27,6 +27,66 @@ public sealed class DictationSessionTests : IDisposable
     }
 
     [Fact]
+    public async Task NoticeDismissalIsSharedAndCannotDismissAReplacement()
+    {
+        var session = Create(new FakeEngine());
+        session.Notify(NoticeKind.Information, "Delivery", "Check the destination.", showInStatus: true);
+        var first = session.State.Notice;
+        SessionSnapshot? published = null;
+        session.StateChanged += snapshot => published = snapshot;
+        session.DismissNotice(first);
+        Assert.True(session.State.Notice.IsDismissed);
+        Assert.False(session.State.Notice.ShouldDisplay);
+        Assert.Same(session.State, published);
+        session.Notify(NoticeKind.Information, "Delivery", "Check the destination.", showInStatus: true);
+        var replacement = session.State.Notice;
+        session.DismissNotice(first);
+        Assert.Same(replacement, session.State.Notice);
+        Assert.True(session.State.Notice.ShouldDisplay);
+        await session.CloseAsync();
+    }
+
+    [Fact]
+    public async Task CaptureRemainsOpenUntilStopCompletes()
+    {
+        var stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var source = new FakeCapture { Stopping = () => stopped.Task };
+        var session = Create(new FakeEngine(), new FakeCaptureFactory
+            { Starting = _ => Task.FromResult<IAudioCapture>(source) });
+        await session.InitializeAsync();
+        var recording = session.StartDictationAsync();
+        await WaitForStateAsync(session, DictationPhase.Recording);
+        Assert.True(session.State.IsCaptureOpen);
+        var finish = session.FinishAsync();
+        Assert.Equal(DictationPhase.Finishing, session.State.Phase);
+        Assert.True(session.State.IsCaptureOpen);
+        stopped.SetResult();
+        await finish;
+        Assert.False(session.State.IsCaptureOpen);
+        source.Packets.Writer.TryComplete();
+        await recording;
+        await session.CloseAsync();
+    }
+
+    [Fact]
+    public async Task FailedStopRetainsOpenCaptureUntilRecoveryReleasesIt()
+    {
+        var source = new FakeCapture { Stopping = () => Task.FromException(new IOException("stop failed")) };
+        var session = Create(new FakeEngine(), new FakeCaptureFactory
+            { Starting = _ => Task.FromResult<IAudioCapture>(source) });
+        await session.InitializeAsync();
+        var recording = session.StartDictationAsync();
+        await WaitForStateAsync(session, DictationPhase.Recording);
+        await Assert.ThrowsAsync<IOException>(() => session.FinishAsync());
+        Assert.Equal(SessionOutcomeKind.Failed, (await recording).Kind);
+        Assert.Equal(DictationPhase.RecoveryRequired, session.State.Phase);
+        Assert.True(session.State.IsCaptureOpen);
+        source.Stopping = null;
+        await session.CloseAsync();
+        Assert.False(session.State.IsCaptureOpen);
+    }
+
+    [Fact]
     public async Task PasteShortcutChangesOnlyWhileIdleAndPersists()
     {
         var session = Create(new FakeEngine(), new FakeCaptureFactory(), settings: new AppSettingsStore(SettingsPath));

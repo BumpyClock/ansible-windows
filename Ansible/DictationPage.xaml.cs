@@ -29,7 +29,6 @@ public sealed partial class DictationPage : Page
     private SessionSnapshot _state;
     private UiSessionObserver? _observer;
     private IReadOnlyList<AudioModel>? _models;
-    private SessionNotice? _dismissedNotice;
     private Visual? _innerVisual;
     private Visual? _outerVisual;
     private double _smoothedLevel;
@@ -170,7 +169,7 @@ public sealed partial class DictationPage : Page
     private void RenderNotice()
     {
         var notice = _state.Notice;
-        if (!notice.ShouldDisplay || ReferenceEquals(notice, _dismissedNotice))
+        if (!notice.ShouldDisplay)
         {
             StatusInfo.IsOpen = false;
             StatusInfo.Visibility = Visibility.Collapsed;
@@ -191,7 +190,7 @@ public sealed partial class DictationPage : Page
 
     private void StatusInfoClosing(InfoBar sender, InfoBarClosingEventArgs args)
     {
-        if (args.Reason == InfoBarCloseReason.CloseButton) { _dismissedNotice = _state.Notice; }
+        if (args.Reason == InfoBarCloseReason.CloseButton) { _session.DismissNotice(_state.Notice); }
     }
 
     private void StatusInfoClosed(InfoBar sender, InfoBarClosedEventArgs args)
