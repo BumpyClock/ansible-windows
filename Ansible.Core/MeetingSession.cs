@@ -9,6 +9,7 @@ public sealed record MeetingSessionSnapshot(long Version, MeetingSessionPhase Ph
 {
     public string? NamingStatus { get; init; }
     public string? RefinementStatus { get; init; }
+    public string DeviceSelectionSummary { get; init; } = "";
 }
 
 public sealed class MeetingSession : IAsyncDisposable
@@ -38,6 +39,7 @@ public sealed class MeetingSession : IAsyncDisposable
     private IMeetingRecognitionEngine? _engine;
     private IAudioCapture? _capture;
     private CancellationTokenSource? _cancellation;
+    private CancellationTokenSource? _preparation;
     private Channel<byte[]>? _audio;
     private PausableReader? _reader;
     private MeetingTranscript _transcript = new();
@@ -74,10 +76,16 @@ public sealed class MeetingSession : IAsyncDisposable
     {
         request.Validate();
         await _commands.WaitAsync();
+        CancellationTokenSource? preparation = null;
         try
         {
             ObjectDisposedException.ThrowIf(_disposed || Volatile.Read(ref _disposing) != 0, this);
             if (IsActive) throw new InvalidOperationException("End the current meeting before starting another.");
+            lock (_gate)
+            {
+                ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposing) != 0, this);
+                _preparation = preparation = new();
+            }
             await _reserve();
             lock (_gate)
             {
@@ -97,7 +105,7 @@ public sealed class MeetingSession : IAsyncDisposable
             _recognition = Task.CompletedTask;
             _pump = Task.CompletedTask;
             _cancellation?.Dispose();
-            _cancellation = new();
+            _cancellation = CancellationTokenSource.CreateLinkedTokenSource(preparation.Token);
             _audio = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(300)
             { SingleWriter = true, SingleReader = true, AllowSynchronousContinuations = false });
             _reader = new PausableReader(_audio.Reader, _timeline.Append);
@@ -106,12 +114,15 @@ public sealed class MeetingSession : IAsyncDisposable
             var models = await _engine.ConnectAsync(_cancellation.Token);
             var model = models.FirstOrDefault(candidate => candidate.Family == "vibevoice_asr_streaming" && candidate.Mode == "streaming")
                 ?? throw new InvalidOperationException("Install VibeVoice ASR Streaming 1.5B in Speech models before starting a meeting.");
+            await _engine.PrepareMeetingAsync(model, _options, _cancellation.Token);
+            _cancellation.Token.ThrowIfCancellationRequested();
             _capture = await _captureFactory.StartAsync(request, _cancellation.Token);
+            _cancellation.Token.ThrowIfCancellationRequested();
             AttachSourceMetadata(_capture);
             _pump = PumpAsync(_capture, _cancellation.Token);
             await StartObserverAsync();
             var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            _recognition = RecognizeAsync(model, ready);
+            _recognition = Task.Run(() => RecognizeAsync(model, ready));
             if (await Task.WhenAny(ready.Task, _recognition) == _recognition)
             {
                 await _recognition;
@@ -138,7 +149,20 @@ public sealed class MeetingSession : IAsyncDisposable
             }
             throw;
         }
-        finally { _commands.Release(); }
+        finally
+        {
+            lock (_gate)
+            {
+                if (ReferenceEquals(_preparation, preparation)) _preparation = null;
+                preparation?.Dispose();
+            }
+            _commands.Release();
+        }
+    }
+
+    private void CancelPreparation()
+    {
+        lock (_gate) _preparation?.Cancel();
     }
 
     public async Task PauseAsync()
@@ -196,7 +220,11 @@ public sealed class MeetingSession : IAsyncDisposable
     }
 
     public async Task EndAsync() => await FinishAsync(false);
-    public async Task DiscardAsync() => await FinishAsync(true);
+    public async Task DiscardAsync()
+    {
+        CancelPreparation();
+        await FinishAsync(true);
+    }
 
     private async Task FinishAsync(bool discard)
     {
@@ -562,8 +590,8 @@ public sealed class MeetingSession : IAsyncDisposable
         try
         {
             await StopCaptureCoreAsync();
-            if (_engine is { } engine) { await engine.DisposeAsync(); _engine = null; }
-            if (_aligner is { } aligner) { await aligner.DisposeAsync(); _aligner = null; }
+            if (_engine is { } engine) { await Task.Run(async () => await engine.DisposeAsync()); _engine = null; }
+            if (_aligner is { } aligner) { await Task.Run(async () => await aligner.DisposeAsync()); _aligner = null; }
             if (_observer is { } observer) { await observer.DisposeAsync(); _observer = null; }
             _timeline = new();
             if (IsActive)
@@ -588,6 +616,7 @@ public sealed class MeetingSession : IAsyncDisposable
     private void SetPhase(MeetingSessionPhase phase, MeetingStatus status, string? error = null)
     {
         lock (_gate) _state = _state with { Version = _state.Version + 1, Phase = phase, Error = error ?? _state.Error,
+            DeviceSelectionSummary = _engine?.DeviceSelectionSummary ?? _state.DeviceSelectionSummary,
             Document = _state.Document is { } document ? document with { Status = status, UpdatedAt = DateTimeOffset.UtcNow } : null };
         Publish();
     }
@@ -597,6 +626,7 @@ public sealed class MeetingSession : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         Interlocked.Exchange(ref _disposing, 1);
+        CancelPreparation();
         await EndAsync();
         await _recognition;
         _disposed = true;

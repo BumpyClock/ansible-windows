@@ -8,6 +8,84 @@ public sealed class DictationSessionTests : IDisposable
     private readonly string _settingsDirectory = Path.Combine(Path.GetTempPath(), "LocalVoiceSettingsTests", Guid.NewGuid().ToString("N"));
     private string SettingsPath => Path.Combine(_settingsDirectory, "settings.json");
 
+    [Theory]
+    [InlineData(NoticeKind.Success)]
+    [InlineData(NoticeKind.Information)]
+    public async Task ExplicitDeliveryNoticeRemainsVisibleUntilReplaced(NoticeKind kind)
+    {
+        var session = Create(new FakeEngine());
+        session.Notify(kind, "Delivery outcome", "Check the destination.", showInStatus: true);
+
+        Assert.True(session.State.Notice.ShouldDisplay);
+        Assert.Equal(kind, session.State.Notice.Kind);
+        Assert.Equal("Delivery outcome", session.State.Notice.Title);
+        Assert.Equal("Check the destination.", session.State.Notice.Message);
+
+        session.Notify(NoticeKind.Information, "Ready", "Choose a model.");
+        Assert.False(session.State.Notice.ShouldDisplay);
+        await session.CloseAsync();
+    }
+
+    [Fact]
+    public async Task NoticeDismissalIsSharedAndCannotDismissAReplacement()
+    {
+        var session = Create(new FakeEngine());
+        session.Notify(NoticeKind.Information, "Delivery", "Check the destination.", showInStatus: true);
+        var first = session.State.Notice;
+        SessionSnapshot? published = null;
+        session.StateChanged += snapshot => published = snapshot;
+        session.DismissNotice(first);
+        Assert.True(session.State.Notice.IsDismissed);
+        Assert.False(session.State.Notice.ShouldDisplay);
+        Assert.Same(session.State, published);
+        session.Notify(NoticeKind.Information, "Delivery", "Check the destination.", showInStatus: true);
+        var replacement = session.State.Notice;
+        session.DismissNotice(first);
+        Assert.Same(replacement, session.State.Notice);
+        Assert.True(session.State.Notice.ShouldDisplay);
+        await session.CloseAsync();
+    }
+
+    [Fact]
+    public async Task CaptureRemainsOpenUntilStopCompletes()
+    {
+        var stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var source = new FakeCapture { Stopping = () => stopped.Task };
+        var session = Create(new FakeEngine(), new FakeCaptureFactory
+            { Starting = _ => Task.FromResult<IAudioCapture>(source) });
+        await session.InitializeAsync();
+        var recording = session.StartDictationAsync();
+        await WaitForStateAsync(session, DictationPhase.Recording);
+        Assert.True(session.State.IsCaptureOpen);
+        var finish = session.FinishAsync();
+        Assert.Equal(DictationPhase.Finishing, session.State.Phase);
+        Assert.True(session.State.IsCaptureOpen);
+        stopped.SetResult();
+        await finish;
+        Assert.False(session.State.IsCaptureOpen);
+        source.Packets.Writer.TryComplete();
+        await recording;
+        await session.CloseAsync();
+    }
+
+    [Fact]
+    public async Task FailedStopRetainsOpenCaptureUntilRecoveryReleasesIt()
+    {
+        var source = new FakeCapture { Stopping = () => Task.FromException(new IOException("stop failed")) };
+        var session = Create(new FakeEngine(), new FakeCaptureFactory
+            { Starting = _ => Task.FromResult<IAudioCapture>(source) });
+        await session.InitializeAsync();
+        var recording = session.StartDictationAsync();
+        await WaitForStateAsync(session, DictationPhase.Recording);
+        await Assert.ThrowsAsync<IOException>(() => session.FinishAsync());
+        Assert.Equal(SessionOutcomeKind.Failed, (await recording).Kind);
+        Assert.Equal(DictationPhase.RecoveryRequired, session.State.Phase);
+        Assert.True(session.State.IsCaptureOpen);
+        source.Stopping = null;
+        await session.CloseAsync();
+        Assert.False(session.State.IsCaptureOpen);
+    }
+
     [Fact]
     public async Task PasteShortcutChangesOnlyWhileIdleAndPersists()
     {
@@ -130,7 +208,7 @@ public sealed class DictationSessionTests : IDisposable
         var engine = new FakeEngine();
         var session = Create(engine, settings: new AppSettingsStore(SettingsPath));
         await session.InitializeAsync();
-        Assert.Equal(NativeBackend.Cpu, session.State.Settings.Backend);
+        Assert.Equal(NativeBackend.Auto, session.State.Settings.Backend);
         session.SetBackend(NativeBackend.Vulkan);
         Assert.Throws<InvalidDataException>(() => session.SetBackend((NativeBackend)42));
         Assert.Equal(NativeBackend.Vulkan, session.State.Settings.Backend);
@@ -245,13 +323,24 @@ public sealed class DictationSessionTests : IDisposable
         await session.InitializeAsync();
         await engine.PrepareCalled.Task.WaitAsync(TimeSpan.FromSeconds(2));
         Assert.Equal(Model, engine.PreparedModel);
-        Assert.Equal(NativeBackend.Cpu, engine.PreparedOptions?.Backend);
+        Assert.Equal(NativeBackend.Auto, engine.PreparedOptions?.Backend);
 
         session.SetBackend(NativeBackend.Vulkan);
         await WaitUntilAsync(() => engine.PreparedOptions?.Backend == NativeBackend.Vulkan);
 
         await session.CloseAsync();
         Assert.Equal(0, engine.Unloads);
+    }
+
+    [Fact]
+    public async Task PreloadPublishesMeasuredDeviceSummaryInANewSnapshot()
+    {
+        var engine = new FakeEngine { PreparedDeviceSummary = "Auto selected Vulkan. CPU: 100.0 ms; Vulkan: 80.0 ms." };
+        var session = Create(engine);
+        await session.InitializeAsync();
+        await WaitUntilAsync(() => session.State.DeviceSelectionSummary == engine.PreparedDeviceSummary);
+        Assert.Equal(engine.PreparedDeviceSummary, session.State.DeviceSelectionSummary);
+        await session.CloseAsync();
     }
 
     [Fact]
@@ -1248,6 +1337,8 @@ public sealed class DictationSessionTests : IDisposable
 
     private sealed class FakeEngine : IRecognitionEngine
     {
+        public string DeviceSelectionSummary { get; private set; } = "";
+        public string PreparedDeviceSummary { get; init; } = "";
         public string ModelsDirectory { get; init; } = "models";
         public string Version => "test";
         public RecognitionResult Result { get; init; } = new("hello world", "hello world");
@@ -1315,6 +1406,7 @@ public sealed class DictationSessionTests : IDisposable
             PreparedOptions = options;
             PrepareCalled.TrySetResult();
             if (Preparing is not null) { await Preparing(token); }
+            DeviceSelectionSummary = PreparedDeviceSummary;
         }
         public Task UnloadAsync(CancellationToken token)
         {

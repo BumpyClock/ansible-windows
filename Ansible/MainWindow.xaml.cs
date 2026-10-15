@@ -34,9 +34,11 @@ public sealed partial class MainWindow : Window
     private bool _creatingFloating;
     private bool? _capturePrivacy;
     private readonly ShortcutCaptureCoordinator _captureCoordinator = new();
-    private readonly CancellationTokenSource _deliveryCancellation = new();
+    private CancellationTokenSource _deliveryCancellation = new();
     private Task<(bool available, CapturedTextTarget? target, string reason)>? _captureTask;
     private Task? _deliveryTask;
+    private Task? _releaseTailTask;
+    private Task? _pressTask;
     private FinalTextDelivery? _delivery;
     private Task<SessionOutcome>? _deliveryOperation;
     private Guid? _deliveryOperationId;
@@ -251,7 +253,9 @@ public sealed partial class MainWindow : Window
         if (existing.window is not null) return existing.window;
         var state = _session.State;
         var meeting = new MeetingSession(
-            () => new NativeAudioEngine(_paths.NativeLibrary, _paths.ModelCatalog, state.ModelsDirectory),
+            () => new NativeAudioEngine(_paths.NativeLibrary, _paths.ModelCatalog, state.ModelsDirectory,
+                deviceProbePath: _paths.DeviceProbe, benchmarkSamplePath: _paths.PublicSample,
+                benchmarkCachePath: _paths.DeviceBenchmarks),
             new PermissionCheckedMeetingCaptureFactory(new Ansible.Core.Windows.MeetingCaptureFactory(), _microphonePermission), _meetingStore,
             new RecognitionOptions(state.Language, state.Settings.CustomDictionary, state.Settings.Backend),
             reserve: async () =>
@@ -463,8 +467,7 @@ public sealed partial class MainWindow : Window
             if (failures.Count > 0)
                 _session.Notify(NoticeKind.Warning, "Screen capture privacy unavailable", string.Join(" ", failures.Distinct()));
         }
-        var showWaveform = state.Phase is DictationPhase.Preparing or DictationPhase.Recording &&
-            (_delivery is null || !state.Settings.PushToTalk || _shortcutHeld);
+        var showWaveform = state.IsCaptureOpen || state.Phase is DictationPhase.Preparing or DictationPhase.Recording;
         if (!showWaveform) { _popupFailed = false; }
         if (showWaveform && _floating is null && !_popupFailed && !_creatingFloating)
         {
@@ -489,27 +492,50 @@ public sealed partial class MainWindow : Window
     {
         _shortcutHeld = pressed;
         if (_closed || _closing) { return; }
+        if (pressed) { _captureCoordinator.NotePressed(); }
         try
         {
             if (!pressed) { await HandleReleaseAsync(); }
-            else { await HandlePressAsync(); }
+            else
+            {
+                var task = HandlePressAsync();
+                _pressTask = _pressTask is { IsCompleted: false } previous ? Task.WhenAll(previous, task) : task;
+                await task;
+            }
         }
         catch (Exception error) { _session.ReportUiError(error); }
     }
 
     // Shortcut release. Marks a pending push-to-talk capture stale so its inspection cannot start a late
-    // recording, and finishes or cancels dictation from a single State snapshot so a Preparing->Recording transition
-    // cannot be read inconsistently across two reads.
+    // recording. Once admitted, capture retains a short tail owned by this release and delivery operation.
     private async Task HandleReleaseAsync()
     {
         var state = _session.State;
-        if (state.Settings.PushToTalk) { _floating?.HidePreview(); }
-        _captureCoordinator.NoteReleased();
+        var release = _captureCoordinator.NoteReleased();
         if (state.Settings.PushToTalk && _delivery is not null)
         {
+            var task = FinishReleasedDictationAsync(release, _delivery, state.OperationId);
+            _releaseTailTask = _releaseTailTask is { IsCompleted: false } previous
+                ? Task.WhenAll(previous, task) : task;
+            await task;
+        }
+    }
+
+    private async Task FinishReleasedDictationAsync(
+        ShortcutCaptureCoordinator.Release release, FinalTextDelivery delivery, Guid? operationId)
+    {
+        var token = _deliveryCancellation.Token;
+        try
+        {
+            if (!await _captureCoordinator.WaitForReleaseTailAsync(release, token)) { return; }
+            if (_closing || _closed || _shortcutHeld || !ReferenceEquals(_delivery, delivery)) { return; }
+            var state = _session.State;
+            if (state.OperationId != operationId || !state.Settings.PushToTalk) { return; }
             if (state.CanFinish) { await _session.FinishAsync(); }
             else if (state.Phase == DictationPhase.Preparing) { await _session.CancelAsync(); }
         }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        catch (Exception error) { _session.ReportUiError(error); }
     }
 
     // Shortcut press. Admits at most one interaction to own the target inspection; a press arriving while an
@@ -518,6 +544,7 @@ public sealed partial class MainWindow : Window
     // overwrite another interaction's recording.
     private async Task HandlePressAsync()
     {
+        var token = _deliveryCancellation.Token;
         if (_captureCoordinator.HasPendingCapture) { return; }
         var state = _session.State;
         if (state.CanFinish)
@@ -552,7 +579,7 @@ public sealed partial class MainWindow : Window
             // Let the hotkey adapter report an already-released chord before admitting recording.
             await Task.Yield();
             var inspected = await inspection;
-            if (_closing || _closed) { return; }
+            if (token.IsCancellationRequested || _closing || _closed) { return; }
             if (!_captureCoordinator.IsCurrent(capture)) { return; }
             if (!inspected.available)
             {
@@ -613,9 +640,10 @@ public sealed partial class MainWindow : Window
 
     private async Task DeliverAsync(Task<SessionOutcome> operation, FinalTextDelivery delivery)
     {
+        var token = _deliveryCancellation.Token;
         try
         {
-            var outcome = await delivery.RunAsync(operation, _deliveryCancellation.Token);
+            var outcome = await delivery.RunAsync(operation, token);
             if (!IsDeliveryCurrent() || outcome.Kind != SessionOutcomeKind.Completed) { return; }
             if (delivery.Error is not null)
                 _session.Notify(NoticeKind.Warning, "Insertion stopped",
@@ -623,11 +651,11 @@ public sealed partial class MainWindow : Window
             else if (delivery.Sent)
                 _session.Notify(delivery.Delivery?.Status == TextDeliveryStatus.Verified ? NoticeKind.Success : NoticeKind.Information,
                     delivery.Delivery?.Status == TextDeliveryStatus.Verified ? "Insertion verified" : "Text sent; unverified",
-                    delivery.Delivery?.Message ?? "The insertion input was sent. Check the destination.");
+                    delivery.Delivery?.Message ?? "The insertion input was sent. Check the destination.", showInStatus: true);
             else
-                _session.Notify(NoticeKind.Information, "No speech to insert", "The model returned no speech text.");
+                _session.Notify(NoticeKind.Information, "No speech to insert", "The model returned no speech text.", showInStatus: true);
         }
-        catch (OperationCanceledException) when (_deliveryCancellation.IsCancellationRequested) { }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         catch (Exception error) { _session.ReportUiError(error); }
         finally
         {
@@ -646,6 +674,7 @@ public sealed partial class MainWindow : Window
         args.Cancel = true;
         if (_closing) { return; }
         _closing = true;
+        MainContent.IsEnabled = false;
         ShutdownError.IsOpen = false;
         ShutdownError.Visibility = Visibility.Collapsed;
         _deliveryCancellation.Cancel();
@@ -670,7 +699,13 @@ public sealed partial class MainWindow : Window
                 try { await capture; }
                 catch (Exception error) { Debug.WriteLine($"Ansible: target inspection failed during close: {error.Message}"); }
             }
+            if (_pressTask is not null)
+            {
+                try { await _pressTask; }
+                catch (Exception pressError) { Debug.WriteLine($"Ansible: shortcut press failed during close: {pressError.Message}"); }
+            }
             if (_deliveryTask is not null) { await _deliveryTask; }
+            if (_releaseTailTask is not null) { await _releaseTailTask; }
             if (_floating is not null) { await _floating.ClosePreviewAsync(); }
             _allowClose = true;
             Close();
@@ -678,14 +713,33 @@ public sealed partial class MainWindow : Window
         catch (Exception error)
         {
             Debug.WriteLine($"Ansible: native shutdown needs recovery: {error.Message}");
-            ShutdownError.Message = $"{error.Message} Try closing the window again.";
+            ShutdownError.Message = $"{error.Message} Waiting for owned work to stop.";
             ShutdownError.Visibility = Visibility.Visible;
             ShutdownError.IsOpen = true;
-            _closing = false;
-            _meetings.ResumeAfterFailedShutdown();
-            // All launch/retry tasks above have been joined; allow a fresh permission retry after failed shutdown.
+            var failures = new List<Exception> { error };
+            _detectionCancellation?.Cancel();
+            try { await _session.CancelAsync(); }
+            catch (Exception stopError) { failures.Add(stopError); }
+            var joined = Task.WhenAll(new[]
+            {
+                _startupTask, _permissionRetryTask, _microphoneSettingsTask,
+                _detectionTask, _detectionActionTask, _captureTask, _pressTask, _deliveryTask, _releaseTailTask
+            }.OfType<Task>());
+            try { await joined; }
+            catch (Exception)
+            {
+                if (joined.Exception is { } joinError) failures.AddRange(joinError.Flatten().InnerExceptions);
+            }
+            _pressTask = null;
+            _deliveryCancellation.Dispose();
+            _deliveryCancellation = new CancellationTokenSource();
             _startupCancellation.Dispose();
             _startupCancellation = new CancellationTokenSource();
+            var failure = failures.Count == 1 ? error : new AggregateException("Shutdown and recovery reported failures.", failures);
+            ShutdownError.Message = $"{failure.Message} Try closing the window again.";
+            _closing = false;
+            MainContent.IsEnabled = true;
+            _meetings.ResumeAfterFailedShutdown();
             _permissionCheckComplete = true;
             RenderMicrophonePermission();
             StartMeetingDetection();

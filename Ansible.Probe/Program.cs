@@ -26,7 +26,7 @@ if (args is ["--cpu-check"])
 
 if (args.Length < 4)
 {
-    Console.Error.WriteLine("Usage: Ansible.Probe --cpu-check | <native-dll> <models-directory> <catalog-json> <16k-mono-PCM16.wav> [model-id] [--file-only] [--dictionary <one-term-per-line>] [--backend cpu|vulkan] [--device <nonnegative-index>]");
+    Console.Error.WriteLine("Usage: Ansible.Probe --cpu-check | <native-dll> <models-directory> <catalog-json> <16k-mono-PCM16.wav> [model-id] [--file-only] [--dictionary <one-term-per-line>] [--backend cpu|vulkan|auto] [--device <nonnegative-index>] [--device-probe <executable>] [--benchmark-cache <json>]");
     return 2;
 }
 
@@ -39,6 +39,8 @@ try
     var fileOnly = false;
     NativeBackend? backend = null;
     int? deviceIndex = null;
+    string? deviceProbe = null;
+    string? benchmarkCache = null;
     for (var index = 4; index < args.Length; index++)
     {
         if (args[index] == "--file-only" && !fileOnly) { fileOnly = true; }
@@ -47,8 +49,13 @@ try
             {
                 "cpu" => NativeBackend.Cpu,
                 "vulkan" => NativeBackend.Vulkan,
-                _ => throw new ArgumentException("Backend must be cpu or vulkan.")
+                "auto" => NativeBackend.Auto,
+                _ => throw new ArgumentException("Backend must be cpu, vulkan or auto.")
             };
+        else if (args[index] == "--device-probe" && deviceProbe is null && index + 1 < args.Length)
+            deviceProbe = args[++index];
+        else if (args[index] == "--benchmark-cache" && benchmarkCache is null && index + 1 < args.Length)
+            benchmarkCache = args[++index];
         else if (args[index] == "--device" && deviceIndex is null && index + 1 < args.Length)
             deviceIndex = int.TryParse(args[++index], out var device) && device >= 0
                 ? device : throw new ArgumentException("Device index must be a nonnegative integer.");
@@ -63,7 +70,8 @@ try
         Backend: backend ?? NativeBackend.Cpu, DeviceIndex: deviceIndex ?? 0);
     using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(3));
     Console.WriteLine($"Requested backend={backend ?? NativeBackend.Cpu}; device={deviceIndex ?? 0}");
-    await using var engine = new NativeAudioEngine(args[0], args[2], args[1], threads: 4, memoryHeadroomMB: 512);
+    await using var engine = new NativeAudioEngine(args[0], args[2], args[1], threads: 4, memoryHeadroomMB: 512,
+        deviceProbePath: deviceProbe, benchmarkSamplePath: args[3], benchmarkCachePath: benchmarkCache);
     var models = await engine.ConnectAsync(timeout.Token);
     var model = modelId is not null
         ? models.FirstOrDefault(model => model.Id == modelId) ??
@@ -88,6 +96,7 @@ try
     }
     Console.WriteLine($"WAV transcription completed in {clock.Elapsed.TotalMilliseconds:F0} ms: {transcript.DisplayText}");
     Console.WriteLine($"Spoken words={transcript.SpokenWords?.ToString() ?? "unknown"}");
+    if (backend == NativeBackend.Auto) { Console.WriteLine(engine.DeviceSelectionSummary); }
     if (model.Mode == "offline" || fileOnly)
     {
         return 0;
@@ -134,6 +143,7 @@ try
         Console.WriteLine($"Live stream completed in {clock.Elapsed.TotalMilliseconds:F0} ms; previews during upload={previewsDuringUpload}");
         Console.WriteLine(liveTranscript.DisplayText);
         Console.WriteLine($"Spoken words={liveTranscript.SpokenWords?.ToString() ?? "unknown"}");
+        if (backend == NativeBackend.Auto) { Console.WriteLine(engine.DeviceSelectionSummary); }
     }
     catch (Exception error)
     {
@@ -156,6 +166,7 @@ try
 catch (Exception error)
 {
     Console.Error.WriteLine($"{stage} failed after {clock.Elapsed.TotalMilliseconds:F0} ms: {error.GetType().Name}: {error.Message}");
+    Console.Error.WriteLine(error.StackTrace);
     return 1;
 }
 

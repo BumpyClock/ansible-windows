@@ -33,8 +33,10 @@ unknown. Cancellation waits for an executing native call to finish.
 | Option | Effect |
 | --- | --- |
 | `--file-only` | Skip streaming; offline models always skip it |
-| `--backend cpu` or `--backend vulkan` | Select the backend explicitly |
+| `--backend cpu`, `--backend vulkan`, or `--backend auto` | Select the backend; default CPU. Auto is not implied. |
 | `--device <index>` | Select a nonnegative device index; default 0 |
+| `--device-probe <executable>` | Required for `--backend auto`. Path to `Ansible.DeviceProbe.exe`. The probe does not discover the worker. |
+| `--benchmark-cache <json>` | Optional Auto cache file. Omit to keep the selection in this process only. |
 | `--dictionary <text>` | Supply newline-separated recognition hints; unsupported models reject them |
 
 Vulkan example:
@@ -43,6 +45,24 @@ Vulkan example:
 dotnet run --project .\Ansible.Probe -- `
   .\.runtime\native\audiocpp.dll .\.runtime\models .\tools\audio-models.json `
   .\.runtime\validation\sample_16k.wav moonshine-tiny --backend vulkan --device 0
+```
+
+Auto example. Build the app first so the worker exists. Use the public sample as
+the positional WAV; Auto uses that file for isolated qualification. Use the
+`Debug` worker folder after a Debug app build. Auto probes CPU, then GPU;
+compared times exclude load and warmup. Each device has a five-minute deadline
+that includes load, warmup, recognition, and teardown. The CLI also has a
+three-minute timeout for each recognition operation, so it can cancel qualification before
+a device deadline. A GPU worker crash or
+timeout disqualifies GPU only. Shared validation, integrity, memory, protocol,
+or ownership errors abort calibration and do not write a device cache entry:
+
+```powershell
+dotnet run --project .\Ansible.Probe -- `
+  .\.runtime\native\audiocpp.dll .\.runtime\models .\tools\audio-models.json `
+  .\.runtime\validation\sample_16k.wav moonshine-tiny --backend auto `
+  --device-probe .\.runtime\device-probe\Release\Ansible.DeviceProbe.exe `
+  --benchmark-cache .\.runtime\device-benchmarks.json
 ```
 
 Dictionary example, after installing `qwen3-asr-0.6b-q8`:
@@ -76,6 +96,24 @@ memory, sample, and command with each result. Separate cold loading from reused
 session timing. A public-sample transcript does not establish accuracy across
 speakers, languages, microphones, or noise conditions. Paced streaming elapsed
 time includes audio delivery and is not pure inference latency.
+
+## Auto qualification
+
+On 2026-10-11, Auto qualification on pinned Moonshine Tiny Q8 used the
+14.07-second bundled Mother Nature sample, CPU and Vulkan, and four threads.
+The native GPU listing was AMD Radeon(TM) 860M Graphics.
+
+Warm sample benchmarks excluded loading and warmup. Offline WAV: CPU 279.3 ms,
+Vulkan 153.1 ms, selected Vulkan. Unpaced streaming: CPU 187.3 ms, Vulkan
+162.2 ms, selected Vulkan. Actual WAV transcription and paced replay both
+returned the same authoritative speech containing "Mother Nature". Moonshine
+produced zero incremental previews, which is expected.
+
+A fresh engine run reused the same measurement timestamps and results. The WAV
+whole-operation time, including calibration, was 8598 ms cold and 1284 ms with
+the cache reused. That is this run only. Paced streaming elapsed time includes
+audio feed time and is not pure inference latency. These measurements do not
+qualify other models, long live dictation, or meeting history.
 
 ## Meeting qualification
 
@@ -130,8 +168,12 @@ calls; a blocked Windows call can delay shutdown while its owned worker is joine
 - Nemotron GPU streaming has a recorded failure on Intel Arc 140V with driver
   `32.0.101.8425` (2026-10-08): WAV transcription completed, but streaming cleanup
   terminated with native `vk::DeviceLostError` from `vk::Queue::submit`. This can
-  terminate the app. Use CPU for Nemotron dictation. Other model/GPU combinations
-  require separate qualification.
+  terminate the app. Native Auto streaming skips Nemotron Vulkan qualification
+  and uses a qualified CPU. Manual GPU has no fallback. Other
+  model/GPU combinations require separate qualification. Isolated
+  `Ansible.DeviceProbe` qualification cannot catch a later in-process driver
+  crash; live GPU work still runs in the app process. Auto does not replay
+  consumed live audio after a GPU failure.
 - VibeVoice streaming can return speaker annotations without speech metadata.
   The app parses its speaker-attributed text for shortcut insertion. Unexpected
   output remains unknown and is not inserted; its speech-word count stays unknown.

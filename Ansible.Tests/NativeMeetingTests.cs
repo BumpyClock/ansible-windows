@@ -54,7 +54,7 @@ public sealed class NativeMeetingTests(ITestOutputHelper output)
             if (update.IsFinal) final = update;
             else if (!string.IsNullOrWhiteSpace(update.SpeechText)) firstSpeech.TrySetResult(update);
         });
-        var recognition = engine.StreamMeetingAsync(model, audio.Reader, new(), progress, timeout.Token);
+        var recognition = engine.StreamMeetingAsync(model, audio.Reader, new(Backend: NativeBackend.Cpu), progress, timeout.Token);
         try
         {
             var pcm = await new AudioInputReader().ReadReplayAsync(

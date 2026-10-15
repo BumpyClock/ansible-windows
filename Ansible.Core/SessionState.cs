@@ -9,7 +9,10 @@ public enum DictationPhase
 public enum SessionActivity { None, Connecting, Dictation, Replay, File, ModelMaintenance }
 public enum NoticeKind { Information, Success, Warning, Error }
 public enum SessionOutcomeKind { Completed, Cancelled, TimedOut, Failed }
-public sealed record SessionNotice(NoticeKind Kind, string Title, string Message);
+public sealed record SessionNotice(NoticeKind Kind, string Title, string Message, bool ShowInStatus = false, bool IsDismissed = false)
+{
+    public bool ShouldDisplay => !IsDismissed && (ShowInStatus || Kind is NoticeKind.Warning or NoticeKind.Error);
+}
 public sealed record SessionOutcome(SessionOutcomeKind Kind, RecognitionResult? Result = null, Exception? Error = null);
 
 public sealed record SessionSnapshot
@@ -17,6 +20,7 @@ public sealed record SessionSnapshot
     public required long Version { get; init; }
     public Guid? OperationId { get; init; }
     public bool MeetingActive { get; init; }
+    public bool IsCaptureOpen { get; init; }
     public required DictationPhase Phase { get; init; }
     public required SessionActivity Activity { get; init; }
     public required SessionNotice Notice { get; init; }
@@ -24,6 +28,7 @@ public sealed record SessionSnapshot
     public required int SelectedIndex { get; init; }
     public required string ModelsDirectory { get; init; }
     public required string BackendVersion { get; init; }
+    public string DeviceSelectionSummary { get; init; } = "";
     public AppSettings Settings { get; init; } = new();
     public string Language => Settings.Language;
     public required string Transcript { get; init; }

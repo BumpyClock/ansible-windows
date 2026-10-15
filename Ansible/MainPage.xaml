@@ -119,10 +119,11 @@
                                   AutomationProperties.Name="Recognition processor"
                                   AutomationProperties.AutomationId="BackendChoice"
                                   SelectionChanged="BackendChanged">
+                            <x:String>Auto (recommended)</x:String>
                             <x:String>CPU</x:String>
                             <x:String>GPU (Vulkan)</x:String>
                         </ComboBox>
-                        <TextBlock x:Name="BackendHint" Text="Applies to the next recognition. GPU requires a compatible driver. If it fails, select CPU to retry."
+                        <TextBlock x:Name="BackendHint" Text="Auto compares CPU and GPU using a bundled speech sample, then remembers the faster working device for each model. Audio stays local."
                                    TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}" />
                     </StackPanel>
                 </StackPanel>

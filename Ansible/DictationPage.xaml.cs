@@ -29,7 +29,6 @@ public sealed partial class DictationPage : Page
     private SessionSnapshot _state;
     private UiSessionObserver? _observer;
     private IReadOnlyList<AudioModel>? _models;
-    private SessionNotice? _dismissedNotice;
     private Visual? _innerVisual;
     private Visual? _outerVisual;
     private double _smoothedLevel;
@@ -167,19 +166,22 @@ public sealed partial class DictationPage : Page
         LiveText.Text = text;
     }
 
-    // Only warnings and errors interrupt. Success and information are already reflected by the hero status,
-    // the transcript, or the control that was used.
     private void RenderNotice()
     {
         var notice = _state.Notice;
-        var attention = notice.Kind is NoticeKind.Warning or NoticeKind.Error;
-        if (!attention || ReferenceEquals(notice, _dismissedNotice))
+        if (!notice.ShouldDisplay)
         {
             StatusInfo.IsOpen = false;
             StatusInfo.Visibility = Visibility.Collapsed;
             return;
         }
-        StatusInfo.Severity = notice.Kind == NoticeKind.Error ? InfoBarSeverity.Error : InfoBarSeverity.Warning;
+        StatusInfo.Severity = notice.Kind switch
+        {
+            NoticeKind.Error => InfoBarSeverity.Error,
+            NoticeKind.Warning => InfoBarSeverity.Warning,
+            NoticeKind.Success => InfoBarSeverity.Success,
+            _ => InfoBarSeverity.Informational
+        };
         StatusInfo.Title = notice.Title;
         StatusInfo.Message = notice.Message;
         StatusInfo.Visibility = Visibility.Visible;
@@ -188,7 +190,7 @@ public sealed partial class DictationPage : Page
 
     private void StatusInfoClosing(InfoBar sender, InfoBarClosingEventArgs args)
     {
-        if (args.Reason == InfoBarCloseReason.CloseButton) { _dismissedNotice = _state.Notice; }
+        if (args.Reason == InfoBarCloseReason.CloseButton) { _session.DismissNotice(_state.Notice); }
     }
 
     private void StatusInfoClosed(InfoBar sender, InfoBarClosedEventArgs args)
@@ -283,6 +285,7 @@ public sealed partial class DictationPage : Page
     }
     private async void RecordClicked(object sender, RoutedEventArgs args)
     {
+        if (!IsEnabled) { return; }
         try
         {
             if (_state.CanFinish) { await _session.FinishAsync(); }
@@ -308,7 +311,7 @@ public sealed partial class DictationPage : Page
             picker.FileTypeFilter.Add(".wav");
             WinRT.Interop.InitializeWithWindow.Initialize(picker, _windowHandle());
             var file = await picker.PickSingleFileAsync();
-            if (file is not null) { await _session.TranscribeFileAsync(file.Path); }
+            if (file is not null && IsEnabled) { await _session.TranscribeFileAsync(file.Path); }
         }
         catch (Exception error) { _session.ReportUiError(error); }
         finally { _picking = false; Render(); }

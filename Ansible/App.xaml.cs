@@ -21,7 +21,9 @@ public partial class App : Application
             var paths = AppPaths.Create(AppContext.BaseDirectory, LocalDataDirectory);
             var microphonePermission = new MicrophonePermissionPreflight(new WindowsMicrophonePermission());
             var session = new DictationSession(
-                directory => new NativeAudioEngine(paths.NativeLibrary, paths.ModelCatalog, directory),
+                directory => new NativeAudioEngine(paths.NativeLibrary, paths.ModelCatalog, directory,
+                    deviceProbePath: paths.DeviceProbe, benchmarkSamplePath: paths.PublicSample,
+                    benchmarkCachePath: paths.DeviceBenchmarks),
                 new PermissionCheckedAudioCaptureFactory(new WaveInCaptureFactory(), microphonePermission), new AudioInputReader(), new UsageStore(paths.Usage), paths.ModelsDirectory,
                 settingsStore: new AppSettingsStore(paths.Settings));
             Window = new MainWindow(session, paths, ModelDownloadManager.CreateHttpClient(), microphonePermission);

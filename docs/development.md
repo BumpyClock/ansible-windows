@@ -76,10 +76,12 @@ verified path under `Ansible\bin\AppPackages`. Change the output directory with:
 ```
 
 Verification inspects the actual package for a native x64 executable, required
-WinUI XAML embedded in `resources.pri`, resources, native dependencies, and
-notices. A managed build alone does not verify this deployment. Publishing
-does not install or sign the package. Use the packaged launch profile for
-development; the unsigned artifact is not ready for direct installation.
+WinUI XAML embedded in `resources.pri`, resources, native dependencies, notices,
+and `DeviceProbe\Ansible.DeviceProbe.exe`. Building the WinUI app publishes that
+worker automatically (NativeAOT in Release). A managed build alone does not
+verify this deployment. Publishing does not install or sign the package. Use the
+packaged launch profile for development; the unsigned artifact is not ready for
+direct installation.
 
 ## Tests
 
@@ -157,7 +159,11 @@ probes sequentially.
 `MeetingSession` owns the meeting operation and reserves `DictationSession`
 before loading its own native engine. Reservation joins/unloads dictation
 preparation and prevents dictation/settings/model maintenance until all meeting
-capture and inference resources are released. Capture privacy is a visual
+capture and inference resources are released. Recognition, including final
+transcript callbacks and their saves, runs without the UI synchronization
+context. End joins this work before releasing the reservation. Session tests
+exercise completion from a single-thread UI context to catch save/refinement
+deadlocks. Capture privacy is a visual
 setting that can change during a meeting. Pause gates the same channel
 reader; it does not reset the native stream. Capture writes 16 kHz mono PCM16
 into bounded queues. Transcripts use atomic source-generated JSON saves; audio
@@ -183,6 +189,7 @@ memory over two hours, and multi-speaker accuracy require separate qualification
 | `Ansible.Core\NativeAudioEngine.cs`, `NativeAudioApi.cs` | Native model/session ownership and C ABI |
 | `Ansible.Core\Windows` | Microphone capture and retained-resource teardown |
 | `Ansible.Probe` | Real WAV and paced streaming recognition outside the UI |
+| `Ansible.DeviceProbe` | Isolated CPU/Vulkan qualification worker, packaged under `DeviceProbe\` |
 | `Ansible.Tests` | Deterministic contract tests and tagged native integration tests |
 | `tools\audio-models.json` | Pinned model IDs, capabilities, downloads, checksums and licenses |
 | `tools` | Setup, native build and package verification |

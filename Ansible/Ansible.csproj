@@ -75,4 +75,19 @@
   <Target Name="RequireOptimizedNativeAot" BeforeTargets="IlcCompile">
     <Error Condition="'$(Optimize)' != 'true'" Text="NativeAOT requires optimization for WinUI reference tracking. Build the Release package with tools\Publish-Ansible.ps1. Use the packaged Debug launch profile for managed debugging." />
   </Target>
+
+  <Target Name="PublishDeviceProbe" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <DeviceProbeOutput>$(MSBuildProjectDirectory)\..\.runtime\device-probe\$(Configuration)</DeviceProbeOutput>
+      <DeviceProbeAot Condition="'$(Configuration)' == 'Release'">true</DeviceProbeAot>
+      <DeviceProbeAot Condition="'$(Configuration)' != 'Release'">false</DeviceProbeAot>
+    </PropertyGroup>
+    <Exec Command="dotnet publish &quot;$(MSBuildProjectDirectory)\..\Ansible.DeviceProbe\Ansible.DeviceProbe.csproj&quot; -c $(Configuration) -r win-x64 --self-contained true -p:PublishAot=$(DeviceProbeAot) -p:Platform=AnyCPU -o &quot;$(DeviceProbeOutput)&quot; --verbosity quiet" />
+    <ItemGroup>
+      <_DeviceProbeFile Include="$(DeviceProbeOutput)\*" Exclude="$(DeviceProbeOutput)\*.pdb" />
+      <Content Include="@(_DeviceProbeFile)"
+               Link="DeviceProbe\%(_DeviceProbeFile.Filename)%(_DeviceProbeFile.Extension)"
+               CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
 </Project>

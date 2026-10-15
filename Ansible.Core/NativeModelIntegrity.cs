@@ -65,7 +65,7 @@ internal sealed partial class NativeModelIntegrity
 
     internal static void RejectLinks(string path)
     {
-        for (var current = path; current is not null; current = Path.GetDirectoryName(current))
+        for (var current = Path.GetFullPath(path); current is not null; current = Path.GetDirectoryName(current))
         {
             if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
                 throw new InvalidDataException("Native models must be ordinary files in a directory without reparse points.");

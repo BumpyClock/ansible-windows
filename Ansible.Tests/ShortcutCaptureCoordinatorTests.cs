@@ -4,6 +4,72 @@ namespace Ansible.Tests;
 
 public sealed class ShortcutCaptureCoordinatorTests
 {
+    [Fact]
+    public async Task ReleaseDoesNotFinishUntilTheFullFiveHundredMillisecondTail()
+    {
+        var elapsed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var coordinator = new ShortcutCaptureCoordinator((duration, _) =>
+        {
+            Assert.Equal(TimeSpan.FromMilliseconds(500), duration);
+            return elapsed.Task;
+        });
+        var release = coordinator.NoteReleased();
+
+        var waiting = coordinator.WaitForReleaseTailAsync(release, CancellationToken.None);
+
+        Assert.False(waiting.IsCompleted);
+        elapsed.SetResult();
+        Assert.True(await waiting);
+    }
+
+    [Fact]
+    public async Task RepressInvalidatesTheOldTailAndTheNextReleaseGetsItsOwnTail()
+    {
+        var timers = new List<TaskCompletionSource>();
+        var coordinator = new ShortcutCaptureCoordinator((duration, _) =>
+        {
+            Assert.Equal(TimeSpan.FromMilliseconds(500), duration);
+            var timer = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            timers.Add(timer);
+            return timer.Task;
+        });
+        var first = coordinator.WaitForReleaseTailAsync(coordinator.NoteReleased(), CancellationToken.None);
+        coordinator.NotePressed();
+        var second = coordinator.WaitForReleaseTailAsync(coordinator.NoteReleased(), CancellationToken.None);
+
+        timers[0].SetResult();
+        Assert.False(await first);
+        Assert.False(second.IsCompleted);
+        timers[1].SetResult();
+        Assert.True(await second);
+    }
+
+    [Fact]
+    public async Task ShutdownCancellationDoesNotWaitForTheReleaseTail()
+    {
+        var coordinator = new ShortcutCaptureCoordinator((_, token) => Task.Delay(Timeout.InfiniteTimeSpan, token));
+        using var cancellation = new CancellationTokenSource();
+        var waiting = coordinator.WaitForReleaseTailAsync(coordinator.NoteReleased(), cancellation.Token);
+
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => waiting);
+    }
+
+    [Fact]
+    public async Task CancellationAfterTheTimerCannotFinishCapture()
+    {
+        var timer = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var coordinator = new ShortcutCaptureCoordinator((_, _) => timer.Task);
+        using var cancellation = new CancellationTokenSource();
+        var waiting = coordinator.WaitForReleaseTailAsync(coordinator.NoteReleased(), cancellation.Token);
+
+        cancellation.Cancel();
+        timer.SetResult();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => waiting);
+    }
+
     [Theory]
     [InlineData(true, false)]
     [InlineData(false, true)]

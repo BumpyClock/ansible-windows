@@ -27,7 +27,7 @@ public sealed class NativeStreamingDeliveryTests
                 firstSpeech.TrySetResult(update);
             }
         });
-        var recognition = engine.StreamAsync(model, audio.Reader, new(), progress, timeout.Token);
+        var recognition = engine.StreamAsync(model, audio.Reader, new(Backend: NativeBackend.Cpu), progress, timeout.Token);
         RecognitionResult final;
         try
         {

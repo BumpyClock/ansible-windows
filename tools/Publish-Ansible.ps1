@@ -46,7 +46,7 @@ $inspection = Join-Path $root ".runtime\package-validation\$([Guid]::NewGuid().T
 try {
     [IO.Compression.ZipFile]::ExtractToDirectory($packagePath, $inspection)
     foreach ($resource in @(
-        "AppxManifest.xml", "resources.pri", "Ansible.exe",
+        "AppxManifest.xml", "resources.pri", "Ansible.exe", "DeviceProbe\Ansible.DeviceProbe.exe",
         "audiocpp.dll", "audio-models.json", "validation-sample.wav", "audio.cpp-LICENSE",
         "Assets\AppIcon.ico", "Assets\StoreLogo.png",
         "Assets\ModelIcons\moonshine.png", "Assets\ModelIcons\moonshine-dark.png",
@@ -87,19 +87,25 @@ try {
         $manifest.Package.Applications.Application.Executable -ne "Ansible.exe") {
         throw "The generated package identity or executable does not match the project manifest."
     }
-    $stream = [IO.File]::OpenRead((Join-Path $inspection "Ansible.exe"))
-    $pe = [Reflection.PortableExecutable.PEReader]::new($stream)
-    try {
-        if ($pe.PEHeaders.CorHeader -or
-            $pe.PEHeaders.CoffHeader.Machine -ne [Reflection.PortableExecutable.Machine]::Amd64) {
-            throw "The packaged executable is not a native x64 PE image."
+    foreach ($executable in @("Ansible.exe", "DeviceProbe\Ansible.DeviceProbe.exe")) {
+        $stream = [IO.File]::OpenRead((Join-Path $inspection $executable))
+        $pe = [Reflection.PortableExecutable.PEReader]::new($stream)
+        try {
+            if ($pe.PEHeaders.CorHeader -or
+                $pe.PEHeaders.CoffHeader.Machine -ne [Reflection.PortableExecutable.Machine]::Amd64) {
+                throw "The packaged executable '$executable' is not a native x64 PE image."
+            }
+        }
+        finally {
+            $pe.Dispose()
+            $stream.Dispose()
         }
     }
-    finally {
-        $pe.Dispose()
-        $stream.Dispose()
-    }
-    foreach ($managedRuntime in @("Ansible.dll", "coreclr.dll", "hostfxr.dll", "hostpolicy.dll")) {
+    foreach ($managedRuntime in @(
+        "Ansible.dll", "coreclr.dll", "hostfxr.dll", "hostpolicy.dll",
+        "DeviceProbe\Ansible.DeviceProbe.dll", "DeviceProbe\coreclr.dll",
+        "DeviceProbe\hostfxr.dll", "DeviceProbe\hostpolicy.dll"
+    )) {
         if (Test-Path -LiteralPath (Join-Path $inspection $managedRuntime)) {
             throw "The NativeAOT MSIX unexpectedly contains '$managedRuntime'."
         }
