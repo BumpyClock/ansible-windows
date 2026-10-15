@@ -297,9 +297,9 @@ captured. **End meeting** stops capture and processes pending chunks before
 releasing resources; the window stays open for review. Closing an active meeting
 offers finishing or explicitly discarding pending speech. Closing the main app
 finishes its active meeting before shutting down. If the meeting is still
-preparing, closing that meeting window cancels preparation and closes it after
-its workers exit. Closing the main app also cancels preparation. Capture stays
-closed.
+preparing, closing that meeting window cancels preparation and waits for
+startup and any opened capture to stop before closing. Closing the main app
+also cancels preparation and waits for that cleanup.
 
 Transcripts and title/speaker edits save automatically. The Meetings list supports
 reopening saved text; each transcript window offers Copy, text export, and Delete.
