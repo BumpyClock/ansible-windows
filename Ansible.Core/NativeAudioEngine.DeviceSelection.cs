@@ -10,6 +10,7 @@ public sealed partial class NativeAudioEngine
     private readonly Dictionary<string, DeviceBenchmarkSelection> _deviceSelections = [];
     private readonly Dictionary<(string Id, string Mode, int History), string> _selectionKeys = [];
     private bool _streamConsumed;
+    private string? _deviceCacheWarning;
     public string DeviceSelectionSummary { get; private set; } = "";
 
     private RecognitionOptions ResolveBackend(AudioModel model, string mode, int history, long decodedBytes,
@@ -56,14 +57,12 @@ public sealed partial class NativeAudioEngine
                     backend => DeviceBenchmark.RunAsync(_deviceProbePath, request with { Backend = backend }, token), token)
                     .GetAwaiter().GetResult();
                 token.ThrowIfCancellationRequested();
-                var entries = DeviceBenchmark.ReadCache(_benchmarkCachePath);
-                entries.RemoveAll(value => value.Key == key);
-                entries.Add(selection);
-                DeviceBenchmark.WriteCache(_benchmarkCachePath, entries);
+                _deviceCacheWarning = DeviceBenchmark.TryUpdateCache(_benchmarkCachePath, key, selection);
             }
             _deviceSelections[key] = selection;
         }
-        DeviceSelectionSummary = selection.Summary + (_benchmarkCachePath is null ? " Persistence disabled; this session only." : "");
+        DeviceSelectionSummary = selection.Summary + (_benchmarkCachePath is null ? " Persistence disabled; this session only." : "") +
+            (_deviceCacheWarning is null ? "" : " " + _deviceCacheWarning);
         token.ThrowIfCancellationRequested();
         return options with { Backend = selection.Backend };
     }
@@ -75,14 +74,14 @@ public sealed partial class NativeAudioEngine
         if (!prior.Cpu.Working)
         {
             _deviceSelections.Remove(key);
-            var warning = DeviceBenchmark.TryUpdateCache(_benchmarkCachePath, key, null);
-            DeviceSelectionSummary = $"Vulkan recognition failed; no qualified CPU fallback is available. {warning}";
+            _deviceCacheWarning = DeviceBenchmark.TryUpdateCache(_benchmarkCachePath, key, null);
+            DeviceSelectionSummary = $"Vulkan recognition failed; no qualified CPU fallback is available. {_deviceCacheWarning}";
         }
         var selection = DeviceBenchmark.CpuFallback(prior, error);
         _deviceSelections[key] = selection;
         DeviceSelectionSummary = selection.Summary + " GPU failure reported; CPU is selected for the next attempt.";
-        if (DeviceBenchmark.TryUpdateCache(_benchmarkCachePath, key, selection) is { } cacheWarning)
-            DeviceSelectionSummary += " " + cacheWarning;
+        _deviceCacheWarning = DeviceBenchmark.TryUpdateCache(_benchmarkCachePath, key, selection);
+        if (_deviceCacheWarning is not null) DeviceSelectionSummary += " " + _deviceCacheWarning;
     }
 
     private RecognitionResult RunAutoStream(AudioModel model, ChannelReader<byte[]> audio, RecognitionOptions options,

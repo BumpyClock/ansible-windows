@@ -226,7 +226,8 @@ calibration and do not write a device result to the cache. If neither device
 works, the app shows an error. Auto does not replay consumed live audio. A
 failed live operation reports the error, and the next attempt may use CPU.
 CPU fallback requires a successful CPU qualification. A failed cache update
-is reported but does not prevent that qualified fallback in the current session.
+is reported but does not prevent using the qualified device or a qualified
+fallback in the current session.
 Qualification cannot catch a later in-process native driver crash.
 
 **CPU** and **GPU (Vulkan)** remain available as manual choices. Vulkan uses
@@ -296,8 +297,9 @@ captured. **End meeting** stops capture and processes pending chunks before
 releasing resources; the window stays open for review. Closing an active meeting
 offers finishing or explicitly discarding pending speech. Closing the main app
 finishes its active meeting before shutting down. If the meeting is still
-preparing, discarding it or closing the main app cancels preparation, waits for
-its workers to exit, and keeps capture closed.
+preparing, closing that meeting window cancels preparation and closes it after
+its workers exit. Closing the main app also cancels preparation. Capture stays
+closed.
 
 Transcripts and title/speaker edits save automatically. The Meetings list supports
 reopening saved text; each transcript window offers Copy, text export, and Delete.

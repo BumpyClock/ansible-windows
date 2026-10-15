@@ -20,6 +20,7 @@ public sealed partial class MeetingWindow : Window
     private bool _closed;
     private bool _allowClose;
     private bool _busy;
+    private Task _startTask = Task.CompletedTask;
     private bool _closing;
     private bool _shutdownPending;
     private long _version = -1;
@@ -228,7 +229,14 @@ public sealed partial class MeetingWindow : Window
         if (nearBottom) TranscriptScroll.ChangeView(null, TranscriptScroll.ScrollableHeight, null, true);
     }
 
-    private async void StartClicked(object sender, RoutedEventArgs args) => await RunActionAsync(async () =>
+    private async void StartClicked(object sender, RoutedEventArgs args)
+    {
+        if (_busy || _closing || _closed) return;
+        _startTask = RunActionAsync(StartMeetingAsync);
+        await _startTask;
+    }
+
+    private async Task StartMeetingAsync()
     {
         var system = AudioSourceChoice.SelectedIndex == 1;
         var process = (ProcessChoice.SelectedItem as ComboBoxItem)?.Tag as MeetingProcessChoice;
@@ -256,7 +264,7 @@ public sealed partial class MeetingWindow : Window
         await _session.StartAsync(new MeetingCaptureRequest(system ? MeetingPlaybackSource.SystemAudio : MeetingPlaybackSource.MeetingApp,
             system ? process is { IsTeams: true } ? process.Id : null : process?.Id));
         if (!string.IsNullOrWhiteSpace(title) && title != "New meeting") await _session.RenameAsync(title);
-    });
+    }
 
     private async void PauseClicked(object sender, RoutedEventArgs args) => await RunActionAsync(() =>
         _session.State.Phase == MeetingSessionPhase.Paused ? _session.ResumeAsync() : _session.PauseAsync());
@@ -269,12 +277,16 @@ public sealed partial class MeetingWindow : Window
         ErrorBar.IsOpen = false;
         StartButton.IsEnabled = PauseButton.IsEnabled = EndButton.IsEnabled = false;
         try { await action(); }
-        catch (Exception error) { ShowError(error.Message); }
+        catch (OperationCanceledException) when (_closing) { }
+        catch (Exception error) { if (!_closed) ShowError(error.Message); }
         finally
         {
             _busy = false;
-            if (!_savedMeeting) Render(_session.State);
-            StartButton.IsEnabled = true;
+            if (!_closed)
+            {
+                if (!_savedMeeting) Render(_session.State);
+                StartButton.IsEnabled = true;
+            }
         }
     }
 
@@ -365,6 +377,22 @@ public sealed partial class MeetingWindow : Window
             return;
         }
         if (_allowClose) return;
+        if (!_savedMeeting && _session.State.Phase == MeetingSessionPhase.Starting)
+        {
+            args.Cancel = true;
+            if (_closing) return;
+            _closing = true;
+            try
+            {
+                await _session.DiscardAsync();
+                await _startTask;
+                _allowClose = true;
+                Close();
+            }
+            catch (Exception error) { ShowError(error.Message); }
+            finally { _closing = false; }
+            return;
+        }
         if (_busy) { args.Cancel = true; return; }
         if (_savedMeeting) return;
         if (!_session.IsActive) return;
