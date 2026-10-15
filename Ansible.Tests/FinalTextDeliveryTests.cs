@@ -131,6 +131,31 @@ public sealed class FinalTextDeliveryTests
     }
 
     [Theory]
+    [InlineData(TextDeliveryStatus.Sent, true, false)]
+    [InlineData(TextDeliveryStatus.Verified, true, false)]
+    [InlineData(TextDeliveryStatus.Partial, false, true)]
+    [InlineData(TextDeliveryStatus.CleanupFailed, true, true)]
+    [InlineData(TextDeliveryStatus.Rejected, false, true)]
+    public async Task PreservesDeliveryEvidenceAndNeverReplaysAnUncertainSend(
+        TextDeliveryStatus status, bool sent, bool failed)
+    {
+        var calls = 0;
+        var reported = new TextDeliveryOutcome(status, "delivery evidence");
+        var delivery = new FinalTextDelivery((_, _) =>
+        {
+            calls++;
+            return Task.FromResult(reported);
+        }, () => true, () => false);
+
+        await delivery.RunAsync(Task.FromResult(Completed("speech")), CancellationToken.None);
+
+        Assert.Equal(1, calls);
+        Assert.Equal(sent, delivery.Sent);
+        Assert.Equal(reported, delivery.Delivery);
+        Assert.Equal(failed ? "delivery evidence" : null, delivery.Error);
+    }
+
+    [Theory]
     [InlineData(null, "The model did not return authoritative speech text.")]
     [InlineData("", null)]
     [InlineData("  ", null)]

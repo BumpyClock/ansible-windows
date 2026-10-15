@@ -7,7 +7,7 @@ internal sealed record CapturedTextTarget(nint Window, nint FocusWindow, int[]? 
 {
     public bool Matches(nint window, nint focusWindow, int[]? runtimeId) =>
         Window == window && FocusWindow == focusWindow &&
-        (RuntimeId is null || runtimeId is null || RuntimeId.AsSpan().SequenceEqual(runtimeId));
+        (RuntimeId is null || (runtimeId is not null && RuntimeId.AsSpan().SequenceEqual(runtimeId)));
 }
 
 internal static unsafe partial class WindowsTextTarget
@@ -27,8 +27,8 @@ internal static unsafe partial class WindowsTextTarget
     private const int CurrentPatternAsSlot = 14;
     private const int PasswordSlot = 35;
     private const int ValueIsReadOnlySlot = 5;
-    private static readonly Guid AutomationClass = new("ff48dba4-60ef-4201-aa87-54103eef594e");
-    private static readonly Guid AutomationInterface = new("30cbe57d-d9d0-452a-ab13-7ac5ac4825ee");
+    private static readonly Guid AutomationClass = new("e22ad333-b25f-460c-83d0-0581107395c9");
+    private static readonly Guid AutomationInterface = new("34723aff-0c9d-49d0-9896-7ab52df8cd8a");
     private static readonly Guid ValuePatternInterface = new("a94cd8b1-0844-4cd6-9d2d-640537ab39e9");
 
     internal static bool TryCapture(nint appWindow, out CapturedTextTarget? target, out string reason)
@@ -49,12 +49,11 @@ internal static unsafe partial class WindowsTextTarget
 
     internal static TextDeliveryOutcome Insert(
         CapturedTextTarget target, string text, TextInsertionMethod method, int typingGapMilliseconds,
-        CancellationToken cancellationToken, Func<bool> stillCurrent)
+        PasteShortcut pasteShortcut, CancellationToken cancellationToken, Func<bool> stillCurrent)
     {
         if (string.IsNullOrWhiteSpace(text))
             return TextDeliveryOutcome.Rejected("The recognition result contains no speech text. Use Copy transcript if needed.");
-        // A held modifier delays typing rather than disabling it: settle briefly, then defer (do not fail) so
-        // the caller retries once the keys are released. Only focus/target loss or a partial send is a rejection.
+        // Never mask physical modifiers with synthetic releases. Deferral is safe only before delivery.
         for (var attempt = 0; attempt < 8 && !ShortcutModifiersReleased(); attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -62,66 +61,71 @@ internal static unsafe partial class WindowsTextTarget
                 return TextDeliveryOutcome.Rejected("Another operation started before the text could be sent. Use Copy transcript instead.");
             Thread.Sleep(25);
         }
-        if (!ShortcutModifiersReleased())
+        if (!InsertionKeysReleased(method, ShortcutModifiersReleased(), PasteTriggerReleased(pasteShortcut)))
             return TextDeliveryOutcome.Deferred("The shortcut keys are still held; typing resumes when they are released.");
-        if (!TryFocus(0, out var window, out var focusWindow, out var reason) ||
-            window != target.Window || focusWindow != target.FocusWindow)
-            return TextDeliveryOutcome.Rejected("The original text field no longer has focus. Use Copy transcript instead.");
-        if (!TryFocusedElement(out var runtimeId, out reason))
-            return TextDeliveryOutcome.Rejected($"{reason} Use Copy transcript instead.");
-        if (!target.Matches(window, focusWindow, runtimeId))
-            return TextDeliveryOutcome.Rejected("The original text field no longer has focus. Use Copy transcript instead.");
-
-        // Runs immediately before any input is sent. Re-validates the target as a rejection, but a modifier
-        // re-pressed at the last moment only defers.
+        TextSnapshot? before = null;
         TextDeliveryOutcome? Recheck()
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (!stillCurrent())
                 return TextDeliveryOutcome.Rejected("Another operation started before the text could be sent. Use Copy transcript instead.");
-            if (!TryFocus(0, out var currentWindow, out var currentFocus, out _) || !target.Matches(currentWindow, currentFocus, runtimeId))
-                return TextDeliveryOutcome.Rejected("Focus changed before insertion. Use Copy transcript instead.");
-            if (!ShortcutModifiersReleased())
+            if (!TryRecheckTarget(target, out var reason))
+                return TextDeliveryOutcome.Rejected($"{reason} Use Copy transcript instead.");
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!stillCurrent())
+                return TextDeliveryOutcome.Rejected("Another operation started before the text could be sent. Use Copy transcript instead.");
+            if (!InsertionKeysReleased(method, ShortcutModifiersReleased(), PasteTriggerReleased(pasteShortcut)))
                 return TextDeliveryOutcome.Deferred("The shortcut keys are still held; typing resumes when they are released.");
             return null;
         }
 
+        TextDeliveryOutcome? PrepareSend()
+        {
+            before = TryReadTextSnapshot(target, cancellationToken, stillCurrent);
+            return Recheck();
+        }
+
+        if (Recheck() is { } early) { return early; }
         var failure = method == TextInsertionMethod.Paste
-            ? Paste(text, ReaderProcesses(target), Recheck)
-            : Type(text, typingGapMilliseconds, Recheck);
+            ? Paste(text, pasteShortcut, cancellationToken, stillCurrent, Recheck, PrepareSend)
+            : Type(text, typingGapMilliseconds, Recheck, PrepareSend);
         if (failure is { } outcome) { return outcome; }
-        return TextDeliveryOutcome.Sent(target.RuntimeId is null || runtimeId is null
-            ? "Text was sent to the original window. Windows could not verify the individual field; check where the text appeared."
-            : "Text was sent to the original field. Check the field if the target app does not accept simulated input.");
+        return VerifyDelivery(target, text, before, cancellationToken, stillCurrent);
     }
 
     // A gap of zero sends the whole text in one SendInput call. Slow targets such as Windows 11 Notepad resolve
     // each injected Unicode keystroke when they process it, so a burst can repeat the latest character instead.
     // A positive gap sends one character (or surrogate pair) at a time and re-validates the target before each.
-    private static TextDeliveryOutcome? Type(string text, int gapMilliseconds, Func<TextDeliveryOutcome?> recheck)
+    private static TextDeliveryOutcome? Type(string text, int gapMilliseconds,
+        Func<TextDeliveryOutcome?> recheck, Func<TextDeliveryOutcome?> prepareSend)
     {
         if (gapMilliseconds <= 0)
         {
-            if (recheck() is { } veto) { return veto; }
+            if (prepareSend() is { } veto) { return veto; }
             return SendUnicode(text, 0, text.Length);
         }
         var index = 0;
         while (index < text.Length)
         {
             var count = char.IsHighSurrogate(text[index]) && index + 1 < text.Length && char.IsLowSurrogate(text[index + 1]) ? 2 : 1;
-            var veto = recheck();
-            // A modifier pressed partway through pauses typing; Ctrl or Alt would otherwise turn text into shortcuts.
-            while (index > 0 && veto is { Status: TextDeliveryStatus.Deferred })
+            TextDeliveryOutcome? veto;
+            try { veto = index == 0 ? prepareSend() : recheck(); }
+            catch (OperationCanceledException) when (index > 0)
             {
-                Thread.Sleep(25);
-                veto = recheck();
+                return TextDeliveryOutcome.Partial("Typing was cancelled after some text was sent. Check the field; no text will be replayed.");
+            }
+            catch (COMException) when (index > 0)
+            {
+                return TextDeliveryOutcome.Partial("Typing stopped because the original field could no longer be checked. Some text was sent; check the field. No text will be replayed.");
             }
             if (veto is { } outcome)
             {
-                return index == 0 ? outcome : TextDeliveryOutcome.Rejected(
+                return index == 0 ? outcome : TextDeliveryOutcome.Partial(
                     $"Typing stopped after {index} of {text.Length} characters. {outcome.Message}");
             }
-            if (SendUnicode(text, index, count) is { } failure) { return failure; }
+            if (SendUnicode(text, index, count) is { } failure)
+                return index > 0 && failure.Status == TextDeliveryStatus.Rejected
+                    ? TextDeliveryOutcome.Partial($"Typing stopped after {index} characters. {failure.Message}") : failure;
             index += count;
             if (index < text.Length) { Thread.Sleep(gapMilliseconds); }
         }
@@ -136,19 +140,18 @@ internal static unsafe partial class WindowsTextTarget
             input[2 * index] = KeyboardEvent.Unicode(text[start + index], KeyUnicode);
             input[2 * index + 1] = KeyboardEvent.Unicode(text[start + index], KeyUnicode | KeyUp);
         }
-        var sent = SendInput((uint)input.Length, input, Marshal.SizeOf<KeyboardEvent>());
-        if (sent == input.Length) { return null; }
-        var error = Marshal.GetLastPInvokeError();
-        return TextDeliveryOutcome.Rejected($"Windows sent {sent} of {input.Length} keyboard events (error {error}). Some text may have been inserted. Check the field before using Copy transcript.");
+        return SendUnicodeEvents(input, NativeSend);
     }
 
-    // The process that owns the focused field reads the clipboard; for hosted apps it can differ from the
-    // foreground frame window's process.
-    private static uint[] ReaderProcesses(CapturedTextTarget target)
+    internal static TextDeliveryOutcome? SendUnicodeEvents(KeyboardEvent[] input, Func<KeyboardEvent[], uint> send)
     {
-        _ = GetWindowThreadProcessId(target.Window, out var windowProcess);
-        _ = GetWindowThreadProcessId(target.FocusWindow, out var focusProcess);
-        return [windowProcess, focusProcess];
+        var sent = Math.Min(send(input), (uint)input.Length);
+        if (sent == input.Length) { return null; }
+        if (sent == 0)
+            return TextDeliveryOutcome.Rejected("Windows did not queue any typing events. Use Copy transcript instead.");
+        if ((sent & 1) != 0 && !ReleaseOwnedKeys([input[sent]], send))
+            return TextDeliveryOutcome.CleanupFailed("Typing stopped with an unreleased injected Unicode key. Some text may have been inserted; check the field. No text will be replayed.");
+        return TextDeliveryOutcome.Partial($"Windows queued {sent} of {input.Length} typing events. Some text may have been inserted; check the field. No text will be replayed.");
     }
 
     private static bool ShortcutModifiersReleased()
@@ -159,6 +162,12 @@ internal static unsafe partial class WindowsTextTarget
             (GetAsyncKeyState(0x5B) & 0x8000) == 0 &&
             (GetAsyncKeyState(0x5C) & 0x8000) == 0;
     }
+
+    private static bool PasteTriggerReleased(PasteShortcut shortcut) =>
+        (GetAsyncKeyState(shortcut == PasteShortcut.ShiftInsert ? 0x2D : VkV) & 0x8000) == 0;
+
+    internal static bool InsertionKeysReleased(TextInsertionMethod method, bool modifiersReleased, bool triggerReleased) =>
+        modifiersReleased && (method != TextInsertionMethod.Paste || triggerReleased);
 
     private static bool TryFocus(nint appWindow, out nint window, out nint focusWindow, out string reason)
     {
@@ -187,93 +196,19 @@ internal static unsafe partial class WindowsTextTarget
     {
         id = null;
         reason = "The focused field cannot be verified for safe insertion.";
-        Marshal.ThrowExceptionForHR(CoInitializeEx(0, 0));
         try
         {
-            try { return ReadFocusedElement(out id, out reason); }
-            catch (COMException error) when (IsAccessibilityUnavailable(error.HResult))
-            {
-                id = null;
-                reason = "The target's accessibility provider could not identify an individual field.";
-                return true;
-            }
+            using var read = new AutomationRead();
+            var field = read.ReadField();
+            id = field.RuntimeId;
+            reason = FieldSafetyReason(field);
+            return reason.Length == 0;
         }
-        finally { CoUninitialize(); }
-    }
-
-    private static bool ReadFocusedElement(out int[]? id, out string reason)
-    {
-        id = null;
-        reason = "The focused field cannot be verified for safe insertion.";
-        var clsid = AutomationClass;
-        var iid = AutomationInterface;
-        Marshal.ThrowExceptionForHR(CoCreateInstance(ref clsid, 0, ClsctxInprocServer, ref iid, out var automation));
-        try
+        catch (COMException error) when (IsAccessibilityUnavailable(error.HResult))
         {
-            var getFocused = (delegate* unmanaged[Stdcall]<nint, nint*, int>)Method(automation, FocusedElementSlot);
-            nint element = 0;
-            Marshal.ThrowExceptionForHR(getFocused(automation, &element));
-            if (element == 0) { return true; }
-            try
-            {
-                int password = 0;
-                var getPassword = (delegate* unmanaged[Stdcall]<nint, int*, int>)Method(element, PasswordSlot);
-                Marshal.ThrowExceptionForHR(getPassword(element, &password));
-                if (password != 0)
-                {
-                    reason = "Automatic insertion is disabled for password fields.";
-                    return false;
-                }
-                nint valuePattern = 0;
-                var patternId = ValuePatternInterface;
-                var getPattern = (delegate* unmanaged[Stdcall]<nint, int, Guid*, nint*, int>)Method(element, CurrentPatternAsSlot);
-                var patternStatus = getPattern(element, ValuePattern, &patternId, &valuePattern);
-                if (patternStatus != UiaNotSupported) { Marshal.ThrowExceptionForHR(patternStatus); }
-                if (valuePattern != 0)
-                {
-                    try
-                    {
-                        int readOnly = 0;
-                        var getReadOnly = (delegate* unmanaged[Stdcall]<nint, int*, int>)Method(valuePattern, ValueIsReadOnlySlot);
-                        Marshal.ThrowExceptionForHR(getReadOnly(valuePattern, &readOnly));
-                        if (readOnly != 0)
-                        {
-                            reason = "The selected field is read-only.";
-                            return false;
-                        }
-                    }
-                    finally { Release(valuePattern); }
-                }
-                nint array = 0;
-                var getId = (delegate* unmanaged[Stdcall]<nint, nint*, int>)Method(element, RuntimeIdSlot);
-                var idStatus = getId(element, &array);
-                if (idStatus < 0)
-                {
-                    if (array != 0) { Marshal.ThrowExceptionForHR(SafeArrayDestroy(array)); }
-                    if (idStatus != UiaNotSupported) { Marshal.ThrowExceptionForHR(idStatus); }
-                    return true;
-                }
-                if (array == 0) { return true; }
-                try
-                {
-                    if (SafeArrayGetDim(array) != 1) { return true; }
-                    Marshal.ThrowExceptionForHR(SafeArrayGetLBound(array, 1, out var lower));
-                    Marshal.ThrowExceptionForHR(SafeArrayGetUBound(array, 1, out var upper));
-                    if (upper < lower || upper - lower >= 128) { return true; }
-                    Marshal.ThrowExceptionForHR(SafeArrayAccessData(array, out var data));
-                    try
-                    {
-                        id = new int[upper - lower + 1];
-                        Marshal.Copy(data, id, 0, id.Length);
-                    }
-                    finally { Marshal.ThrowExceptionForHR(SafeArrayUnaccessData(array)); }
-                    return true;
-                }
-                finally { Marshal.ThrowExceptionForHR(SafeArrayDestroy(array)); }
-            }
-            finally { Release(element); }
+            reason = "The target's accessibility provider could not identify an individual field.";
+            return true;
         }
-        finally { Release(automation); }
     }
 
     internal static bool IsAccessibilityUnavailable(int hresult) =>
@@ -321,7 +256,7 @@ internal static unsafe partial class WindowsTextTarget
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct KeybdInput
+    internal struct KeybdInput
     {
         public ushort VirtualKey, ScanCode;
         public uint Flags, Time;
@@ -329,7 +264,7 @@ internal static unsafe partial class WindowsTextTarget
     }
 
     [StructLayout(LayoutKind.Explicit, Size = 40)]
-    private struct KeyboardEvent
+    internal struct KeyboardEvent
     {
         [FieldOffset(0)] public uint Type;
         [FieldOffset(8)] public KeybdInput Key;
@@ -338,7 +273,7 @@ internal static unsafe partial class WindowsTextTarget
             new() { Type = InputKeyboard, Key = new KeybdInput { ScanCode = character, Flags = flags } };
 
         public static KeyboardEvent Virtual(ushort key, uint flags) =>
-            new() { Type = InputKeyboard, Key = new KeybdInput { VirtualKey = key, ScanCode = (ushort)MapVirtualKeyW(key, 0), Flags = flags } };
+            new() { Type = InputKeyboard, Key = new KeybdInput { VirtualKey = key, Flags = flags } };
     }
 
     [LibraryImport("user32.dll")]
@@ -352,8 +287,6 @@ internal static unsafe partial class WindowsTextTarget
     private static partial short GetAsyncKeyState(int key);
     [LibraryImport("user32.dll", SetLastError = true)]
     private static partial uint SendInput(uint count, [In] KeyboardEvent[] inputs, int size);
-    [LibraryImport("user32.dll")]
-    private static partial uint MapVirtualKeyW(uint code, uint mapType);
     [LibraryImport("ole32.dll")]
     private static partial int CoInitializeEx(nint reserved, uint threadingModel);
     [LibraryImport("ole32.dll")]

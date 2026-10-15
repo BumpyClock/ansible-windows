@@ -131,11 +131,14 @@ public sealed class DictationSession
     public void SetInsertionMethod(TextInsertionMethod method) =>
         ChangeSettings(state => state with { Settings = state.Settings with { InsertionMethod = method } },
             new(NoticeKind.Success, "Text insertion updated", method == TextInsertionMethod.Paste
-                ? "Dictated text is pasted. Your clipboard is restored after each paste."
+                ? "Dictated text replaces the clipboard and remains available after the paste shortcut is sent."
                 : "Dictated text is typed one character at a time."));
     public void SetTypingGap(int milliseconds) =>
         ChangeSettings(state => state with { Settings = state.Settings with { TypingGapMilliseconds = milliseconds } },
             new(NoticeKind.Success, "Typing gap updated", $"Typed characters are sent {milliseconds} ms apart."));
+    public void SetPasteShortcut(PasteShortcut shortcut) =>
+        ChangeSettings(state => state with { Settings = state.Settings with { PasteShortcut = shortcut } },
+            new(NoticeKind.Success, "Paste shortcut updated", "The selected paste shortcut applies to the next dictation. Check that the destination accepts it."));
     public void SetMicrophoneBoost(int decibels) =>
         ChangeSettings(state => state with { Settings = state.Settings with { MicrophoneBoostDecibels = decibels } },
             new(NoticeKind.Success, "Microphone boost updated", "The boost applies to the next microphone dictation."));

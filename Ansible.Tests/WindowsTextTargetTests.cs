@@ -1,3 +1,5 @@
+using Ansible.Core;
+
 namespace Ansible.Tests;
 
 public sealed class WindowsTextTargetTests
@@ -17,7 +19,7 @@ public sealed class WindowsTextTargetTests
         var target = new CapturedTextTarget(1, 2, null);
 
         Assert.True(target.Matches(1, 2, null));
-        Assert.True(new CapturedTextTarget(1, 2, [3]).Matches(1, 2, null));
+        Assert.False(new CapturedTextTarget(1, 2, [3]).Matches(1, 2, null));
         Assert.False(target.Matches(5, 2, null));
         Assert.False(target.Matches(1, 6, null));
     }
@@ -30,24 +32,106 @@ public sealed class WindowsTextTargetTests
     public void TreatsUnavailableAccessibilityAsWindowOnlyFocus(int error) =>
         Assert.True(WindowsTextTarget.IsAccessibilityUnavailable(error));
 
+    [Fact]
+    public void QueuedPasteLeavesSpeechAvailableForDelayedAndRepeatedReaders()
+    {
+        var clipboard = "old clipboard";
+        Action? queuedPaste = null;
+        var reads = new List<string>();
+
+        var result = WindowsTextTarget.PasteWithClipboard(
+            () => { clipboard = "final speech"; return null; },
+            () => null,
+            () => { queuedPaste = () => reads.Add(clipboard); return null; });
+
+        Assert.Null(result);
+        Assert.NotNull(queuedPaste);
+        Assert.Empty(reads);
+        queuedPaste();
+        queuedPaste();
+        Assert.Equal(["final speech", "final speech"], reads);
+        Assert.Equal("final speech", clipboard);
+    }
+
+    [Fact]
+    public void DoesNotPublishOrPasteWhenTheTargetIsAlreadyLost()
+    {
+        var clipboard = "old clipboard";
+        var sends = 0;
+        var rejection = TextDeliveryOutcome.Rejected("Focus changed.");
+
+        var result = WindowsTextTarget.PasteWithClipboard(
+            () => { clipboard = "speech"; return null; },
+            () => rejection,
+            () => { sends++; return null; });
+
+        Assert.Equal(rejection, result);
+        Assert.Equal("old clipboard", clipboard);
+        Assert.Equal(0, sends);
+    }
+
+    [Fact]
+    public void DoesNotSendPasteWhenClipboardPublicationFails()
+    {
+        var sends = 0;
+        var failure = TextDeliveryOutcome.Rejected("Clipboard publication failed.");
+
+        var result = WindowsTextTarget.PasteWithClipboard(
+            () => failure, () => null,
+            () => { sends++; return null; });
+
+        Assert.Equal(failure, result);
+        Assert.Equal(0, sends);
+    }
+
     [Theory]
-    [InlineData(1u, false, false, nameof(WindowsTextTarget.ClipboardFormatKind.Memory))]          // CF_TEXT
-    [InlineData(13u, false, false, nameof(WindowsTextTarget.ClipboardFormatKind.Memory))]         // CF_UNICODETEXT
-    [InlineData(15u, false, false, nameof(WindowsTextTarget.ClipboardFormatKind.Memory))]         // CF_HDROP
-    [InlineData(8u, true, false, nameof(WindowsTextTarget.ClipboardFormatKind.Memory))]           // CF_DIB
-    [InlineData(0xC123u, false, false, nameof(WindowsTextTarget.ClipboardFormatKind.Memory))]     // registered format
-    [InlineData(2u, true, false, nameof(WindowsTextTarget.ClipboardFormatKind.Synthesized))]      // CF_BITMAP from a DIB
-    [InlineData(9u, true, false, nameof(WindowsTextTarget.ClipboardFormatKind.Synthesized))]      // CF_PALETTE from a DIB
-    [InlineData(3u, false, true, nameof(WindowsTextTarget.ClipboardFormatKind.Synthesized))]      // CF_METAFILEPICT
-    [InlineData(14u, false, true, nameof(WindowsTextTarget.ClipboardFormatKind.EnhancedMetafile))]
-    [InlineData(2u, false, false, nameof(WindowsTextTarget.ClipboardFormatKind.Uncopyable))]      // bitmap without a DIB
-    [InlineData(0x80u, false, false, nameof(WindowsTextTarget.ClipboardFormatKind.Uncopyable))]   // CF_OWNERDISPLAY
-    [InlineData(0x82u, false, false, nameof(WindowsTextTarget.ClipboardFormatKind.Uncopyable))]   // CF_DSPBITMAP
-    [InlineData(0x200u, false, false, nameof(WindowsTextTarget.ClipboardFormatKind.Uncopyable))]  // CF_PRIVATEFIRST
-    [InlineData(0x3FFu, false, false, nameof(WindowsTextTarget.ClipboardFormatKind.Uncopyable))]  // CF_GDIOBJLAST
-    public void ClassifiesClipboardFormatsForBackup(
-        uint format, bool hasDib, bool hasEnhancedMetafile, string expected) =>
-        Assert.Equal(expected, WindowsTextTarget.ClassifyClipboardFormat(format, hasDib, hasEnhancedMetafile).ToString());
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TargetLossOrHeldModifiersAfterPublicationNeverSendsPaste(bool defer)
+    {
+        var published = false;
+        var sends = 0;
+        var veto = defer ? TextDeliveryOutcome.Deferred("Modifier held.") : TextDeliveryOutcome.Rejected("Focus changed.");
+
+        var result = WindowsTextTarget.PasteWithClipboard(
+            () => { published = true; return null; },
+            () => published ? veto : null,
+            () => { sends++; return null; });
+
+        Assert.Equal(veto, result);
+        Assert.True(published);
+        Assert.Equal(0, sends);
+    }
+
+    [Fact]
+    public void PartialSendNeverRestoresOldClipboard()
+    {
+        var clipboard = "old clipboard";
+        var sends = 0;
+        var failure = TextDeliveryOutcome.Partial("Partial send.");
+
+        var result = WindowsTextTarget.PasteWithClipboard(
+            () => { clipboard = "final speech"; return null; },
+            () => null,
+            () => { sends++; return failure; });
+
+        Assert.Equal(failure, result);
+        Assert.Equal(1, sends);
+        Assert.Equal("final speech", clipboard);
+    }
+
+    [Fact]
+    public void LaterClipboardChangesAreNotOverwrittenByCleanup()
+    {
+        var clipboard = "old clipboard";
+        var result = WindowsTextTarget.PasteWithClipboard(
+            () => { clipboard = "speech"; return null; },
+            () => null,
+            () => { clipboard = "new user copy"; return null; });
+
+        Assert.Null(result);
+        Assert.Equal("new user copy", clipboard);
+    }
 
     [Fact]
     public void DoesNotHideUnexpectedAccessErrorsAsMissingAccessibility() =>

@@ -577,9 +577,10 @@ public sealed partial class MainWindow : Window
         var settings = _session.State.Settings;
         var method = settings.InsertionMethod;
         var typingGap = settings.TypingGapMilliseconds;
+        var pasteShortcut = settings.PasteShortcut;
         var delivery = new FinalTextDelivery(
             insert: (pending, token) => Task.Run(() =>
-                WindowsTextTarget.Insert(target, pending, method, typingGap, token, IsDeliveryCurrent), token),
+                WindowsTextTarget.Insert(target, pending, method, typingGap, pasteShortcut, token, IsDeliveryCurrent), token),
             isCurrent: IsDeliveryCurrent,
             typingDeferred: () => _shortcutHeld && modifiers != 0);
         _delivery = delivery;
@@ -618,9 +619,11 @@ public sealed partial class MainWindow : Window
             if (!IsDeliveryCurrent() || outcome.Kind != SessionOutcomeKind.Completed) { return; }
             if (delivery.Error is not null)
                 _session.Notify(NoticeKind.Warning, "Insertion stopped",
-                    $"{delivery.Error} Use Copy transcript for the final text.");
+                    $"{delivery.Error} Check the destination before using Copy transcript; do not repeat text that already appeared.");
             else if (delivery.Sent)
-                _session.Notify(NoticeKind.Success, "Text sent", "The final transcript was inserted.");
+                _session.Notify(delivery.Delivery?.Status == TextDeliveryStatus.Verified ? NoticeKind.Success : NoticeKind.Information,
+                    delivery.Delivery?.Status == TextDeliveryStatus.Verified ? "Insertion verified" : "Text sent; unverified",
+                    delivery.Delivery?.Message ?? "The insertion input was sent. Check the destination.");
             else
                 _session.Notify(NoticeKind.Information, "No speech to insert", "The model returned no speech text.");
         }

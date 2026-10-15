@@ -89,7 +89,12 @@ options and checks.
   The offline 7B model buffers microphone audio and recognizes it after Finish;
   it needs substantial free memory.
 - Insertion supports regular desktop text fields. Elevated apps and the secure
-  desktop are unsupported. Check the destination after insertion.
+  desktop are unsupported. Default paste replaces the clipboard and leaves the
+  dictated text available for delayed readers. Use **Type characters** to preserve
+  the clipboard or for apps that block paste. Settings offers Ctrl+V, Shift+Insert,
+  and Ctrl+Shift+V; choose the chord accepted by the actual destination. Bounded
+  UI Automation text checks distinguish verified insertion from unverified input.
+  Check the destination after an unverified or partial send.
 
 ## Documentation
 

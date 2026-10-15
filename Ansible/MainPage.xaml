@@ -59,11 +59,24 @@
                             <RadioButtons.Resources>
                                 <Thickness x:Key="RadioButtonsTopHeaderMargin">0</Thickness>
                             </RadioButtons.Resources>
-                            <x:String>Paste, then restore clipboard</x:String>
+                            <x:String>Paste (replaces clipboard)</x:String>
                             <x:String>Type characters</x:String>
                         </RadioButtons>
                         <TextBlock x:Name="InsertionHelpText" TextWrapping="Wrap"
                                    Style="{StaticResource CaptionSecondaryStyle}" />
+                        <StackPanel x:Name="PasteShortcutRow" Spacing="4">
+                            <ComboBox x:Name="PasteShortcutChoice" Header="Destination paste shortcut"
+                                      HorizontalAlignment="Stretch"
+                                      AutomationProperties.AutomationId="PasteShortcutChoice"
+                                      AutomationProperties.Name="Destination paste shortcut"
+                                      SelectionChanged="PasteShortcutChanged">
+                                <x:String>Ctrl+V</x:String>
+                                <x:String>Shift+Insert</x:String>
+                                <x:String>Ctrl+Shift+V</x:String>
+                            </ComboBox>
+                            <TextBlock Text="Choose the shortcut accepted by the focused editor or terminal. This applies to all paste dictation; it is not detected automatically."
+                                       TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}" />
+                        </StackPanel>
                         <Grid x:Name="TypingGapRow" ColumnSpacing="16" Visibility="Collapsed">
                             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                             <StackPanel VerticalAlignment="Center">

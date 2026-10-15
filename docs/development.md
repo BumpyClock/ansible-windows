@@ -83,6 +83,30 @@ development; the unsigned artifact is not ready for direct installation.
 
 ## Tests
 
+### Dictation insertion
+
+`WindowsTextTarget` uses UI Automation for destination safety and observation,
+not `ValuePattern.SetValue`. The latter replaces a field's value and is not
+caret insertion. The paste shortcut is an explicit preference, not a
+process-name-based terminal detector.
+
+UIA2 connection and transaction waits are set to 150 ms. Per-read and
+post-delivery observation budgets are 750 ms and 600 ms; snapshots are limited
+to 8192 UTF-16 code units. These are provider settings and checks between calls,
+not hard deadlines for arbitrary in-process COM code or release. All calls and
+COM ownership remain joined on the delivery worker; shutdown waits for it.
+Missing, changing, oversized, or unsupported snapshots leave delivery unverified.
+Only an exact document and caret delta in the original field is verified.
+No destination text is logged or persisted.
+
+Tests cover target identity loss, field changes, safety properties, exact
+selection replacement, unknown verification, selected paste chords, partial
+input, cleanup-only retries, cancellation, and outcome propagation. Real
+Teams/Copilot field and terminal behavior still requires application qualification;
+a passing unit suite or package build does not establish it.
+
+### Core and native checks
+
 Run the deterministic tests without native model dependencies:
 
 ```powershell
