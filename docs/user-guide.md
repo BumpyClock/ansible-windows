@@ -299,7 +299,9 @@ offers finishing or explicitly discarding pending speech. Closing the main app
 finishes its active meeting before shutting down. If the meeting is still
 preparing, closing that meeting window cancels preparation and waits for
 startup and any opened capture to stop before closing. Closing the main app
-also cancels preparation and waits for that cleanup.
+also cancels preparation and waits for that cleanup. If shutdown fails, the app
+waits for owned shortcut and delivery work to stop before allowing another
+recording; the shutdown error remains visible.
 
 Transcripts and title/speaker edits save automatically. The Meetings list supports
 reopening saved text; each transcript window offers Copy, text export, and Delete.

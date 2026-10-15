@@ -285,6 +285,7 @@ public sealed partial class DictationPage : Page
     }
     private async void RecordClicked(object sender, RoutedEventArgs args)
     {
+        if (!IsEnabled) { return; }
         try
         {
             if (_state.CanFinish) { await _session.FinishAsync(); }
@@ -310,7 +311,7 @@ public sealed partial class DictationPage : Page
             picker.FileTypeFilter.Add(".wav");
             WinRT.Interop.InitializeWithWindow.Initialize(picker, _windowHandle());
             var file = await picker.PickSingleFileAsync();
-            if (file is not null) { await _session.TranscribeFileAsync(file.Path); }
+            if (file is not null && IsEnabled) { await _session.TranscribeFileAsync(file.Path); }
         }
         catch (Exception error) { _session.ReportUiError(error); }
         finally { _picking = false; Render(); }
