@@ -143,6 +143,10 @@ internal static unsafe partial class WindowsTextTarget
         // GetBoundingRectangles 10, MoveEndpointByUnit 14. TextUnit_Character is 0.
         private const int ExpandToEnclosingUnitSlot = 6, BoundingRectanglesSlot = 10, MoveEndpointByUnitSlot = 14;
         private const int CaretRangeSlot = 10;
+        // The caret is a placement hint. It gets at most this share of the shared clock so a slow
+        // provider cannot delay opening the microphone by the full field-verification budget.
+        private const int CaretBudget = 250;
+        private int? _caretDeadline;
 
         public AutomationRead(CancellationToken cancellationToken = default,
             Func<bool>? stillCurrent = null, Stopwatch? deadline = null)
@@ -171,7 +175,7 @@ internal static unsafe partial class WindowsTextTarget
         {
             _cancellationToken.ThrowIfCancellationRequested();
             if (!_stillCurrent()) { throw new OperationCanceledException("The delivery operation was superseded."); }
-            if (_clock.ElapsedMilliseconds >= _budget) { throw new COMException("Accessibility observation deadline elapsed.", UiaTimedOut); }
+            if (_clock.ElapsedMilliseconds >= (_caretDeadline ?? _budget)) { throw new COMException("Accessibility observation deadline elapsed.", UiaTimedOut); }
         }
 
         private void SetTimeout(int slot, uint milliseconds)
@@ -368,6 +372,9 @@ internal static unsafe partial class WindowsTextTarget
         /// </summary>
         public CaretBounds? ReadCaret()
         {
+            var elapsed = _clock.ElapsedMilliseconds;
+            if (elapsed >= CaretBudget) { return null; }
+            _caretDeadline = (int)Math.Min(_budget, elapsed + CaretBudget);
             nint range = 0;
             try
             {
@@ -419,7 +426,11 @@ internal static unsafe partial class WindowsTextTarget
                 return BoundingRectangle(range) is { } previous
                     ? previous with { Left = previous.Left + previous.Width, Width = 0 } : null;
             }
-            finally { if (range != 0) { Release(range); } }
+            finally
+            {
+                _caretDeadline = null;
+                if (range != 0) { Release(range); }
+            }
         }
 
         private CaretBounds? BoundingRectangle(nint range)

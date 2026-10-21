@@ -121,5 +121,6 @@ public readonly record struct CaretBounds(int Left, int Top, int Width, int Heig
     // A caret taller than this is not a text line; a provider returned a page or control bound instead.
     public const int MaxHeight = 400;
 
-    public bool IsUsable => Width >= 0 && Height > 0 && Height <= MaxHeight && Width <= MaxHeight;
+    // A wide rectangle is a selection; the pill still anchors on its centre line.
+    public bool IsUsable => Width >= 0 && Height > 0 && Height <= MaxHeight;
 }
