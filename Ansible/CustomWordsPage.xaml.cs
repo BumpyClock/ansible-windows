@@ -55,8 +55,8 @@ public sealed partial class CustomWordsPage : Page
         }
         var model = _state.SelectedModel;
         ModelStatusText.Text = model is null ? "Choose a speech model to use custom words."
-            : model.SupportsCustomDictionary ? ""
-            : $"{model.DisplayName ?? model.Id} does not support custom words.";
+            : !model.SupportsCustomDictionary ? $"{model.DisplayName ?? model.Id} does not support custom words."
+            : CustomVocabulary.ModelCompatibilityError(model, dictionary) ?? "";
         ModelStatusText.Visibility = ModelStatusText.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
         BusyText.Visibility = _state.IsIdle ? Visibility.Collapsed : Visibility.Visible;
         AddWordsButton.IsEnabled = ImportWordsButton.IsEnabled = AddFirstWordButton.IsEnabled = _state.IsIdle;
@@ -140,6 +140,8 @@ public sealed partial class CustomWordsPage : Page
             var text = CustomVocabulary.Normalize(EntryBox.Text);
             if (_editorMode != EditorMode.Import && text.Contains('\n'))
                 throw new InvalidDataException("Enter one word or phrase. Use Import to add a list.");
+            if (CustomVocabulary.ModelCompatibilityError(_state.SelectedModel, text) is { } compatibilityError)
+                throw new InvalidDataException(compatibilityError);
             var updated = _editorMode == EditorMode.Edit
                 ? CustomVocabulary.ReplaceEntry(dictionary, _editingWord!, text)
                 : CustomVocabulary.AddEntries(dictionary, text);

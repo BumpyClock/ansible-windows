@@ -9,6 +9,16 @@ public static class CustomVocabulary
     public const int MaximumEntryCharacters = 100;
     public const int MaximumUtf8Bytes = 4096;
 
+    public static string? ModelCompatibilityError(AudioModel? model, string dictionary)
+    {
+        ArgumentNullException.ThrowIfNull(dictionary);
+        if (model?.Family == "kroko_asr" && dictionary.Contains('/'))
+        {
+            return "Kroko cannot use saved entries containing '/'. Edit Dictionary to remove '/' or choose another model.";
+        }
+        return null;
+    }
+
     public static string AddEntries(string dictionary, string additions)
     {
         var existing = Normalize(dictionary).Split('\n', StringSplitOptions.RemoveEmptyEntries);

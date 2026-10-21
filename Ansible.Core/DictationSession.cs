@@ -284,6 +284,8 @@ public sealed class DictationSession
                 {
                     throw new InvalidOperationException("Choose an installed model that supports this recognition mode.");
                 }
+                if (CustomVocabulary.ModelCompatibilityError(model, _state.Settings.CustomDictionary) is { } dictionaryError)
+                    throw new InvalidDataException(dictionaryError);
             }
             var options = new RecognitionOptions(_state.Language,
                 model?.SupportsCustomDictionary == true ? _state.Settings.CustomDictionary : "", _state.Settings.Backend);
@@ -422,14 +424,24 @@ public sealed class DictationSession
             {
                 // Completion observers run after cleanup and terminal state publication. Keep their failures
                 // from changing the recognition outcome or preventing awaiting callers from resuming.
-                if (completion is not null) { DictationCompleted?.Invoke(completion); }
+                if (completion is not null && DictationCompleted is { } observers)
+                {
+                    foreach (Action<DictationCompletion> observer in observers.GetInvocationList())
+                    {
+                        try { observer(completion); }
+                        catch (Exception error)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"Ansible: dictation completion observer failed: {error.Message}");
+                        }
+                    }
+                }
             }
             finally
             {
                 operation.Completion.TrySetResult(outcome);
+                AudioLevelChanged?.Invoke(0);
             }
         }
-        AudioLevelChanged?.Invoke(0);
     }
 
     private async Task ConnectCoreAsync(Operation operation)

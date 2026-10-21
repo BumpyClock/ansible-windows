@@ -85,6 +85,13 @@ public sealed partial class SettingsRow : UserControl
         }
 
         var wide = width >= SettingsWideMinWidth;
+        // The row keeps one shared visual tree, but only the active axis may contribute
+        // geometry. Collapsing the inactive track and its spacing prevents a hidden
+        // column or row from changing compact widths or wide row heights.
+        LayoutRoot.ColumnDefinitions[1].Width = wide ? GridLength.Auto : new GridLength(0);
+        LayoutRoot.RowDefinitions[1].Height = wide ? new GridLength(0) : GridLength.Auto;
+        LayoutRoot.ColumnSpacing = wide ? SettingsCardGap : 0;
+        LayoutRoot.RowSpacing = wide ? 0 : SettingsRowSpacing;
         Grid.SetColumn(DescriptionPanel, 0);
         Grid.SetRow(DescriptionPanel, 0);
         Grid.SetColumn(ControlPresenter, wide ? 1 : 0);
@@ -111,4 +118,10 @@ public sealed partial class SettingsRow : UserControl
 
     private static double SettingsWideMinWidth =>
         (double)Application.Current.Resources["SettingsWideMinWidth"];
+
+    private static double SettingsCardGap =>
+        (double)Application.Current.Resources["CardGap"];
+
+    private static double SettingsRowSpacing =>
+        (double)Application.Current.Resources["SettingsRowRowSpacing"];
 }

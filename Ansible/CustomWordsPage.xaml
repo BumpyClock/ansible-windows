@@ -146,7 +146,8 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock x:Name="ModelStatusText" VerticalAlignment="Center" Style="{StaticResource CaptionSecondaryStyle}" />
+                    <TextBlock x:Name="ModelStatusText" VerticalAlignment="Center" TextWrapping="Wrap"
+                               Style="{StaticResource CaptionSecondaryStyle}" />
                     <HyperlinkButton Grid.Column="1" Content="Speech models" Padding="0,4"
                                      AutomationProperties.AutomationId="CustomWordsModelsButton" Click="ModelsClicked" />
                 </Grid>

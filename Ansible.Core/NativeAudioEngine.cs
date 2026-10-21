@@ -462,8 +462,8 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
         var dictionary = CustomVocabulary.Normalize(options.CustomDictionary);
         if (dictionary.Length > 0 && !model.SupportsCustomDictionary)
             throw new NotSupportedException($"{model.Id} does not support custom dictionary hints in this native backend.");
-        if (model.Family == "kroko_asr" && dictionary.Contains('/'))
-            throw new InvalidDataException("Kroko treats '/' as a hotword separator. Use separate dictionary entries instead.");
+        if (CustomVocabulary.ModelCompatibilityError(model, dictionary) is { } compatibilityError)
+            throw new InvalidDataException(compatibilityError);
         return options with { CustomDictionary = dictionary };
     }
 

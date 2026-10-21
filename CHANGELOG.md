@@ -6,6 +6,8 @@
   moving page content. Open Settings to show the guidance again.
 - Restore Kroko English Community 64-L Q8 downloads and streaming dictation,
   with per-request custom hotwords and decoder-aware device qualification.
+  Show incompatible saved vocabulary before capture starts, while preserving
+  slash-bearing entries for models that support them.
 - Separate Home history ownership and typed card projections from dictation
   controls. Reuse one adaptive Settings row. Derive shared theme roles from a
   canonical palette. Correct High Contrast selection visibility, dark caption

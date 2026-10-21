@@ -42,9 +42,10 @@ public sealed partial class DictationPage : Page
         _clock.Tick += (_, _) =>
         {
             RenderClock();
-            if (_homeDataDate == DateTime.Today) return;
+            var dateChanged = _homeDataDate != DateTime.Today;
+            if (!dateChanged && _homeGreetingHour == DateTime.Now.Hour) return;
             RenderHomeData();
-            RenderHomeHistory();
+            if (dateChanged) RenderHomeHistory();
         };
         _copiedTimer.Tick += (_, _) => { _copiedTimer.Stop(); CopyLabel.Text = "Copy"; };
         _history.Changed += HistoryChanged;

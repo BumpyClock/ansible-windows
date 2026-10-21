@@ -4,6 +4,58 @@ namespace Ansible.Tests;
 
 public sealed partial class DictationSessionTests
 {
+    [Theory]
+    [InlineData(SessionActivity.Dictation)]
+    [InlineData(SessionActivity.Replay)]
+    [InlineData(SessionActivity.File)]
+    public async Task IncompatibleSavedKrokoHintsAreRejectedBeforeOperationOrCapture(SessionActivity activity)
+    {
+        var model = new AudioModel { Id = "kroko", Family = "kroko_asr", Mode = "streaming", SupportsCustomDictionary = true };
+        var capture = new FakeCaptureFactory();
+        var settings = new FakeSettingsStore { Settings = new() { ModelId = model.Id, CustomDictionary = "AC/DC\nGood hint" } };
+        var engine = new FakeEngine { Connecting = _ => Task.FromResult<IReadOnlyList<AudioModel>>([model]) };
+        var session = Create(engine, capture, settings: settings);
+        try
+        {
+            await session.InitializeAsync();
+            var previous = session.State;
+            await Assert.ThrowsAsync<InvalidDataException>(() => activity switch
+            {
+                SessionActivity.Dictation => session.StartDictationAsync(),
+                SessionActivity.Replay => session.ReplayAsync("sample.wav"),
+                _ => session.TranscribeFileAsync("sample.wav")
+            });
+            Assert.Equal(0, capture.Starts);
+            Assert.Equal(previous.OperationId, session.State.OperationId);
+            Assert.Equal("AC/DC\nGood hint", session.State.Settings.CustomDictionary);
+            session.SetCustomDictionary("Good hint");
+            Assert.Equal("Good hint", session.State.Settings.CustomDictionary);
+        }
+        finally { await session.CloseAsync(); }
+    }
+
+    [Fact]
+    public async Task FaultingCompletionObserverDoesNotSkipLaterObserversOrTerminalAudioReset()
+    {
+        var session = Create(new FakeEngine());
+        try
+        {
+            await session.InitializeAsync();
+            var delivered = false;
+            var reset = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            session.DictationCompleted += _ => throw new InvalidOperationException("Observer failure.");
+            session.DictationCompleted += _ => delivered = true;
+            session.AudioLevelChanged += level => { if (level == 0 && session.State.IsIdle) reset.TrySetResult(); };
+            var operation = session.StartDictationAsync();
+            await WaitForStateAsync(session, DictationPhase.Recording);
+            await session.FinishAsync();
+            Assert.Equal(SessionOutcomeKind.Completed, (await operation).Kind);
+            await reset.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            Assert.True(delivered);
+        }
+        finally { await session.CloseAsync(); }
+    }
+
     [Fact]
     public async Task SuccessfulDictationDeliversOneTypedCompletionAndCancellationDeliversNone()
     {

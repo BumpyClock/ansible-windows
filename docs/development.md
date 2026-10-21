@@ -102,6 +102,10 @@ Debug builds accept `--design-theme=light` and `--design-theme=dark` as launch
 arguments for screenshot qualification. This scopes appearance to the app
 window and does not change Windows settings. Release builds follow Windows.
 
+Independent visual judges must invoke the `ux-designer` skill before reviewing
+actual screenshots. Check both themes and responsive, error, and empty states.
+Showing or dismissing transient notices must not change the page viewport bounds.
+
 The app mark uses exact Pencil geometry. `Ansible/Assets/Brand` retains SVG
 artwork derived from that geometry and native-size PNGs exported through Pencil MCP. There is no design
 JSON snapshot in the repository. Regenerate package icons with the pinned

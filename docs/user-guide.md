@@ -112,7 +112,7 @@ transcript text. Reduced-motion mode uses a level meter.
 
 ### Text insertion
 
-After shortcut insertion, open **Dictation** or **Settings** to see the delivery
+After shortcut insertion, open **Home** or **Settings** to see the delivery
 outcome in the status bar. **Insertion verified** means the app observed the
 exact expected change. **Text sent; unverified** means input was queued but the
 change could not be verified; check the destination before inserting again.
@@ -220,7 +220,11 @@ merged. Limits are 100 unique entries, 100 characters per entry, and 4 KiB of
 UTF-8 text. The page warns if a change could not be saved.
 
 Kroko uses these entries as live English hotwords. Kroko rejects `/` within an
-entry because its decoder treats that character as a separator. Qwen3-ASR and both VibeVoice models accept this context; offline VibeVoice uses it
+entry because its decoder treats that character as a separator. Saved slash-bearing
+entries remain available for other models. With Kroko selected, Dictionary shows
+a compatibility warning and recognition stops before opening the microphone.
+Edit those entries or choose another model. Qwen3-ASR and both VibeVoice models
+accept this context; offline VibeVoice uses it
 only for WAV transcription. Moonshine and Nemotron do not use it. The selected
 model's support is shown on Dictionary. Each operation uses the
 saved list at startup.
