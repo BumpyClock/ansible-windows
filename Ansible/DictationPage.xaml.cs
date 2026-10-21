@@ -347,19 +347,13 @@ public sealed partial class DictationPage : Page
     private void RenderNotice()
     {
         var notice = _state.Notice;
-        if (!notice.ShouldDisplay)
+        if (!notice.ShouldDisplayOn(NoticeArea.Dictation))
         {
             StatusInfo.IsOpen = false;
             StatusInfo.Visibility = Visibility.Collapsed;
             return;
         }
-        StatusInfo.Severity = notice.Kind switch
-        {
-            NoticeKind.Error => InfoBarSeverity.Error,
-            NoticeKind.Warning => InfoBarSeverity.Warning,
-            NoticeKind.Success => InfoBarSeverity.Success,
-            _ => InfoBarSeverity.Informational
-        };
+        StatusInfo.Severity = notice.Kind == NoticeKind.Error ? InfoBarSeverity.Error : InfoBarSeverity.Warning;
         StatusInfo.Title = notice.Title;
         StatusInfo.Message = notice.Message;
         StatusInfo.Visibility = Visibility.Visible;

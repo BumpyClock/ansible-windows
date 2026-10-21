@@ -35,6 +35,8 @@
                                          SecondaryTemplate="{StaticResource SecondaryModelTemplate}" />
     </UserControl.Resources>
     <StackPanel x:Name="InsightsColumn" Spacing="{StaticResource HomeCardGap}" VerticalAlignment="Top">
+        <muxc:InfoBar x:Name="UsageWarningBar" Title="Some usage statistics are missing"
+                      Severity="Warning" IsOpen="False" IsClosable="False" Visibility="Collapsed" />
         <Border x:Name="CompactInsightsCard" Style="{StaticResource MetricCardStyle}">
             <StackPanel Spacing="{StaticResource HomeStatsGap}">
                 <Grid VerticalAlignment="Center">

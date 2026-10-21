@@ -115,7 +115,7 @@ public sealed partial class CustomWordsPage : Page
             ValidateEditor();
             await EntryDialog.ShowAsync();
         }
-        catch (Exception error) { _session.ReportUiError(error); }
+        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Dictionary); }
         finally
         {
             _editorOpen = false;
@@ -198,7 +198,7 @@ public sealed partial class CustomWordsPage : Page
         }
         catch (Exception error)
         {
-            _session.ReportUiError(error);
+            _session.ReportUiError(error, NoticeArea.Dictionary);
             _state = _session.State;
             Render();
             return false;
@@ -219,7 +219,7 @@ public sealed partial class CustomWordsPage : Page
         var index = _words.IndexOf(new DictionaryWord(word));
         string after;
         try { after = CustomVocabulary.RemoveEntry(before, word); }
-        catch (InvalidOperationException error) { _session.ReportUiError(error); return; }
+        catch (InvalidOperationException error) { _session.ReportUiError(error, NoticeArea.Dictionary); return; }
         if (!ApplyDictionary(after, $"Removed \"{word}\".")) return;
         _undoBefore = before;
         _undoAfter = after;
@@ -268,17 +268,11 @@ public sealed partial class CustomWordsPage : Page
     private void RenderNotice()
     {
         var notice = _state.Notice;
-        StatusInfo.IsOpen = notice.ShouldDisplay;
+        StatusInfo.IsOpen = notice.ShouldDisplayOn(NoticeArea.Dictionary);
         StatusInfo.Visibility = StatusInfo.IsOpen ? Visibility.Visible : Visibility.Collapsed;
         StatusInfo.Title = notice.Title;
         StatusInfo.Message = notice.Message;
-        StatusInfo.Severity = notice.Kind switch
-        {
-            NoticeKind.Error => InfoBarSeverity.Error,
-            NoticeKind.Warning => InfoBarSeverity.Warning,
-            NoticeKind.Success => InfoBarSeverity.Success,
-            _ => InfoBarSeverity.Informational
-        };
+        StatusInfo.Severity = notice.Kind == NoticeKind.Error ? InfoBarSeverity.Error : InfoBarSeverity.Warning;
     }
 
     private void StatusInfoClosing(InfoBar sender, InfoBarClosingEventArgs args)

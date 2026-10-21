@@ -125,7 +125,7 @@ public sealed partial class FloatingDictationWindow : Window
     {
         if (_closed) { return; }
         try { ApplyCapturePrivacy(_state.Settings.HideFromCapture); }
-        catch (Exception error) { _session.Notify(NoticeKind.Warning, "Screen capture privacy unavailable", error.Message); }
+        catch (Exception error) { _session.Notify(NoticeKind.Warning, "Screen capture privacy unavailable", error.Message, NoticeArea.Application); }
         var presentation = FloatingPreviewPresentation.From(_state);
         if (_state.IsLiveOperation) { _replay = _state.IsReplay; }
         var source = _replay ? "Public WAV replay. No microphone is open." : "Microphone audio. On-device recognition.";
@@ -242,7 +242,7 @@ public sealed partial class FloatingDictationWindow : Window
             _pill ??= new NativeCompositionPill(WinRT.Interop.WindowNative.GetWindowHandle(_owner),
                 QueueTerminalDismiss, _cleanupTasks.Add);
             try { _pill.ApplyCapturePrivacy(_state.Settings.HideFromCapture); }
-            catch (Exception error) { _session.Notify(NoticeKind.Warning, "Screen capture privacy unavailable", error.Message); }
+            catch (Exception error) { _session.Notify(NoticeKind.Warning, "Screen capture privacy unavailable", error.Message, NoticeArea.Application); }
             var foreground = ((SolidColorBrush)PreviewRoot.BorderBrush).Color;
             _pill.Configure(bounds.X + shape.Item1, bounds.Y + shape.Item2, pillWidth, pillHeight,
                 scale, foreground, ((SolidColorBrush)PreviewRoot.Background).Color,

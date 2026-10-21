@@ -14,7 +14,8 @@ internal sealed record HomeInsightsViewModel(
     string? AvailabilityMessage,
     IReadOnlyList<HomeModelViewModel> Models,
     IReadOnlyDictionary<DateOnly, int>? Activity,
-    DateOnly Today);
+    DateOnly Today,
+    string? UsageWarning);
 
 internal static class HomeInsightsProjection
 {
@@ -29,7 +30,7 @@ internal static class HomeInsightsProjection
         {
             return new HomeInsightsViewModel(
                 "--", "--", "--", "--", usageError ?? "Usage statistics are not available yet.",
-                usageError ?? "Usage statistics are not available yet.", new List<HomeModelViewModel>(), null, today);
+                usageError ?? "Usage statistics are not available yet.", new List<HomeModelViewModel>(), null, today, null);
         }
 
         var summary = UsageSummary.Create(usage.Entries, today, timeZone);
@@ -43,7 +44,7 @@ internal static class HomeInsightsProjection
             summary.WordsPerMinute?.ToString("N0", CultureInfo.CurrentCulture) ?? "--",
             summary.DictationSessions.ToString("N0", CultureInfo.CurrentCulture),
             summary.DictatedWords.ToString("N0", CultureInfo.CurrentCulture),
-            streak, Footnote(summary), null, models, summary.Activity, today);
+            streak, Footnote(summary), null, models, summary.Activity, today, usageError);
     }
 
     private static string Footnote(UsageSummary summary)
