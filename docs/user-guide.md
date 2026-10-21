@@ -13,8 +13,10 @@ transcript area. Audio is never saved.
 
 Use **Dictate** or your configured shortcut to record. Choose the active model
 and use **Transcribe WAV file** on **Models**.
-The Insights cards show actual local usage counts. History and local usage
-counts are separate. Turning off usage statistics does not save transcripts.
+The Insights cards show actual local usage counts. A failed or overflowed
+background usage write appears there as a warning; it does not delay transcript
+insertion. History and local usage counts are separate. Turning off usage
+statistics does not save transcripts.
 
 Ansible uses a Mica window base and follows Windows light, dark, and High Contrast appearance. The default
 Ink / Citron identity matches the Pencil design. Additional color schemes are
@@ -67,10 +69,11 @@ another model.
 **Speech models**. Installed diarization cards show **Meeting companion**. Use
 is hidden; the companion cannot be selected for dictation, replay, or WAV
 transcription. Installing only that companion leaves dictation disconnected.
-Unconfigured meetings use it with installed Nemotron ASR. If Nemotron ASR is
-missing, installed Kroko uses the same companion. If no paired Nemotron or
-Kroko ASR is available, meetings keep VibeVoice ASR Streaming 1.5B, even when
-the companion is present. There is no meeting model picker.
+There is no meeting model picker. Start honors an explicitly saved **Use**
+selection only when that model is meeting-capable streaming ASR. An automatic
+dictation default is not a meeting override. Unconfigured meetings use the
+companion with installed Nemotron ASR, then installed Kroko, then VibeVoice ASR
+Streaming 1.5B, including when the companion is absent.
 
 ### Model behavior
 
@@ -127,12 +130,15 @@ transcript text. Reduced-motion mode uses a level meter.
 
 ### Text insertion
 
-After shortcut insertion, open **Home** or **Settings** to see the delivery
-outcome in the status bar. **Insertion verified** means the app observed the
-exact expected change. **Text sent; unverified** means input was queued but the
-change could not be verified; check the destination before inserting again.
-The notice stays until dismissed or replaced by the next session notice.
-Dismissing it on either page also dismisses it on the other page.
+Only warning and error notices appear, each limited to the pages for its area.
+Capture-privacy failures appear on every page. Routine success and cancel
+messages are not shown.
+
+After shortcut insertion, a verified send is not announced. Open **Home** if
+delivery could not be confirmed. **Text sent; unverified**
+means input was queued but the change could not be verified; check the
+destination before inserting again. Partial input and rejected delivery also
+produce warnings or errors. A notice stays until dismissed or replaced.
 
 **Settings > Text insertion** offers two methods:
 
@@ -175,11 +181,11 @@ Those snapshots stay in memory; no field contents are logged or saved. Password
 fields are not read. Unsupported, ambiguous or truncated snapshots do not prove
 failure and never trigger another insertion.
 
-**Insertion verified** means the expected text change was observed in the same
-field. **Text sent; unverified** means input was sent but the destination could
-not be confirmed. Partial input and key-release failures produce warnings and
-are not automatically retried. Check the destination before using **Copy** to
-recover text manually; repeating an uncertain send can duplicate speech.
+A verified insertion observed the expected text change in the same field; that
+success is not shown as a notice. Unverified, partial, and rejected delivery
+still produce warnings or errors and are not automatically retried. Check the
+destination before using **Copy** to recover text manually; repeating an
+uncertain send can duplicate speech.
 
 ## Transcribe without automatic insertion
 
@@ -300,27 +306,32 @@ Settings. Other apps still start
 manually; detection does not fetch calendar events or automatically end recording.
 
 Open **Meetings > Start meeting**. Select the meeting application, or explicitly
-choose **All system audio**, then start. After Start, the window shows
-**Preparing**. Wait until it shows **Transcribing** before speaking. A cold Auto
-run benchmarks and loads the meeting model before capture opens, so the
-30-second recognition backlog does not fill during qualification. That first
+choose **All system audio**, then start. Start snapshots the recognition
+processor, language hint, and vocabulary for that meeting. After Start, the
+window shows **Preparing**. Wait until it shows **Transcribing** before speaking.
+A cold Auto run benchmarks and loads the meeting model before capture opens, so
+the 30-second recognition backlog does not fill during qualification. That first
 preparation can take longer than later meetings that reuse a cached device
-choice. The caption shows the selected processor and the CPU/GPU comparison.
-The app then captures the Windows default microphone and playback together.
+choice. The app then captures the Windows default microphone and playback together.
 Application capture includes its child-process tree; a browser selection can
 include audio from other tabs. Windows build 20348 or later is required for
 application capture. Use headphones: echo cancellation is not implemented.
 
-Default setup installs Nemotron ASR and Nemotron 3 Diarization. An unconfigured
-meeting uses that pair when both are installed. If Nemotron ASR is missing,
-installed Kroko English uses the same companion. If no paired Nemotron or Kroko
-ASR is available, meetings keep VibeVoice ASR Streaming 1.5B, even when the
-companion is present. Meetings do not follow the dictation **Use** selection, and the Meetings
-window does not offer a model picker. Ordinary dictation, replay, and WAV stay
-plain ASR. The companion is never a dictation choice.
+Default setup installs Nemotron ASR and Nemotron 3 Diarization. The Meetings
+window does not offer a model picker. If you have explicitly selected a
+meeting-capable streaming model with **Use** (Nemotron ASR, Kroko English, or
+VibeVoice ASR Streaming 1.5B), Start uses that ASR. Explicit Nemotron or Kroko
+requires the installed companion; a missing companion stops Start with an error
+rather than switching models. An automatic dictation default is not a meeting
+override. When no such selection is saved, an unconfigured meeting uses that
+Nemotron pair when both are installed, then installed Kroko with the same
+companion, then VibeVoice ASR Streaming 1.5B, including when the companion is
+absent. Ordinary dictation, replay, and WAV stay plain ASR. The companion is
+never a dictation choice.
 
-Meetings use the configured recognition processor (Auto, CPU, or GPU) and
-language hint. Custom vocabulary applies only when the meeting ASR supports it.
+Meetings use the recognition processor (Auto, CPU, or GPU), language hint, and
+vocabulary snapshotted at Start. Custom vocabulary applies only when the meeting
+ASR supports it. Later setting changes do not affect an active meeting.
 Dictation and model changes are unavailable while a meeting owns the recognition
 resources. Auto qualification for a paired meeting admits both weights together
 and requires speaker activity on the public sample.
@@ -345,10 +356,12 @@ missing or repeated phrases retain **approximate chunk time**. English digits
 can match spoken quantities without changing wording.
 Long turns can use unique endpoint phrases with at least 80% word agreement;
 previously aligned spans cannot be reused by another turn. These are ASR token
-anchors, not precise acoustic word boundaries. Missing weights or insufficient
-memory disable this optional pass without replacing the speech model. Chunk
-timestamps use native input sample positions; audio during pauses is excluded.
-Update latency and long-session speaker continuity remain unqualified.
+anchors, not precise acoustic word boundaries. Missing weights, insufficient
+memory, or other optional naming and refinement failures leave editable speaker
+labels in place and write a trace warning; they do not add diagnostic status
+cards. Chunk timestamps use native input sample positions; audio during pauses
+is excluded. Update latency and long-session speaker continuity remain
+unqualified.
 
 **Pause** stops capture and transcript updates. **Resume** continues the same
 meeting and processes retained pending speech. Speech during the pause is not
@@ -397,7 +410,8 @@ The option is off by default, persists across restarts, and applies to open and
 new windows, including during a recording. The main window stays visible.
 Windows 10 version 2004 or later is required. Some capture tools do not honor
 Windows capture exclusion; this is not protection against every recorder or a
-camera. The app reports a warning if Windows cannot apply or verify the setting.
+camera. The app reports an app-wide warning if Windows cannot apply or verify
+the setting.
 
 Captured audio always stays in memory. Dictation transcripts stay in memory;
 meeting transcripts, titles, and speaker names save locally. Recognition does
@@ -426,8 +440,12 @@ Per-user files are in Windows package storage, normally
 **Insights** uses completed sessions. Failed and cancelled sessions are excluded.
 Unknown speech-word counts remain unknown and are excluded from word totals and
 pace. Dictation pace includes microphone pauses; file transcription is excluded
-from pace. Disable **Usage statistics** in Settings to stop collection without
-deleting prior records. The app has no external usage telemetry.
+from pace. Completed sessions are queued for local writes, at most 32 pending,
+so insertion is not delayed. If a write fails or that queue overflows, Insights
+shows the error; a later successful write does not recover a lost entry.
+Shutdown drains and joins remaining writes. Disable **Usage statistics** in
+Settings to stop collection without deleting prior records. The app has no
+external usage telemetry.
 
 Changing model folders does not move or delete weights. Package updates preserve
 local data; uninstalling removes package-local data, including models in the

@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Queue local usage writes on a 32-entry background channel so disk work never
+  delays final insertion. Drain and join that writer at shutdown. Show
+  `UsageError` in Insights after a failed or overflowed write.
+- Show only area-scoped warning and error notices, including app-wide
+  capture-privacy failures. Suppress routine success and cancel notices.
+- Honor an explicitly saved meeting-capable streaming **Use** selection at
+  meeting Start. Start snapshots the processor, language hint, and vocabulary.
+  An automatic dictation default is not a meeting override. Explicit Nemotron or
+  Kroko without the diarization companion fails Start rather than switching
+  models. Unconfigured meetings still use the Nemotron pair, Kroko pair, then
+  VibeVoice path, including when the companion is absent. There is no meeting
+  model picker.
+- Remove meeting `NamingStatus`, `RefinementStatus`, and
+  `DeviceSelectionSummary` diagnostic cards. Keep editable speaker labels.
+  Optional naming and timing-refinement failures are trace warnings.
 - Prefer installed Nemotron ASR (`nemotron-asr-0.6b-q8`) when no dictation model
   is saved. Default setup downloads and verifies that ASR and Nemotron 3
   Diarization (`nemotron-3-diarization-q8`). The companion cannot be selected for
@@ -10,7 +25,7 @@
 - Pair unconfigured meetings with installed Nemotron ASR and Nemotron 3
   Diarization. If Nemotron ASR is missing, installed Kroko uses that companion
   before VibeVoice. Keep VibeVoice streaming when no paired Nemotron or Kroko
-  ASR is available, even if the companion is present.
+  ASR is available, including when the companion is absent.
   Native paired meetings publish cumulative timed anonymous speaker turns and
   abstain on unknown or overlapping speech. Dictation, replay, and WAV stay
   plain ASR. There is no meeting model picker.
