@@ -174,8 +174,8 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
 
     private Task PrepareForModeAsync(AudioModel model, RecognitionOptions options, string mode, int history, CancellationToken cancellationToken)
     {
-        // Request text such as the dictionary is per stream; only the model and backend shape the session.
-        options = ValidateOptions(model, options with { CustomDictionary = "" });
+        // Kroko hotwords change decoder cost, so qualification must use the same decoder mode.
+        options = ValidateOptions(model, model.Family == "kroko_asr" ? options : options with { CustomDictionary = "" });
         return RunExclusiveAsync(() =>
         {
             var selected = ResolveBackend(model, mode, history, NativeMemory.MaximumStreamFrames * sizeof(float), options, cancellationToken);
@@ -462,6 +462,8 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
         var dictionary = CustomVocabulary.Normalize(options.CustomDictionary);
         if (dictionary.Length > 0 && !model.SupportsCustomDictionary)
             throw new NotSupportedException($"{model.Id} does not support custom dictionary hints in this native backend.");
+        if (CustomVocabulary.ModelCompatibilityError(model, dictionary) is { } compatibilityError)
+            throw new InvalidDataException(compatibilityError);
         return options with { CustomDictionary = dictionary };
     }
 
@@ -471,9 +473,19 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
         var request = new NativeAudioHandle(NativeAudioApi.RequestCreate(), NativeHandleKind.Request);
         try
         {
+            var kroko = _loadedId is not null && _inventory!.Entries[_loadedId].Family == "kroko_asr";
             NativeOperation.Step(token, () =>
-                NativeAudioApi.Check(NativeAudioApi.SetText(request.DangerousGetHandle(), options.CustomDictionary, null),
+                NativeAudioApi.Check(NativeAudioApi.SetText(request.DangerousGetHandle(), kroko ? "" : options.CustomDictionary, null),
                     "set recognition context"));
+            if (kroko && options.CustomDictionary.Length > 0)
+            {
+                NativeOperation.Step(token, () => NativeAudioApi.Check(
+                    NativeAudioApi.SetOption(request.DangerousGetHandle(), "decoding_method", "modified_beam_search"),
+                    "enable Kroko hotword decoding"));
+                NativeOperation.Step(token, () => NativeAudioApi.Check(
+                    NativeAudioApi.SetOption(request.DangerousGetHandle(), "hotwords", options.CustomDictionary),
+                    "set Kroko dictionary phrases"));
+            }
             if (!string.IsNullOrWhiteSpace(options.Language))
             {
                 NativeOperation.Step(token, () =>

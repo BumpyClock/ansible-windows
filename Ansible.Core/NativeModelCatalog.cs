@@ -47,7 +47,7 @@ public sealed record NativeModelCatalog
                 entry.Mode is not "offline" and not "streaming" ||
                 entry.Preview is not (null or "final-only" or "live" or "buffered") ||
                 entry.SupportsCustomDictionary &&
-                    entry.Family is not ("qwen3_asr" or "vibevoice_asr" or "vibevoice_asr_streaming") ||
+                    entry.Family is not ("qwen3_asr" or "vibevoice_asr" or "vibevoice_asr_streaming" or "kroko_asr") ||
                 entry.Sha256 is null || entry.Sha256.Length != 64 || !entry.Sha256.All(char.IsAsciiHexDigit) ||
                 string.Equals(entry.Filename, ".localvoice-models.lock", StringComparison.OrdinalIgnoreCase) ||
                 !entries.TryAdd(entry.Id, entry) || !filenames.Add(entry.Filename) ||

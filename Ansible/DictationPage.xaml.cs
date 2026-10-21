@@ -1,117 +1,297 @@
 using Ansible.Core;
-using Microsoft.UI.Text;
-using System.Numerics;
-using Microsoft.UI.Composition;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Documents;
-using Microsoft.UI.Xaml.Hosting;
-using Microsoft.UI.Xaml.Shapes;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage.Pickers;
-using Windows.UI.ViewManagement;
 
 namespace Ansible;
 
 public sealed partial class DictationPage : Page
 {
     private static readonly TimeSpan CopiedDuration = TimeSpan.FromSeconds(2);
-    // Halo scale while listening at silence, so the recording state stays visible without input.
-    private const double RestInner = 1.12, RestOuter = 1.22;
 
     private readonly DictationSession _session;
     private readonly AppPaths _paths;
+    private readonly HomeDictationHistory _history;
     private readonly Func<nint> _windowHandle;
-    private readonly UISettings _uiSettings = new();
+    private readonly Task _catalogNamesTask;
     private readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromMilliseconds(250) };
     private readonly DispatcherTimer _copiedTimer = new() { Interval = CopiedDuration };
     private SessionSnapshot _state;
     private UiSessionObserver? _observer;
-    private IReadOnlyList<AudioModel>? _models;
-    private Visual? _innerVisual;
-    private Visual? _outerVisual;
-    private double _smoothedLevel;
-    private bool _spinning;
-    private bool _rendering;
     private bool _picking;
+    private readonly Dictionary<string, string> _homeCatalogNames = new(StringComparer.OrdinalIgnoreCase);
+    private UsageDocument? _homeUsage;
+    private string? _homeUsageError;
+    private string _homeShortcutDisplay = "";
+    private int _homeGreetingHour = -1;
+    private bool _homeDataInitialized;
+    private DateTime _homeDataDate;
+    private bool _disposed;
 
-    internal DictationPage(DictationSession session, AppPaths paths, Func<nint> windowHandle)
+    internal DictationPage(DictationSession session, AppPaths paths, Func<nint> windowHandle, HomeDictationHistory history)
     {
         InitializeComponent();
         _session = session;
         _paths = paths;
         _windowHandle = windowHandle;
+        _history = history ?? throw new ArgumentNullException(nameof(history));
         _state = session.State;
-        _clock.Tick += (_, _) => RenderClock();
+        _catalogNamesTask = LoadHomeCatalogNamesAsync();
+        _clock.Tick += (_, _) =>
+        {
+            RenderClock();
+            var dateChanged = _homeDataDate != DateTime.Today;
+            if (!dateChanged && _homeGreetingHour == DateTime.Now.Hour) return;
+            RenderHomeData();
+            if (dateChanged) RenderHomeHistory();
+        };
         _copiedTimer.Tick += (_, _) => { _copiedTimer.Stop(); CopyLabel.Text = "Copy"; };
+        _history.Changed += HistoryChanged;
+        HistoryView.QueryChanged += HistoryQueryChanged;
+        HistoryView.CopyRequested += CopyHistoryItem;
+        HistoryChanged();
+        _observer = new UiSessionObserver(session, DispatcherQueue, state =>
+        {
+            _state = state;
+            if (IsLoaded) { Render(); }
+        });
         Loaded += (_, _) =>
         {
-            _observer = new UiSessionObserver(session, DispatcherQueue, state => { _state = state; Render(); }, OnLevel);
             _clock.Start();
+            Render();
+            RenderHomeHistory();
         };
         Unloaded += (_, _) =>
         {
-            _observer?.Dispose(); _observer = null;
             _clock.Stop();
             if (_copiedTimer.IsEnabled) { _copiedTimer.Stop(); CopyLabel.Text = "Copy"; }
-            StopSpin();
-            ResetHalos();
         };
+    }
+
+    internal Task FinishBackgroundWorkAsync() => _catalogNamesTask;
+
+    internal void Dispose()
+    {
+        _disposed = true;
+        _history.Changed -= HistoryChanged;
+        HistoryView.QueryChanged -= HistoryQueryChanged;
+        HistoryView.CopyRequested -= CopyHistoryItem;
+        _observer?.Dispose();
+        _observer = null;
+        _clock.Stop();
+        if (_copiedTimer.IsEnabled) { _copiedTimer.Stop(); CopyLabel.Text = "Copy"; }
     }
 
     private void Render()
     {
-        _rendering = true;
-        try
-        {
-            if (!ReferenceEquals(_models, _state.Models))
-            {
-                ModelBox.ItemsSource = _state.Models.Select(model => model.DisplayName ?? model.Id).ToArray();
-                _models = _state.Models;
-            }
-            ModelBox.SelectedIndex = _state.SelectedIndex;
-            ModelBox.IsEnabled = _state.Phase == DictationPhase.Ready && !_picking;
-            ToolTipService.SetToolTip(ModelBox, ModelBox.IsEnabled ? ModelHint() : "Finish the current operation to change the model.");
-            var ready = _state.Phase == DictationPhase.Ready && _state.SelectedModel is not null && !_picking;
-            FileButton.Visibility = _state.SelectedModel is null ? Visibility.Collapsed : Visibility.Visible;
-            FileButton.IsEnabled = ready;
-            UpdateModelActionsLayout();
-            RenderRecordControl();
-            RenderStatus();
-            RenderClock();
-            RenderNotice();
-            if (TranscriptBox.Text != _state.Transcript) { TranscriptBox.Text = _state.Transcript; }
-            var empty = string.IsNullOrWhiteSpace(_state.Transcript);
-            TranscriptCard.Visibility = empty ? Visibility.Collapsed : Visibility.Visible;
-            TranscriptHeader.Visibility = empty ? Visibility.Collapsed : Visibility.Visible;
-            CopyButton.IsEnabled = _state.IsIdle || _state.Phase == DictationPhase.RecoveryRequired;
-        }
-        finally { _rendering = false; }
+        RenderRecordControl();
+        RenderStatus();
+        RenderClock();
+        RenderNotice();
+        RenderHomeData();
+        if (TranscriptBox.Text != _state.Transcript) { TranscriptBox.Text = _state.Transcript; }
+        var empty = string.IsNullOrWhiteSpace(_state.Transcript);
+        var retainedInHistory = _state.TranscriptOperationId is { } operationId && _history.Contains(operationId);
+        var showTranscript = !empty && !retainedInHistory;
+        TranscriptCard.Visibility = showTranscript ? Visibility.Visible : Visibility.Collapsed;
+        TranscriptHeader.Visibility = showTranscript ? Visibility.Visible : Visibility.Collapsed;
+        CopyButton.IsEnabled = _state.IsIdle || _state.Phase == DictationPhase.RecoveryRequired;
     }
 
-    private string? ModelHint() => _state.SelectedModel switch
+    private async Task LoadHomeCatalogNamesAsync()
     {
-        { Mode: "offline" } => "Transcribes WAV files. No microphone dictation.",
-        { Preview: "final-only" } => "Text appears after you finish.",
-        { Preview: "buffered" } => "Text arrives in chunks while you speak.",
-        { Preview: "live" } => "Text appears as you speak.",
-        _ => null
-    };
+        var dispatcher = DispatcherQueue;
+        try
+        {
+            var entries = await NativeModelCatalog.LoadAsync(_paths.ModelCatalog).ConfigureAwait(false);
+            var names = entries
+                .Where(entry => !string.IsNullOrWhiteSpace(entry.DisplayName))
+                .ToDictionary(entry => entry.Id, entry => entry.DisplayName!, StringComparer.OrdinalIgnoreCase);
+            dispatcher.TryEnqueue(() =>
+            {
+                if (_disposed) { return; }
+                _homeCatalogNames.Clear();
+                foreach (var pair in names) { _homeCatalogNames[pair.Key] = pair.Value; }
+                _homeDataInitialized = false;
+                RenderHomeData();
+                RenderHomeHistory();
+            });
+        }
+        catch
+        {
+            // Installed model snapshots still carry catalog display names. An unavailable catalog adds no label.
+        }
+    }
+
+    private string? HomeModelDisplayName(string modelId)
+    {
+        if (_homeCatalogNames.TryGetValue(modelId, out var catalogName)) { return catalogName; }
+        return _state.Models.FirstOrDefault(model => model.Id == modelId)?.DisplayName;
+    }
+
+    private void RenderHomeData()
+    {
+        var hour = DateTime.Now.Hour;
+        if (hour != _homeGreetingHour)
+        {
+            _homeGreetingHour = hour;
+            GreetingText.Text = hour switch
+            {
+                < 12 => "Good morning",
+                < 18 => "Good afternoon",
+                _ => "Good evening"
+            };
+        }
+        var settings = _state.Settings;
+        var shortcutMode = settings.PushToTalk ? "Hold" : "Press";
+        if (ShortcutModeText.Text != shortcutMode) ShortcutModeText.Text = shortcutMode;
+        if (_homeShortcutDisplay != settings.Shortcut.DisplayText)
+        {
+            _homeShortcutDisplay = settings.Shortcut.DisplayText;
+            ShortcutKeys.Children.Clear();
+            var parts = _homeShortcutDisplay.Split(" + ", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            for (var index = 0; index < parts.Length; index++)
+            {
+                if (index > 0)
+                    ShortcutKeys.Children.Add(new TextBlock { Text = "+", Style = AppStyle("CaptionSecondaryStyle"), VerticalAlignment = VerticalAlignment.Center });
+                var keycap = new Border { Style = AppStyle("KeycapStyle") };
+                keycap.Child = new TextBlock { Text = parts[index], Style = AppStyle("KeycapTextStyle") };
+                ShortcutKeys.Children.Add(keycap);
+            }
+        }
+        if (ShortcutTailText.Text != "anywhere, or") ShortcutTailText.Text = "anywhere, or";
+        if (!_homeDataInitialized || _homeDataDate != DateTime.Today || !ReferenceEquals(_homeUsage, _state.Usage) || _homeUsageError != _state.UsageError)
+        {
+            _homeDataInitialized = true;
+            _homeDataDate = DateTime.Today;
+            _homeUsage = _state.Usage;
+            _homeUsageError = _state.UsageError;
+            HomeInsightsColumn.Render(HomeInsightsProjection.Create(_state.Usage, _state.UsageError,
+                HomeModelDisplayName, DateOnly.FromDateTime(DateTime.Today), TimeZoneInfo.Local));
+        }
+    }
+
+    private void RenderHomeHistory()
+    {
+        HistoryView.Render(HomeHistoryProjection.Create(_history.Snapshot(), HistoryView.Query,
+            _history.OversizedCurrentResult, HomeModelDisplayName, DateTime.Today));
+    }
+
+    private void HistoryChanged()
+    {
+        if (_disposed) return;
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (_disposed || !IsLoaded) return;
+            Render();
+            RenderHomeHistory();
+        });
+    }
+
+    private void HistoryQueryChanged() => RenderHomeHistory();
+
+    private void CopyHistoryItem(HomeHistoryItem item)
+    {
+        try
+        {
+            var package = new DataPackage();
+            package.SetText(item.Text);
+            Clipboard.SetContent(package);
+        }
+        catch (Exception error) { _session.ReportUiError(error); }
+    }
+
+    private Style AppStyle(string key)
+    {
+        var resource = Resources.ContainsKey(key) ? Resources[key] : Application.Current.Resources[key];
+        return (Style)resource;
+    }
+
+    private void HomeHeaderSizeChanged(object sender, SizeChangedEventArgs args)
+    {
+        var narrow = args.NewSize.Width < (double)Application.Current.Resources["HomeHeaderStackThreshold"];
+        HomeHeader.ColumnDefinitions.Clear();
+        HomeHeader.RowDefinitions.Clear();
+        HomeHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        HomeHeader.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        if (narrow) HomeHeader.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        else HomeHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        Grid.SetColumn(CompactDictateCard, narrow ? 0 : 1);
+        Grid.SetRow(CompactDictateCard, narrow ? 1 : 0);
+        CompactDictateCard.HorizontalAlignment = narrow ? HorizontalAlignment.Stretch : HorizontalAlignment.Right;
+        var stackedHelper = args.NewSize.Width < (double)Application.Current.Resources["ShortcutStackThreshold"];
+        Grid.SetRow(ShortcutButtons, stackedHelper ? 1 : 0);
+        Grid.SetColumn(ShortcutButtons, stackedHelper ? 0 : 1);
+        Grid.SetColumnSpan(ShortcutButtons, stackedHelper ? 2 : 1);
+        ShortcutButtons.HorizontalAlignment = stackedHelper ? HorizontalAlignment.Right : HorizontalAlignment.Left;
+        RequestHomeColumnsHeight();
+    }
+    private void HomeColumnsSizeChanged(object sender, SizeChangedEventArgs args)
+    {
+        var narrow = args.NewSize.Width < (double)Application.Current.Resources["HomeColumnsStackThreshold"];
+        HomeColumns.ColumnDefinitions.Clear();
+        HomeColumns.RowDefinitions.Clear();
+        if (narrow)
+        {
+            HomeColumns.ClearValue(FrameworkElement.HeightProperty);
+            HomeColumns.ClearValue(FrameworkElement.MinHeightProperty);
+            HomeInsightsColumn.SetWideLayout(false);
+            HomeColumns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            HomeColumns.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            HomeColumns.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            Grid.SetColumn(HomeInsightsColumn, 0);
+            Grid.SetRow(HomeInsightsColumn, 1);
+        }
+        else
+        {
+            HomeInsightsColumn.SetWideLayout(true);
+            HomeColumns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            HomeColumns.ColumnDefinitions.Add(new ColumnDefinition { Width = (GridLength)Application.Current.Resources["HomeInsightsColumnWidth"] });
+            HomeColumns.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            Grid.SetColumn(HomeInsightsColumn, 1);
+            Grid.SetRow(HomeInsightsColumn, 0);
+            RequestHomeColumnsHeight();
+        }
+    }
+
+    private void HomeViewportSizeChanged(object sender, SizeChangedEventArgs args) => UpdateHomeColumnsHeight(HomeViewport.ViewportHeight);
+
+    private void StatusInfoSizeChanged(object sender, SizeChangedEventArgs args) => RequestHomeColumnsHeight();
+
+    private void RequestHomeColumnsHeight()
+    {
+        if (!IsLoaded) { return; }
+        DispatcherQueue.TryEnqueue(() => UpdateHomeColumnsHeight(HomeViewport.ViewportHeight));
+    }
+
+    private void UpdateHomeColumnsHeight(double viewportHeight)
+    {
+        if (viewportHeight <= 0 || HomeColumns.ActualWidth < (double)Application.Current.Resources["HomeColumnsStackThreshold"]) { return; }
+        var padding = HomeViewport.ContentPadding;
+        var effectiveViewportHeight = HomeViewport.ViewportHeight > 0 ? HomeViewport.ViewportHeight : viewportHeight;
+        var spacing = (double)Application.Current.Resources["PageSectionSpacing"];
+        var statusVisible = StatusInfo.Visibility == Visibility.Visible;
+        var precedingSpacing = spacing * (statusVisible ? 2 : 1);
+        var available = effectiveViewportHeight - padding.Top - padding.Bottom - HomeHeader.ActualHeight - precedingSpacing -
+            (statusVisible ? StatusInfo.ActualHeight : 0);
+        if (available > 0 && (double.IsNaN(HomeColumns.MinHeight) || Math.Abs(HomeColumns.MinHeight - available) > 0.5))
+        {
+            HomeColumns.ClearValue(FrameworkElement.HeightProperty);
+            if (double.IsNaN(HomeColumns.MinHeight) || Math.Abs(HomeColumns.MinHeight - available) > 0.5)
+                HomeColumns.MinHeight = available;
+        }
+    }
 
     private void RenderRecordControl()
     {
-        var busy = _state.Phase is DictationPhase.Connecting or DictationPhase.Preparing or DictationPhase.Finishing
-            or DictationPhase.Transcribing or DictationPhase.Cancelling or DictationPhase.MaintainingModels
-            or DictationPhase.Closing;
-        RecordButton.IsEnabled = !_picking && (_state.CanStart || _state.CanFinish);
-        RecordGlyph.Glyph = "";
+        var canRecord = !_picking && (_state.CanStart || _state.CanFinish);
+        CompactDictateButton.IsEnabled = canRecord;
         var label = _state.CanFinish ? "Finish dictation" : "Start dictation";
-        AutomationProperties.SetName(RecordButton, label);
-        ToolTipService.SetToolTip(RecordButton, label);
-        if (busy) { StartSpin(); } else { StopSpin(); }
-        if (_state.Phase == DictationPhase.Recording && !_state.IsReplay) { ShowHalos(); }
-        else { ResetHalos(); }
+        CompactDictateLabel.Text = _state.CanFinish ? "Finish" : "Dictate";
+        AutomationProperties.SetName(CompactDictateButton, label);
+        ToolTipService.SetToolTip(CompactDictateButton, label);
     }
 
     private void RenderStatus()
@@ -141,29 +321,27 @@ public sealed partial class DictationPage : Page
             DictationPhase.RecoveryRequired => ("Recovery required", _state.Notice.Message),
             _ => ("Closing", "Releasing native resources.")
         };
-        StatusTitle.Text = title;
-        StatusDetail.Inlines.Clear();
-        if (detail.Length > 0) { StatusDetail.Inlines.Add(new Run { Text = detail }); return; }
-        if (!(_state.Phase == DictationPhase.Ready && _state.CanStart)) { return; }
-        StatusDetail.Inlines.Add(new Run { Text = settings.PushToTalk ? "Click the microphone, or hold " : "Click the microphone, or press " });
-        StatusDetail.Inlines.Add(new Run { Text = settings.Shortcut.DisplayText, FontWeight = FontWeights.SemiBold });
-        StatusDetail.Inlines.Add(new Run { Text = settings.PushToTalk ? " in any app and release to finish." : " in any app, then press it again to finish." });
+        CompactStatusTitle.Text = title;
+        CompactStatusDetail.Text = detail.Length > 0 ? detail : _state.Phase == DictationPhase.Ready && _state.CanStart
+            ? settings.PushToTalk
+                ? $"Click the microphone, or hold {settings.Shortcut.DisplayText} in any app and release to finish."
+                : $"Click the microphone, or press {settings.Shortcut.DisplayText} in any app, then press it again to finish."
+            : "";
+        var showCompactStatus = _state.Phase != DictationPhase.Ready || detail.Length > 0;
+        CompactStatusPanel.Visibility = showCompactStatus ? Visibility.Visible : Visibility.Collapsed;
+        CompactCancelButton.Visibility = _state.CanCancel ? Visibility.Visible : Visibility.Collapsed;
+        CompactCancelButton.IsEnabled = _state.CanCancel;
     }
 
-    // The live row keeps its height in every state so starting a dictation does not shift the layout.
     private void RenderClock()
     {
         var live = _state.CanCancel;
         var completed = _state.IsIdle && _state.Result is not null;
-        LiveRow.Opacity = live || completed ? 1 : 0;
-        LiveRow.IsHitTestVisible = live;
-        CancelButton.Visibility = live ? Visibility.Visible : Visibility.Collapsed;
-        CancelButton.IsEnabled = live;
-        FinishButton.Visibility = _state.CanFinish ? Visibility.Visible : Visibility.Collapsed;
+        CompactLiveText.Visibility = live || completed ? Visibility.Visible : Visibility.Collapsed;
         if (!live && !completed) { return; }
         var text = _session.Elapsed.ToString(@"mm\:ss");
         if (_state.Words is { } words) { text += $"  ·  {words:N0} {(words == 1 ? "word" : "words")}"; }
-        LiveText.Text = text;
+        CompactLiveText.Text = text;
     }
 
     private void RenderNotice()
@@ -198,91 +376,6 @@ public sealed partial class DictationPage : Page
         if (!sender.IsOpen) { sender.Visibility = Visibility.Collapsed; }
     }
 
-    private void ModelActionsSizeChanged(object sender, SizeChangedEventArgs args) => UpdateModelActionsLayout();
-
-    private void UpdateModelActionsLayout()
-    {
-        if (ModelActions.ActualWidth <= 0) { return; }
-        FileButton.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
-        var narrow = ModelActions.ActualWidth < 320 + FileButton.DesiredSize.Width + ModelActions.ColumnSpacing;
-        Grid.SetColumnSpan(ModelBox, narrow ? 2 : 1);
-        Grid.SetColumn(FileButton, narrow ? 0 : 1);
-        Grid.SetRow(FileButton, narrow ? 1 : 0);
-        Grid.SetColumnSpan(FileButton, narrow ? 2 : 1);
-        FileButton.HorizontalAlignment = narrow ? HorizontalAlignment.Left : HorizontalAlignment.Stretch;
-    }
-
-    // The ring is a thin arc that rotates around the button. With animations off it stays as a static arc.
-    private void StartSpin()
-    {
-        SpinRing.Opacity = 1;
-        if (_spinning || !_uiSettings.AnimationsEnabled) { return; }
-        _spinning = true;
-        SpinStoryboard.Begin();
-    }
-
-    private void StopSpin()
-    {
-        SpinRing.Opacity = 0;
-        if (!_spinning) { return; }
-        _spinning = false;
-        SpinStoryboard.Stop();
-    }
-
-    // Halo scale uses Composition implicit animations, so each level update glides over 90 ms instead of stepping.
-    private Visual HaloVisual(Ellipse halo, ref Visual? cache)
-    {
-        if (cache is not null) { return cache; }
-        var visual = ElementCompositionPreview.GetElementVisual(halo);
-        var compositor = visual.Compositor;
-        var glide = compositor.CreateVector3KeyFrameAnimation();
-        glide.Target = "Scale";
-        glide.InsertExpressionKeyFrame(1f, "this.FinalValue");
-        glide.Duration = TimeSpan.FromMilliseconds(90);
-        var implicitAnimations = compositor.CreateImplicitAnimationCollection();
-        implicitAnimations["Scale"] = glide;
-        visual.ImplicitAnimations = implicitAnimations;
-        visual.CenterPoint = new Vector3((float)halo.Width / 2, (float)halo.Height / 2, 0);
-        cache = visual;
-        return visual;
-    }
-
-    private void SetHalo(double inner, double outer)
-    {
-        HaloVisual(InnerHalo, ref _innerVisual).Scale = new Vector3((float)inner, (float)inner, 1);
-        HaloVisual(OuterHalo, ref _outerVisual).Scale = new Vector3((float)outer, (float)outer, 1);
-    }
-
-    private void ShowHalos()
-    {
-        InnerHalo.Opacity = 0.28;
-        OuterHalo.Opacity = 0.12;
-        if (!_uiSettings.AnimationsEnabled) { SetHalo(1.15, 1.25); }
-        else if (_smoothedLevel == 0) { SetHalo(RestInner, RestOuter); }
-    }
-
-    private void ResetHalos()
-    {
-        _smoothedLevel = 0;
-        InnerHalo.Opacity = 0;
-        OuterHalo.Opacity = 0;
-        SetHalo(1, 1);
-    }
-
-    private void OnLevel(double raw)
-    {
-        if (_state.Phase != DictationPhase.Recording || _state.IsReplay || !_uiSettings.AnimationsEnabled) { return; }
-        var target = FloatingPreviewPresentation.MeterLevel(raw);
-        _smoothedLevel += (target - _smoothedLevel) * (target > _smoothedLevel ? 0.5 : 0.15);
-        SetHalo(RestInner + 0.5 * _smoothedLevel, RestOuter + 0.9 * _smoothedLevel);
-    }
-
-    private void ModelChanged(object sender, SelectionChangedEventArgs args)
-    {
-        if (_rendering || ModelBox.SelectedIndex < 0) { return; }
-        try { _session.SelectModel(ModelBox.SelectedIndex); }
-        catch (Exception error) { _session.ReportUiError(error); }
-    }
     private async void RecordClicked(object sender, RoutedEventArgs args)
     {
         if (!IsEnabled) { return; }
@@ -298,7 +391,7 @@ public sealed partial class DictationPage : Page
         try { await _session.CancelAsync(); }
         catch (Exception error) { _session.ReportUiError(error); }
     }
-    private async void TranscribeClicked(object sender, RoutedEventArgs args) => await PickAndRunAsync();
+    internal Task TranscribeFileAsync() => PickAndRunAsync();
 
     private async Task PickAndRunAsync()
     {

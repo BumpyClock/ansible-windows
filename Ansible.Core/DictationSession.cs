@@ -67,6 +67,8 @@ public sealed class DictationSession
     }
 
     public event Action<SessionSnapshot>? StateChanged;
+    /// <summary>Raised once for each successful microphone dictation, after owned cleanup.</summary>
+    public event Action<DictationCompletion>? DictationCompleted;
     public event Action<double>? AudioLevelChanged;
     public SessionSnapshot State { get { lock (_gate) { return _state; } } }
     public string UsagePath => _usageStore.Path;
@@ -282,6 +284,8 @@ public sealed class DictationSession
                 {
                     throw new InvalidOperationException("Choose an installed model that supports this recognition mode.");
                 }
+                if (CustomVocabulary.ModelCompatibilityError(model, _state.Settings.CustomDictionary) is { } dictionaryError)
+                    throw new InvalidDataException(dictionaryError);
             }
             var options = new RecognitionOptions(_state.Language,
                 model?.SupportsCustomDictionary == true ? _state.Settings.CustomDictionary : "", _state.Settings.Backend);
@@ -307,6 +311,8 @@ public sealed class DictationSession
                     _ => DictationPhase.Preparing
                 },
                 Transcript = activity is SessionActivity.Connecting or SessionActivity.ModelMaintenance ? _state.Transcript : "",
+                TranscriptOperationId = activity is SessionActivity.Connecting or SessionActivity.ModelMaintenance
+                    ? _state.TranscriptOperationId : null,
                 Result = activity is SessionActivity.Connecting or SessionActivity.ModelMaintenance ? _state.Result : null,
                 Notice = new(NoticeKind.Information, "Preparing operation",
                     "New work is admitted only when the current session has released its resources.")
@@ -363,6 +369,7 @@ public sealed class DictationSession
             _ => new AggregateException("Recognition and cleanup reported failures.", errors)
         };
         var outcome = new SessionOutcome(kind, operation.Result, errorResult);
+        DictationCompletion? completion = null;
         SessionSnapshot state;
         lock (_gate)
         {
@@ -390,19 +397,51 @@ public sealed class DictationSession
                     new(NoticeKind.Success, "Native backend ready", $"{_state.Models.Count} installed models; one resident model at a time."),
                 _ => new(NoticeKind.Success, "Operation complete", "Owned resources were released.")
             };
+            var completedAt = _time.GetUtcNow();
             state = SetState(_state with
             {
                 Phase = _closing ? DictationPhase.Closing : _recovery is not null ? DictationPhase.RecoveryRequired :
                     _engine is null ? DictationPhase.Disconnected : DictationPhase.Ready,
                 Notice = _recovery is not null ? new(NoticeKind.Error, "Cleanup requires recovery",
-                    "Native resources remain owned. Close the app to retry release; new work is blocked.") : notice
+                    "Native resources remain owned. Close the app to retry release; new work is blocked.") : notice,
             });
+            if (_recovery is null && kind == SessionOutcomeKind.Completed && operation.Activity == SessionActivity.Dictation &&
+                operation.Result is { } result && operation.Model is { } model)
+            {
+                completion = new DictationCompletion(operation.Id, model.Id, result, completedAt, elapsed);
+            }
             if (_recovery is null) { KeepEngineWarm(); }
         }
         if (_recovery is null) { operation.Dispose(); }
-        operation.Completion.TrySetResult(outcome);
-        Publish(state);
-        AudioLevelChanged?.Invoke(0);
+        try
+        {
+            // Publish the terminal snapshot before the typed completion event so UI observers see the final state first.
+            Publish(state);
+        }
+        finally
+        {
+            try
+            {
+                // Completion observers run after cleanup and terminal state publication. Keep their failures
+                // from changing the recognition outcome or preventing awaiting callers from resuming.
+                if (completion is not null && DictationCompleted is { } observers)
+                {
+                    foreach (Action<DictationCompletion> observer in observers.GetInvocationList())
+                    {
+                        try { observer(completion); }
+                        catch (Exception error)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"Ansible: dictation completion observer failed: {error.Message}");
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                operation.Completion.TrySetResult(outcome);
+                AudioLevelChanged?.Invoke(0);
+            }
+        }
     }
 
     private async Task ConnectCoreAsync(Operation operation)
@@ -982,7 +1021,21 @@ public sealed class DictationSession
     private void UpdateCurrent(Operation operation, Func<SessionSnapshot, SessionSnapshot> update)
     {
         SessionSnapshot state;
-        lock (_gate) { EnsureCurrent(operation); state = SetState(update(_state)); }
+        lock (_gate)
+        {
+            EnsureCurrent(operation);
+            var next = update(_state);
+            var transcriptChanged = !string.Equals(next.Transcript, _state.Transcript, StringComparison.Ordinal);
+            var resultChanged = !Equals(next.Result, _state.Result);
+            if (transcriptChanged || resultChanged)
+            {
+                next = next with
+                {
+                    TranscriptOperationId = next.Result is not null || next.Transcript.Length > 0 ? operation.Id : null
+                };
+            }
+            state = SetState(next);
+        }
         Publish(state);
     }
 
@@ -1013,7 +1066,8 @@ public sealed class DictationSession
         Version = ++_version,
         IsCaptureOpen = (_operation ?? _recovery) is { Capture.IsReleased: false } owner &&
             owner.StopWork?.IsCompletedSuccessfully != true,
-        DeviceSelectionSummary = _engine?.DeviceSelectionSummary ?? ""
+        DeviceSelectionSummary = _engine?.DeviceSelectionSummary ?? "",
+        DeviceComparison = _engine?.DeviceComparison
     };
     private void Publish(SessionSnapshot state) => StateChanged?.Invoke(state);
 

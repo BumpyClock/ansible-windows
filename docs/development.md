@@ -83,6 +83,52 @@ verify this deployment. Publishing does not install or sign the package. Use the
 packaged launch profile for development; the unsigned artifact is not ready for
 direct installation.
 
+## Design resources
+
+`Ansible/DesignTokens.xaml` owns app colors, typography, shared dimensions, and
+control styles. It is merged after the WinUI resource dictionary. Pages consume
+semantic resources rather than palette literals. Brand roles are separate from
+light/dark surface roles. A future color scheme can replace those brand roles
+without rewriting page layouts. High Contrast uses Windows system colors.
+The existing Windows font is retained.
+
+Every page renders into `PageCanvas`. This component owns content width,
+responsive padding, scroll bounds, and bottom space. Pages with virtualized
+lists use its bounded mode and let the list own scrolling. The design check
+rejects page roots that bypass the shared canvas. `DeviceComparisonView` renders
+structured benchmark snapshots without parsing presentation text.
+
+Debug builds accept `--design-theme=light` and `--design-theme=dark` as launch
+arguments for screenshot qualification. This scopes appearance to the app
+window and does not change Windows settings. Release builds follow Windows.
+
+Independent visual judges must invoke the `ux-designer` skill before reviewing
+actual screenshots. Check both themes and responsive, error, and empty states.
+Showing or dismissing transient notices must not change the page viewport bounds.
+
+The app mark uses exact Pencil geometry. `Ansible/Assets/Brand` retains SVG
+artwork derived from that geometry and native-size PNGs exported through Pencil MCP. There is no design
+JSON snapshot in the repository. Regenerate package icons with the pinned
+renderer, then check tokens:
+
+```powershell
+npm install --prefix .runtime/design-renderer --no-save @resvg/resvg-js@2.6.2
+node .\tools\Generate-DesignAssets.cjs
+.\tools\Test-DesignTokens.ps1
+```
+
+The generated Windows assets use transparent backgrounds and optical cuts for
+small sizes. Tray artwork is available for future integration; the app does not
+currently create a notification-area icon. In-app history is bounded and held
+only in memory. The session emits a typed successful dictation completion after
+cleanup. One app-owned history instance receives it independently of page
+lifetime. History and Insights views consume typed projections; the dictation
+page owns recording and file actions. Failed, cancelled, and unreleased
+operations never enter history. Bounded `PageCanvas` layouts retain a finite minimum
+height and allow outer overflow in short windows, so warnings cannot collapse their lists.
+`SettingsRow` owns the shared adaptive setting
+layout; pages provide labels, descriptions, and controls.
+
 ## Tests
 
 ### Dictation insertion

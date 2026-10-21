@@ -1,0 +1,15 @@
+<UserControl x:Class="Ansible.PageCanvas"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Content>
+        <ScrollViewer x:Name="Viewport" HorizontalScrollBarVisibility="Disabled" HorizontalScrollMode="Disabled"
+                      HorizontalContentAlignment="Stretch" VerticalScrollBarVisibility="Auto"
+                      AutomationProperties.AutomationId="PageViewport" SizeChanged="ViewportSizeChanged">
+            <Grid x:Name="ContentHost" MaxWidth="{StaticResource PageContentMaxWidth}"
+                  Padding="{StaticResource PagePadding}">
+                <ContentControl x:Name="BodyHost" HorizontalContentAlignment="Stretch"
+                                VerticalContentAlignment="Stretch" IsTabStop="False" />
+            </Grid>
+        </ScrollViewer>
+    </UserControl.Content>
+</UserControl>

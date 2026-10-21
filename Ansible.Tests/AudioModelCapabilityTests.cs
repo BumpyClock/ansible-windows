@@ -12,6 +12,7 @@ public sealed class AudioModelCapabilityTests
     {
         // Preview timing does not govern final insertion.
         Assert.True(Model("nemotron_asr", "streaming", "live").CanInsertDictation);
+        Assert.True(Model("kroko_asr", "streaming", "live").CanInsertDictation);
 
         // Buffered and final-only models provide the same final insertion contract.
         Assert.True(Model("moonshine_asr", "streaming", "final-only").CanInsertDictation);
@@ -37,6 +38,7 @@ public sealed class AudioModelCapabilityTests
     [InlineData("moonshine_asr", true)]
     [InlineData("qwen3_asr", true)]
     [InlineData("nemotron_asr", true)]
+    [InlineData("kroko_asr", true)]
     [InlineData("vibevoice_asr_streaming", false)]
     [InlineData("vibevoice_asr", false)]
     [InlineData(null, false)]

@@ -8,13 +8,14 @@
     </Window.SystemBackdrop>
     <Border x:Name="PreviewRoot"
             HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
-            Loaded="PreviewLoaded" SizeChanged="PreviewSizeChanged" ActualThemeChanged="ThemeChanged">
+            Loaded="PreviewLoaded" SizeChanged="PreviewSizeChanged" ActualThemeChanged="ThemeChanged"
+            Background="{ThemeResource PillBackgroundBrush}" BorderBrush="{ThemeResource AppTextBrush}">
         <!-- The native composition pill draws the visible overlay. This region-empty host sizes the
              window and resolves the theme text colour from BorderBrush for high-contrast drawing. -->
-        <Border x:Name="PillBorder" Width="220" Height="56" Background="Transparent"
-                BorderBrush="{ThemeResource PrimaryTextBrush}" BorderThickness="0"
+        <Border x:Name="PillBorder" Width="220" Height="56" Background="{ThemeResource PillBackdropFillBrush}"
+                BorderBrush="{ThemeResource PillStrokeBrush}" BorderThickness="0"
                 CornerRadius="28" HorizontalAlignment="Center">
-            <StackPanel x:Name="WaveBars" HorizontalAlignment="Center"
+            <StackPanel x:Name="WaveBars" HorizontalAlignment="Center" Background="{ThemeResource PillWaveBrush}"
                         AutomationProperties.Name="Real audio energy history" />
         </Border>
     </Border>

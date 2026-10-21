@@ -29,6 +29,7 @@ public sealed class NativeIntegrityTests : IDisposable
     [InlineData("qwen3_asr")]
     [InlineData("vibevoice_asr")]
     [InlineData("vibevoice_asr_streaming")]
+    [InlineData("kroko_asr")]
     public async Task SupportedDictionaryCapabilityReachesTheConnectedModel(string family)
     {
         WriteCatalog(EntryJson().Replace("\"family\":\"moonshine_asr\"",

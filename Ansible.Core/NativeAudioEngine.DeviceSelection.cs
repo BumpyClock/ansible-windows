@@ -12,13 +12,17 @@ public sealed partial class NativeAudioEngine
     private bool _streamConsumed;
     private string? _deviceCacheWarning;
     public string DeviceSelectionSummary { get; private set; } = "";
+    public DeviceComparisonSnapshot? DeviceComparison { get; private set; }
 
     private RecognitionOptions ResolveBackend(AudioModel model, string mode, int history, long decodedBytes,
         RecognitionOptions options, CancellationToken token)
     {
+        // A new selection is in progress until a complete benchmark result is available.
+        DeviceComparison = null;
         try { return ResolveBackendCore(model, mode, history, decodedBytes, options, token); }
         catch (Exception error) when (options.Backend == NativeBackend.Auto)
         {
+            DeviceComparison = null;
             DeviceSelectionSummary = $"Auto qualification did not select a device: {error.Message}";
             throw;
         }
@@ -29,6 +33,7 @@ public sealed partial class NativeAudioEngine
     {
         if (options.Backend != NativeBackend.Auto)
         {
+            DeviceComparison = null;
             DeviceSelectionSummary = $"Manual {options.Backend}, device {options.DeviceIndex}; no automatic benchmark or fallback.";
             return options;
         }
@@ -41,7 +46,8 @@ public sealed partial class NativeAudioEngine
             throw new InvalidDataException("Device qualification requires an unchanged admitted model.");
         using var lease = _integrity.OpenVerified(model.ModelPath, entry, token);
         var request = new DeviceBenchmarkRequest(_libraryPath, _catalogPath, ModelsDirectory, _benchmarkSamplePath,
-            model.Id, NativeBackend.Cpu, options.DeviceIndex, _threads, _headroom, mode, history);
+            model.Id, NativeBackend.Cpu, options.DeviceIndex, _threads, _headroom, mode, history,
+            UseDictionary: model.Family == "kroko_asr" && options.CustomDictionary.Length > 0);
         var key = DeviceBenchmark.Key(request, entry.Sha256, token);
         _selectionKeys[(model.Id, mode, history)] = key;
         if (!_deviceSelections.TryGetValue(key, out var selection))
@@ -63,12 +69,14 @@ public sealed partial class NativeAudioEngine
         }
         DeviceSelectionSummary = selection.Summary + (_benchmarkCachePath is null ? " Persistence disabled; this session only." : "") +
             (_deviceCacheWarning is null ? "" : " " + _deviceCacheWarning);
+        DeviceComparison = ToDeviceComparison(selection);
         token.ThrowIfCancellationRequested();
         return options with { Backend = selection.Backend };
     }
 
     private void RejectSelectedGpu(AudioModel model, string mode, int history, NativeExecutionException error)
     {
+        DeviceComparison = null;
         var key = _selectionKeys[(model.Id, mode, history)];
         var prior = _deviceSelections[key];
         if (!prior.Cpu.Working)
@@ -82,7 +90,16 @@ public sealed partial class NativeAudioEngine
         DeviceSelectionSummary = selection.Summary + " GPU failure reported; CPU is selected for the next attempt.";
         _deviceCacheWarning = DeviceBenchmark.TryUpdateCache(_benchmarkCachePath, key, selection);
         if (_deviceCacheWarning is not null) DeviceSelectionSummary += " " + _deviceCacheWarning;
+        DeviceComparison = ToDeviceComparison(selection);
     }
+
+    private static DeviceComparisonSnapshot ToDeviceComparison(DeviceBenchmarkSelection selection) => new(
+        selection.Cpu.Working ? selection.Cpu.Milliseconds : null,
+        selection.Gpu.Working ? selection.Gpu.Milliseconds : null,
+        selection.Backend,
+        selection.MeasuredAt,
+        selection.Cpu.Error,
+        selection.Gpu.Error);
 
     private RecognitionResult RunAutoStream(AudioModel model, ChannelReader<byte[]> audio, RecognitionOptions options,
         IProgress<TranscriptUpdate>? progress, CancellationToken token, Action? onReady, int history = 0)

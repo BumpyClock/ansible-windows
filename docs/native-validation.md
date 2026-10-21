@@ -77,6 +77,18 @@ dotnet run --project .\Ansible.Probe -- `
 The probe reports dictionary support and whether context was supplied, without
 printing the dictionary. Recognition output is printed to the console.
 
+Kroko uses the same command with model ID `kroko-en-64l-q8` and `--backend cpu`.
+Its dictionary selects modified beam-search decoding and supplies per-request
+hotwords. Entries containing `/` are rejected before native work. Automatic
+device qualification distinguishes the hotword decoder from ordinary decoding
+and uses public sample hints rather than the user's vocabulary.
+
+On 2026-10-20, the Kroko CPU probe passed WAV recognition and microphone-paced
+streaming on the 14.072-second public sample with nonempty hotwords. Both final
+results contained "Mother Nature" and reported 28 spoken words. Ten previews
+arrived while streaming input was open. This checks recognition functionality;
+the run occurred alongside builds and does not qualify performance or GPU support.
+
 To check CPU eligibility without loading a model:
 
 ```powershell

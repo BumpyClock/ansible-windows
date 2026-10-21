@@ -21,7 +21,6 @@ public sealed partial class MainPage : Page
     private UiSessionObserver? _observer;
     private SessionSnapshot _state;
     private bool _rendering;
-    private bool _dictionaryDirty;
 
     internal MainPage(DictationSession session, AppPaths paths, Func<nint> windowHandle,
         Action<DictationShortcut> changeHotkey, Action<bool> changeMode, Action<bool> captureShortcut)
@@ -39,12 +38,14 @@ public sealed partial class MainPage : Page
         // TextBox handles pointer presses itself, so listen for handled presses to restart capture on click.
         HotkeyCaptureBox.AddHandler(PointerPressedEvent, new PointerEventHandler((_, _) => StartShortcutCapture()), true);
         _rendering = true;
-        HotkeyCaptureBox.Text = _state.Settings.Shortcut.DisplayText;
+        SetShortcutDisplay(_state.Settings.Shortcut.DisplayText);
         PushToTalkChoice.SelectedIndex = _state.Settings.PushToTalk ? 0 : 1;
         RenderInsertion(_state.IsIdle);
         _rendering = false;
         Loaded += (_, _) =>
+        {
             _observer = new UiSessionObserver(session, DispatcherQueue, state => { _state = state; Render(); });
+        };
         Unloaded += (_, _) =>
         {
             EndShortcutCapture();
@@ -67,17 +68,16 @@ public sealed partial class MainPage : Page
                 NativeBackend.Vulkan => 2,
                 _ => throw new InvalidDataException("The recognition processor setting is invalid.")
             };
-            BackendHint.Text = _state.Settings.Backend == NativeBackend.Auto
+            BackendRow.Description = _state.Settings.Backend == NativeBackend.Auto
                 ? string.IsNullOrEmpty(_state.DeviceSelectionSummary)
                     ? "Auto compares CPU and GPU using a bundled speech sample, then remembers the faster working device for each model. The first preparation takes longer. Audio stays local."
                     : $"Last device comparison: {_state.DeviceSelectionSummary}"
                 : _state.Settings.Backend == NativeBackend.Vulkan && _state.SelectedModel?.Family == "nemotron_asr"
                     ? "Nemotron GPU streaming has a known native crash in this build. Choose Auto or CPU for dictation and replay."
                     : "Manual selection applies to the next recognition. Choose Auto to compare devices and recover from a failed GPU qualification.";
+            DeviceComparison.Comparison = _state.DeviceComparison;
+            DeviceComparison.Summary = _state.DeviceSelectionSummary;
             if (LanguageBox.FocusState == FocusState.Unfocused) { LanguageBox.Text = _state.Language; }
-            if (!_dictionaryDirty) { DictionaryBox.Text = _state.Settings.CustomDictionary; }
-            DictionaryBox.IsEnabled = idle;
-            RenderDictionaryStatus();
             RenderNotice();
             UsageToggle.IsOn = _state.Settings.CollectUsage;
             HideFromCaptureChoice.IsChecked = _state.Settings.HideFromCapture;
@@ -85,7 +85,7 @@ public sealed partial class MainPage : Page
             UsageToggle.IsEnabled = idle;
             ToolTipService.SetToolTip(UsageRow, $"Stored on this device. Never audio or text. Session dates, model, word counts, and timing. File: {_session.UsagePath}");
             AutomationProperties.SetHelpText(UsageToggle, _session.UsagePath);
-            if (!_recordingShortcut) { HotkeyCaptureBox.Text = _state.Settings.Shortcut.DisplayText; }
+            if (!_recordingShortcut) { SetShortcutDisplay(_state.Settings.Shortcut.DisplayText); }
             HotkeyCaptureBox.IsEnabled = idle;
             ResetShortcutButton.Visibility = _state.Settings.Shortcut != DictationShortcut.Default ? Visibility.Visible : Visibility.Collapsed;
             ResetShortcutButton.IsEnabled = idle;
@@ -103,7 +103,7 @@ public sealed partial class MainPage : Page
         var typing = _state.Settings.InsertionMethod == TextInsertionMethod.Type;
         InsertionChoice.SelectedIndex = typing ? 1 : 0;
         InsertionChoice.IsEnabled = idle;
-        InsertionHelpText.Text = typing
+        InsertionRow.Description = typing
             ? "Types one character at a time. Use this for apps that block paste."
             : "Replaces your clipboard with dictated text and sends the selected paste shortcut. The text stays available for apps that paste later. Requests exclusion from clipboard history and cloud sync. Use Type characters to preserve your clipboard.";
         PasteShortcutRow.Visibility = typing ? Visibility.Collapsed : Visibility.Visible;
@@ -112,19 +112,6 @@ public sealed partial class MainPage : Page
         TypingGapRow.Visibility = typing ? Visibility.Visible : Visibility.Collapsed;
         TypingGapBox.IsEnabled = idle;
         TypingGapBox.Value = _state.Settings.TypingGapMilliseconds;
-    }
-
-    // Shared by Render and DictionaryChanged. DictionaryChanged must not call Render, because Render
-    // rewrites DictionaryBox.Text whenever the draft is clean and would move the caret while typing.
-    private void RenderDictionaryStatus()
-    {
-        SaveDictionaryButton.IsEnabled = _state.IsIdle && _dictionaryDirty;
-        if (_dictionaryDirty) { DictionaryStatusText.Text = "Unsaved changes"; return; }
-        // The saved dictionary is normalized to unique, non-empty entries joined by line feeds.
-        var entries = _state.Settings.CustomDictionary.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length;
-        var count = entries switch { 0 => "No entries", 1 => "1 entry", _ => $"{entries} entries" };
-        DictionaryStatusText.Text = _state.SelectedModel is { SupportsCustomDictionary: false } model
-            ? $"{count} · Not used by {model.DisplayName ?? model.Id}." : count;
     }
 
     private void RenderNotice()
@@ -177,25 +164,6 @@ public sealed partial class MainPage : Page
         try { _session.SetLanguage(LanguageBox.Text); }
         catch (Exception error) { _session.ReportUiError(error); }
     }
-    private void DictionaryChanged(object sender, TextChangedEventArgs args)
-    {
-        if (_rendering || DictionaryBox is null) { return; }
-        var draft = DictionaryBox.Text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
-        _dictionaryDirty = draft != _session.State.Settings.CustomDictionary;
-        RenderDictionaryStatus();
-    }
-    private void SaveDictionaryClicked(object sender, RoutedEventArgs args)
-    {
-        try
-        {
-            _session.SetCustomDictionary(DictionaryBox.Text);
-            _state = _session.State;
-            if (_state.Notice.Kind == NoticeKind.Success) { _dictionaryDirty = false; }
-        }
-        catch (Exception error) { _session.ReportUiError(error); _state = _session.State; }
-        Render();
-    }
-
     private void UsageToggled(object sender, RoutedEventArgs args)
     {
         if (_rendering) { return; }
@@ -221,7 +189,7 @@ public sealed partial class MainPage : Page
     {
         if (_rendering || PushToTalkChoice.SelectedIndex < 0) { return; }
         var pushToTalk = PushToTalkChoice.SelectedIndex == 0;
-        // RadioButtons can raise SelectionChanged after Render returns; ignore echoes of the current setting.
+        // Selection controls can raise SelectionChanged after Render returns; ignore echoes of the current setting.
         if (pushToTalk == _session.State.Settings.PushToTalk) { return; }
         try { _changeMode(pushToTalk); }
         catch (Exception error) { _session.ReportUiError(error); Render(); }
@@ -282,7 +250,7 @@ public sealed partial class MainPage : Page
             _captureShortcut(true);
             _recordingShortcut = true;
             _pendingShortcut = null;
-            HotkeyCaptureBox.Text = "Press a shortcut; Esc cancels";
+            SetShortcutDisplay("Press a shortcut; Esc cancels");
         }
         catch (Exception error) { _session.ReportUiError(error); }
     }
@@ -308,11 +276,11 @@ public sealed partial class MainPage : Page
         var shortcut = new DictationShortcut(modifiers, (uint)args.Key);
         if (!shortcut.IsValid)
         {
-            HotkeyCaptureBox.Text = "Use F1-F11, or Ctrl/Alt/Win with a letter or digit";
+            SetShortcutDisplay("Use F1-F11, or Ctrl/Alt/Win with a letter or digit");
             return;
         }
         _pendingShortcut = shortcut;
-        HotkeyCaptureBox.Text = $"{shortcut.DisplayText} (release to apply)";
+        SetShortcutDisplay($"{shortcut.DisplayText} (release to apply)");
     }
 
     private void ShortcutKeyUp(object sender, KeyRoutedEventArgs args)
@@ -336,6 +304,27 @@ public sealed partial class MainPage : Page
         _pendingShortcut = null;
         try { _captureShortcut(false); }
         catch (Exception error) { _session.Notify(NoticeKind.Error, "Shortcut unavailable", error.Message); }
-        HotkeyCaptureBox.Text = _session.State.Settings.Shortcut.DisplayText;
+        SetShortcutDisplay(_session.State.Settings.Shortcut.DisplayText);
+    }
+
+    private void SetShortcutDisplay(string text)
+    {
+        HotkeyCaptureBox.Text = text;
+        if (_recordingShortcut)
+        {
+            HotkeyKeycaps.Visibility = Visibility.Collapsed;
+            HotkeyCaptureStatus.Visibility = Visibility.Visible;
+            HotkeyCaptureStatus.Text = text;
+            return;
+        }
+
+        HotkeyCaptureStatus.Visibility = Visibility.Collapsed;
+        HotkeyKeycaps.Visibility = Visibility.Visible;
+        var parts = text.Split(" + ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var hasModifier = parts.Length > 1;
+        HotkeyModifierKeycap.Visibility = hasModifier ? Visibility.Visible : Visibility.Collapsed;
+        HotkeyPlusText.Visibility = hasModifier ? Visibility.Visible : Visibility.Collapsed;
+        HotkeyModifierText.Text = hasModifier ? string.Join(" + ", parts[..^1]) : string.Empty;
+        HotkeyPrimaryText.Text = parts.Length == 0 ? text : parts[^1];
     }
 }

@@ -2,12 +2,33 @@
 
 See the [README](../README.md#build-and-run) to build and launch the app.
 
+## Home and appearance
+
+**Home** shows recent completed dictations with timestamps, search, and Copy.
+History stays in memory for this app session. Closing Ansible clears it. The
+history keeps at most 100 entries within a bounded text budget. Copy completed
+dictations from History. Search can hide entries until you clear its filter.
+WAV results and dictations too large for history remain available in the separate
+transcript area. Audio is never saved.
+
+Use **Dictate** or your configured shortcut to record. Choose the active model
+and use **Transcribe WAV file** on **Models**.
+The Insights cards show actual local usage counts. History and local usage
+counts are separate. Turning off usage statistics does not save transcripts.
+
+Ansible uses a Mica window base and follows Windows light, dark, and High Contrast appearance. The default
+Ink / Citron identity matches the Pencil design. Additional color schemes are
+prepared through shared brand tokens; a scheme picker is not yet available.
+Compact windows use an icon sidebar, smaller page padding, and stacked controls.
+
 ## Microphone access
 
 Ansible checks microphone permission at launch, before recording can start. If
 Windows requires consent, the app requests it then. Already granted access does
-not prompt again. If Windows blocks access, the main window shows **Open
-microphone settings** and **Check again**. Enable the applicable microphone
+not prompt again. If Windows blocks access, a compact overlay offers **Open
+settings** and **Check again** without changing page height. Dismiss it to reveal
+the content underneath. Open **Settings** in Ansible to show the guidance again.
+Enable the applicable microphone
 access settings, then return to Ansible. Policy restrictions may require your
 administrator. File transcription and model management remain available.
 
@@ -21,7 +42,7 @@ are not requested because these features do not use them.
 
 Open **Speech models**. Select **Download** on a model card, or open **Model folder**
 and use **Choose folder** to select a folder containing catalog weights. Select
-**Use** on an installed model, or select it from **Speech model** on the Dictation page.
+**Use** on an installed model to make it active.
 
 Downloads start only when requested. **Pause** keeps partial files for **Resume**.
 The app verifies the length and SHA-256 before installing weights. If recognition
@@ -49,6 +70,7 @@ and in the [catalog](../tools/audio-models.json).
 | `moonshine-tiny` | Microphone and WAV | Final only; English only | Yes |
 | `qwen3-asr-0.6b-q8` | Microphone and WAV | Buffered | Yes |
 | `nemotron-asr-0.6b-q8` | Microphone and WAV | Can produce live previews | Yes, after final recognition |
+| `kroko-en-64l-q8` | Microphone and WAV | Live English previews; custom hotwords | Yes, after final recognition |
 | `vibevoice-streaming-1.5b-q4` | Microphone and WAV | Can produce live previews with annotations | Yes, after final recognition |
 | `vibevoice-asr-7b-q8` | Microphone and WAV | Buffered until Finish; final only | Yes, after final recognition |
 
@@ -90,7 +112,7 @@ transcript text. Reduced-motion mode uses a level meter.
 
 ### Text insertion
 
-After shortcut insertion, open **Dictation** or **Settings** to see the delivery
+After shortcut insertion, open **Home** or **Settings** to see the delivery
 outcome in the status bar. **Insertion verified** means the app observed the
 exact expected change. **Text sent; unverified** means input was queued but the
 change could not be verified; check the destination before inserting again.
@@ -146,12 +168,12 @@ recover text manually; repeating an uncertain send can duplicate speech.
 
 ## Transcribe without automatic insertion
 
-On **Dictation**, use the round record button to start microphone capture, then
+On **Home**, use **Dictate** to start microphone capture, then
 **Finish** to recognize the remaining audio. **Cancel** stops capture and waits for
 the current native step; partial text can remain visible for copying. A blocking
 native call cannot be forcibly interrupted.
 
-Select **Transcribe WAV file…** for a recording. **Copy** copies the visible
+On **Models**, select **Transcribe WAV file** for a recording. **Copy** copies the visible
 transcript. These page controls do not automatically insert text into another app.
 
 WAV input is limited to five minutes, 100 MiB on disk, and 64 MiB of decoded float
@@ -184,18 +206,27 @@ remove noise, and loud samples can clip. Reduce it if speech distorts.
 
 ### Language and vocabulary
 
-Leave **Language hint** blank for English-only Moonshine. Other models have
+Leave **Language hint** blank for English-only Moonshine and Kroko. Other models have
 model-dependent language support; individual languages are not qualified by this
 app. Unsupported native options produce an error.
 
-Under **Custom vocabulary**, enter one name, word, or phrase per line and select
-**Save dictionary**. Save an empty list to clear it. Blank lines are removed,
-whitespace is normalized, and duplicate entries are merged. Limits are 100 unique
-entries, 100 characters per entry, and 4 KiB of UTF-8 text.
+Open **Dictionary** in the sidebar. **Add new** adds one name, word, or phrase.
+**Import** accepts one entry per line. Search filters the list. Each row offers
+Edit and Remove. **Undo remove** restores the latest deletion. Existing saved
+words stay in the list. Changes save immediately.
 
-Qwen3-ASR and both VibeVoice models accept this context; offline VibeVoice uses it
+Blank lines are removed, whitespace is normalized, and duplicate entries are
+merged. Limits are 100 unique entries, 100 characters per entry, and 4 KiB of
+UTF-8 text. The page warns if a change could not be saved.
+
+Kroko uses these entries as live English hotwords. Kroko rejects `/` within an
+entry because its decoder treats that character as a separator. Saved slash-bearing
+entries remain available for other models. With Kroko selected, Dictionary shows
+a compatibility warning and recognition stops before opening the microphone.
+Edit those entries or choose another model. Qwen3-ASR and both VibeVoice models
+accept this context; offline VibeVoice uses it
 only for WAV transcription. Moonshine and Nemotron do not use it. The selected
-model's support is shown beside the vocabulary field. Each operation uses the
+model's support is shown on Dictionary. Each operation uses the
 saved list at startup.
 
 Entries are recognition hints, not guaranteed spellings or replacement rules.

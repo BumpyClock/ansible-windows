@@ -35,6 +35,9 @@ Run these commands in PowerShell from the repository root. You need:
 
 Setup downloads and verifies `moonshine-tiny` into `.runtime\models`. The native
 build produces the DLL, dependencies, notices, and public validation sample.
+Optional English streaming Kroko weights are available in the app, or through
+`tools\Setup-AudioBackend.ps1 -Models kroko-en-64l-q8`. Kroko supports custom
+hotwords. GPU support and performance remain unqualified.
 For CPU only, replace the second command with:
 
 ```powershell

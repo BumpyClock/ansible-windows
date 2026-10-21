@@ -221,6 +221,7 @@ public sealed class DeviceBenchmarkTests
             }));
             Assert.NotEqual(original, Key(request with { Mode = "streaming" }));
             Assert.NotEqual(original, Key(request with { History = 4096 }));
+            Assert.NotEqual(original, Key(request with { UseDictionary = true }));
             Assert.NotEqual(original, Key(request with { Device = 1 }));
             Assert.NotEqual(original, Key(request with { Threads = 2 }));
             Assert.NotEqual(original, Key(request, "changed-model-sha"));

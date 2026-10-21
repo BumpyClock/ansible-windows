@@ -234,7 +234,7 @@ $env:PATH = "$installer;$ninjaRoot;" + ($env:PATH -replace '"', '')
 $configure = "`"$cmake`" -S `"$source`" -B `"$build`" -G Ninja " +
     "-DCMAKE_MAKE_PROGRAM=`"$ninja`" -DCMAKE_BUILD_TYPE=Release " +
     "-DAUDIOCPP_BUILD_C_API=ON -DAUDIOCPP_DEPLOYMENT_BUILD=ON " +
-    "-DAUDIOCPP_MODEL_SET=custom -DAUDIOCPP_MODELS=moonshine_asr,vibevoice_asr,qwen3_asr,nemotron_asr " +
+    "-DAUDIOCPP_MODEL_SET=custom -DAUDIOCPP_MODELS=moonshine_asr,vibevoice_asr,qwen3_asr,nemotron_asr,kroko_asr " +
     "-DENGINE_ENABLE_CUDA=OFF -DENGINE_ENABLE_HIP=OFF $vulkanFlags " +
     "-DENGINE_ENABLE_METAL=OFF -DENGINE_ENABLE_NATIVE_CPU=OFF -DENGINE_ENABLE_LLAMAFILE=OFF " +
     "-DGGML_AVX=ON -DGGML_AVX2=ON -DGGML_BMI2=ON -DGGML_AVX512=OFF -DENGINE_BUILD_TESTS=OFF"
