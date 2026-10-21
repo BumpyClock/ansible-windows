@@ -39,10 +39,12 @@ public sealed partial class PageCanvas : UserControl
         var width = Math.Min(Viewport.ActualWidth, (double)resources["PageContentMaxWidth"]);
         ContentHost.Padding = (Thickness)resources[width < (double)resources["CompactPageThreshold"]
             ? "CompactPagePadding" : "PagePadding"];
-        Viewport.VerticalScrollBarVisibility = _scrollable ? ScrollBarVisibility.Auto : ScrollBarVisibility.Disabled;
-        Viewport.VerticalScrollMode = _scrollable ? ScrollMode.Auto : ScrollMode.Disabled;
+        var boundedPageHeight = Math.Max(ViewportHeight, (double)resources["BoundedPageMinHeight"]);
+        var canScroll = _scrollable || boundedPageHeight > ViewportHeight;
+        Viewport.VerticalScrollBarVisibility = canScroll ? ScrollBarVisibility.Auto : ScrollBarVisibility.Disabled;
+        Viewport.VerticalScrollMode = canScroll ? ScrollMode.Auto : ScrollMode.Disabled;
         // Full-page flows retain bottom padding. Bounded lists receive a finite viewport and own their scrolling.
-        ContentHost.Height = _scrollable ? double.NaN : ViewportHeight;
+        ContentHost.Height = _scrollable ? double.NaN : boundedPageHeight;
         ContentHost.MinHeight = _scrollable ? ViewportHeight : 0;
     }
 }

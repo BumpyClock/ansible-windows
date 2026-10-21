@@ -15,13 +15,21 @@ public sealed record SessionNotice(NoticeKind Kind, string Title, string Message
 }
 public sealed record SessionOutcome(SessionOutcomeKind Kind, RecognitionResult? Result = null, Exception? Error = null);
 
+/// <summary>
+/// The single successful microphone-dictation signal consumed by session history and other app-owned projections.
+/// It is raised only after recognition and all operation-owned cleanup have completed.
+/// </summary>
+public sealed record DictationCompletion(
+    Guid OperationId,
+    string ModelId,
+    RecognitionResult Result,
+    DateTimeOffset CompletedAt,
+    TimeSpan Elapsed);
+
 public sealed record SessionSnapshot
 {
     public required long Version { get; init; }
     public Guid? OperationId { get; init; }
-    public SessionOutcomeKind? Outcome { get; init; }
-    public DateTimeOffset? CompletedAt { get; init; }
-    public TimeSpan Elapsed { get; init; }
     public bool MeetingActive { get; init; }
     public bool IsCaptureOpen { get; init; }
     public required DictationPhase Phase { get; init; }
@@ -36,6 +44,8 @@ public sealed record SessionSnapshot
     public AppSettings Settings { get; init; } = new();
     public string Language => Settings.Language;
     public required string Transcript { get; init; }
+    /// <summary>Identifies the recognition operation that owns the current transcript and result.</summary>
+    public Guid? TranscriptOperationId { get; init; }
     public RecognitionResult? Result { get; init; }
     public UsageDocument? Usage { get; init; }
     public string? UsageError { get; init; }

@@ -12,7 +12,7 @@
             Background="{ThemeResource PillBackgroundBrush}" BorderBrush="{ThemeResource AppTextBrush}">
         <!-- The native composition pill draws the visible overlay. This region-empty host sizes the
              window and resolves the theme text colour from BorderBrush for high-contrast drawing. -->
-        <Border x:Name="PillBorder" Width="220" Height="56" Background="Transparent"
+        <Border x:Name="PillBorder" Width="220" Height="56" Background="{ThemeResource PillBackdropFillBrush}"
                 BorderBrush="{ThemeResource PillStrokeBrush}" BorderThickness="0"
                 CornerRadius="28" HorizontalAlignment="Center">
             <StackPanel x:Name="WaveBars" HorizontalAlignment="Center" Background="{ThemeResource PillWaveBrush}"

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Show microphone permission guidance in a compact, dismissible overlay without
+  moving page content. Open Settings to show the guidance again.
+- Restore Kroko English Community 64-L Q8 downloads and streaming dictation,
+  with per-request custom hotwords and decoder-aware device qualification.
+- Separate Home history ownership and typed card projections from dictation
+  controls. Reuse one adaptive Settings row. Derive shared theme roles from a
+  canonical palette. Correct High Contrast selection visibility, dark caption
+  contrast, localized history times, and recycled Dictionary action labels.
+  Keep bounded page lists reachable when warnings reduce the window height.
 - Match the Pencil AnsibleDesign Home and Settings layouts in light and dark
   mode with a Mica window base. Keep the existing Windows font. Centralize semantic colors, typography,
   spacing, and control styles in `Ansible/DesignTokens.xaml`, with separate brand

@@ -35,7 +35,7 @@ public static partial class DeviceBenchmarkWorker
                 if (audio.SampleRate != 16000 || audio.Channels != 1 || audio.Samples.Length > 16000 * 30)
                     throw new InvalidDataException("Benchmark requires at most 30 seconds of public 16 kHz mono audio.");
                 var milliseconds = await engine.BenchmarkAsync(model, audio,
-                    new RecognitionOptions(Backend: request.Backend, DeviceIndex: request.Device), request.Mode, request.History);
+                    CreateOptions(request, model), request.Mode, request.History);
                 result = new(request.Backend, milliseconds, null);
             }
             finally
@@ -51,6 +51,15 @@ public static partial class DeviceBenchmarkWorker
         }
         Console.WriteLine(DeviceBenchmark.ResultPrefix + JsonSerializer.Serialize(result, DeviceBenchmarkJson.Default.DeviceBenchmarkResult));
         return result.Working ? 0 : 1;
+    }
+
+    internal static RecognitionOptions CreateOptions(DeviceBenchmarkRequest request, AudioModel model)
+    {
+        if (request.UseDictionary && (model.Family != "kroko_asr" || !model.SupportsCustomDictionary))
+            throw new InvalidDataException("Hotword qualification requires the Kroko dictionary adapter.");
+        // Benchmark public wording, never place the user's vocabulary in worker arguments or caches.
+        return new(CustomDictionary: request.UseDictionary ? "Mother Nature" : "",
+            Backend: request.Backend, DeviceIndex: request.Device);
     }
 
     internal static DeviceBenchmarkResult ClassifyFailure(NativeBackend backend, Exception error)

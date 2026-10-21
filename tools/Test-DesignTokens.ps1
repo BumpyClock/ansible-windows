@@ -44,6 +44,10 @@ foreach ($themeDictionary in $themeDictionaries) {
     }
     $themeKeySets[$themeName] = $themeKeySet
 }
+$rootKeySet = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+foreach ($node in $tokenDocument.SelectNodes('/*/*[@x:Key]', $namespaceManager)) {
+    [void]$rootKeySet.Add($node.GetAttribute('Key', $namespaceManager.LookupNamespace('x')))
+}
 
 $failures = [System.Collections.Generic.List[string]]::new()
 function Assert-Condition {
@@ -67,6 +71,9 @@ $typedDimensions = @{
     'SettingsSegmentCornerRadius' = 'CornerRadius'
     'SettingsSegmentTrackPadding' = 'Thickness'
     'SettingsSegmentTrackCornerRadius' = 'CornerRadius'
+    'SettingsRowRowSpacing' = 'Double'
+    'SettingsRowDescriptionSpacing' = 'Double'
+    'SettingsRowDescriptionMaxWidth' = 'Double'
 }
 foreach ($entry in $typedDimensions.GetEnumerator()) {
     $node = $tokenDocument.SelectSingleNode("//*[@x:Key='$($entry.Key)']", $namespaceManager)
@@ -105,9 +112,86 @@ foreach ($file in $xamlFiles) {
 }
 
 $semanticBrushKeys = @($tokenKeys | Where-Object { $_ -match '^(?:App|Pill|Brand).+Brush$' })
+$highContrastKeySet = $themeKeySets['HighContrast']
+$systemAwareRootBrushKeys = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+foreach ($node in $tokenDocument.SelectNodes('/*/*[@x:Key and @Color]', $namespaceManager)) {
+    $key = $node.GetAttribute('Key', $namespaceManager.LookupNamespace('x'))
+    if ($key -match '^(?:App|Pill|Brand).+Brush$' -and $node.GetAttribute('Color') -match 'SystemColor') {
+        [void]$systemAwareRootBrushKeys.Add($key)
+    }
+}
 foreach ($themeName in @('Light', 'Dark', 'HighContrast')) {
-    foreach ($key in $semanticBrushKeys) {
-        Assert-Condition $themeKeySets[$themeName].Contains($key) "$themeName theme is missing semantic brush '$key'."
+    Assert-Condition $themeKeySets.ContainsKey($themeName) "$themeName theme dictionary is unavailable for semantic brush coverage."
+}
+foreach ($key in $semanticBrushKeys | Sort-Object -Unique) {
+    $isShared = $rootKeySet.Contains($key)
+    if ($isShared) {
+        $hasHighContrastOverride = $themeKeySets.ContainsKey('HighContrast') -and $highContrastKeySet.Contains($key)
+        $hasSystemAwareFallback = $systemAwareRootBrushKeys.Contains($key)
+        Assert-Condition ($hasHighContrastOverride -or $hasSystemAwareFallback) "Shared semantic brush '$key' must have a HighContrast override or an explicit system-aware root fallback."
+    } else {
+        $isThemeComplete = $true
+        foreach ($themeName in @('Light', 'Dark', 'HighContrast')) {
+            if (-not $themeKeySets.ContainsKey($themeName) -or -not $themeKeySets[$themeName].Contains($key)) {
+                $isThemeComplete = $false
+                break
+            }
+        }
+        Assert-Condition $isThemeComplete "Semantic brush '$key' must be shared or overridden in every theme."
+    }
+}
+
+# The shared semantic brush layer is an alias map over canonical palette roles.
+# Read each root resource once so Light and Dark cannot drift independently.
+$sharedBrushAliases = @{
+    'TextFillColorPrimaryBrush' = 'AppTextColor'
+    'TextFillColorSecondaryBrush' = 'AppSecondaryTextColor'
+    'TextFillColorTertiaryBrush' = 'AppMutedTextColor'
+    'ControlFillColorDefaultBrush' = 'AppControlColor'
+    'ControlFillColorSecondaryBrush' = 'AppHoverColor'
+    'CardBackgroundFillColorDefaultBrush' = 'AppCardColor'
+    'CardBackgroundFillColorSecondaryBrush' = 'AppSurfaceColor'
+    'CardBackgroundFillColorTertiaryBrush' = 'AppBackgroundColor'
+    'AccentFillColorDefaultBrush' = 'BrandAccentColor'
+    'AccentFillColorSecondaryBrush' = 'BrandAccentStrongColor'
+    'AccentFillColorTertiaryBrush' = 'BrandAccentSoftColor'
+}
+foreach ($alias in $sharedBrushAliases.GetEnumerator()) {
+    $brush = $tokenDocument.SelectSingleNode("/*/*[@x:Key='$($alias.Key)']", $namespaceManager)
+    $expected = "{ThemeResource $($alias.Value)}"
+    Assert-Condition ($null -ne $brush -and $brush.GetAttribute('Color') -eq $expected) `
+        "Shared semantic brush '$($alias.Key)' must alias canonical color '$($alias.Value)'."
+}
+
+$highContrastBrushAliases = @{
+    'AppSegmentSelectedBrush' = 'SystemColorHighlightColor'
+    'AppSelectedTextBrush' = 'SystemColorHighlightTextColor'
+    'AppSelectedIconBrush' = 'SystemColorHighlightTextColor'
+}
+$highContrastNode = $tokenDocument.SelectSingleNode("//*[local-name()='ResourceDictionary' and @x:Key='HighContrast']", $namespaceManager)
+foreach ($alias in $highContrastBrushAliases.GetEnumerator()) {
+    $brush = $highContrastNode.SelectSingleNode("./*[@x:Key='$($alias.Key)']", $namespaceManager)
+    $expected = "{ThemeResource $($alias.Value)}"
+    Assert-Condition ($null -ne $brush -and $brush.GetAttribute('Color') -eq $expected) `
+        "HighContrast semantic brush '$($alias.Key)' must alias '$($alias.Value)'."
+}
+
+$removedPaletteCopies = @(
+    'TextFillColorPrimary', 'TextFillColorSecondary', 'TextFillColorTertiary', 'TextFillColorDisabled',
+    'TextOnAccentFillColorPrimary', 'TextOnAccentFillColorSecondary',
+    'ControlFillColorDefault', 'ControlFillColorSecondary', 'ControlFillColorTertiary',
+    'ControlStrongFillColorDefault', 'ControlStrongFillColorDisabled',
+    'ControlStrokeColorDefault', 'ControlStrokeColorSecondary', 'ControlStrokeColorOnAccent', 'ControlStrokeColorDisabled',
+    'CardBackgroundFillColorDefault', 'CardBackgroundFillColorSecondary', 'CardBackgroundFillColorTertiary', 'CardStrokeColorDefault',
+    'LayerFillColorDefault', 'LayerFillColorAlt', 'LayerFillColorDisabled',
+    'SubtleFillColorTransparent', 'SubtleFillColorSecondary', 'SubtleFillColorTertiary', 'SubtleFillColorDisabled',
+    'DividerStrokeColorDefault', 'DividerStrokeColorSecondary',
+    'AccentFillColorDefault', 'AccentFillColorSecondary', 'AccentFillColorTertiary',
+    'AccentTextFillColorPrimary', 'AccentTextFillColorTertiary', 'AccentTextFillColorDisabled'
+)
+foreach ($themeName in @('Light', 'Dark')) {
+    foreach ($key in $removedPaletteCopies) {
+        Assert-Condition (-not $themeKeySets[$themeName].Contains($key)) "$themeName keeps copied semantic color '$key'; use the canonical palette color through its brush alias."
     }
 }
 
@@ -157,7 +241,7 @@ foreach ($page in Get-ChildItem -LiteralPath (Join-Path $RepoRoot 'Ansible') -Fi
 }
 
 if ($failures.Count -gt 0) {
-    $failures | ForEach-Object { Write-Error $_ }
+    $failures | ForEach-Object { Write-Error $_ -ErrorAction Continue }
     exit 1
 }
 

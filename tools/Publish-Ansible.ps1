@@ -70,7 +70,9 @@ try {
     $resourceMap = $resources.PriInfo.ResourceMap | Where-Object name -EQ $identity.Name
     if (-not $resourceMap) { throw "The package resource index has no map for '$($identity.Name)'." }
     foreach ($xaml in @(
-        "App.xbf", "DesignTokens.xbf", "AppMark.xbf", "PageCanvas.xbf", "DeviceComparisonView.xbf", "MainWindow.xbf", "FloatingDictationWindow.xbf", "MainPage.xbf",
+        "App.xbf", "DesignTokens.xbf", "AppMark.xbf", "PageCanvas.xbf", "DeviceComparisonView.xbf",
+        "SettingsRow.xbf", "HomeHistoryView.xbf", "HomeInsightsView.xbf",
+        "MainWindow.xbf", "FloatingDictationWindow.xbf", "MainPage.xbf",
         "DictationPage.xbf", "ModelManagementPage.xbf", "ModelCard.xbf",
         "MeetingsPage.xbf", "MeetingWindow.xbf", "CustomWordsPage.xbf"
     )) {

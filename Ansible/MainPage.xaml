@@ -4,9 +4,7 @@
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:local="using:Ansible">
     <local:PageCanvas x:Name="SettingsCanvas">
-            <StackPanel x:Name="SettingsLayoutRoot"
-                        Spacing="{StaticResource CardGap}"
-                        SizeChanged="SettingsLayoutRootSizeChanged">
+            <StackPanel Spacing="{StaticResource CardGap}">
                 <StackPanel Spacing="6">
                     <TextBlock Text="Settings" Margin="0" Style="{StaticResource PageTitleStyle}" />
                     <TextBlock Text="Control how Ansible listens, recognizes speech, and protects your data."
@@ -27,22 +25,10 @@
                             <TextBlock Grid.Column="1" Text="Input and insertion" Style="{StaticResource CaptionSecondaryStyle}" />
                         </Grid>
 
-                        <Grid ColumnSpacing="{StaticResource CardGap}" RowSpacing="8">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="5" MaxWidth="620" HorizontalAlignment="Left">
-                                <TextBlock Text="Activation mode" Style="{StaticResource BodyTextBlockStyle}" />
-                                <TextBlock Text="Hold the shortcut while you speak, or press once to start and again to stop."
-                                           TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}" />
-                            </StackPanel>
-                            <Border x:Name="PushToTalkTrack" Grid.Row="1"
-                                    HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                        <local:SettingsRow Title="Activation mode"
+                                            Description="Hold the shortcut while you speak, or press once to start and again to stop."
+                                            CompactAlignment="Left">
+                            <Border x:Name="PushToTalkTrack"
                                     Style="{StaticResource SettingsSegmentTrackStyle}">
                                 <ListBox x:Name="PushToTalkChoice"
                                          Style="{StaticResource SegmentedListBoxStyle}"
@@ -54,24 +40,12 @@
                                     <x:String>Press to start and stop</x:String>
                                 </ListBox>
                             </Border>
-                        </Grid>
+                        </local:SettingsRow>
 
                         <Border Height="1" Background="{ThemeResource AppBorderBrush}" />
 
-                        <Grid ColumnSpacing="{StaticResource CardGap}">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="5" MaxWidth="620" HorizontalAlignment="Left">
-                                <TextBlock Text="Shortcut" Style="{StaticResource BodyTextBlockStyle}" />
-                            </StackPanel>
-                            <StackPanel x:Name="ShortcutControl" Grid.Row="1" Orientation="Horizontal" Spacing="8"
-                                        HorizontalAlignment="Stretch" VerticalAlignment="Center">
+                        <local:SettingsRow Title="Shortcut">
+                            <StackPanel x:Name="ShortcutControl" Orientation="Horizontal" Spacing="8">
                                 <!-- Read-only keycap. Focus or click records a new shortcut; Esc cancels. -->
                                 <!-- Shown only when the shortcut differs from the default. -->
                                 <HyperlinkButton x:Name="ResetShortcutButton" Content="Reset" VerticalAlignment="Center"
@@ -104,26 +78,12 @@
                                              KeyUp="ShortcutKeyUp" LostFocus="ShortcutLostFocus" />
                                 </Grid>
                             </StackPanel>
-                        </Grid>
+                        </local:SettingsRow>
 
                         <Border Height="1" Background="{ThemeResource AppBorderBrush}" />
 
-                        <Grid ColumnSpacing="{StaticResource CardGap}">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="5" MaxWidth="620" HorizontalAlignment="Left">
-                                <TextBlock Text="Text insertion" Style="{StaticResource BodyTextBlockStyle}" />
-                                <TextBlock x:Name="InsertionHelpText" TextWrapping="Wrap"
-                                           Style="{StaticResource CaptionSecondaryStyle}" />
-                            </StackPanel>
-                            <Border x:Name="InsertionTrack" Grid.Row="1"
-                                    HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                        <local:SettingsRow x:Name="InsertionRow" Title="Text insertion" CompactAlignment="Left">
+                            <Border x:Name="InsertionTrack"
                                     Style="{StaticResource SettingsSegmentTrackStyle}">
                                 <ListBox x:Name="InsertionChoice"
                                          Style="{StaticResource SegmentedListBoxStyle}"
@@ -135,24 +95,13 @@
                                     <x:String>Type characters</x:String>
                                 </ListBox>
                             </Border>
-                        </Grid>
+                        </local:SettingsRow>
 
-                        <Grid x:Name="PasteShortcutRow" ColumnSpacing="{StaticResource CardGap}">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="5" MaxWidth="620" HorizontalAlignment="Left">
-                                <TextBlock Text="Destination paste shortcut" Style="{StaticResource BodyTextBlockStyle}" />
-                                <TextBlock Text="Choose the shortcut accepted by the focused editor or terminal. This applies to all paste dictation; it is not detected automatically."
-                                           TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}" />
-                            </StackPanel>
-                            <ComboBox x:Name="PasteShortcutChoice" Grid.Row="1"
-                                      HorizontalAlignment="Stretch"
+                        <local:SettingsRow x:Name="PasteShortcutRow"
+                                            Title="Destination paste shortcut"
+                                            Description="Choose the shortcut accepted by the focused editor or terminal. This applies to all paste dictation; it is not detected automatically."
+                                            WideWidth="{StaticResource SettingsSelectWidth}">
+                            <ComboBox x:Name="PasteShortcutChoice"
                                       AutomationProperties.AutomationId="PasteShortcutChoice"
                                       AutomationProperties.Name="Destination paste shortcut"
                                       SelectionChanged="PasteShortcutChanged">
@@ -160,30 +109,20 @@
                                 <x:String>Shift+Insert</x:String>
                                 <x:String>Ctrl+Shift+V</x:String>
                             </ComboBox>
-                        </Grid>
+                        </local:SettingsRow>
 
-                        <Grid x:Name="TypingGapRow" ColumnSpacing="{StaticResource CardGap}" Visibility="Collapsed">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="5" MaxWidth="620" HorizontalAlignment="Left">
-                                <TextBlock Text="Gap between characters (ms)" Style="{StaticResource BodyTextBlockStyle}" />
-                                <TextBlock Text="0 sends all text at once, which some apps such as Notepad garble. Windows may round short gaps up to about 15 ms."
-                                           TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}" />
-                            </StackPanel>
-                            <NumberBox x:Name="TypingGapBox" Grid.Row="1"
-                                       HorizontalAlignment="Stretch"
+                        <local:SettingsRow x:Name="TypingGapRow"
+                                            Visibility="Collapsed"
+                                            Title="Gap between characters (ms)"
+                                            Description="0 sends all text at once, which some apps such as Notepad garble. Windows may round short gaps up to about 15 ms."
+                                            WideWidth="{StaticResource SettingsNumberWidth}">
+                            <NumberBox x:Name="TypingGapBox"
                                        AutomationProperties.AutomationId="TypingGapBox"
                                        AutomationProperties.Name="Gap between typed characters in milliseconds"
                                        Minimum="0" Maximum="200" SmallChange="5" LargeChange="20"
                                        SpinButtonPlacementMode="Inline" ValidationMode="InvalidInputOverwritten"
                                        ValueChanged="TypingGapChanged" />
-                        </Grid>
+                        </local:SettingsRow>
                     </StackPanel>
                 </Border>
 
@@ -198,71 +137,36 @@
                             <TextBlock Grid.Column="1" Text="Applies to the next dictation" Style="{StaticResource CaptionSecondaryStyle}" />
                         </Grid>
 
-                        <Grid ColumnSpacing="{StaticResource CardGap}">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="5" MaxWidth="620" HorizontalAlignment="Left">
-                                <TextBlock Text="Microphone boost (dB)" Style="{StaticResource BodyTextBlockStyle}" />
-                                <TextBlock Text="For quiet speech or whispering. 0 is off; try 6 or 12 dB first. Higher boost also raises background noise and can distort louder speech."
-                                           TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}" />
-                            </StackPanel>
-                            <NumberBox x:Name="MicrophoneBoostBox" Grid.Row="1"
-                                       HorizontalAlignment="Stretch"
+                        <local:SettingsRow Title="Microphone boost (dB)"
+                                            Description="For quiet speech or whispering. 0 is off; try 6 or 12 dB first. Higher boost also raises background noise and can distort louder speech."
+                                            WideWidth="{StaticResource SettingsNumberWidth}">
+                            <NumberBox x:Name="MicrophoneBoostBox"
                                        AutomationProperties.AutomationId="MicrophoneBoostBox"
                                        AutomationProperties.Name="Microphone boost in decibels"
                                        AutomationProperties.HelpText="0 is off. Applies to the next microphone dictation."
                                        Minimum="0" Maximum="24" SmallChange="6" LargeChange="12"
                                        SpinButtonPlacementMode="Inline" ValidationMode="InvalidInputOverwritten"
                                        ValueChanged="MicrophoneBoostChanged" />
-                        </Grid>
+                        </local:SettingsRow>
 
                         <Border Height="1" Background="{ThemeResource AppBorderBrush}" />
 
-                        <Grid ColumnSpacing="{StaticResource CardGap}">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="5" MaxWidth="620" HorizontalAlignment="Left">
-                                <TextBlock Text="Language hint" Style="{StaticResource BodyTextBlockStyle}" />
-                                <TextBlock Text="Leave this empty to use the model default."
-                                           TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}" />
-                            </StackPanel>
-                            <TextBox x:Name="LanguageBox" Grid.Row="1"
-                                     HorizontalAlignment="Stretch"
+                        <local:SettingsRow Title="Language hint"
+                                            Description="Leave this empty to use the model default."
+                                            WideWidth="{StaticResource SettingsLanguageWidth}">
+                            <TextBox x:Name="LanguageBox"
                                      AutomationProperties.Name="Language hint" PlaceholderText="Model default"
                                      TextChanged="LanguageChanged" />
-                        </Grid>
+                        </local:SettingsRow>
 
                         <Border Height="1" Background="{ThemeResource AppBorderBrush}" />
 
-                        <Grid ColumnSpacing="{StaticResource CardGap}">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="5" MaxWidth="620" HorizontalAlignment="Left">
-                                <TextBlock Text="Recognition processor" Style="{StaticResource BodyTextBlockStyle}" />
-                                <TextBlock x:Name="BackendHint"
-                                           Text="Auto compares CPU and GPU using a bundled speech sample, then remembers the faster working device for each model. Audio stays local."
-                                           TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}" />
-                            </StackPanel>
-                            <Border x:Name="BackendTrack" Grid.Row="1"
-                                    HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                        <local:SettingsRow x:Name="BackendRow"
+                                            Title="Recognition processor"
+                                            Description="Auto compares CPU and GPU using a bundled speech sample, then remembers the faster working device for each model. Audio stays local."
+                                            CompactAlignment="Left"
+                                            WideWidth="{StaticResource SettingsProcessorWidth}">
+                            <Border x:Name="BackendTrack"
                                     Style="{StaticResource SettingsSegmentTrackStyle}">
                                 <ListBox x:Name="BackendChoice"
                                          Style="{StaticResource SegmentedListBoxStyle}"
@@ -275,7 +179,7 @@
                                     <x:String>Vulkan</x:String>
                                 </ListBox>
                             </Border>
-                        </Grid>
+                        </local:SettingsRow>
 
                         <local:DeviceComparisonView x:Name="DeviceComparison" />
                     </StackPanel>

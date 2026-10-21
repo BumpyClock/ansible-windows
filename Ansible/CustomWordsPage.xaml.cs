@@ -13,7 +13,7 @@ public sealed partial class CustomWordsPage : Page
 
     private readonly DictationSession _session;
     private readonly Action _openModels;
-    private readonly ObservableCollection<string> _words = [];
+    private readonly ObservableCollection<DictionaryWord> _words = [];
     private UiSessionObserver? _observer;
     private SessionSnapshot _state;
     private string? _renderedDictionary;
@@ -76,9 +76,10 @@ public sealed partial class CustomWordsPage : Page
             .Order(StringComparer.CurrentCultureIgnoreCase).ToArray();
         // Preserve unchanged rows so dictionary updates do not discard their focused controls.
         for (var index = _words.Count - 1; index >= 0; index--)
-            if (!filtered.Contains(_words[index], StringComparer.Ordinal)) _words.RemoveAt(index);
+            if (!filtered.Contains(_words[index].Word, StringComparer.Ordinal)) _words.RemoveAt(index);
         for (var index = 0; index < filtered.Length; index++)
-            if (index >= _words.Count || _words[index] != filtered[index]) _words.Insert(index, filtered[index]);
+            if (index >= _words.Count || _words[index].Word != filtered[index])
+                _words.Insert(index, new DictionaryWord(filtered[index]));
         CountText.Text = query.Length == 0
             ? $"{entries.Length} of {CustomVocabulary.MaximumEntries} entries"
             : $"{filtered.Length} of {entries.Length} entries shown";
@@ -213,7 +214,7 @@ public sealed partial class CustomWordsPage : Page
     {
         if (!_state.IsIdle || sender is not Button { Tag: string word }) return;
         var before = _state.Settings.CustomDictionary;
-        var index = _words.IndexOf(word);
+        var index = _words.IndexOf(new DictionaryWord(word));
         string after;
         try { after = CustomVocabulary.RemoveEntry(before, word); }
         catch (InvalidOperationException error) { _session.ReportUiError(error); return; }
@@ -244,12 +245,9 @@ public sealed partial class CustomWordsPage : Page
         if (WordsList is not null) RenderWords();
     }
 
-    private void RowButtonLoaded(object sender, RoutedEventArgs args)
+    private void WordsContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
     {
-        if (sender is not Button { Tag: string word } button) return;
-        var action = AutomationProperties.GetAutomationId(button) == "EditCustomWordButton" ? "Edit" : "Remove";
-        AutomationProperties.SetName(button, $"{action} {word}");
-        if (WordsList.ContainerFromItem(word) is ListViewItem container) container.IsEnabled = _state.IsIdle;
+        if (!args.InRecycleQueue) args.ItemContainer.IsEnabled = _state.IsIdle;
     }
 
     private void ModelsClicked(object sender, RoutedEventArgs args) => _openModels();

@@ -5,64 +5,61 @@ namespace Ansible.Tests;
 public sealed partial class DictationSessionTests
 {
     [Fact]
-    public async Task HistoryCanDistinguishCompletionFromCancellationAndANewOperation()
+    public async Task SuccessfulDictationDeliversOneTypedCompletionAndCancellationDeliversNone()
     {
         var session = Create(new FakeEngine());
         try
         {
             await session.InitializeAsync();
+            var completions = new List<DictationCompletion>();
+            session.DictationCompleted += completions.Add;
             var completed = session.StartDictationAsync();
             await WaitForStateAsync(session, DictationPhase.Recording);
-            Assert.Null(session.State.Outcome);
             await session.FinishAsync();
             Assert.Equal(SessionOutcomeKind.Completed, (await completed).Kind);
-            Assert.Equal(SessionOutcomeKind.Completed, session.State.Outcome);
-            Assert.NotNull(session.State.CompletedAt);
-            Assert.Equal(session.Elapsed, session.State.Elapsed);
+            var completion = Assert.Single(completions);
+            Assert.Equal(session.State.OperationId, completion.OperationId);
+            Assert.Equal("test", completion.ModelId);
+            Assert.Equal(session.Elapsed, completion.Elapsed);
+            Assert.NotEqual(default, completion.CompletedAt);
 
             var cancelled = session.StartDictationAsync();
             await WaitForStateAsync(session, DictationPhase.Recording);
-            Assert.Null(session.State.Outcome);
-            Assert.Null(session.State.CompletedAt);
-            Assert.Equal(TimeSpan.Zero, session.State.Elapsed);
             await session.CancelAsync();
             Assert.Equal(SessionOutcomeKind.Cancelled, (await cancelled).Kind);
-            Assert.Equal(SessionOutcomeKind.Cancelled, session.State.Outcome);
+            Assert.Single(completions);
         }
         finally { await session.CloseAsync(); }
     }
 
     [Fact]
-    public async Task CompletedOutcomeWaitsForTerminalSnapshotPublicationBeforeNextOperation()
+    public async Task CompletionIsDeliveredAfterTerminalSnapshotPublication()
     {
         var session = Create(new FakeEngine());
         try
         {
             await session.InitializeAsync();
-            Task<SessionOutcome>? completion = null;
-            var terminalPublished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            var completedBeforePublication = false;
+            var terminalPublished = false;
+            var delivered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            session.DictationCompleted += _ =>
+            {
+                Assert.True(terminalPublished);
+                delivered.TrySetResult();
+            };
             session.StateChanged += state =>
             {
-                if (state.Activity == SessionActivity.Dictation && state.Outcome == SessionOutcomeKind.Completed)
-                {
-                    if (terminalPublished.TrySetResult())
-                        completedBeforePublication = completion?.IsCompleted == true;
-                }
+                if (state.Activity == SessionActivity.Dictation && state.Phase == DictationPhase.Ready && state.Result is not null)
+                    terminalPublished = true;
             };
 
-            completion = session.StartDictationAsync();
+            var completion = session.StartDictationAsync();
             await WaitForStateAsync(session, DictationPhase.Recording);
             await session.FinishAsync();
-            await terminalPublished.Task.WaitAsync(TimeSpan.FromSeconds(2));
-
-            Assert.False(completedBeforePublication);
+            await delivered.Task.WaitAsync(TimeSpan.FromSeconds(2));
             Assert.Equal(SessionOutcomeKind.Completed, (await completion).Kind);
-            Assert.Equal(SessionOutcomeKind.Completed, session.State.Outcome);
 
             var next = session.StartDictationAsync();
             await WaitForStateAsync(session, DictationPhase.Recording);
-            Assert.Null(session.State.Outcome);
             await session.CancelAsync();
             Assert.Equal(SessionOutcomeKind.Cancelled, (await next).Kind);
         }
@@ -80,16 +77,52 @@ public sealed partial class DictationSessionTests
         try
         {
             await session.InitializeAsync();
+            var completions = 0;
+            session.DictationCompleted += _ => completions++;
             var operation = session.StartDictationAsync();
             await WaitForStateAsync(session, DictationPhase.Recording);
             await session.FinishAsync();
             Assert.Equal(SessionOutcomeKind.Failed, (await operation).Kind);
-            Assert.Equal(SessionOutcomeKind.Failed, session.State.Outcome);
+            Assert.Equal(0, completions);
         }
         finally
         {
             capture.FailDisposal = false;
             await session.CloseAsync();
         }
+    }
+
+    [Fact]
+    public async Task TranscriptProvenanceSurvivesReconnectAndModelMaintenance()
+    {
+        var first = new FakeEngine { Result = new("first transcript", "first transcript") };
+        var second = new FakeEngine();
+        var third = new FakeEngine();
+        var engines = new Queue<IRecognitionEngine>([first, second, third]);
+        var session = new DictationSession(_ => engines.Dequeue(), new FakeCaptureFactory(), new FakeInput(),
+            new FakeUsageStore(), "models", new FakeSettingsStore());
+        try
+        {
+            await session.InitializeAsync();
+            var operation = session.StartDictationAsync();
+            await WaitForStateAsync(session, DictationPhase.Recording);
+            await session.FinishAsync();
+            Assert.Equal(SessionOutcomeKind.Completed, (await operation).Kind);
+
+            var transcriptId = session.State.TranscriptOperationId;
+            Assert.Equal(session.State.OperationId, transcriptId);
+            Assert.Equal("first transcript", session.State.Transcript);
+
+            await session.ConnectAsync("models");
+            Assert.Equal("first transcript", session.State.Transcript);
+            Assert.Equal(transcriptId, session.State.TranscriptOperationId);
+            Assert.NotEqual(transcriptId, session.State.OperationId);
+
+            await session.MaintainModelsAsync(_ => Task.CompletedTask);
+            Assert.Equal("first transcript", session.State.Transcript);
+            Assert.Equal(transcriptId, session.State.TranscriptOperationId);
+            Assert.NotEqual(transcriptId, session.State.OperationId);
+        }
+        finally { await session.CloseAsync(); }
     }
 }

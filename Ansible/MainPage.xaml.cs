@@ -21,7 +21,6 @@ public sealed partial class MainPage : Page
     private UiSessionObserver? _observer;
     private SessionSnapshot _state;
     private bool _rendering;
-    private bool? _wideSettingsLayout;
 
     internal MainPage(DictationSession session, AppPaths paths, Func<nint> windowHandle,
         Action<DictationShortcut> changeHotkey, Action<bool> changeMode, Action<bool> captureShortcut)
@@ -45,7 +44,6 @@ public sealed partial class MainPage : Page
         _rendering = false;
         Loaded += (_, _) =>
         {
-            ApplySettingsLayout(HasWideSettingsContent(SettingsLayoutRoot.ActualWidth));
             _observer = new UiSessionObserver(session, DispatcherQueue, state => { _state = state; Render(); });
         };
         Unloaded += (_, _) =>
@@ -53,59 +51,6 @@ public sealed partial class MainPage : Page
             EndShortcutCapture();
             _observer?.Dispose(); _observer = null;
         };
-    }
-
-    private void SettingsLayoutRootSizeChanged(object sender, SizeChangedEventArgs args)
-        => ApplySettingsLayout(HasWideSettingsContent(args.NewSize.Width));
-
-    private bool HasWideSettingsContent(double width)
-        => width >= SettingsDimension("SettingsWideMinWidth");
-
-    private static double SettingsDimension(string key)
-        => (double)Application.Current.Resources[key];
-
-    private void ApplySettingsLayout(bool wide)
-    {
-        if (_wideSettingsLayout == wide) { return; }
-        _wideSettingsLayout = wide;
-
-        Grid.SetColumn(PushToTalkTrack, wide ? 1 : 0);
-        Grid.SetRow(PushToTalkTrack, wide ? 0 : 1);
-        PushToTalkTrack.HorizontalAlignment = wide ? HorizontalAlignment.Right : HorizontalAlignment.Left;
-
-        Grid.SetColumn(ShortcutControl, wide ? 1 : 0);
-        Grid.SetRow(ShortcutControl, wide ? 0 : 1);
-        ShortcutControl.HorizontalAlignment = wide ? HorizontalAlignment.Right : HorizontalAlignment.Stretch;
-
-        Grid.SetColumn(InsertionTrack, wide ? 1 : 0);
-        Grid.SetRow(InsertionTrack, wide ? 0 : 1);
-        InsertionTrack.HorizontalAlignment = wide ? HorizontalAlignment.Right : HorizontalAlignment.Left;
-
-        Grid.SetColumn(PasteShortcutChoice, wide ? 1 : 0);
-        Grid.SetRow(PasteShortcutChoice, wide ? 0 : 1);
-        PasteShortcutChoice.HorizontalAlignment = wide ? HorizontalAlignment.Right : HorizontalAlignment.Stretch;
-        PasteShortcutChoice.Width = wide ? SettingsDimension("SettingsSelectWidth") : double.NaN;
-
-        Grid.SetColumn(TypingGapBox, wide ? 1 : 0);
-        Grid.SetRow(TypingGapBox, wide ? 0 : 1);
-        TypingGapBox.HorizontalAlignment = wide ? HorizontalAlignment.Right : HorizontalAlignment.Stretch;
-        TypingGapBox.Width = wide ? SettingsDimension("SettingsNumberWidth") : double.NaN;
-
-        Grid.SetColumn(MicrophoneBoostBox, wide ? 1 : 0);
-        Grid.SetRow(MicrophoneBoostBox, wide ? 0 : 1);
-        MicrophoneBoostBox.HorizontalAlignment = wide ? HorizontalAlignment.Right : HorizontalAlignment.Stretch;
-        MicrophoneBoostBox.Width = wide ? SettingsDimension("SettingsNumberWidth") : double.NaN;
-
-        Grid.SetColumn(LanguageBox, wide ? 1 : 0);
-        Grid.SetRow(LanguageBox, wide ? 0 : 1);
-        LanguageBox.HorizontalAlignment = wide ? HorizontalAlignment.Right : HorizontalAlignment.Stretch;
-        LanguageBox.Width = wide ? SettingsDimension("SettingsLanguageWidth") : double.NaN;
-
-        Grid.SetColumn(BackendTrack, wide ? 1 : 0);
-        Grid.SetRow(BackendTrack, wide ? 0 : 1);
-        BackendTrack.HorizontalAlignment = wide ? HorizontalAlignment.Right : HorizontalAlignment.Left;
-        BackendTrack.MinWidth = wide ? SettingsDimension("SettingsProcessorWidth") : 0;
-        BackendTrack.Width = double.NaN;
     }
 
     private void Render()
@@ -123,7 +68,7 @@ public sealed partial class MainPage : Page
                 NativeBackend.Vulkan => 2,
                 _ => throw new InvalidDataException("The recognition processor setting is invalid.")
             };
-            BackendHint.Text = _state.Settings.Backend == NativeBackend.Auto
+            BackendRow.Description = _state.Settings.Backend == NativeBackend.Auto
                 ? string.IsNullOrEmpty(_state.DeviceSelectionSummary)
                     ? "Auto compares CPU and GPU using a bundled speech sample, then remembers the faster working device for each model. The first preparation takes longer. Audio stays local."
                     : $"Last device comparison: {_state.DeviceSelectionSummary}"
@@ -158,7 +103,7 @@ public sealed partial class MainPage : Page
         var typing = _state.Settings.InsertionMethod == TextInsertionMethod.Type;
         InsertionChoice.SelectedIndex = typing ? 1 : 0;
         InsertionChoice.IsEnabled = idle;
-        InsertionHelpText.Text = typing
+        InsertionRow.Description = typing
             ? "Types one character at a time. Use this for apps that block paste."
             : "Replaces your clipboard with dictated text and sends the selected paste shortcut. The text stays available for apps that paste later. Requests exclusion from clipboard history and cloud sync. Use Type characters to preserve your clipboard.";
         PasteShortcutRow.Visibility = typing ? Visibility.Collapsed : Visibility.Visible;

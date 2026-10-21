@@ -246,6 +246,7 @@ public sealed partial class FloatingDictationWindow : Window
             var foreground = ((SolidColorBrush)PreviewRoot.BorderBrush).Color;
             _pill.Configure(bounds.X + shape.Item1, bounds.Y + shape.Item2, pillWidth, pillHeight,
                 scale, foreground, ((SolidColorBrush)PreviewRoot.Background).Color,
+                ((SolidColorBrush)PillBorder.Background).Color,
                 ((SolidColorBrush)PillBorder.BorderBrush).Color, ((SolidColorBrush)WaveBars.Background).Color,
                 _accessibility.HighContrast,
                 _settings.AdvancedEffectsEnabled);
@@ -337,7 +338,7 @@ public sealed partial class FloatingDictationWindow : Window
         private double _scale;
         // Logical pixels. The bar row is centred in the pill.
         private const double BarWidth = 3, BarGap = 3;
-        private (int Width, int Height, double Scale, Windows.UI.Color Foreground, Windows.UI.Color Background,
+        private (int Width, int Height, double Scale, Windows.UI.Color Foreground, Windows.UI.Color Background, Windows.UI.Color BackdropFill,
             Windows.UI.Color Stroke, Windows.UI.Color Wave, bool Contrast, bool Effects) _style;
 
         public NativeCompositionPill(nint owner, Action dismiss, Action<Task> retainCleanup)
@@ -417,12 +418,12 @@ public sealed partial class FloatingDictationWindow : Window
         }
 
         public void Configure(int x, int y, int width, int height, double scale,
-            Windows.UI.Color foreground, Windows.UI.Color background, Windows.UI.Color stroke,
+            Windows.UI.Color foreground, Windows.UI.Color background, Windows.UI.Color backdropFill, Windows.UI.Color stroke,
             Windows.UI.Color wave, bool contrast, bool effects)
         {
             if (_disposed) { return; }
             _scale = scale;
-            var style = (width, height, scale, foreground, background, stroke, wave, contrast, effects);
+            var style = (width, height, scale, foreground, background, backdropFill, stroke, wave, contrast, effects);
             if (_style != style)
             {
                 _style = style;
@@ -445,8 +446,7 @@ public sealed partial class FloatingDictationWindow : Window
                 else { _backdrop.Brush = _compositor.CreateColorBrush(Windows.UI.Color.FromArgb(0, 0, 0, 0)); }
                 // Translucent fill and a faint hairline over the blurred host backdrop. Without the
                 // backdrop, and in high contrast, use an opaque fill and the window text colour.
-                var fill = background;
-                if (!backdrop) fill.A = byte.MaxValue;
+                var fill = backdrop ? backdropFill : background;
                 _outline.FillBrush = _compositor.CreateColorBrush(fill);
                 _outline.StrokeBrush = _compositor.CreateColorBrush(!backdrop ? foreground : stroke);
                 _outline.StrokeThickness = (float)scale;

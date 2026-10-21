@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl x:Class="Ansible.HomeHistoryView"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:local="using:Ansible"
+      xmlns:muxc="using:Microsoft.UI.Xaml.Controls">
+    <Border x:Name="HistoryCard" Style="{StaticResource CardStyle}" Padding="0">
+        <Grid RowSpacing="0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <Border x:Name="HistoryHeader" Padding="{StaticResource HistoryHeaderPadding}" BorderBrush="{ThemeResource AppBorderBrush}"
+                    BorderThickness="0,0,0,1" VerticalAlignment="Center">
+                <Grid x:Name="HistoryHeaderGrid" ColumnSpacing="12" SizeChanged="HistoryHeaderSizeChanged">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="{StaticResource HistorySearchColumnWidth}" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="HistoryTitle" Text="History" VerticalAlignment="Center" Style="{StaticResource HomeCardTitleStyle}" />
+                    <Border x:Name="HistoryCountPill" Grid.Column="1" Style="{StaticResource HistoryCountStyle}"
+                            ToolTipService.ToolTip="Completed dictations today in this app session.">
+                        <TextBlock x:Name="HistoryCount" Text="0 dictations today" VerticalAlignment="Center" TextWrapping="NoWrap" Style="{StaticResource CaptionSecondaryStyle}" />
+                    </Border>
+                    <TextBox x:Name="HistorySearchBox" Grid.Column="3" Height="36" PlaceholderText="Search transcripts"
+                             TextChanged="HistorySearchChanged" Padding="{StaticResource HistorySearchPadding}"
+                             FontSize="{StaticResource HistorySearchFontSize}" VerticalContentAlignment="Center"
+                             Background="{ThemeResource AppSearchBrush}"
+                             BorderBrush="{ThemeResource AppBorderBrush}" AutomationProperties.Name="Search transcripts">
+                        <TextBox.KeyboardAccelerators>
+                            <KeyboardAccelerator Key="K" Modifiers="Control" Invoked="FocusHistorySearchInvoked" />
+                        </TextBox.KeyboardAccelerators>
+                    </TextBox>
+                    <FontIcon x:Name="HistorySearchIcon" Grid.Column="3" Glyph="&#xE721;"
+                              FontSize="14" HorizontalAlignment="Left" VerticalAlignment="Center"
+                              Margin="12,0,0,0" IsHitTestVisible="False" />
+                    <Border x:Name="HistorySearchShortcut" Grid.Column="3" Style="{StaticResource SearchKeycapStyle}"
+                            HorizontalAlignment="Right" VerticalAlignment="Center" IsHitTestVisible="False">
+                        <TextBlock Text="Ctrl K" Style="{StaticResource SearchKeycapTextStyle}" />
+                    </Border>
+                </Grid>
+            </Border>
+            <ScrollViewer x:Name="HistoryRowsHost" Grid.Row="1"
+                          VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                          VerticalContentAlignment="Stretch">
+                <StackPanel x:Name="HistoryRows" Padding="{StaticResource HistoryListPadding}" Spacing="4"
+                            HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                    <TextBlock x:Name="OversizedNotice" TextWrapping="Wrap" Margin="12,8,12,4"
+                               Style="{StaticResource CaptionSecondaryStyle}" Visibility="Collapsed" />
+                    <muxc:ItemsRepeater x:Name="HistoryItems">
+                        <muxc:ItemsRepeater.Layout>
+                            <muxc:StackLayout Spacing="4" />
+                        </muxc:ItemsRepeater.Layout>
+                        <muxc:ItemsRepeater.ItemTemplate>
+                            <DataTemplate x:DataType="local:HomeHistoryGroup">
+                                <StackPanel Spacing="4">
+                                    <Grid Margin="8,12,8,4" ColumnSpacing="10" VerticalAlignment="Center">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{x:Bind Label}" Style="{StaticResource CaptionSecondaryStyle}" FontWeight="SemiBold" />
+                                        <Border Grid.Column="1" Style="{StaticResource HistoryDividerStyle}" />
+                                    </Grid>
+                                    <muxc:ItemsRepeater ItemsSource="{x:Bind BindableEntries}">
+                                        <muxc:ItemsRepeater.Layout>
+                                            <muxc:StackLayout Spacing="4" />
+                                        </muxc:ItemsRepeater.Layout>
+                                        <muxc:ItemsRepeater.ItemTemplate>
+                                            <DataTemplate x:DataType="local:HomeHistoryEntry">
+                                                <Border Style="{StaticResource HistoryRowStyle}">
+                                                    <Grid ColumnSpacing="16">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="64" />
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Text="{x:Bind TimeText}" Style="{StaticResource CaptionSecondaryStyle}" VerticalAlignment="Top" Margin="0,3,0,0" />
+                                                        <StackPanel Grid.Column="1" Spacing="2">
+                                                            <TextBlock Text="{x:Bind Text}" TextWrapping="Wrap" Style="{StaticResource BodyTextBlockStyle}" LineHeight="22" />
+                                                            <TextBlock Text="{x:Bind MetadataText}" Style="{StaticResource CaptionSecondaryStyle}" Margin="0,4,0,0" />
+                                                        </StackPanel>
+                                                        <Button Grid.Column="2" Width="32" Height="32" Padding="0" Tag="{x:Bind Item}"
+                                                                VerticalAlignment="Top" Click="HistoryCopyClicked"
+                                                                ToolTipService.ToolTip="Copy transcript" AutomationProperties.Name="Copy transcript">
+                                                            <FontIcon Glyph="&#xE8C8;" FontSize="16" />
+                                                        </Button>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </muxc:ItemsRepeater.ItemTemplate>
+                                    </muxc:ItemsRepeater>
+                                </StackPanel>
+                            </DataTemplate>
+                        </muxc:ItemsRepeater.ItemTemplate>
+                    </muxc:ItemsRepeater>
+                    <StackPanel x:Name="EmptyState" Spacing="{StaticResource HistoryEmptyGap}"
+                                HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed">
+                        <TextBlock x:Name="EmptyTitle" TextWrapping="Wrap" HorizontalAlignment="Center" Style="{StaticResource HistoryEmptyTitleStyle}" />
+                        <TextBlock x:Name="EmptyDetail" TextWrapping="Wrap" HorizontalAlignment="Center" Style="{StaticResource HistoryEmptyDetailStyle}" />
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </Border>
+</UserControl>

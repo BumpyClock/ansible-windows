@@ -45,7 +45,7 @@ public sealed record AudioModel
 public static class SpeechContent
 {
     public static bool IsPlainSpeechFamily(string? family) =>
-        family is "moonshine_asr" or "qwen3_asr" or "nemotron_asr";
+        family is "moonshine_asr" or "qwen3_asr" or "nemotron_asr" or "kroko_asr";
 }
 
 public sealed record TranscriptUpdate(string Text, bool IsFinal, string? SpeechText = null)

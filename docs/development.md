@@ -116,8 +116,14 @@ node .\tools\Generate-DesignAssets.cjs
 The generated Windows assets use transparent backgrounds and optical cuts for
 small sizes. Tray artwork is available for future integration; the app does not
 currently create a notification-area icon. In-app history is bounded and held
-only in memory. Session snapshots expose the terminal outcome so failed or
-cancelled operations cannot become successful history entries.
+only in memory. The session emits a typed successful dictation completion after
+cleanup. One app-owned history instance receives it independently of page
+lifetime. History and Insights views consume typed projections; the dictation
+page owns recording and file actions. Failed, cancelled, and unreleased
+operations never enter history. Bounded `PageCanvas` layouts retain a finite minimum
+height and allow outer overflow in short windows, so warnings cannot collapse their lists.
+`SettingsRow` owns the shared adaptive setting
+layout; pages provide labels, descriptions, and controls.
 
 ## Tests
 

@@ -8,7 +8,8 @@ using Microsoft.Win32;
 namespace Ansible.Core;
 
 internal sealed record DeviceBenchmarkRequest(string Library, string Catalog, string Models, string Sample,
-    string ModelId, NativeBackend Backend, int Device, int Threads, int Headroom, string Mode, int History);
+    string ModelId, NativeBackend Backend, int Device, int Threads, int Headroom, string Mode, int History,
+    bool UseDictionary = false);
 
 internal sealed record DeviceBenchmarkResult(NativeBackend Backend, double? Milliseconds, string? Error, bool Fatal = false)
 {
@@ -91,7 +92,7 @@ internal static class DeviceBenchmark
     {
         token.ThrowIfCancellationRequested();
         var identity = new StringBuilder($"benchmark-v3|{modelHash}|{request.ModelId}|{request.Mode}|{request.History}|" +
-            $"{request.Device}|{request.Threads}|{request.Headroom}|{Environment.OSVersion}|{Environment.ProcessorCount}|");
+            $"{request.Device}|{request.Threads}|{request.Headroom}|{request.UseDictionary}|{Environment.OSVersion}|{Environment.ProcessorCount}|");
         identity.Append(HashFile(request.Library, token)).Append('|').Append(HashFile(request.Sample, token));
         // Native dependencies and their contents are part of the compiled backend identity.
         foreach (var path in Directory.EnumerateFiles(Path.GetDirectoryName(request.Library)!, "*.dll").Order(StringComparer.OrdinalIgnoreCase))

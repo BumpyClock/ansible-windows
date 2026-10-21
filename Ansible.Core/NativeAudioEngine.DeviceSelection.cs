@@ -46,7 +46,8 @@ public sealed partial class NativeAudioEngine
             throw new InvalidDataException("Device qualification requires an unchanged admitted model.");
         using var lease = _integrity.OpenVerified(model.ModelPath, entry, token);
         var request = new DeviceBenchmarkRequest(_libraryPath, _catalogPath, ModelsDirectory, _benchmarkSamplePath,
-            model.Id, NativeBackend.Cpu, options.DeviceIndex, _threads, _headroom, mode, history);
+            model.Id, NativeBackend.Cpu, options.DeviceIndex, _threads, _headroom, mode, history,
+            UseDictionary: model.Family == "kroko_asr" && options.CustomDictionary.Length > 0);
         var key = DeviceBenchmark.Key(request, entry.Sha256, token);
         _selectionKeys[(model.Id, mode, history)] = key;
         if (!_deviceSelections.TryGetValue(key, out var selection))

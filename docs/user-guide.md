@@ -6,8 +6,10 @@ See the [README](../README.md#build-and-run) to build and launch the app.
 
 **Home** shows recent completed dictations with timestamps, search, and Copy.
 History stays in memory for this app session. Closing Ansible clears it. The
-history keeps at most 100 entries within a bounded text budget. The current
-transcript remains available separately. Audio is never saved.
+history keeps at most 100 entries within a bounded text budget. Copy completed
+dictations from History. Search can hide entries until you clear its filter.
+WAV results and dictations too large for history remain available in the separate
+transcript area. Audio is never saved.
 
 Use **Dictate** or your configured shortcut to record. Choose the active model
 and use **Transcribe WAV file** on **Models**.
@@ -23,8 +25,10 @@ Compact windows use an icon sidebar, smaller page padding, and stacked controls.
 
 Ansible checks microphone permission at launch, before recording can start. If
 Windows requires consent, the app requests it then. Already granted access does
-not prompt again. If Windows blocks access, the main window shows **Open
-microphone settings** and **Check again**. Enable the applicable microphone
+not prompt again. If Windows blocks access, a compact overlay offers **Open
+settings** and **Check again** without changing page height. Dismiss it to reveal
+the content underneath. Open **Settings** in Ansible to show the guidance again.
+Enable the applicable microphone
 access settings, then return to Ansible. Policy restrictions may require your
 administrator. File transcription and model management remain available.
 
@@ -66,6 +70,7 @@ and in the [catalog](../tools/audio-models.json).
 | `moonshine-tiny` | Microphone and WAV | Final only; English only | Yes |
 | `qwen3-asr-0.6b-q8` | Microphone and WAV | Buffered | Yes |
 | `nemotron-asr-0.6b-q8` | Microphone and WAV | Can produce live previews | Yes, after final recognition |
+| `kroko-en-64l-q8` | Microphone and WAV | Live English previews; custom hotwords | Yes, after final recognition |
 | `vibevoice-streaming-1.5b-q4` | Microphone and WAV | Can produce live previews with annotations | Yes, after final recognition |
 | `vibevoice-asr-7b-q8` | Microphone and WAV | Buffered until Finish; final only | Yes, after final recognition |
 
@@ -201,7 +206,7 @@ remove noise, and loud samples can clip. Reduce it if speech distorts.
 
 ### Language and vocabulary
 
-Leave **Language hint** blank for English-only Moonshine. Other models have
+Leave **Language hint** blank for English-only Moonshine and Kroko. Other models have
 model-dependent language support; individual languages are not qualified by this
 app. Unsupported native options produce an error.
 
@@ -214,7 +219,8 @@ Blank lines are removed, whitespace is normalized, and duplicate entries are
 merged. Limits are 100 unique entries, 100 characters per entry, and 4 KiB of
 UTF-8 text. The page warns if a change could not be saved.
 
-Qwen3-ASR and both VibeVoice models accept this context; offline VibeVoice uses it
+Kroko uses these entries as live English hotwords. Kroko rejects `/` within an
+entry because its decoder treats that character as a separator. Qwen3-ASR and both VibeVoice models accept this context; offline VibeVoice uses it
 only for WAV transcription. Moonshine and Nemotron do not use it. The selected
 model's support is shown on Dictionary. Each operation uses the
 saved list at startup.

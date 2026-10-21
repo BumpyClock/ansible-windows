@@ -13,6 +13,7 @@ public sealed partial class MainWindow : Window
 {
     private readonly DictationSession _session;
     private readonly DictationPage _dictation;
+    private readonly HomeDictationHistory _history;
     private readonly MainPage _settings;
     private readonly ModelManagementPage _models;
     private readonly CustomWordsPage _customWords;
@@ -62,6 +63,7 @@ public sealed partial class MainWindow : Window
     private Task? _microphoneSettingsTask;
     private bool _launchReady;
     private bool _permissionCheckComplete;
+    private MicrophonePermissionStatus? _dismissedMicrophonePermissionStatus;
 
     internal MainWindow(DictationSession session, AppPaths paths, HttpClient modelDownloads, MicrophonePermissionPreflight microphonePermission)
     {
@@ -71,7 +73,8 @@ public sealed partial class MainWindow : Window
         _paths = paths;
         _meetingStore = new MeetingStore(Path.Combine(Path.GetDirectoryName(paths.Settings)!, "meetings"));
         _meetings = new MeetingsPage(_meetingStore, OpenMeetingAsync, () => WinRT.Interop.WindowNative.GetWindowHandle(this));
-        _dictation = new DictationPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this));
+        _history = new HomeDictationHistory(session);
+        _dictation = new DictationPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this), _history);
         _settings = new MainPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this),
             ChangeHotkey, ChangeDictationMode, CaptureShortcut);
         _models = new ModelManagementPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this), modelDownloads,
@@ -170,17 +173,38 @@ public sealed partial class MainWindow : Window
         if (!_permissionCheckComplete) return;
         var status = _microphonePermission.Status;
         var allowed = status == MicrophonePermissionStatus.Allowed;
-        MicrophonePermissionNotice.IsOpen = !allowed;
-        MicrophonePermissionNotice.Visibility = allowed ? Visibility.Collapsed : Visibility.Visible;
-        MicrophonePermissionNotice.Message = status switch
+        if (allowed || (_dismissedMicrophonePermissionStatus is { } dismissed && dismissed != status))
+            _dismissedMicrophonePermissionStatus = null;
+        MicrophonePermissionMessage.Text = status switch
         {
-            MicrophonePermissionStatus.DeniedByUser => "Enable microphone access for Ansible and desktop apps in Windows Settings, then check again. No audio has been captured by this permission check.",
-            MicrophonePermissionStatus.DeniedBySystem => "Windows blocks microphone access. Enable microphone access in Windows Settings, or contact your administrator.",
-            MicrophonePermissionStatus.NotDeclared => "This package does not declare microphone access. Install an Ansible package with the microphone capability.",
-            MicrophonePermissionStatus.PromptRequired => "Microphone permission has not been granted. Check again to request access.",
-            _ => "Microphone permission could not be checked. Review Windows microphone privacy settings, then check again."
+            MicrophonePermissionStatus.DeniedByUser => "Enable microphone access for Ansible and desktop apps in Windows Settings, then check again.",
+            MicrophonePermissionStatus.DeniedBySystem => "Windows is blocking microphone access. Check Windows Settings or contact your administrator.",
+            MicrophonePermissionStatus.NotDeclared => "This package does not declare microphone access. Install an Ansible package with microphone capability.",
+            MicrophonePermissionStatus.PromptRequired => "Microphone access is required. Check again to request access.",
+            _ => "Microphone access could not be checked. Review Windows privacy settings, then check again."
         };
+        MicrophonePermissionNotice.Visibility = allowed || _dismissedMicrophonePermissionStatus == status
+            ? Visibility.Collapsed : Visibility.Visible;
         CheckMicrophonePermissionButton.IsEnabled = _permissionRetryTask is not { IsCompleted: false };
+    }
+
+    private void MicrophonePermissionNoticeDismissed(object sender, RoutedEventArgs args)
+    {
+        if (_microphonePermission.Status != MicrophonePermissionStatus.Allowed)
+            _dismissedMicrophonePermissionStatus = _microphonePermission.Status;
+        MicrophonePermissionNotice.Visibility = Visibility.Collapsed;
+    }
+
+    private void MicrophonePermissionNoticeSizeChanged(object sender, SizeChangedEventArgs args)
+    {
+        var available = MicrophonePermissionActions.ActualWidth;
+        if (available <= 0) return;
+        var gap = (double)Application.Current.Resources["NavItemGap"];
+        var required = MicrophonePermissionActions.Children.OfType<FrameworkElement>()
+            .Sum(child => child.DesiredSize.Width) + gap * Math.Max(0, MicrophonePermissionActions.Children.Count - 1);
+        var orientation = required <= available ? Orientation.Horizontal : Orientation.Vertical;
+        if (MicrophonePermissionActions.Orientation != orientation)
+            MicrophonePermissionActions.Orientation = orientation;
     }
 
     private async void CheckMicrophonePermissionClicked(object sender, RoutedEventArgs args)
@@ -192,6 +216,7 @@ public sealed partial class MainWindow : Window
 
     private async Task RetryMicrophonePermissionAsync()
     {
+        _dismissedMicrophonePermissionStatus = null;
         CheckMicrophonePermissionButton.IsEnabled = false;
         try { await _microphonePermission.InitializeAsync(_startupCancellation.Token); }
         catch (OperationCanceledException) when (_startupCancellation.IsCancellationRequested) { }
@@ -241,6 +266,11 @@ public sealed partial class MainWindow : Window
 
     private void Navigate(string page)
     {
+        if (page == "settings" && _permissionCheckComplete && _microphonePermission.Status != MicrophonePermissionStatus.Allowed)
+        {
+            _dismissedMicrophonePermissionStatus = null;
+            RenderMicrophonePermission();
+        }
         MainContent.Content = page switch { "settings" => _settings, "dictation" => _dictation, "models" => _models,
             "custom-words" => _customWords, "meetings" => _meetings, _ => _dictation };
         foreach (var (button, indicator) in new[]
@@ -726,6 +756,7 @@ public sealed partial class MainWindow : Window
             foreach (var meeting in meetings) await meeting.session.DisposeAsync();
             foreach (var meeting in _meetingWindows.ToArray()) meeting.window.Close();
             await Task.WhenAll(_session.CloseAsync(), _models.DisposeAsync().AsTask(), _dictation.FinishBackgroundWorkAsync());
+            _history.Dispose();
             if (_captureTask is { } capture)
             {
                 try { await capture; }
@@ -782,6 +813,7 @@ public sealed partial class MainWindow : Window
     {
         _closed = true;
         _dictation.Dispose();
+        _history.Dispose();
         _hotkey?.Dispose();
         _deliveryCancellation.Dispose();
         _startupCancellation.Dispose();

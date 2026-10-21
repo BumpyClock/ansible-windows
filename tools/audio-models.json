@@ -93,6 +93,25 @@
       "bytes": 930625888,
       "sha256": "c58b62c1bdd6c5d7b14b08126c5bd16c1289fee6e0d6ac0761dbd3aa6d714935",
       "license": "OpenMDW-1.1"
+    },
+    {
+      "id": "kroko-en-64l-q8",
+      "display_name": "Kroko English Community 64-L Q8",
+      "description": "English-only streaming speech recognition with live custom hotwords. CPU performance and GPU support are unqualified.",
+      "languages": "English",
+      "precision": "Q8_0",
+      "license_notes": "The Banafo/Kroko-ASR model card labels community weights CC-BY-SA without specifying a version, and its LICENSE file is empty. Confirm exact terms and attribution/ShareAlike obligations before redistribution; the engine license is separate.",
+      "family": "kroko_asr",
+      "supports_custom_dictionary": true,
+      "mode": "streaming",
+      "preview": "live",
+      "repo": "audio-cpp/audio.cpp-gguf",
+      "revision": "351dbab8d8534675ee29440bb402e348b09e55e2",
+      "remote_file": "Kroko-ASR-GGUF/kroko-en-community-64-l-q8_0.gguf",
+      "filename": "kroko-en-community-64-l-q8_0.gguf",
+      "bytes": 167756928,
+      "sha256": "596c749fcb6c582f2d7aaa9aefcff2929e405867a4d04864a55b2c9c2963baa5",
+      "license": "CC-BY-SA"
     }
   ]
 }
