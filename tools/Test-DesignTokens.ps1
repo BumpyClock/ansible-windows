@@ -125,7 +125,6 @@ foreach ($file in $xamlFiles) {
 }
 
 $themeBrushKeys = @($tokenKeys | Where-Object { $_ -match 'Brush$' })
-$highContrastKeySet = $themeKeySets['HighContrast']
 foreach ($themeName in @('Light', 'Dark', 'HighContrast')) {
     Assert-Condition $themeKeySets.ContainsKey($themeName) "$themeName theme dictionary is unavailable for semantic brush coverage."
 }
