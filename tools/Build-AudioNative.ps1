@@ -22,6 +22,39 @@ if ($NativeDirectory) { $output = [IO.Path]::GetFullPath($NativeDirectory) }
 if ($Backend -eq "vulkan") { $runtimeBackends += "vulkan" }
 $sdkVersion = $null
 [object[]]$sourcePatches = @()
+
+# Single source of truth for the native build recipe. Both the real build path and the
+# stage/verify path must derive from these, so a stale record can never be trusted blindly.
+[string[]]$expectedPatchNames = @("audio-vulkan-loader.patch", "audio-nemotron-stream-timestamps.patch")
+[string[]]$expectedModelFamilies = @("moonshine_asr", "vibevoice_asr", "qwen3_asr", "nemotron_asr", "nemotron_3_diar", "kroko_asr")
+
+function Get-ExpectedSourcePatches {
+    @($expectedPatchNames | ForEach-Object {
+        [ordered]@{
+            file = $_
+            sha256 = (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot "patches\$_") -Algorithm SHA256).Hash.ToLowerInvariant()
+        }
+    })
+}
+
+function Assert-RecipeMatchesCurrentExpectations {
+    param($Record)
+    $expectedPatches = Get-ExpectedSourcePatches
+    $recordPatches = @($Record.source_patches)
+    $recordPatchKeys = @($recordPatches | ForEach-Object { "$($_.file)=$($_.sha256)".ToLowerInvariant() } | Sort-Object)
+    $expectedPatchKeys = @($expectedPatches | ForEach-Object { "$($_.file)=$($_.sha256)".ToLowerInvariant() } | Sort-Object)
+    if (@(Compare-Object $expectedPatchKeys $recordPatchKeys).Count -ne 0) {
+        throw "The native runtime record does not match the current patch recipe (expected: $($expectedPatchNames -join ', ')). Rebuild it with .\tools\Build-AudioNative.ps1."
+    }
+    $recordFamilies = @($Record.model_families)
+    $recordFamilySorted = @($recordFamilies | Sort-Object)
+    $expectedFamilySorted = @($expectedModelFamilies | Sort-Object)
+    if (@(Compare-Object $expectedFamilySorted $recordFamilySorted).Count -ne 0) {
+        throw "The native runtime record does not match the current compiled model family set (expected: $($expectedModelFamilies -join ', ')). Rebuild it with .\tools\Build-AudioNative.ps1."
+    }
+    return $expectedPatches
+}
+
 if ($StageRuntimeOnly -or $VerifyRuntimeOnly) {
     $recordPath = Join-Path $output "native-runtime.json"
     if (-not (Test-Path -LiteralPath $recordPath)) { throw "Build the native runtime before staging or verifying it." }
@@ -41,8 +74,12 @@ if ($StageRuntimeOnly -or $VerifyRuntimeOnly) {
         (Get-FileHash -LiteralPath $nativePath -Algorithm SHA256).Hash -ne $nativeRecord[0].sha256) {
         throw "The native DLL does not match its runtime record. Rebuild with .\tools\Build-AudioNative.ps1 -Backend $Backend before staging or publishing."
     }
+    # A DLL that matches its own record's hash only proves internal self-consistency; it says
+    # nothing about whether that record reflects the patches/models this script currently requires.
+    # A stale pre-change record (e.g. missing the diarization/timestamp patch or model family) must
+    # be rejected here rather than silently re-staged or verified as current.
+    $sourcePatches = Assert-RecipeMatchesCurrentExpectations $record
     $sdkVersion = $record.vulkan_sdk
-    $sourcePatches = if ($record.source_patches) { @($record.source_patches) } else { @() }
 }
 if (-not [Environment]::Is64BitProcess -or
     [Runtime.InteropServices.RuntimeInformation]::OSArchitecture -ne [Runtime.InteropServices.Architecture]::X64) {
@@ -151,6 +188,7 @@ function Test-NativeClosure {
             backends = $runtimeBackends
             vulkan_sdk = $sdkVersion
             source_patches = $sourcePatches
+            model_families = $expectedModelFamilies
             cpu_requirements = @("AVX2", "FMA", "F16C", "BMI1", "BMI2", "OS-enabled AVX state")
             windows_prerequisite = "Windows 10 or newer supplies UCRT and Windows API-set imports."
             redist_version = $redistRoot.Name
@@ -215,8 +253,7 @@ if ($LASTEXITCODE -ne 0 -or $commit -ne "795c45fbde0a7d29c93b22199728ff5caaec02e
     throw "The native source is not the expected audio.cpp v0.9.0 commit."
 }
 
-$sourcePatches = @()
-foreach ($patchName in @("audio-vulkan-loader.patch", "audio-nemotron-stream-timestamps.patch")) {
+foreach ($patchName in $expectedPatchNames) {
     $patch = Join-Path $PSScriptRoot "patches\$patchName"
     $patchCheck = & git -C $source apply --check $patch 2>&1
     if ($LASTEXITCODE -eq 0) {
@@ -226,11 +263,8 @@ foreach ($patchName in @("audio-vulkan-loader.patch", "audio-nemotron-stream-tim
         & git -C $source apply --reverse --check $patch 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "The pinned source does not match '$patchName': $patchCheck" }
     }
-    $sourcePatches += @{
-        file = $patchName
-        sha256 = (Get-FileHash -LiteralPath $patch -Algorithm SHA256).Hash.ToLowerInvariant()
-    }
 }
+$sourcePatches = Get-ExpectedSourcePatches
 
 $vulkanFlags = "-DENGINE_ENABLE_VULKAN=OFF"
 if ($Backend -eq "vulkan") {
@@ -251,7 +285,7 @@ $env:PATH = "$installer;$ninjaRoot;" + ($env:PATH -replace '"', '')
 $configure = "`"$cmake`" -S `"$source`" -B `"$build`" -G Ninja " +
     "-DCMAKE_MAKE_PROGRAM=`"$ninja`" -DCMAKE_BUILD_TYPE=Release " +
     "-DAUDIOCPP_BUILD_C_API=ON -DAUDIOCPP_DEPLOYMENT_BUILD=ON " +
-    "-DAUDIOCPP_MODEL_SET=custom -DAUDIOCPP_MODELS=moonshine_asr,vibevoice_asr,qwen3_asr,nemotron_asr,nemotron_3_diar,kroko_asr " +
+    "-DAUDIOCPP_MODEL_SET=custom -DAUDIOCPP_MODELS=$($expectedModelFamilies -join ',') " +
     "-DENGINE_ENABLE_CUDA=OFF -DENGINE_ENABLE_HIP=OFF $vulkanFlags " +
     "-DENGINE_ENABLE_METAL=OFF -DENGINE_ENABLE_NATIVE_CPU=OFF -DENGINE_ENABLE_LLAMAFILE=OFF " +
     "-DGGML_AVX=ON -DGGML_AVX2=ON -DGGML_BMI2=ON -DGGML_AVX512=OFF -DENGINE_BUILD_TESTS=OFF"
