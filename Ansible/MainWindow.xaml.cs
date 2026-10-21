@@ -319,7 +319,11 @@ public sealed partial class MainWindow : Window
                 deviceProbePath: _paths.DeviceProbe, benchmarkSamplePath: _paths.PublicSample,
                 benchmarkCachePath: _paths.DeviceBenchmarks),
             new PermissionCheckedMeetingCaptureFactory(new Ansible.Core.Windows.MeetingCaptureFactory(), _microphonePermission), _meetingStore,
-            new RecognitionOptions(state.Language, state.Settings.CustomDictionary, state.Settings.Backend),
+            () =>
+            {
+                var current = _session.State;
+                return new RecognitionOptions(current.Language, current.Settings.CustomDictionary, current.Settings.Backend);
+            },
             reserve: async () =>
             {
                 if (!_launchReady || !_meetingRecoveryComplete)

@@ -43,13 +43,16 @@ public sealed class KrokoQualificationTests
         "native.dll", "catalog.json", "models", "public.wav", Kroko.Id,
         NativeBackend.Cpu, 0, 4, 512, "streaming", 0);
 
-    [Fact]
-    public void HotwordQualificationUsesPublicHintsInsteadOfPrivateVocabulary()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(4096)]
+    public void HotwordQualificationUsesPublicHintsInsteadOfPrivateVocabulary(int history)
     {
-        var options = DeviceBenchmarkWorker.CreateOptions(Request with { UseDictionary = true }, Kroko);
+        var meeting = Request with { History = history };
+        var options = DeviceBenchmarkWorker.CreateOptions(meeting with { UseDictionary = true }, Kroko);
 
         Assert.Equal("Mother Nature", options.CustomDictionary);
-        Assert.Empty(DeviceBenchmarkWorker.CreateOptions(Request, Kroko).CustomDictionary);
+        Assert.Empty(DeviceBenchmarkWorker.CreateOptions(meeting, Kroko).CustomDictionary);
     }
 
     [Theory]

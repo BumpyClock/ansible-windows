@@ -59,4 +59,5 @@ public static class SpeechContent
 public sealed record TranscriptUpdate(string Text, bool IsFinal, string? SpeechText = null)
 {
     public long? ProcessedSamples { get; init; }
+    public IReadOnlyList<MeetingTurn>? SpeakerTurns { get; init; }
 }
