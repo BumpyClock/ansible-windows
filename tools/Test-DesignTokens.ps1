@@ -76,7 +76,6 @@ foreach ($key in $lightDarkInvariantColors) {
 
 $typedDimensions = @{
     'CardCornerRadius' = 'CornerRadius'
-    'PanelCornerRadius' = 'CornerRadius'
     'ControlCornerRadius' = 'CornerRadius'
     'CardBorderThickness' = 'Thickness'
     'SettingsCardPadding' = 'Thickness'

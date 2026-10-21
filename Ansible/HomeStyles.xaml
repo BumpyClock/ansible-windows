@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Home-only section styles, shared by the history and insights views. Section headers sit on the window
+     base above their card, so each card holds content only. -->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Style x:Key="HomeSectionStyle" TargetType="StackPanel">
+        <Setter Property="Spacing" Value="{StaticResource SectionHeaderGap}" />
+    </Style>
+    <Style x:Key="HomeSectionHeaderStyle" TargetType="Grid">
+        <Setter Property="MinHeight" Value="{StaticResource HomeSectionHeaderMinHeight}" />
+        <Setter Property="Padding" Value="4,0" />
+        <Setter Property="ColumnSpacing" Value="12" />
+    </Style>
+    <Style x:Key="HomeSectionTitleStyle" TargetType="TextBlock" BasedOn="{StaticResource HomeCardTitleStyle}">
+        <Setter Property="FontSize" Value="{StaticResource HomeSectionTitleFontSize}" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <!-- Chips on the base take the card fill; AppControlBrush disappears against the light base. -->
+    <Style x:Key="HomeBaseCountChipStyle" TargetType="Border" BasedOn="{StaticResource HistoryCountStyle}">
+        <Setter Property="Background" Value="{ThemeResource AppCardBrush}" />
+    </Style>
+    <Style x:Key="HomeBaseStreakChipStyle" TargetType="Border" BasedOn="{StaticResource HomeActivityStreakStyle}">
+        <Setter Property="Background" Value="{ThemeResource AppCardBrush}" />
+    </Style>
+</ResourceDictionary>

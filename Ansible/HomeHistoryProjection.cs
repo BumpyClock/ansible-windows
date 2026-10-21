@@ -1,9 +1,24 @@
+using Ansible.Core;
 using System.Globalization;
 
 namespace Ansible;
 
+/// <summary>A row tag for a real insertion outcome. <see cref="Inserted"/> selects the accent treatment.</summary>
+internal sealed record HomeHistoryTag(string Label, string Glyph, bool Inserted, string Meaning);
+
 internal sealed record HomeHistoryEntry(HomeHistoryItem Item, string? ModelName)
 {
+    // Only real insertion outcomes get a tag. In-app dictations, deferred, and pending deliveries have none.
+    public HomeHistoryTag? Tag => Item.Delivery switch
+    {
+        TextDeliveryStatus.Verified => new("Inserted", "\uE73E", true, "Inserted and confirmed in the target field."),
+        TextDeliveryStatus.Sent => new("Not verified", "\uE946", false, "Sent to the active app, but the field could not confirm the text arrived."),
+        TextDeliveryStatus.CleanupFailed => new("Inserted", "\uE7BA", false, "Inserted, but the clipboard could not be cleaned up afterward."),
+        TextDeliveryStatus.Rejected => new("Not inserted", "\uE711", false, "Insertion was stopped. Copy the transcript to paste it yourself."),
+        TextDeliveryStatus.Partial => new("Partially inserted", "\uE7BA", false, "Only part of the text reached the target field. Copy the transcript to paste it yourself."),
+        _ => null
+    };
+
     public string TimeText => Item.CompletedAt.ToLocalTime().ToString("t", CultureInfo.CurrentCulture);
     public string Text => Item.Text;
     public string MetadataText
@@ -23,18 +38,15 @@ internal sealed record HomeHistoryEntry(HomeHistoryItem Item, string? ModelName)
     }
 }
 
-internal sealed record HomeHistoryGroup(string Label, IReadOnlyList<HomeHistoryEntry> Entries)
-{
-    // ItemsRepeater consumes a WinRT object vector, while projection callers retain typed entries.
-    public IList<object> BindableEntries { get; } = Entries.Cast<object>().ToList();
-}
+internal sealed record HomeHistoryGroup(string Label, IReadOnlyList<HomeHistoryEntry> Entries);
 
 internal sealed record HomeHistoryViewModel(
     IReadOnlyList<HomeHistoryGroup> Groups,
     int TodayCount,
     bool HasHistory,
     bool HasMatches,
-    bool OversizedCurrentResult);
+    bool OversizedCurrentResult,
+    IReadOnlySet<Guid> AllOperationIds);
 
 internal static class HomeHistoryProjection
 {
@@ -56,7 +68,8 @@ internal static class HomeHistoryProjection
                 group.Select(item => new HomeHistoryEntry(item,
                     item.ModelId.Length > 0 ? modelName(item.ModelId) : null)).ToList()))
             .ToList();
-        return new HomeHistoryViewModel(groups, todayCount, all.Count > 0, filtered.Count > 0, oversizedCurrentResult);
+        return new HomeHistoryViewModel(groups, todayCount, all.Count > 0, filtered.Count > 0, oversizedCurrentResult,
+            all.Select(item => item.OperationId).ToHashSet());
     }
 
     private static string GroupLabel(DateOnly date, DateOnly today)

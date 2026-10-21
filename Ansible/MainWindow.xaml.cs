@@ -104,6 +104,8 @@ public sealed partial class MainWindow : Window
         };
         AppWindow.Closing += CloseRequested;
         Closed += WindowClosed;
+        ApplyNavigationInteractionBrushes();
+        AddNoticeShowAnimations();
         Navigate("dictation");
         _observer = new UiSessionObserver(session, DispatcherQueue, SessionChanged);
     }
@@ -249,6 +251,52 @@ public sealed partial class MainWindow : Window
 
     private void NavigateClicked(object sender, RoutedEventArgs args) => Navigate((string)((Button)sender).Tag);
 
+    private Button[] NavigationButtons => [DictationNav, MeetingsNav, ModelsNav, CustomWordsNav, SettingsNav];
+
+    // NavigationButtonStyle is transparent at rest; per-instance keys give hover and press the brand surfaces.
+    // The current page keeps its active surface under the pointer: dropping to the lighter hover tint reads as
+    // deselection in the light theme.
+    private void ApplyNavigationInteractionBrushes()
+    {
+        var resources = Application.Current.Resources;
+        var selectedStyle = (Style)resources["SelectedNavigationButtonStyle"];
+        foreach (var button in NavigationButtons)
+        {
+            var selected = ReferenceEquals(button.Style, selectedStyle);
+            button.Resources["ButtonBackgroundPointerOver"] = resources[selected ? "AppActiveBrush" : "AppHoverBrush"];
+            button.Resources["ButtonBackgroundPressed"] = resources["AppActiveBrush"];
+        }
+    }
+
+    // Notices toggle Visibility rather than joining the panel, so an implicit show animation lets them rise into
+    // place instead of popping. Skipped when Windows animations are off.
+    private void AddNoticeShowAnimations()
+    {
+        if (!new Windows.UI.ViewManagement.UISettings().AnimationsEnabled) return;
+        var resources = Application.Current.Resources;
+        var duration = TimeSpan.FromMilliseconds((double)resources["MotionNormalMilliseconds"]);
+        var offset = (float)(double)resources["MotionEntranceOffset"];
+        var compositor = Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(ShellRoot).Compositor;
+        foreach (UIElement notice in new UIElement[] { MicrophonePermissionNotice, MeetingSuggestion, ShutdownError })
+        {
+            Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.SetIsTranslationEnabled(notice, true);
+            var fade = compositor.CreateScalarKeyFrameAnimation();
+            fade.Target = "Opacity";
+            fade.InsertKeyFrame(0, 0);
+            fade.InsertKeyFrame(1, 1);
+            fade.Duration = duration;
+            var rise = compositor.CreateVector3KeyFrameAnimation();
+            rise.Target = "Translation";
+            rise.InsertKeyFrame(0, new System.Numerics.Vector3(0, offset, 0));
+            rise.InsertKeyFrame(1, System.Numerics.Vector3.Zero);
+            rise.Duration = duration;
+            var show = compositor.CreateAnimationGroup();
+            show.Add(fade);
+            show.Add(rise);
+            Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.SetImplicitShowAnimation(notice, show);
+        }
+    }
+
     private void ShellSizeChanged(object sender, SizeChangedEventArgs args)
     {
         var compact = args.NewSize.Width < (double)Application.Current.Resources["CompactNavigationThreshold"];
@@ -257,11 +305,16 @@ public sealed partial class MainWindow : Window
         SidebarColumn.Width = (GridLength)Application.Current.Resources[compact ? "CompactSidebarColumnWidth" : "SidebarColumnWidth"];
         Sidebar.Padding = (Thickness)Application.Current.Resources[compact ? "CompactSidebarPadding" : "SidebarPadding"];
         AppWordmark.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
-        foreach (var button in new[] { DictationNav, MeetingsNav, ModelsNav, CustomWordsNav, SettingsNav })
+        foreach (var button in NavigationButtons)
         {
+            // A local value outlasts Navigate's style swaps, so the icon stays centred in the 72 px column.
+            button.HorizontalContentAlignment = compact ? HorizontalAlignment.Center : HorizontalAlignment.Left;
             if (button.Content is StackPanel content)
+            {
+                content.Spacing = compact ? 0 : (double)Application.Current.Resources["NavLabelGap"];
                 foreach (var label in content.Children.OfType<TextBlock>())
                     label.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+            }
             ToolTipService.SetToolTip(button, compact ? AutomationProperties.GetName(button) : null);
         }
     }
@@ -273,8 +326,11 @@ public sealed partial class MainWindow : Window
             _dismissedMicrophonePermissionStatus = null;
             RenderMicrophonePermission();
         }
-        MainContent.Content = page switch { "settings" => _settings, "dictation" => _dictation, "models" => _models,
+        Page target = page switch { "settings" => _settings, "dictation" => _dictation, "models" => _models,
             "custom-words" => _customWords, "meetings" => _meetings, _ => _dictation };
+        // Reselecting the current page keeps its state and scroll position.
+        if (ReferenceEquals(MainContent.Content, target)) return;
+        MainContent.Content = target;
         foreach (var (button, indicator) in new[]
         {
             (DictationNav, DictationIndicator), (ModelsNav, ModelsIndicator),
@@ -291,6 +347,7 @@ public sealed partial class MainWindow : Window
             AutomationProperties.SetHelpText(button, selected ? "Current page" : "");
             AutomationProperties.SetItemStatus(button, selected ? "Current page" : "");
         }
+        ApplyNavigationInteractionBrushes();
     }
 
     private void ShellThemeChanged(FrameworkElement sender, object args)
@@ -298,6 +355,7 @@ public sealed partial class MainWindow : Window
         DispatcherQueue.TryEnqueue(() =>
         {
             if (_closed || AppTitleBar is null) return;
+            ApplyNavigationInteractionBrushes();
             AppWindow.TitleBar.ButtonForegroundColor = ((SolidColorBrush)AppTitleBar.Foreground).Color;
             AppWindow.TitleBar.ButtonInactiveForegroundColor = ((SolidColorBrush)ShellRoot.BorderBrush).Color;
         });
@@ -726,10 +784,16 @@ public sealed partial class MainWindow : Window
     private async Task DeliverAsync(Task<SessionOutcome> operation, FinalTextDelivery delivery)
     {
         var token = _deliveryCancellation.Token;
+        var operationId = _deliveryOperationId;
         try
         {
             var outcome = await delivery.RunAsync(operation, token);
             if (!IsDeliveryCurrent() || outcome.Kind != SessionOutcomeKind.Completed) { return; }
+            // Real insertion outcome for the Home timeline tag. Deferred-only deliveries report nothing.
+            if (operationId is { } completedId && delivery.Delivery is { } reported)
+            {
+                _history.RecordDelivery(completedId, reported.Status);
+            }
             if (delivery.Error is not null)
                 _session.Notify(NoticeKind.Warning, "Insertion stopped",
                     $"{delivery.Error} Check the destination before using Copy transcript; do not repeat text that already appeared.");
