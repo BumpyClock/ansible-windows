@@ -16,8 +16,6 @@ public sealed class NativeDictionaryTests(ITestOutputHelper output)
         "vibevoice_asr", "offline", false)]
     [InstalledDictionaryModel("qwen3-asr-0.6b-q8", "qwen3-asr-0.6b-q8_0.gguf",
         "qwen3_asr", "streaming", true)]
-    [InstalledDictionaryModel("kroko-en-64l-q8", "kroko-en-community-64-l-q8_0.gguf",
-        "kroko_asr", "streaming", true)]
     public async Task RecognizesPublicSampleWithNonEmptyDictionary(
         string modelId, string filename, string family, string mode, bool plainSpeech)
     {

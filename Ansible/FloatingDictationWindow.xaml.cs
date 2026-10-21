@@ -125,7 +125,7 @@ public sealed partial class FloatingDictationWindow : Window
     {
         if (_closed) { return; }
         try { ApplyCapturePrivacy(_state.Settings.HideFromCapture); }
-        catch (Exception error) { _session.Notify(NoticeKind.Warning, "Screen capture privacy unavailable", error.Message); }
+        catch (Exception error) { _session.Notify(NoticeKind.Warning, "Screen capture privacy unavailable", error.Message, NoticeArea.Application); }
         var presentation = FloatingPreviewPresentation.From(_state);
         if (_state.IsLiveOperation) { _replay = _state.IsReplay; }
         var source = _replay ? "Public WAV replay. No microphone is open." : "Microphone audio. On-device recognition.";
@@ -242,11 +242,10 @@ public sealed partial class FloatingDictationWindow : Window
             _pill ??= new NativeCompositionPill(WinRT.Interop.WindowNative.GetWindowHandle(_owner),
                 QueueTerminalDismiss, _cleanupTasks.Add);
             try { _pill.ApplyCapturePrivacy(_state.Settings.HideFromCapture); }
-            catch (Exception error) { _session.Notify(NoticeKind.Warning, "Screen capture privacy unavailable", error.Message); }
+            catch (Exception error) { _session.Notify(NoticeKind.Warning, "Screen capture privacy unavailable", error.Message, NoticeArea.Application); }
             var foreground = ((SolidColorBrush)PreviewRoot.BorderBrush).Color;
             _pill.Configure(bounds.X + shape.Item1, bounds.Y + shape.Item2, pillWidth, pillHeight,
                 scale, foreground, ((SolidColorBrush)PreviewRoot.Background).Color,
-                ((SolidColorBrush)PillBorder.Background).Color,
                 ((SolidColorBrush)PillBorder.BorderBrush).Color, ((SolidColorBrush)WaveBars.Background).Color,
                 _accessibility.HighContrast,
                 _settings.AdvancedEffectsEnabled);
@@ -338,7 +337,7 @@ public sealed partial class FloatingDictationWindow : Window
         private double _scale;
         // Logical pixels. The bar row is centred in the pill.
         private const double BarWidth = 3, BarGap = 3;
-        private (int Width, int Height, double Scale, Windows.UI.Color Foreground, Windows.UI.Color Background, Windows.UI.Color BackdropFill,
+        private (int Width, int Height, double Scale, Windows.UI.Color Foreground, Windows.UI.Color Background,
             Windows.UI.Color Stroke, Windows.UI.Color Wave, bool Contrast, bool Effects) _style;
 
         public NativeCompositionPill(nint owner, Action dismiss, Action<Task> retainCleanup)
@@ -418,12 +417,12 @@ public sealed partial class FloatingDictationWindow : Window
         }
 
         public void Configure(int x, int y, int width, int height, double scale,
-            Windows.UI.Color foreground, Windows.UI.Color background, Windows.UI.Color backdropFill, Windows.UI.Color stroke,
+            Windows.UI.Color foreground, Windows.UI.Color background, Windows.UI.Color stroke,
             Windows.UI.Color wave, bool contrast, bool effects)
         {
             if (_disposed) { return; }
             _scale = scale;
-            var style = (width, height, scale, foreground, background, backdropFill, stroke, wave, contrast, effects);
+            var style = (width, height, scale, foreground, background, stroke, wave, contrast, effects);
             if (_style != style)
             {
                 _style = style;
@@ -446,7 +445,8 @@ public sealed partial class FloatingDictationWindow : Window
                 else { _backdrop.Brush = _compositor.CreateColorBrush(Windows.UI.Color.FromArgb(0, 0, 0, 0)); }
                 // Translucent fill and a faint hairline over the blurred host backdrop. Without the
                 // backdrop, and in high contrast, use an opaque fill and the window text colour.
-                var fill = backdrop ? backdropFill : background;
+                var fill = background;
+                if (!backdrop) fill.A = byte.MaxValue;
                 _outline.FillBrush = _compositor.CreateColorBrush(fill);
                 _outline.StrokeBrush = _compositor.CreateColorBrush(!backdrop ? foreground : stroke);
                 _outline.StrokeThickness = (float)scale;

@@ -45,10 +45,19 @@ public sealed partial class NativeAudioEngine
         if (!_inventory.Models.Contains(model) || model.ModelPath is null || !_inventory.Entries.TryGetValue(model.Id, out var entry))
             throw new InvalidDataException("Device qualification requires an unchanged admitted model.");
         using var lease = _integrity.OpenVerified(model.ModelPath, entry, token);
+        var modelIdentity = entry.Sha256;
+        var modelBytes = entry.Bytes;
+        if (history > 0 && UsesDiarization(model))
+        {
+            var companion = FindDiarizationModel();
+            var companionEntry = _inventory.Entries[companion.Id];
+            modelIdentity += $"|{companionEntry.Sha256}|{NativeDiarizationSession.LatencyProfile}";
+            modelBytes = checked(modelBytes + companionEntry.Bytes);
+        }
         var request = new DeviceBenchmarkRequest(_libraryPath, _catalogPath, ModelsDirectory, _benchmarkSamplePath,
             model.Id, NativeBackend.Cpu, options.DeviceIndex, _threads, _headroom, mode, history,
             UseDictionary: model.Family == "kroko_asr" && options.CustomDictionary.Length > 0);
-        var key = DeviceBenchmark.Key(request, entry.Sha256, token);
+        var key = DeviceBenchmark.Key(request, modelIdentity, token);
         _selectionKeys[(model.Id, mode, history)] = key;
         if (!_deviceSelections.TryGetValue(key, out var selection))
         {
@@ -57,7 +66,7 @@ public sealed partial class NativeAudioEngine
             {
                 // No resident execution weights coexist with either owned subprocess.
                 ReleaseModel();
-                NativeMemory.CheckBudget(entry.Bytes, decodedBytes, _headroom);
+                NativeMemory.CheckBudget(modelBytes, decodedBytes, _headroom);
                 DeviceSelectionSummary = $"Qualifying {model.Id} {mode} on CPU and Vulkan with the public sample.";
                 selection = DeviceBenchmark.QualifyAsync(key, model.Family, mode,
                     backend => DeviceBenchmark.RunAsync(_deviceProbePath, request with { Backend = backend }, token), token)

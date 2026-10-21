@@ -1,9 +1,14 @@
 using Ansible.Core;
+using Microsoft.UI.Text;
+using System.Globalization;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Shapes;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage.Pickers;
+using Windows.UI.ViewManagement;
 
 namespace Ansible;
 
@@ -13,7 +18,6 @@ public sealed partial class DictationPage : Page
 
     private readonly DictationSession _session;
     private readonly AppPaths _paths;
-    private readonly HomeDictationHistory _history;
     private readonly Func<nint> _windowHandle;
     private readonly Task _catalogNamesTask;
     private readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromMilliseconds(250) };
@@ -21,37 +25,32 @@ public sealed partial class DictationPage : Page
     private SessionSnapshot _state;
     private UiSessionObserver? _observer;
     private bool _picking;
-    private readonly Dictionary<string, string> _homeCatalogNames = new(StringComparer.OrdinalIgnoreCase);
+    private double _homeCellSize = 14;
+    private UsageSummary? _homeSummary;
     private UsageDocument? _homeUsage;
     private string? _homeUsageError;
+    private readonly Dictionary<string, string> _homeCatalogNames = new(StringComparer.OrdinalIgnoreCase);
+    private long _homeHistoryVersion = -1;
+    private string _homeHistoryQuery = "";
+    private volatile bool _historyLimitMessageVisible;
+    private bool _homeHistoryLimitMessageRendered;
     private string _homeShortcutDisplay = "";
     private int _homeGreetingHour = -1;
     private bool _homeDataInitialized;
-    private DateTime _homeDataDate;
     private bool _disposed;
 
-    internal DictationPage(DictationSession session, AppPaths paths, Func<nint> windowHandle, HomeDictationHistory history)
+    internal DictationPage(DictationSession session, AppPaths paths, Func<nint> windowHandle)
     {
         InitializeComponent();
         _session = session;
         _paths = paths;
         _windowHandle = windowHandle;
-        _history = history ?? throw new ArgumentNullException(nameof(history));
         _state = session.State;
         _catalogNamesTask = LoadHomeCatalogNamesAsync();
-        _clock.Tick += (_, _) =>
-        {
-            RenderClock();
-            var dateChanged = _homeDataDate != DateTime.Today;
-            if (!dateChanged && _homeGreetingHour == DateTime.Now.Hour) return;
-            RenderHomeData();
-            if (dateChanged) RenderHomeHistory();
-        };
+        _clock.Tick += (_, _) => RenderClock();
         _copiedTimer.Tick += (_, _) => { _copiedTimer.Stop(); CopyLabel.Text = "Copy"; };
-        _history.Changed += HistoryChanged;
-        HistoryView.QueryChanged += HistoryQueryChanged;
-        HistoryView.CopyRequested += CopyHistoryItem;
-        HistoryChanged();
+        _session.StateChanged += CaptureHistory;
+        CaptureHistory(_state);
         _observer = new UiSessionObserver(session, DispatcherQueue, state =>
         {
             _state = state;
@@ -61,7 +60,6 @@ public sealed partial class DictationPage : Page
         {
             _clock.Start();
             Render();
-            RenderHomeHistory();
         };
         Unloaded += (_, _) =>
         {
@@ -75,9 +73,7 @@ public sealed partial class DictationPage : Page
     internal void Dispose()
     {
         _disposed = true;
-        _history.Changed -= HistoryChanged;
-        HistoryView.QueryChanged -= HistoryQueryChanged;
-        HistoryView.CopyRequested -= CopyHistoryItem;
+        _session.StateChanged -= CaptureHistory;
         _observer?.Dispose();
         _observer = null;
         _clock.Stop();
@@ -93,11 +89,39 @@ public sealed partial class DictationPage : Page
         RenderHomeData();
         if (TranscriptBox.Text != _state.Transcript) { TranscriptBox.Text = _state.Transcript; }
         var empty = string.IsNullOrWhiteSpace(_state.Transcript);
-        var retainedInHistory = _state.TranscriptOperationId is { } operationId && _history.Contains(operationId);
-        var showTranscript = !empty && !retainedInHistory;
+        var completedDictation = _state.Activity == SessionActivity.Dictation &&
+            _state.Phase == DictationPhase.Ready && _state.Outcome == SessionOutcomeKind.Completed &&
+            _state.Result is not null;
+        var historyText = _state.Result is { } result
+            ? (string.IsNullOrWhiteSpace(result.SpeechText) ? result.DisplayText : result.SpeechText).Trim() : "";
+        var showTranscript = !empty && (!completedDictation || historyText.Length > HomeDictationHistory.MaximumCharacters);
         TranscriptCard.Visibility = showTranscript ? Visibility.Visible : Visibility.Collapsed;
         TranscriptHeader.Visibility = showTranscript ? Visibility.Visible : Visibility.Collapsed;
         CopyButton.IsEnabled = _state.IsIdle || _state.Phase == DictationPhase.RecoveryRequired;
+    }
+
+    private void CaptureHistory(SessionSnapshot state)
+    {
+        if (state.Phase != DictationPhase.Ready || state.Activity != SessionActivity.Dictation ||
+            state.OperationId is not Guid operationId) { return; }
+        if (state.Outcome != SessionOutcomeKind.Completed || state.Result is not { } result ||
+            state.CompletedAt is not { } completedAt)
+        {
+            return;
+        }
+        var text = string.IsNullOrWhiteSpace(result.SpeechText) ? result.DisplayText : result.SpeechText;
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return;
+        }
+        var item = new HomeHistoryItem(operationId, completedAt, text.Trim(), state.SelectedModel?.Id ?? "",
+            result.SpokenWords, state.Elapsed);
+        if (item.Text.Length > HomeDictationHistory.MaximumCharacters)
+        {
+            _historyLimitMessageVisible = true;
+            return;
+        }
+        HomeDictationHistory.Add(item);
     }
 
     private async Task LoadHomeCatalogNamesAsync()
@@ -114,9 +138,11 @@ public sealed partial class DictationPage : Page
                 if (_disposed) { return; }
                 _homeCatalogNames.Clear();
                 foreach (var pair in names) { _homeCatalogNames[pair.Key] = pair.Value; }
-                _homeDataInitialized = false;
-                RenderHomeData();
-                RenderHomeHistory();
+                if (_homeSummary is not null)
+                {
+                    if (_homeSummary is { } summary) { RenderHomeModels(summary); }
+                    RenderHistory();
+                }
             });
         }
         catch
@@ -155,45 +181,187 @@ public sealed partial class DictationPage : Page
             for (var index = 0; index < parts.Length; index++)
             {
                 if (index > 0)
-                    ShortcutKeys.Children.Add(new TextBlock { Text = "+", Style = AppStyle("CaptionSecondaryStyle"), VerticalAlignment = VerticalAlignment.Center });
+                {
+                    ShortcutKeys.Children.Add(new TextBlock
+                    {
+                        Text = "+",
+                        Style = AppStyle("CaptionSecondaryStyle"),
+                        VerticalAlignment = VerticalAlignment.Center
+                    });
+                }
                 var keycap = new Border { Style = AppStyle("KeycapStyle") };
                 keycap.Child = new TextBlock { Text = parts[index], Style = AppStyle("KeycapTextStyle") };
                 ShortcutKeys.Children.Add(keycap);
             }
         }
-        if (ShortcutTailText.Text != "anywhere, or") ShortcutTailText.Text = "anywhere, or";
-        if (!_homeDataInitialized || _homeDataDate != DateTime.Today || !ReferenceEquals(_homeUsage, _state.Usage) || _homeUsageError != _state.UsageError)
+        const string shortcutTail = "anywhere, or";
+        if (ShortcutTailText.Text != shortcutTail) ShortcutTailText.Text = shortcutTail;
+        RenderRecordControl();
+        var query = HistorySearchBox?.Text?.Trim() ?? "";
+        if (_homeHistoryVersion != HomeDictationHistory.Version || _homeHistoryQuery != query ||
+            _homeHistoryLimitMessageRendered != _historyLimitMessageVisible)
         {
-            _homeDataInitialized = true;
-            _homeDataDate = DateTime.Today;
-            _homeUsage = _state.Usage;
-            _homeUsageError = _state.UsageError;
-            HomeInsightsColumn.Render(HomeInsightsProjection.Create(_state.Usage, _state.UsageError,
-                HomeModelDisplayName, DateOnly.FromDateTime(DateTime.Today), TimeZoneInfo.Local));
+            _homeHistoryVersion = HomeDictationHistory.Version;
+            _homeHistoryQuery = query;
+            RenderHistory();
+        }
+        if (_homeDataInitialized && ReferenceEquals(_homeUsage, _state.Usage) && _homeUsageError == _state.UsageError) { return; }
+        _homeDataInitialized = true;
+        _homeUsage = _state.Usage;
+        _homeUsageError = _state.UsageError;
+        if (_state.Usage is null)
+        {
+            HomePaceText.Text = "--";
+            HomeSessionsText.Text = "--";
+            HomeWordsText.Text = "--";
+            HomeStreakText.Text = "--";
+            HomeInsightsFootnote.Text = _state.UsageError ?? "Usage statistics are not available yet.";
+            HomeModelRows.Children.Clear();
+            HomeModelRows.Children.Add(new TextBlock
+            {
+                Text = "Usage statistics are not available yet.",
+                TextWrapping = TextWrapping.Wrap,
+                Style = AppStyle("SecondaryTextStyle")
+            });
+            _homeSummary = null;
+            RenderHomeActivity(null);
+            return;
+        }
+        _homeSummary = UsageSummary.Create(_state.Usage.Entries, DateOnly.FromDateTime(DateTime.Today), TimeZoneInfo.Local);
+        HomePaceText.Text = _homeSummary.WordsPerMinute?.ToString("N0", CultureInfo.CurrentCulture) ?? "--";
+        HomeSessionsText.Text = _homeSummary.DictationSessions.ToString("N0", CultureInfo.CurrentCulture);
+        HomeWordsText.Text = _homeSummary.DictatedWords.ToString("N0", CultureInfo.CurrentCulture);
+        HomeStreakText.Text = _homeSummary.CurrentStreak == 0 ? "No streak" :
+            $"{_homeSummary.CurrentStreak} {(_homeSummary.CurrentStreak == 1 ? "day" : "days")} streak";
+        HomeInsightsFootnote.Text = _homeSummary.RecordingSeconds > 0
+            ? $"{_homeSummary.RecordingSeconds / 60:N1} min of microphone time, pauses included."
+            : _homeSummary.DictationSessions == 0 ? "No completed dictations yet." : "Microphone time is unavailable.";
+        RenderHomeModels(_homeSummary);
+        RenderHomeActivity(_homeSummary);
+    }
+
+    private Style AppStyle(string key)
+    {
+        var resource = Resources.ContainsKey(key) ? Resources[key] : Application.Current.Resources[key];
+        return (Style)resource;
+    }
+
+    private void RenderHistory()
+    {
+        if (HistoryRows is null) { return; }
+        _homeHistoryLimitMessageRendered = _historyLimitMessageVisible;
+        var all = HomeDictationHistory.Snapshot();
+        var query = HistorySearchBox?.Text?.Trim() ?? "";
+        var items = query.Length == 0
+            ? all
+            : all.Where(item => item.Text.Contains(query, StringComparison.CurrentCultureIgnoreCase)).ToArray();
+        var todayCount = all.Count(item => item.CompletedAt.LocalDateTime.Date == DateTime.Today);
+        HistoryCount.Text = $"{todayCount:N0} {(todayCount == 1 ? "dictation" : "dictations")} today";
+        HistoryRows.Children.Clear();
+        HistoryRows.VerticalAlignment = items.Count == 0 ? VerticalAlignment.Center : VerticalAlignment.Stretch;
+        if (_historyLimitMessageVisible)
+        {
+            HistoryRows.Children.Add(new TextBlock
+            {
+                Text = $"A transcript over {HomeDictationHistory.MaximumCharacters:N0} characters stays in the current result and is not added to session history.",
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(12, 8, 12, 4),
+                Style = AppStyle("CaptionSecondaryStyle")
+            });
+        }
+        if (items.Count == 0)
+        {
+            var emptyState = new StackPanel
+            {
+                Spacing = (double)Application.Current.Resources["HistoryEmptyGap"],
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            emptyState.Children.Add(new TextBlock
+            {
+                Text = all.Count == 0 ? "No completed dictations in this app session." : "No matching transcripts.",
+                TextWrapping = TextWrapping.Wrap,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Style = AppStyle("HistoryEmptyTitleStyle")
+            });
+            emptyState.Children.Add(new TextBlock
+            {
+                Text = all.Count == 0 ? "Choose Dictate to start your history." : "Try a different search.",
+                TextWrapping = TextWrapping.Wrap,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Style = AppStyle("HistoryEmptyDetailStyle")
+            });
+            HistoryRows.Children.Add(emptyState);
+            return;
+        }
+        DateOnly? group = null;
+        foreach (var item in items)
+        {
+            var date = DateOnly.FromDateTime(item.CompletedAt.LocalDateTime);
+            if (group != date)
+            {
+                group = date;
+                var label = date == DateOnly.FromDateTime(DateTime.Today) ? "TODAY" :
+                    date == DateOnly.FromDateTime(DateTime.Today.AddDays(-1)) ? "YESTERDAY" :
+                    date.ToString("ddd, MMM d", CultureInfo.CurrentCulture).ToUpperInvariant();
+                var divider = new Grid { Margin = new Thickness(8, 12, 8, 4), ColumnSpacing = 10, VerticalAlignment = VerticalAlignment.Center };
+                divider.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                divider.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                divider.Children.Add(new TextBlock { Text = label, Style = AppStyle("CaptionSecondaryStyle"), FontWeight = FontWeights.SemiBold });
+                var line = new Border { Style = AppStyle("HistoryDividerStyle") };
+                Grid.SetColumn(line, 1);
+                divider.Children.Add(line);
+                HistoryRows.Children.Add(divider);
+            }
+            var row = new Border { Style = AppStyle("HistoryRowStyle") };
+            var content = new Grid { ColumnSpacing = 16 };
+            content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(64) });
+            content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            content.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            content.Children.Add(new TextBlock
+            {
+                Text = item.CompletedAt.ToLocalTime().ToString("h:mmtt", CultureInfo.CurrentCulture),
+                Style = AppStyle("CaptionSecondaryStyle"), VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(0, 3, 0, 0)
+            });
+            var text = new TextBlock
+            {
+                Text = item.Text, TextWrapping = TextWrapping.Wrap,
+                Style = AppStyle("BodyTextBlockStyle"), LineHeight = 22
+            };
+            var modelName = item.ModelId.Length > 0 ? HomeModelDisplayName(item.ModelId) : null;
+            var meta = new TextBlock
+            {
+                Text = $"{(item.Words is { } words ? $"{words:N0} {(words == 1 ? "word" : "words")}" : "Word count unavailable")} · {item.Elapsed:mm\\:ss}" +
+                    (modelName is { Length: > 0 } ? $" · {modelName}" : ""),
+                Style = AppStyle("CaptionSecondaryStyle"), Margin = new Thickness(0, 4, 0, 0)
+            };
+            var body = new StackPanel { Spacing = 2 };
+            body.Children.Add(text);
+            body.Children.Add(meta);
+            Grid.SetColumn(body, 1);
+            content.Children.Add(body);
+            var copy = new Button { Width = 32, Height = 32, Padding = new Thickness(0), Tag = item, VerticalAlignment = VerticalAlignment.Top };
+            ToolTipService.SetToolTip(copy, "Copy transcript");
+            copy.Content = new FontIcon { Glyph = "\uE8C8", FontSize = 16 };
+            copy.Click += HistoryCopyClicked;
+            Grid.SetColumn(copy, 2);
+            content.Children.Add(copy);
+            row.Child = content;
+            HistoryRows.Children.Add(row);
         }
     }
 
-    private void RenderHomeHistory()
+    private void HistorySearchChanged(object sender, TextChangedEventArgs args)
     {
-        HistoryView.Render(HomeHistoryProjection.Create(_history.Snapshot(), HistoryView.Query,
-            _history.OversizedCurrentResult, HomeModelDisplayName, DateTime.Today));
+        _homeHistoryQuery = HistorySearchBox.Text.Trim();
+        _homeHistoryVersion = HomeDictationHistory.Version;
+        RenderHistory();
     }
 
-    private void HistoryChanged()
+    private void HistoryCopyClicked(object sender, RoutedEventArgs args)
     {
-        if (_disposed) return;
-        DispatcherQueue.TryEnqueue(() =>
-        {
-            if (_disposed || !IsLoaded) return;
-            Render();
-            RenderHomeHistory();
-        });
-    }
-
-    private void HistoryQueryChanged() => RenderHomeHistory();
-
-    private void CopyHistoryItem(HomeHistoryItem item)
-    {
+        if (sender is not Button { Tag: HomeHistoryItem item }) { return; }
         try
         {
             var package = new DataPackage();
@@ -203,10 +371,98 @@ public sealed partial class DictationPage : Page
         catch (Exception error) { _session.ReportUiError(error); }
     }
 
-    private Style AppStyle(string key)
+    private void RenderHomeModels(UsageSummary summary)
     {
-        var resource = Resources.ContainsKey(key) ? Resources[key] : Application.Current.Resources[key];
-        return (Style)resource;
+        HomeModelRows.Children.Clear();
+        var max = Math.Max(1, summary.Models.Sum(model => model.Sessions));
+        var modelIndex = 0;
+        foreach (var model in summary.Models.Take(5))
+        {
+            var primary = modelIndex++ == 0;
+            var label = HomeModelDisplayName(model.ModelId) ?? "Unknown model";
+            var row = new StackPanel { Spacing = (double)Application.Current.Resources["HomeModelRowsGap"] };
+            var top = new Grid { ColumnSpacing = 8 };
+            top.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            top.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            top.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            if (primary) top.Children.Add(new Ellipse { Style = AppStyle("HomeModelDotStyle") });
+            var name = new TextBlock { Text = label, TextTrimming = TextTrimming.CharacterEllipsis,
+                Style = AppStyle(primary ? "BodyTextBlockStyle" : "HomeMetricLabelStyle") };
+            Grid.SetColumn(name, primary ? 1 : 0);
+            Grid.SetColumnSpan(name, primary ? 1 : 2);
+            top.Children.Add(name);
+            var count = new TextBlock { Text = model.Sessions.ToString("N0", CultureInfo.CurrentCulture), Style = AppStyle("BodyStrongTextBlockStyle") };
+            Grid.SetColumn(count, 2);
+            top.Children.Add(count);
+            row.Children.Add(top);
+            var bar = new ProgressBar
+            {
+                Maximum = max,
+                Value = model.Sessions,
+                Style = AppStyle(primary ? "HomeModelPrimaryBarStyle" : "HomeModelSecondaryBarStyle"),
+                HorizontalAlignment = HorizontalAlignment.Stretch
+            };
+            row.Children.Add(bar);
+            HomeModelRows.Children.Add(row);
+        }
+        if (summary.Models.Count == 0)
+            HomeModelRows.Children.Add(new TextBlock { Text = "No completed sessions yet.", TextWrapping = TextWrapping.Wrap, Style = AppStyle("SecondaryTextStyle") });
+    }
+
+    private void RenderHomeActivity(UsageSummary? summary)
+    {
+        const int weeks = 13;
+        const double labelColumn = 16;
+        var cellSize = _homeCellSize;
+        HomeHeatmapGrid.Children.Clear();
+        HomeHeatmapGrid.ColumnDefinitions.Clear();
+        HomeHeatmapGrid.RowDefinitions.Clear();
+        HomeHeatmapGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(labelColumn) });
+        for (var column = 0; column < weeks; column++) HomeHeatmapGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        HomeHeatmapGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        for (var row = 0; row < 7; row++) HomeHeatmapGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(cellSize) });
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var start = today.AddDays(-84);
+        start = start.AddDays(-(int)start.DayOfWeek);
+        foreach (var (row, text) in new[] { (1, "M"), (3, "W"), (5, "F") })
+        {
+            var label = new TextBlock { Text = text, Style = AppStyle("CaptionSecondaryStyle"), VerticalAlignment = VerticalAlignment.Center, LineStackingStrategy = LineStackingStrategy.BlockLineHeight, LineHeight = cellSize };
+            Grid.SetRow(label, row + 1);
+            HomeHeatmapGrid.Children.Add(label);
+        }
+        var monthColumns = Enumerable.Range(0, weeks).Where(column => column == 0 || start.AddDays(column * 7).Month != start.AddDays(column * 7 - 7).Month).ToList();
+        if (monthColumns.Count > 1 && monthColumns[1] < 3) monthColumns.RemoveAt(0);
+        for (var index = 0; index < monthColumns.Count; index++)
+        {
+            var column = monthColumns[index];
+            var month = new TextBlock { Text = start.AddDays(column * 7).ToString("MMM", CultureInfo.CurrentCulture), Style = AppStyle("CaptionTextBlockStyle"), TextWrapping = TextWrapping.NoWrap };
+            Grid.SetColumn(month, column + 1);
+            Grid.SetColumnSpan(month, (index + 1 < monthColumns.Count ? monthColumns[index + 1] : weeks) - column);
+            HomeHeatmapGrid.Children.Add(month);
+        }
+        for (var column = 0; column < weeks; column++)
+            for (var row = 0; row < 7; row++)
+            {
+                var day = start.AddDays(column * 7 + row);
+                var count = summary?.Activity.GetValueOrDefault(day) ?? 0;
+                var styleKey = day > today ? "ActivityFutureCellStyle" : count switch { 0 => "ActivityEmptyCellStyle", 1 => "ActivityLowCellStyle", 2 => "ActivityMediumCellStyle", _ => "ActivityHighCellStyle" };
+                var cell = new Border { Style = AppStyle(styleKey), Width = cellSize, Height = cellSize, CornerRadius = new CornerRadius(3) };
+                var description = $"{day.ToString("ddd d MMM", CultureInfo.CurrentCulture)}: {count} {(count == 1 ? "session" : "sessions")}";
+                ToolTipService.SetToolTip(cell, description);
+                AutomationProperties.SetName(cell, description);
+                Grid.SetRow(cell, row + 1);
+                Grid.SetColumn(cell, column + 1);
+                HomeHeatmapGrid.Children.Add(cell);
+            }
+    }
+
+    private void HomeHeatmapHostSizeChanged(object sender, SizeChangedEventArgs args)
+    {
+        var gap = (double)Application.Current.Resources["HomeActivityHeatmapGap"];
+        var cell = Math.Clamp(Math.Floor((args.NewSize.Width - 16 - 13 * gap) / 13), 12, 20);
+        if (cell == _homeCellSize) return;
+        _homeCellSize = cell;
+        RenderHomeActivity(_homeSummary);
     }
 
     private void HomeHeaderSizeChanged(object sender, SizeChangedEventArgs args)
@@ -228,6 +484,62 @@ public sealed partial class DictationPage : Page
         ShortcutButtons.HorizontalAlignment = stackedHelper ? HorizontalAlignment.Right : HorizontalAlignment.Left;
         RequestHomeColumnsHeight();
     }
+    private void HistoryHeaderSizeChanged(object sender, SizeChangedEventArgs args)
+    {
+        var narrow = args.NewSize.Width < (double)Application.Current.Resources["HistorySearchStackThreshold"];
+        HistoryHeaderGrid.ColumnDefinitions.Clear();
+        HistoryHeaderGrid.RowDefinitions.Clear();
+        if (narrow)
+        {
+            HistoryHeaderGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            HistoryHeaderGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            HistoryHeaderGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            HistoryHeaderGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            Grid.SetColumn(HistoryTitle, 0);
+            Grid.SetColumn(HistoryCountPill, 1);
+            Grid.SetColumn(HistorySearchBox, 0);
+            Grid.SetColumnSpan(HistorySearchBox, 2);
+            Grid.SetRow(HistorySearchBox, 1);
+            Grid.SetColumn(HistorySearchIcon, 0);
+            Grid.SetColumnSpan(HistorySearchIcon, 2);
+            Grid.SetRow(HistorySearchIcon, 1);
+            Grid.SetColumn(HistorySearchShortcut, 0);
+            Grid.SetColumnSpan(HistorySearchShortcut, 2);
+            Grid.SetRow(HistorySearchShortcut, 1);
+            HistorySearchBox.HorizontalAlignment = HorizontalAlignment.Stretch;
+            HistoryHeaderGrid.RowSpacing = 10;
+            HistorySearchBox.Margin = new Thickness(0);
+        }
+        else
+        {
+            HistoryHeaderGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            HistoryHeaderGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            HistoryHeaderGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            HistoryHeaderGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = (GridLength)Application.Current.Resources["HistorySearchColumnWidth"] });
+            HistoryHeaderGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            Grid.SetColumn(HistoryTitle, 0);
+            Grid.SetColumn(HistoryCountPill, 1);
+            Grid.SetColumn(HistorySearchBox, 3);
+            Grid.SetColumnSpan(HistorySearchBox, 1);
+            Grid.SetRow(HistorySearchBox, 0);
+            Grid.SetColumn(HistorySearchIcon, 3);
+            Grid.SetColumnSpan(HistorySearchIcon, 1);
+            Grid.SetRow(HistorySearchIcon, 0);
+            Grid.SetColumn(HistorySearchShortcut, 3);
+            Grid.SetColumnSpan(HistorySearchShortcut, 1);
+            Grid.SetRow(HistorySearchShortcut, 0);
+            HistorySearchBox.HorizontalAlignment = HorizontalAlignment.Stretch;
+            HistoryHeaderGrid.RowSpacing = 0;
+            HistorySearchBox.Margin = new Thickness(0);
+        }
+    }
+
+    private void FocusHistorySearchInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        HistorySearchBox.Focus(FocusState.Keyboard);
+        args.Handled = true;
+    }
+
     private void HomeColumnsSizeChanged(object sender, SizeChangedEventArgs args)
     {
         var narrow = args.NewSize.Width < (double)Application.Current.Resources["HomeColumnsStackThreshold"];
@@ -237,7 +549,7 @@ public sealed partial class DictationPage : Page
         {
             HomeColumns.ClearValue(FrameworkElement.HeightProperty);
             HomeColumns.ClearValue(FrameworkElement.MinHeightProperty);
-            HomeInsightsColumn.SetWideLayout(false);
+            HomeActivityCard.ClearValue(FrameworkElement.MinHeightProperty);
             HomeColumns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             HomeColumns.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             HomeColumns.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -246,7 +558,7 @@ public sealed partial class DictationPage : Page
         }
         else
         {
-            HomeInsightsColumn.SetWideLayout(true);
+            HomeActivityCard.MinHeight = (double)Application.Current.Resources["HomeActivityCardMinHeight"];
             HomeColumns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             HomeColumns.ColumnDefinitions.Add(new ColumnDefinition { Width = (GridLength)Application.Current.Resources["HomeInsightsColumnWidth"] });
             HomeColumns.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
@@ -347,19 +659,13 @@ public sealed partial class DictationPage : Page
     private void RenderNotice()
     {
         var notice = _state.Notice;
-        if (!notice.ShouldDisplay)
+        if (!notice.ShouldDisplayOn(NoticeArea.Dictation))
         {
             StatusInfo.IsOpen = false;
             StatusInfo.Visibility = Visibility.Collapsed;
             return;
         }
-        StatusInfo.Severity = notice.Kind switch
-        {
-            NoticeKind.Error => InfoBarSeverity.Error,
-            NoticeKind.Warning => InfoBarSeverity.Warning,
-            NoticeKind.Success => InfoBarSeverity.Success,
-            _ => InfoBarSeverity.Informational
-        };
+        StatusInfo.Severity = notice.Kind == NoticeKind.Error ? InfoBarSeverity.Error : InfoBarSeverity.Warning;
         StatusInfo.Title = notice.Title;
         StatusInfo.Message = notice.Message;
         StatusInfo.Visibility = Visibility.Visible;

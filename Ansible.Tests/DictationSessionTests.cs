@@ -11,12 +11,12 @@ public sealed partial class DictationSessionTests : IDisposable
     [Theory]
     [InlineData(NoticeKind.Success)]
     [InlineData(NoticeKind.Information)]
-    public async Task ExplicitDeliveryNoticeRemainsVisibleUntilReplaced(NoticeKind kind)
+    public async Task RoutineOutcomesDoNotOpenStatusBanners(NoticeKind kind)
     {
         var session = Create(new FakeEngine());
-        session.Notify(kind, "Delivery outcome", "Check the destination.", showInStatus: true);
+        session.Notify(kind, "Delivery outcome", "Check the destination.");
 
-        Assert.True(session.State.Notice.ShouldDisplay);
+        Assert.False(session.State.Notice.ShouldDisplay);
         Assert.Equal(kind, session.State.Notice.Kind);
         Assert.Equal("Delivery outcome", session.State.Notice.Title);
         Assert.Equal("Check the destination.", session.State.Notice.Message);
@@ -30,7 +30,7 @@ public sealed partial class DictationSessionTests : IDisposable
     public async Task NoticeDismissalIsSharedAndCannotDismissAReplacement()
     {
         var session = Create(new FakeEngine());
-        session.Notify(NoticeKind.Information, "Delivery", "Check the destination.", showInStatus: true);
+        session.Notify(NoticeKind.Warning, "Insertion stopped", "Check the destination.");
         var first = session.State.Notice;
         SessionSnapshot? published = null;
         session.StateChanged += snapshot => published = snapshot;
@@ -38,11 +38,94 @@ public sealed partial class DictationSessionTests : IDisposable
         Assert.True(session.State.Notice.IsDismissed);
         Assert.False(session.State.Notice.ShouldDisplay);
         Assert.Same(session.State, published);
-        session.Notify(NoticeKind.Information, "Delivery", "Check the destination.", showInStatus: true);
+        session.Notify(NoticeKind.Warning, "Insertion stopped", "Check the destination.");
         var replacement = session.State.Notice;
         session.DismissNotice(first);
         Assert.Same(replacement, session.State.Notice);
         Assert.True(session.State.Notice.ShouldDisplay);
+        Assert.True(session.State.Notice.ShouldDisplayOn(NoticeArea.Dictation));
+        Assert.False(session.State.Notice.ShouldDisplayOn(NoticeArea.Dictionary));
+        Assert.False(session.State.Notice.ShouldDisplayOn(NoticeArea.Settings));
+        await session.CloseAsync();
+    }
+
+    [Fact]
+    public async Task FailedDictionarySaveIsVisibleOnlyOnDictionary()
+    {
+        var session = Create(new FakeEngine(), settings: new FakeSettingsStore { FailSaving = true });
+        await session.InitializeAsync();
+        session.SetCustomDictionary("Contoso");
+
+        Assert.Equal("Contoso", session.State.Settings.CustomDictionary);
+        Assert.True(session.State.Notice.ShouldDisplayOn(NoticeArea.Dictionary));
+        Assert.False(session.State.Notice.ShouldDisplayOn(NoticeArea.Dictation));
+        Assert.False(session.State.Notice.ShouldDisplayOn(NoticeArea.Models));
+        Assert.False(session.State.Notice.ShouldDisplayOn(NoticeArea.Settings));
+        await session.CloseAsync();
+    }
+
+    [Fact]
+    public async Task FailedPreferenceSaveIsVisibleOnlyInSettings()
+    {
+        var session = Create(new FakeEngine(), settings: new FakeSettingsStore { FailSaving = true });
+        await session.InitializeAsync();
+        session.SetLanguage("fr");
+
+        Assert.Equal("fr", session.State.Language);
+        Assert.True(session.State.Notice.ShouldDisplayOn(NoticeArea.Settings));
+        Assert.False(session.State.Notice.ShouldDisplayOn(NoticeArea.Dictionary));
+        Assert.False(session.State.Notice.ShouldDisplayOn(NoticeArea.Dictation));
+        await session.CloseAsync();
+    }
+
+    [Fact]
+    public async Task ModelMaintenanceFailureDoesNotAppearOnDictionaryOrSettings()
+    {
+        var session = Create(new FakeEngine());
+        await session.InitializeAsync();
+        var outcome = await session.MaintainModelsAsync(_ => throw new IOException("Model file is locked."));
+
+        Assert.Equal(SessionOutcomeKind.Failed, outcome.Kind);
+        Assert.True(session.State.Notice.ShouldDisplayOn(NoticeArea.Models));
+        Assert.False(session.State.Notice.ShouldDisplayOn(NoticeArea.Dictionary));
+        Assert.False(session.State.Notice.ShouldDisplayOn(NoticeArea.Settings));
+        await session.CloseAsync();
+    }
+
+    [Fact]
+    public async Task CancellationShowsActivityWithoutOpeningAWarning()
+    {
+        var session = Create(new FakeEngine());
+        await session.InitializeAsync();
+        var states = new System.Collections.Concurrent.ConcurrentQueue<SessionSnapshot>();
+        session.StateChanged += states.Enqueue;
+        var recording = session.StartDictationAsync();
+        await WaitForStateAsync(session, DictationPhase.Recording);
+
+        await session.CancelAsync();
+
+        Assert.Equal(SessionOutcomeKind.Cancelled, (await recording).Kind);
+        Assert.Contains(states, state => state.Phase == DictationPhase.Cancelling);
+        Assert.All(states, state => Assert.False(state.Notice.ShouldDisplay));
+        await session.CloseAsync();
+    }
+
+    [Theory]
+    [InlineData("hello world")]
+    [InlineData("")]
+    public async Task RecognitionCompletionDoesNotOpenABanner(string speech)
+    {
+        var session = Create(new FakeEngine { Result = new(speech, speech) });
+        await session.InitializeAsync();
+        var states = new System.Collections.Concurrent.ConcurrentQueue<SessionSnapshot>();
+        session.StateChanged += states.Enqueue;
+
+        var outcome = await session.TranscribeFileAsync("sample.wav");
+
+        Assert.Equal(SessionOutcomeKind.Completed, outcome.Kind);
+        Assert.Equal(speech, session.State.Transcript);
+        Assert.False(session.State.Notice.ShouldDisplay);
+        Assert.All(states, state => Assert.False(state.Notice.ShouldDisplay));
         await session.CloseAsync();
     }
 
@@ -406,7 +489,7 @@ public sealed partial class DictationSessionTests : IDisposable
     }
 
     [Fact]
-    public async Task FailedPreparationWarnsWithoutBlockingDictation()
+    public async Task FailedPreparationKeepsDiagnosticsWithoutOpeningABannerOrBlockingDictation()
     {
         var engine = new FakeEngine { Preparing = _ => Task.FromException(new InsufficientMemoryException("not enough memory")) };
         var session = Create(engine);
@@ -415,6 +498,7 @@ public sealed partial class DictationSessionTests : IDisposable
         await WaitUntilAsync(() => session.State.Notice.Title == "Model not preloaded");
 
         Assert.Contains("not enough memory", session.State.Notice.Message);
+        Assert.False(session.State.Notice.ShouldDisplay);
         Assert.True(session.State.CanStart);
         await session.CloseAsync();
     }
@@ -467,11 +551,11 @@ public sealed partial class DictationSessionTests : IDisposable
         var outcome = await recording;
         Assert.Equal(SessionOutcomeKind.Completed, outcome.Kind);
         Assert.Equal("Speaker 0: hello world", session.State.Transcript);
+        await session.CloseAsync();
         Assert.Equal(2, Assert.Single(usage.Document.Entries).Words);
         Assert.Equal(10, usage.Document.Entries[0].RecordingSeconds);
         Assert.Equal(1, source.Disposals);
         Assert.Equal(1, factory.Starts);
-        await session.CloseAsync();
     }
 
     [Fact]
@@ -534,10 +618,13 @@ public sealed partial class DictationSessionTests : IDisposable
         var usage = new FakeUsageStore { FailRecording = true };
         var session = Create(new FakeEngine(), usage: usage);
         await session.InitializeAsync();
+        var reported = UsageFailureAsync(session);
         var outcome = await session.TranscribeFileAsync("sample.wav");
+        await reported.WaitAsync(TimeSpan.FromSeconds(2));
         Assert.Equal(SessionOutcomeKind.Completed, outcome.Kind);
         Assert.Equal("hello world", session.State.Transcript);
-        Assert.Equal(NoticeKind.Warning, session.State.Notice.Kind);
+        Assert.False(session.State.Notice.ShouldDisplay);
+        Assert.NotNull(session.State.UsageError);
         Assert.Empty(usage.Document.Entries);
         await session.CloseAsync();
     }
@@ -808,6 +895,46 @@ public sealed partial class DictationSessionTests : IDisposable
         await restarted.InitializeAsync();
         Assert.Equal("previous word", restarted.State.Settings.CustomDictionary);
         await restarted.CloseAsync();
+    }
+
+    [Fact]
+    public async Task DictionaryEntryEditsPersistAndUpdateTheNextRecognition()
+    {
+        var supported = Model with { SupportsCustomDictionary = true };
+        var engine = new FakeEngine
+        {
+            Connecting = _ => Task.FromResult<IReadOnlyList<AudioModel>>([supported])
+        };
+        var store = new AppSettingsStore(SettingsPath);
+        var session = Create(engine, settings: store);
+        await session.InitializeAsync();
+
+        session.SetCustomDictionary(CustomVocabulary.AddEntries(session.State.Settings.CustomDictionary,
+            "Contoso\nNative AOT\ncontoso"));
+        Assert.Equal("Contoso\nNative AOT", store.Load().CustomDictionary);
+
+        var beforeRemoval = session.State.Settings.CustomDictionary;
+        session.SetCustomDictionary(CustomVocabulary.RemoveEntry(beforeRemoval, "Contoso"));
+        Assert.Equal("Native AOT", store.Load().CustomDictionary);
+        await session.TranscribeFileAsync("sample.wav");
+        Assert.Equal("Native AOT", engine.LastDictionary);
+
+        session.SetCustomDictionary(beforeRemoval);
+        Assert.Equal("Contoso\nNative AOT", store.Load().CustomDictionary);
+        await session.TranscribeFileAsync("sample.wav");
+        Assert.Equal("Contoso\nNative AOT", engine.LastDictionary);
+
+        session.SetCustomDictionary(CustomVocabulary.ReplaceEntry(session.State.Settings.CustomDictionary, "Native AOT", "NativeAOT"));
+        Assert.Equal("Contoso\nNativeAOT", store.Load().CustomDictionary);
+        await session.TranscribeFileAsync("sample.wav");
+        Assert.Equal("Contoso\nNativeAOT", engine.LastDictionary);
+
+        session.SetCustomDictionary(CustomVocabulary.RemoveEntry(session.State.Settings.CustomDictionary, "Contoso"));
+        session.SetCustomDictionary(CustomVocabulary.RemoveEntry(session.State.Settings.CustomDictionary, "NativeAOT"));
+        Assert.Equal("", store.Load().CustomDictionary);
+        await session.TranscribeFileAsync("sample.wav");
+        Assert.Equal("", engine.LastDictionary);
+        await session.CloseAsync();
     }
 
     [Fact]

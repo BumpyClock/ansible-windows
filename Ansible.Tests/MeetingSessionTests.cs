@@ -29,7 +29,7 @@ public sealed class MeetingSessionTests : IDisposable
         } };
         var captures = new CaptureFactory();
         var releases = 0;
-        var session = new MeetingSession(() => engine, captures, new(_directory), new(),
+        var session = new MeetingSession(() => engine, captures, new(_directory), () => new(),
             release: () => { releases++; return Task.CompletedTask; });
         var start = session.StartAsync(Request);
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
@@ -57,7 +57,7 @@ public sealed class MeetingSessionTests : IDisposable
         var reserved = 0;
         var released = 0;
         var store = new MeetingStore(_directory);
-        await using var session = new MeetingSession(() => engine, capture, store, new(),
+        await using var session = new MeetingSession(() => engine, capture, store, () => new(),
             () => { reserved++; return Task.CompletedTask; }, () => { released++; return Task.CompletedTask; });
         await session.StartAsync(Request);
         capture.Captures[0].Send(3200);
@@ -157,7 +157,7 @@ public sealed class MeetingSessionTests : IDisposable
     {
         var engine = new Engine { ConnectFailure = new InvalidOperationException("Model missing") };
         var releases = 0;
-        await using var session = new MeetingSession(() => engine, new CaptureFactory(), new(_directory), new(),
+        await using var session = new MeetingSession(() => engine, new CaptureFactory(), new(_directory), () => new(),
             release: () => { releases++; return Task.CompletedTask; });
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => session.StartAsync(Request));
         Assert.Equal("Model missing", error.Message);
@@ -190,7 +190,7 @@ public sealed class MeetingSessionTests : IDisposable
         var captures = new CaptureFactory { StartupFailure = new CaptureOwnershipException("Capture failed", retained, new IOException("Device lost")) };
         var releases = 0;
         var engine = new Engine();
-        await using var session = new MeetingSession(() => engine, captures, new(_directory), new(),
+        await using var session = new MeetingSession(() => engine, captures, new(_directory), () => new(),
             release: () => { releases++; return Task.CompletedTask; });
         await Assert.ThrowsAnyAsync<Exception>(() => session.StartAsync(Request));
         Assert.True(session.IsActive);
@@ -238,7 +238,7 @@ public sealed class MeetingSessionTests : IDisposable
         Assert.Equal("First continued", saved.Turns[0].Text);
     }
 
-    private MeetingSession Create(Engine engine, CaptureFactory captures) => new(() => engine, captures, new(_directory), new());
+    private MeetingSession Create(Engine engine, CaptureFactory captures) => new(() => engine, captures, new(_directory), () => new());
 
     [Fact]
     public async Task EndFromUiContextFinalizesAndReleasesNativeResourcesOffUi()
@@ -250,7 +250,7 @@ public sealed class MeetingSessionTests : IDisposable
         var store = new MeetingStore(_directory);
         await context.RunAsync(async () =>
         {
-            await using var session = new MeetingSession(() => engine, captures, store, new(), alignerFactory: () => aligner);
+            await using var session = new MeetingSession(() => engine, captures, store, () => new(), alignerFactory: () => aligner);
             await session.StartAsync(Request);
             captures.Captures[0].Send(96000);
             await WaitUntilAsync(() => engine.ReadBytes == 96000);
@@ -314,7 +314,7 @@ public sealed class MeetingSessionTests : IDisposable
         var engine = new Engine();
         var captures = new CaptureFactory();
         var aligner = new Aligner();
-        await using var session = new MeetingSession(() => engine, captures, new(_directory), new(), alignerFactory: () => aligner);
+        await using var session = new MeetingSession(() => engine, captures, new(_directory), () => new(), alignerFactory: () => aligner);
         await session.StartAsync(Request);
         captures.Captures[0].Send(16000 * 2 * 3);
         await WaitUntilAsync(() => engine.ReadBytes == 96000);
@@ -340,13 +340,13 @@ public sealed class MeetingSessionTests : IDisposable
         var engine = new Engine();
         var captures = new CaptureFactory();
         var aligner = new Aligner { FailInitialization = true };
-        await using var session = new MeetingSession(() => engine, captures, new(_directory), new(), alignerFactory: () => aligner);
+        await using var session = new MeetingSession(() => engine, captures, new(_directory), () => new(), alignerFactory: () => aligner);
         await session.StartAsync(Request);
         captures.Captures[0].Send(32000);
         await WaitUntilAsync(() => engine.ReadBytes == 32000);
         engine.Report("Speaker 0: Local speech");
         await session.EndAsync();
-        Assert.Contains("unavailable", session.State.RefinementStatus);
+        Assert.Null(session.State.Error);
         Assert.Equal(MeetingSessionPhase.Completed, session.State.Phase);
         Assert.Equal("Local speech", session.Document!.Turns[0].Text);
         Assert.Equal(MeetingTimingQuality.Chunk, session.Document.Turns[0].TimingQuality);
@@ -376,7 +376,7 @@ public sealed class MeetingSessionTests : IDisposable
         var engine = new Engine();
         var captures = new CaptureFactory();
         var observer = new Observer();
-        await using var session = new MeetingSession(() => engine, captures, new(_directory), new(),
+        await using var session = new MeetingSession(() => engine, captures, new(_directory), () => new(),
             observerFactory: () => observer, alignerFactory: () => new TwoTurnAligner());
         await session.StartAsync(new(MeetingPlaybackSource.MeetingApp, 42));
         captures.Captures[0].PlaybackRms = 0.2;
@@ -460,6 +460,49 @@ public sealed class MeetingSessionTests : IDisposable
 
     public void Dispose() { if (Directory.Exists(_directory)) Directory.Delete(_directory, recursive: true); }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task MeetingReadsCurrentDictionaryAtStartAndKeepsItUntilTheNextMeeting(bool supportsDictionary)
+    {
+        var engine = new Engine { SupportsDictionary = supportsDictionary };
+        var options = new RecognitionOptions(CustomDictionary: "word from when the window opened");
+        await using var session = new MeetingSession(() => engine, new CaptureFactory(), new(_directory), () => options);
+
+        options = options with { CustomDictionary = "latest word" };
+        await session.StartAsync(Request);
+        Assert.Equal(supportsDictionary ? "latest word" : "", engine.PreparedOptions?.CustomDictionary);
+        Assert.Equal(engine.PreparedOptions, engine.StreamedOptions);
+
+        options = options with { CustomDictionary = "word for next meeting" };
+        await session.PauseAsync();
+        await session.ResumeAsync();
+        Assert.Equal(supportsDictionary ? "latest word" : "", engine.StreamedOptions?.CustomDictionary);
+        await session.EndAsync();
+
+        await session.StartAsync(Request);
+        Assert.Equal(supportsDictionary ? "word for next meeting" : "", engine.PreparedOptions?.CustomDictionary);
+        Assert.Equal(engine.PreparedOptions, engine.StreamedOptions);
+        await session.EndAsync();
+    }
+
+    [Fact]
+    public async Task UnavailableRecognitionOptionsReleaseTheMeetingReservation()
+    {
+        var releases = 0;
+        var captures = new CaptureFactory();
+        await using var session = new MeetingSession(() => new Engine(), captures, new(_directory),
+            () => throw new InvalidOperationException("Options unavailable."),
+            release: () => { releases++; return Task.CompletedTask; });
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => session.StartAsync(Request));
+
+        Assert.False(session.IsActive);
+        Assert.Empty(captures.Captures);
+        Assert.Equal(1, releases);
+        Assert.Equal(MeetingSessionPhase.Failed, session.State.Phase);
+    }
+
     private sealed class Engine : IMeetingRecognitionEngine
     {
         private IProgress<TranscriptUpdate>? _progress;
@@ -473,17 +516,25 @@ public sealed class MeetingSessionTests : IDisposable
         public SynchronizationContext? DisposalContext { get; private set; }
         public bool BlockReads { get; init; }
         public Exception? ConnectFailure { get; init; }
+        public bool SupportsDictionary { get; init; }
+        public RecognitionOptions? PreparedOptions { get; private set; }
+        public RecognitionOptions? StreamedOptions { get; private set; }
         public Func<CancellationToken, Task>? Preparing { get; init; }
-        public Task PrepareMeetingAsync(AudioModel model, RecognitionOptions options, CancellationToken token) =>
-            Preparing?.Invoke(token) ?? Task.CompletedTask;
+        public Task PrepareMeetingAsync(AudioModel model, RecognitionOptions options, CancellationToken token)
+        {
+            PreparedOptions = options;
+            return Preparing?.Invoke(token) ?? Task.CompletedTask;
+        }
         public TaskCompletionSource AllowReads { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public Task<IReadOnlyList<AudioModel>> ConnectAsync(CancellationToken cancellationToken) => ConnectFailure is { } error
             ? Task.FromException<IReadOnlyList<AudioModel>>(error)
-            : Task.FromResult<IReadOnlyList<AudioModel>>([new() { Id = "vibevoice", Family = "vibevoice_asr_streaming", Mode = "streaming" }]);
+            : Task.FromResult<IReadOnlyList<AudioModel>>([new() { Id = "vibevoice", Family = "vibevoice_asr_streaming",
+                Mode = "streaming", SupportsCustomDictionary = SupportsDictionary }]);
         public async Task StreamMeetingAsync(AudioModel model, ChannelReader<byte[]> audio, RecognitionOptions options,
             IProgress<TranscriptUpdate> progress, CancellationToken cancellationToken, Action? onReady = null)
         {
             StreamCalls++;
+            StreamedOptions = options;
             _progress = progress;
             onReady?.Invoke();
             try

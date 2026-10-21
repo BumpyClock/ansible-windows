@@ -30,12 +30,9 @@
                 </Grid>
             </Border>
             <TextBlock x:Name="DelayText" Visibility="Collapsed" Style="{StaticResource CaptionSecondaryStyle}"/>
-            <TextBlock x:Name="DeviceStatusText" Visibility="Collapsed" TextWrapping="Wrap"
-                       Style="{StaticResource CaptionSecondaryStyle}" AutomationProperties.LiveSetting="Polite"/>
-            <TextBlock x:Name="NamingStatusText" Visibility="Collapsed" Style="{StaticResource CaptionSecondaryStyle}" AutomationProperties.LiveSetting="Polite"/>
-            <TextBlock x:Name="RefinementStatusText" Visibility="Collapsed" Style="{StaticResource CaptionSecondaryStyle}" AutomationProperties.LiveSetting="Polite"/>
             <TextBlock x:Name="CleanupStatusText" Visibility="Collapsed" Style="{StaticResource CaptionSecondaryStyle}" AutomationProperties.LiveSetting="Polite"/>
-            <InfoBar x:Name="ErrorBar" Severity="Error" IsOpen="False" IsClosable="True"/>
+            <InfoBar x:Name="ErrorBar" Severity="Error" IsOpen="False" IsClosable="True"
+                     Visibility="Collapsed" Closed="ErrorBarClosed"/>
         </StackPanel>
         <Grid Grid.Row="3" Margin="32,0,32,0">
             <ScrollViewer x:Name="TranscriptScroll" HorizontalScrollBarVisibility="Disabled">

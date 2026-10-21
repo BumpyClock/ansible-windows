@@ -1,0 +1,23 @@
+diff --git a/src/models/nemotron_asr/session.cpp b/src/models/nemotron_asr/session.cpp
+--- a/src/models/nemotron_asr/session.cpp
++++ b/src/models/nemotron_asr/session.cpp
+@@ -609,6 +609,9 @@ runtime::StreamEvent NemotronASRStreamingSession::publish_stream_update() {
+     if (!delta.empty()) {
+         event.partial_text = runtime::Transcript{std::move(delta), streaming_language_};
+     }
++    // Cumulative token anchors let a live diarizer attribute the same audio in memory.
++    // They are a snapshot, not a delta; the final token may still grow.
++    event.word_timestamps = decoder_->stream_result(decoder_stream_state_).token_timestamps;
+     if (stream_event_sink_) {
+         stream_event_sink_(event);
+         return {};
+@@ -639,6 +642,9 @@ runtime::StreamEvent NemotronASRStreamingSession::process_available_chunks(
+             combined.partial_text->text += event.partial_text->text;
+         }
+         if (!stream_event_sink_) {
++            if (!event.word_timestamps.empty()) {
++                combined.word_timestamps = std::move(event.word_timestamps);
++            }
+             combined.speaker_turns.insert(
+                 combined.speaker_turns.end(), event.speaker_turns.begin(), event.speaker_turns.end());
+         }

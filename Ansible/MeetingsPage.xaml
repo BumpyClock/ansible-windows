@@ -11,7 +11,8 @@
             <Button x:Name="NewMeetingButton" Content="Start meeting" Style="{StaticResource AppPrimaryButtonStyle}" Click="NewMeetingClicked" AutomationProperties.AutomationId="StartMeeting"/>
             <TextBlock Text="Transcripts save automatically. Audio is never saved." Style="{StaticResource CaptionSecondaryStyle}"/>
         </StackPanel>
-        <InfoBar x:Name="ErrorBar" Grid.Row="1" Margin="{StaticResource PageSectionBottomMargin}" Severity="Error" IsOpen="False" IsClosable="True"/>
+        <InfoBar x:Name="ErrorBar" Grid.Row="1" Margin="{StaticResource PageSectionBottomMargin}" Severity="Error" IsOpen="False" IsClosable="True"
+                 Visibility="Collapsed" Closing="ErrorBarClosing"/>
         <Grid Grid.Row="2">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel Spacing="16">

@@ -2,6 +2,13 @@ using System.Text.Json.Serialization;
 
 namespace Ansible.Core;
 
+public static class AudioModelDefaults
+{
+    public const string RecognitionModelId = "nemotron-asr-0.6b-q8";
+    public const string DiarizationModelId = "nemotron-3-diarization-q8";
+    public const string KrokoModelId = "kroko-en-64l-q8";
+}
+
 public sealed record AudioModel
 {
     [JsonPropertyName("id")]
@@ -29,7 +36,8 @@ public sealed record AudioModel
     public bool HasPlainSpeechText => SpeechContent.IsPlainSpeechFamily(Family);
 
     /// <summary>Accepts microphone input, buffered until Finish for offline VibeVoice.</summary>
-    public bool SupportsMicrophone => Mode == "streaming" || Family == "vibevoice_asr" && Mode == "offline";
+    public bool SupportsMicrophone => Task != "diar" &&
+        (Mode == "streaming" || Family == "vibevoice_asr" && Mode == "offline");
 
     /// <summary>Can supply final speech through plain text, metadata, or VibeVoice speaker parsing.</summary>
     public bool CanInsertDictation => SupportsMicrophone &&
@@ -51,4 +59,5 @@ public static class SpeechContent
 public sealed record TranscriptUpdate(string Text, bool IsFinal, string? SpeechText = null)
 {
     public long? ProcessedSamples { get; init; }
+    public IReadOnlyList<MeetingTurn>? SpeakerTurns { get; init; }
 }

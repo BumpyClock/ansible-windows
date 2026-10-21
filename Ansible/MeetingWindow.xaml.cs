@@ -145,12 +145,6 @@ public sealed partial class MeetingWindow : Window
         };
         DelayText.Visibility = state.PendingSeconds >= 10 ? Visibility.Visible : Visibility.Collapsed;
         DelayText.Text = $"{FormatTime(state.PendingSeconds)} of captured audio awaiting transcription";
-        DeviceStatusText.Visibility = string.IsNullOrEmpty(state.DeviceSelectionSummary) ? Visibility.Collapsed : Visibility.Visible;
-        DeviceStatusText.Text = state.DeviceSelectionSummary;
-        NamingStatusText.Visibility = string.IsNullOrWhiteSpace(state.NamingStatus) ? Visibility.Collapsed : Visibility.Visible;
-        NamingStatusText.Text = state.NamingStatus ?? "";
-        RefinementStatusText.Visibility = string.IsNullOrWhiteSpace(state.RefinementStatus) ? Visibility.Collapsed : Visibility.Visible;
-        RefinementStatusText.Text = state.RefinementStatus ?? "";
         SaveText.Text = "Text saves automatically";
         EmptyTitle.Text = preparing ? "Preparing local transcription" : finishing ? "Finishing your meeting" : active ? "Listening for your conversation" : "Ready when you are";
         EmptyDescription.Text = state.Phase == MeetingSessionPhase.Paused
@@ -175,10 +169,6 @@ public sealed partial class MeetingWindow : Window
             ElapsedText.Text = FormatTime(_document.Turns.LastOrDefault()?.EndSeconds ?? 0);
             EmptyTitle.Text = "No transcript text";
             EmptyDescription.Text = "This meeting has no saved speech. Audio was not stored.";
-            NamingStatusText.Visibility = Visibility.Visible;
-            NamingStatusText.Text = _document.AutoSpeakerNames.Count > 0
-                ? "Automatic speaker names are editable. Click a label to correct it."
-                : "Click a speaker label to name the speaker.";
         }
         if (ReferenceEquals(_renderedTurns, _document.Turns) && ReferenceEquals(_renderedNames, _document.SpeakerNames) && ReferenceEquals(_renderedAutoNames, _document.AutoSpeakerNames)) return;
         var nearBottom = TranscriptScroll.ScrollableHeight - TranscriptScroll.VerticalOffset < 60;
@@ -325,7 +315,6 @@ public sealed partial class MeetingWindow : Window
             var data = new DataPackage();
             data.SetText(MeetingStore.ExportText(_document));
             Clipboard.SetContent(data);
-            SaveText.Text = "Transcript copied";
         }
         catch (Exception error) { ShowError(error.Message); }
     }
@@ -339,7 +328,7 @@ public sealed partial class MeetingWindow : Window
             picker.FileTypeChoices.Add("Text document", [".txt"]);
             WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
             var file = await picker.PickSaveFileAsync();
-            if (file is not null) { await FileIO.WriteTextAsync(file, MeetingStore.ExportText(_document)); SaveText.Text = "Transcript exported"; }
+            if (file is not null) await FileIO.WriteTextAsync(file, MeetingStore.ExportText(_document));
         }
         catch (Exception error) { ShowError(error.Message); }
     }
@@ -479,7 +468,7 @@ public sealed partial class MeetingWindow : Window
     private async Task CleanWordingAsync(MeetingDocument document, MeetingCleanupOptions options, CancellationToken token)
     {
         CleanupStatusText.Visibility = Visibility.Visible;
-        CleanupStatusText.Text = "Cleaning up wording with Copilot. Original text is kept until the complete result is ready.";
+        CleanupStatusText.Text = "Cleaning up wording...";
         ErrorBar.IsOpen = false;
         try
         {
@@ -491,20 +480,17 @@ public sealed partial class MeetingWindow : Window
                 await _session.ApplyCleanupAsync(texts);
                 _document = _session.Document;
             }
-            CleanupStatusText.Text = "Wording cleaned up. Original text remains available.";
             RenderDocument();
         }
-        catch (OperationCanceledException) when (token.IsCancellationRequested)
-        {
-            CleanupStatusText.Text = "Cleanup cancelled. Transcript unchanged.";
-        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         catch (Exception error)
         {
-            CleanupStatusText.Text = "Cleanup could not be completed. Original wording remains available.";
             ShowError(error.Message);
         }
         finally
         {
+            CleanupStatusText.Visibility = Visibility.Collapsed;
+            CleanupStatusText.Text = "";
             DeleteMenuItem.IsEnabled = !_session.IsActive && _document is not null;
         }
     }
@@ -544,7 +530,7 @@ public sealed partial class MeetingWindow : Window
     private async Task RestoreWordingAsync(CancellationToken token)
     {
         CleanupStatusText.Visibility = Visibility.Visible;
-        CleanupStatusText.Text = "Restoring original wording.";
+        CleanupStatusText.Text = "Restoring original wording...";
         try
         {
             if (_savedMeeting) _document = await _store.RevertCleanupAsync(_document!.Id, token);
@@ -554,19 +540,19 @@ public sealed partial class MeetingWindow : Window
                 await _session.ApplyCleanupAsync(_document!.Turns.Select(turn => turn.OriginalText ?? turn.Text).ToArray());
                 _document = _session.Document;
             }
-            CleanupStatusText.Text = "Original wording restored.";
             RenderDocument();
         }
-        catch (OperationCanceledException) when (token.IsCancellationRequested)
-        {
-            CleanupStatusText.Text = "Restore cancelled.";
-        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         catch (Exception error)
         {
-            CleanupStatusText.Text = "Original wording could not be restored.";
             ShowError(error.Message);
         }
-        finally { DeleteMenuItem.IsEnabled = !_session.IsActive && _document is not null; }
+        finally
+        {
+            CleanupStatusText.Visibility = Visibility.Collapsed;
+            CleanupStatusText.Text = "";
+            DeleteMenuItem.IsEnabled = !_session.IsActive && _document is not null;
+        }
     }
 
     private void AudioSourceChanged(object sender, SelectionChangedEventArgs args)
@@ -627,7 +613,17 @@ public sealed partial class MeetingWindow : Window
         if (_selectedDetectedMeeting != SelectedMeetingIdentity) _selectedDetectedMeeting = null;
         UpdateNamingHelp();
     }
-    private void ShowError(string message) { ErrorBar.Title = "Meeting needs attention"; ErrorBar.Message = message; ErrorBar.IsOpen = true; }
+    private void ShowError(string message)
+    {
+        ErrorBar.Title = "Meeting needs attention";
+        ErrorBar.Message = message;
+        ErrorBar.Visibility = Visibility.Visible;
+        ErrorBar.IsOpen = true;
+    }
+    private void ErrorBarClosed(InfoBar sender, InfoBarClosedEventArgs args)
+    {
+        if (!sender.IsOpen) sender.Visibility = Visibility.Collapsed;
+    }
     private static string FormatTime(double seconds) => TimeSpan.FromSeconds(Math.Max(0, seconds)).ToString(seconds >= 3600 ? @"h\:mm\:ss" : @"m\:ss");
     private static string FormatTurnTime(MeetingTurn turn) => turn.TimingQuality switch
     {

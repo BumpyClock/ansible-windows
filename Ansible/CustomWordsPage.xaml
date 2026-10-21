@@ -76,7 +76,6 @@
                     </Border>
                     <ListView x:Name="WordsList" Grid.Row="1" AutomationProperties.AutomationId="CustomWordsList"
                               AutomationProperties.Name="Dictionary entries" SelectionMode="None"
-                              ContainerContentChanging="WordsContainerContentChanging"
                               CornerRadius="{StaticResource OverlayCornerRadius}">
                         <ListView.ItemContainerStyle>
                             <Style TargetType="ListViewItem">
@@ -86,27 +85,25 @@
                             </Style>
                         </ListView.ItemContainerStyle>
                         <ListView.ItemTemplate>
-                            <DataTemplate x:DataType="local:DictionaryWord">
+                            <DataTemplate x:DataType="x:String">
                                 <Border BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" BorderThickness="0,0,0,1">
                                     <Grid Padding="20,8,12,8" ColumnSpacing="16" MinHeight="64">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Text="{x:Bind Word}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                                        <TextBlock Text="{x:Bind}" TextWrapping="Wrap" VerticalAlignment="Center" />
                                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-                                            <Button Tag="{x:Bind Word}" MinWidth="40" MinHeight="40"
+                                            <Button Tag="{x:Bind}" MinWidth="40" MinHeight="40"
                                                     AutomationProperties.AutomationId="EditCustomWordButton"
-                                                    AutomationProperties.Name="{x:Bind EditName}"
                                                     Style="{StaticResource SubtleButtonStyle}" Click="EditWordClicked"
-                                                    ToolTipService.ToolTip="Edit word">
+                                                    Loaded="RowButtonLoaded" ToolTipService.ToolTip="Edit word">
                                                 <FontIcon Glyph="&#xE70F;" FontSize="16" />
                                             </Button>
-                                            <Button Tag="{x:Bind Word}" MinWidth="40" MinHeight="40"
+                                            <Button Tag="{x:Bind}" MinWidth="40" MinHeight="40"
                                                     AutomationProperties.AutomationId="RemoveCustomWordButton"
-                                                    AutomationProperties.Name="{x:Bind RemoveName}"
                                                     Style="{StaticResource SubtleButtonStyle}" Click="RemoveWordClicked"
-                                                    ToolTipService.ToolTip="Remove word">
+                                                    Loaded="RowButtonLoaded" ToolTipService.ToolTip="Remove word">
                                                 <FontIcon Glyph="&#xE74D;" FontSize="16" />
                                             </Button>
                                         </StackPanel>
@@ -146,8 +143,7 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock x:Name="ModelStatusText" VerticalAlignment="Center" TextWrapping="Wrap"
-                               Style="{StaticResource CaptionSecondaryStyle}" />
+                    <TextBlock x:Name="ModelStatusText" VerticalAlignment="Center" Style="{StaticResource CaptionSecondaryStyle}" />
                     <HyperlinkButton Grid.Column="1" Content="Speech models" Padding="0,4"
                                      AutomationProperties.AutomationId="CustomWordsModelsButton" Click="ModelsClicked" />
                 </Grid>

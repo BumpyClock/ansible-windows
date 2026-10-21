@@ -96,8 +96,11 @@ public sealed partial class NativeAudioEngine
                 }
                 channel.Writer.TryWrite(pcm);
                 channel.Writer.TryComplete();
-                return StreamCore(model, channel.Reader, options, null, CancellationToken.None, null,
+                var result = StreamCore(model, channel.Reader, options, null, CancellationToken.None, null,
                     history == 0 ? NativeMemory.MaximumStreamFrames : 16000L * 120 * 60, history);
+                if (history > 0 && UsesDiarization(model) && _diarization?.HasSpeakerActivity != true)
+                    throw new InvalidDataException("The public sample produced no speaker activity during paired qualification.");
+                return result;
             }
             static void Validate(RecognitionResult result)
             {

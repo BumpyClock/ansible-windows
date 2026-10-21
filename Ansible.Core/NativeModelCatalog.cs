@@ -45,6 +45,9 @@ public sealed record NativeModelCatalog
             if (entry is null || !IsIdentifier(entry.Id) || !IsIdentifier(entry.Family) ||
                 !IsFilename(entry.Filename) || entry.Bytes <= 0 ||
                 entry.Mode is not "offline" and not "streaming" ||
+                entry.Task is not "asr" and not "diar" ||
+                entry.Task == "diar" && entry.Family != "nemotron_3_diar" ||
+                entry.Family == "nemotron_3_diar" && entry.Task != "diar" ||
                 entry.Preview is not (null or "final-only" or "live" or "buffered") ||
                 entry.SupportsCustomDictionary &&
                     entry.Family is not ("qwen3_asr" or "vibevoice_asr" or "vibevoice_asr_streaming" or "kroko_asr") ||
@@ -80,7 +83,7 @@ public sealed record NativeModelCatalog
             }
             models.Add(new AudioModel
             {
-                Id = entry.Id, Family = entry.Family, Mode = entry.Mode, Task = "asr",
+                Id = entry.Id, Family = entry.Family, Mode = entry.Mode, Task = entry.Task,
                 ModelPath = path, Preview = entry.Preview, DisplayName = entry.DisplayName,
                 SupportsCustomDictionary = entry.SupportsCustomDictionary
             });
@@ -110,8 +113,13 @@ internal sealed record NativeModelInventory(
 
 public sealed record NativeModelEntry
 {
+    // Source-generated JSON preserves constructor defaults, not init-only property initializers.
+    [JsonConstructor]
+    public NativeModelEntry(string task = "asr") => Task = task;
+
     [JsonPropertyName("id")] public required string Id { get; init; }
     [JsonPropertyName("family")] public required string Family { get; init; }
+    [JsonPropertyName("task")] public string Task { get; init; }
     [JsonPropertyName("mode")] public required string Mode { get; init; }
     [JsonPropertyName("filename")] public required string Filename { get; init; }
     [JsonPropertyName("bytes")] public required long Bytes { get; init; }

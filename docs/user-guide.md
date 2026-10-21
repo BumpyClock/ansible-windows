@@ -6,10 +6,8 @@ See the [README](../README.md#build-and-run) to build and launch the app.
 
 **Home** shows recent completed dictations with timestamps, search, and Copy.
 History stays in memory for this app session. Closing Ansible clears it. The
-history keeps at most 100 entries within a bounded text budget. Copy completed
-dictations from History. Search can hide entries until you clear its filter.
-WAV results and dictations too large for history remain available in the separate
-transcript area. Audio is never saved.
+history keeps at most 100 entries within a bounded text budget. The current
+transcript remains available separately. Audio is never saved.
 
 Use **Dictate** or your configured shortcut to record. Choose the active model
 and use **Transcribe WAV file** on **Models**.
@@ -25,10 +23,8 @@ Compact windows use an icon sidebar, smaller page padding, and stacked controls.
 
 Ansible checks microphone permission at launch, before recording can start. If
 Windows requires consent, the app requests it then. Already granted access does
-not prompt again. If Windows blocks access, a compact overlay offers **Open
-settings** and **Check again** without changing page height. Dismiss it to reveal
-the content underneath. Open **Settings** in Ansible to show the guidance again.
-Enable the applicable microphone
+not prompt again. If Windows blocks access, the main window shows **Open
+microphone settings** and **Check again**. Enable the applicable microphone
 access settings, then return to Ansible. Policy restrictions may require your
 administrator. File transcription and model management remain available.
 
@@ -42,7 +38,7 @@ are not requested because these features do not use them.
 
 Open **Speech models**. Select **Download** on a model card, or open **Model folder**
 and use **Choose folder** to select a folder containing catalog weights. Select
-**Use** on an installed model to make it active.
+**Use** on an installed model, or select it from **Speech model** on Home.
 
 Downloads start only when requested. **Pause** keeps partial files for **Resume**.
 The app verifies the length and SHA-256 before installing weights. If recognition
@@ -55,9 +51,12 @@ both require confirmation. Installation, removal, and folder changes are availab
 only while recognition is idle. Removing the last model leaves the app disconnected
 until another model is installed.
 
-The app remembers the selected model by ID. If it is missing from the chosen
-folder, the app warns and uses the first available model for that session. The
-saved choice is retained until you explicitly select another model.
+The app remembers the selected model by ID. With no saved choice, it prefers
+`nemotron-asr-0.6b-q8` when that file is installed. If the saved choice is
+missing from the chosen folder, the app warns and uses the first available
+model for that session. The saved choice is retained until you explicitly
+select another model. Nemotron 3 Diarization is a meeting companion. It is
+downloadable from **Speech models** but cannot be selected for dictation.
 
 ### Model behavior
 
@@ -70,17 +69,23 @@ and in the [catalog](../tools/audio-models.json).
 | `moonshine-tiny` | Microphone and WAV | Final only; English only | Yes |
 | `qwen3-asr-0.6b-q8` | Microphone and WAV | Buffered | Yes |
 | `nemotron-asr-0.6b-q8` | Microphone and WAV | Can produce live previews | Yes, after final recognition |
-| `kroko-en-64l-q8` | Microphone and WAV | Live English previews; custom hotwords | Yes, after final recognition |
+| `kroko-en-64l-q8` | Microphone and WAV | Can produce live previews; English only | Yes, after final recognition |
 | `vibevoice-streaming-1.5b-q4` | Microphone and WAV | Can produce live previews with annotations | Yes, after final recognition |
 | `vibevoice-asr-7b-q8` | Microphone and WAV | Buffered until Finish; final only | Yes, after final recognition |
+| `nemotron-3-diarization-q8` | Meeting companion only | Speaker activity intervals; cannot transcribe | No |
 
 Live previews can appear in the main transcript, but a short recording may end
-before any preview arrives. VibeVoice output can contain speaker labels. Shortcut
-insertion uses speech metadata or parses the streaming model's speaker format to
-remove labels. Unrecognized output is not inserted. The offline 7B model keeps
-microphone audio in memory until Finish, then runs offline recognition; it has no
-live preview and still requires substantial free memory. Installed weights do not
-prove that a model can load or run on your hardware.
+before any preview arrives. Nemotron and Kroko shortcut dictation, replay, and
+WAV stay plain ASR speech. Their diarization runs only in meetings and does not
+produce per-speaker WAV output. VibeVoice display and WAV can still include
+speaker annotations. Shortcut insertion uses speech metadata or parses the
+streaming model's speaker format to remove labels.
+Unrecognized output is not inserted. The offline 7B model keeps microphone audio
+in memory until Finish, then runs offline recognition; it has no live preview and
+still requires substantial free memory. Installed weights do not prove that a
+model can load or run on your hardware. Kroko community weights are labeled
+CC-BY-SA on the [source card](https://huggingface.co/Banafo/Kroko-ASR/raw/main/README.md)
+without a catalog-verified version. Commercial Kroko packages are not supported.
 
 ## Dictate into another app
 
@@ -99,11 +104,12 @@ Shift, or Win keys delay insertion until released. Model loading and recognition
 can continue after capture stops.
 
 In **Hold to talk** mode, the microphone stays open for **500 ms after key
-release** to capture the end of the phrase. The waveform remains visible until
-capture stops. Pressing the shortcut again during that tail keeps the current
-recording open; its next release starts a new 500 ms tail. Cancellation and
-window shutdown do not wait for the tail. **Press to start and stop** and manual
-Finish keep their immediate-stop behavior.
+release** to capture the end of the phrase. That tail is a fixed delay, not
+speech-aware endpointing. The waveform remains visible until capture stops.
+Pressing the shortcut again during that tail keeps the current recording open;
+its next release starts a new 500 ms tail. Cancellation and window shutdown do
+not wait for the tail. **Press to start and stop** and manual Finish keep their
+immediate-stop behavior.
 
 The waveform pill shows microphone energy while capture is active. It hides when
 capture stops, including after the hold-to-talk release tail. If stopping fails,
@@ -112,12 +118,17 @@ transcript text. Reduced-motion mode uses a level meter.
 
 ### Text insertion
 
-After shortcut insertion, open **Home** or **Settings** to see the delivery
-outcome in the status bar. **Insertion verified** means the app observed the
-exact expected change. **Text sent; unverified** means input was queued but the
-change could not be verified; check the destination before inserting again.
-The notice stays until dismissed or replaced by the next session notice.
-Dismissing it on either page also dismisses it on the other page.
+Normal insertion does not open a banner, including when the destination cannot
+be verified. Rejected or partial insertion shows a warning on **Dictation**.
+Check the destination before retrying or using **Copy**, so you do not insert
+the same speech twice. Missing insertion feedback is not proof that the
+destination accepted the text.
+
+Failures appear on the relevant page rather than following you into unrelated
+pages. Settings and dictionary save failures remain visible where you made the
+change. Privacy warnings remain visible. Cancellation, background model
+preparation, and optional meeting speaker refinement do not open banners.
+Usage-storage failures appear in Home's **Insights** cards.
 
 **Settings > Text insertion** offers two methods:
 
@@ -160,20 +171,19 @@ Those snapshots stay in memory; no field contents are logged or saved. Password
 fields are not read. Unsupported, ambiguous or truncated snapshots do not prove
 failure and never trigger another insertion.
 
-**Insertion verified** means the expected text change was observed in the same
-field. **Text sent; unverified** means input was sent but the destination could
-not be confirmed. Partial input and key-release failures produce warnings and
-are not automatically retried. Check the destination before using **Copy** to
-recover text manually; repeating an uncertain send can duplicate speech.
+The internal delivery result distinguishes observed insertion from input whose
+destination change could not be confirmed. Neither outcome opens a banner.
+Partial input and key-release failures produce warnings and are not
+automatically retried.
 
 ## Transcribe without automatic insertion
 
-On **Home**, use **Dictate** to start microphone capture, then
+On **Dictation**, use the round record button to start microphone capture, then
 **Finish** to recognize the remaining audio. **Cancel** stops capture and waits for
 the current native step; partial text can remain visible for copying. A blocking
 native call cannot be forcibly interrupted.
 
-On **Models**, select **Transcribe WAV file** for a recording. **Copy** copies the visible
+Select **Transcribe WAV file…** for a recording. **Copy** copies the visible
 transcript. These page controls do not automatically insert text into another app.
 
 WAV input is limited to five minutes, 100 MiB on disk, and 64 MiB of decoded float
@@ -204,33 +214,11 @@ not use boost.
 Boost raises speech and background noise. It does not recover missing audio or
 remove noise, and loud samples can clip. Reduce it if speech distorts.
 
-### Language and vocabulary
+### Language hint
 
-Leave **Language hint** blank for English-only Moonshine and Kroko. Other models have
-model-dependent language support; individual languages are not qualified by this
-app. Unsupported native options produce an error.
-
-Open **Dictionary** in the sidebar. **Add new** adds one name, word, or phrase.
-**Import** accepts one entry per line. Search filters the list. Each row offers
-Edit and Remove. **Undo remove** restores the latest deletion. Existing saved
-words stay in the list. Changes save immediately.
-
-Blank lines are removed, whitespace is normalized, and duplicate entries are
-merged. Limits are 100 unique entries, 100 characters per entry, and 4 KiB of
-UTF-8 text. The page warns if a change could not be saved.
-
-Kroko uses these entries as live English hotwords. Kroko rejects `/` within an
-entry because its decoder treats that character as a separator. Saved slash-bearing
-entries remain available for other models. With Kroko selected, Dictionary shows
-a compatibility warning and recognition stops before opening the microphone.
-Edit those entries or choose another model. Qwen3-ASR and both VibeVoice models
-accept this context; offline VibeVoice uses it
-only for WAV transcription. Moonshine and Nemotron do not use it. The selected
-model's support is shown on Dictionary. Each operation uses the
-saved list at startup.
-
-Entries are recognition hints, not guaranteed spellings or replacement rules.
-The app does not rewrite completed transcripts or text already inserted.
+Leave **Language hint** blank for English-only Moonshine and Kroko. Other models
+have model-dependent language support; individual languages are not qualified by
+this app. Unsupported native options produce an error.
 
 ### Recognition processor
 
@@ -259,7 +247,9 @@ failed live operation reports the error, and the next attempt may use CPU.
 CPU fallback requires a successful CPU qualification. A failed cache update
 is reported but does not prevent using the qualified device or a qualified
 fallback in the current session.
-Qualification cannot catch a later in-process native driver crash.
+Qualification cannot catch a later in-process native driver crash. A rebuilt
+native runtime changes Auto cache keys, so older CPU-only results are not reused
+for a Vulkan runtime.
 
 **CPU** and **GPU (Vulkan)** remain available as manual choices. Vulkan uses
 device 0 and needs a Vulkan build, a compatible driver, and supported model
@@ -270,6 +260,50 @@ reported native crash that can terminate the app. See [known native limits](nati
 The host-memory guard runs on both backends; it does not guarantee sufficient
 GPU memory. The offline 7B model has about 9.86 GB of weights and needs additional
 memory to load and decode. Keep the guard enabled.
+
+## Custom words
+
+Open **Custom words** in the sidebar. The page is titled **Dictionary** and is
+separate from **Settings**. Words already saved in settings stay in the list.
+
+**Add new** opens **Add a word**. Enter one name, word, or phrase and select
+**Add word**. **Enter** submits. **Import** opens **Import words**. Paste a
+list with one entry per line. The dialog previews how many new entries will be
+added and skips duplicates. Select **Import words**. Import uses pasted text
+only; it does not open a file. Each row has edit and remove icons. Edit opens
+**Edit word**; **Save** writes the change. A name that matches another entry is
+rejected. Changing only capitalization is allowed and keeps the word in its
+saved position.
+
+Additions, imports, edits, and removals apply immediately and persist in the
+same local settings as other preferences. Blank lines are dropped, extra
+whitespace is collapsed, and case-insensitive duplicates are merged. New
+entries keep the first spelling.
+
+The list is alphabetical. Search filters it. The count shows how many of 100
+entries are stored, or how many match the search. **Undo remove** restores
+only the latest deletion.
+
+Qwen3-ASR, Kroko, and both VibeVoice models use the dictionary, including
+buffered shortcut dictation on offline VibeVoice. Moonshine and Nemotron do not.
+Kroko sends the saved entries as newline-separated hotwords through
+`modified_beam_search`. An entry that contains `/` is rejected because Kroko
+treats slash as a hotword separator; use separate entries instead. The footer
+shows whether the selected model uses the dictionary and links to **Speech
+models**. Dictation and other recognition operations read the saved list when
+they start. An already open idle meeting window reads it when you select
+**Start**.
+
+You cannot change the dictionary while recognition, a meeting, or other session
+work is running. The page then shows **Finish the current operation to change
+your dictionary.**
+
+Limits are 100 unique entries, 100 characters each, and 4 KB of UTF-8 text. If
+the settings file cannot be written, the page warns that the change applies
+only to this session.
+
+Entries are recognition hints, not guaranteed spellings or replacement rules.
+The app does not rewrite completed transcripts or text already inserted.
 
 ## Meeting transcripts
 
@@ -296,13 +330,33 @@ Application capture includes its child-process tree; a browser selection can
 include audio from other tabs. Windows build 20348 or later is required for
 application capture. Use headphones: echo cancellation is not implemented.
 
-Install **VibeVoice ASR Streaming 1.5B Q4_K** in **Speech models** first. Meetings
-use this model independently of the dictation selection, with the configured
-recognition processor (Auto, CPU, or GPU), language hint, and custom vocabulary.
-Dictation and model changes are unavailable while a meeting owns the recognition resources.
+Meetings default to **Nemotron ASR** (`nemotron-asr-0.6b-q8`) with **Nemotron 3
+Diarization** (`nemotron-3-diarization-q8`). Default setup installs both. The
+diarization card shows **Meeting companion**. Download it from **Speech models**,
+but it cannot be selected for dictation. Selecting **Kroko** or **VibeVoice
+streaming** on **Speech models** also uses that ASR for meetings. If the selected
+dictation model cannot run meetings, meetings use Nemotron. An explicit
+meeting-capable choice that is missing is not replaced automatically. Kroko plus
+the Nemotron diarizer is an extra option, not the default. To try it, install
+`kroko-en-64l-q8` and the diarization companion, then select Kroko on **Speech
+models** before **Start meeting**.
 
-Text appears throughout the meeting as native chunks finish. Speaker labels come
-from VibeVoice; rename a speaker by selecting its heading. When Teams is selected,
+Meetings use the configured recognition processor (Auto, CPU, or GPU), language
+hint, and custom words when the ASR supports them. An already open idle meeting
+window reads the dictionary when you select **Start**. Dictation and model
+changes are unavailable while a meeting owns the recognition resources.
+
+The default pair sends the same 16 kHz mono samples through persistent ASR and
+diarization native sessions in memory. It combines cumulative native word
+timestamps with completed speaker activity intervals. Labels can stay **Unknown
+speaker** until an ongoing diarizer turn closes. Overlap that cannot be assigned
+stays unknown. This is single-stream attribution, not masked multi-speaker
+overlap decoding. The diarizer labels up to eight anonymous speakers (`Speaker 0`
+through `Speaker 7`). It does not enroll people by name and cannot transcribe
+alone. There is no precomputed safetensors file or HTTP recognition server.
+
+Text appears throughout the meeting as native chunks finish. Rename a speaker by
+selecting its heading. When Teams is selected,
 the app reads visible speaking markers through Windows accessibility. Names require
 two consistent, nonoverlapping final turns with an exclusive microphone/playback
 source and full observation coverage. Ambiguous evidence retains model labels;
@@ -310,17 +364,23 @@ manual names take precedence. Other meeting apps retain editable model labels.
 Hidden windows, unsupported layouts, and unsupported marker languages can prevent
 automatic names. No voiceprints or calendar-name guesses are used.
 
-Install **Nemotron ASR** weights to enable optional timing refinement on CPU.
-It compares recognized token anchors with finalized, unchanged VibeVoice turns in a rolling
-30-second audio buffer held only in memory. Confident matches show **ASR-aligned**;
-missing or repeated phrases retain **approximate chunk time**. English digits
-can match spoken quantities without changing wording.
-Long turns can use unique endpoint phrases with at least 80% word agreement;
-previously aligned spans cannot be reused by another turn. These are ASR token
-anchors, not precise acoustic word boundaries. Missing weights or insufficient
-memory disable this optional pass without replacing the speech model. Chunk
-timestamps use native input sample positions; audio during pauses is excluded.
-Update latency and long-session speaker continuity remain unqualified.
+The meeting window shows recording state and any transcription backlog.
+Routine device-comparison, speaker-evidence, and timing-refinement diagnostics
+do not add status rows. Speaker labels remain editable.
+
+On **VibeVoice streaming** meetings, speaker labels come from VibeVoice.
+Install **Nemotron ASR** weights to enable optional timing refinement on CPU
+for those turns. It compares recognized token anchors with finalized, unchanged
+VibeVoice turns in a rolling 30-second audio buffer held only in memory.
+Confident matches show **ASR-aligned**; missing or repeated phrases retain
+**approximate chunk time**. English digits can match spoken quantities without
+changing wording. Long turns can use unique endpoint phrases with at least 80%
+word agreement; previously aligned spans cannot be reused by another turn. These
+are ASR token anchors, not precise acoustic word boundaries. Missing weights or
+insufficient memory disable this optional pass without replacing the speech
+model. Chunk timestamps use native input sample positions; audio during pauses
+is excluded. Update latency and long-session speaker continuity remain
+unqualified.
 
 **Pause** stops capture and transcript updates. **Resume** continues the same
 meeting and processes retained pending speech. Speech during the pause is not
@@ -388,7 +448,7 @@ Per-user files are in Windows package storage, normally
 
 | Path | Contents |
 | --- | --- |
-| `settings.json` | Preferences, chosen model folder, and custom vocabulary |
+| `settings.json` | Preferences, chosen model folder, and custom words |
 | `device-benchmarks.json` | Cached Auto device timings for model, runtime, hardware, and mode; no user audio |
 | `usage.json` | Session IDs, completion timestamps, model IDs, session type, speech-word counts, and durations |
 | `meetings\<id>.json` | Titles, dates, transcript turns, timing quality, manual/automatic names, and original wording after cleanup; no audio |

@@ -66,61 +66,19 @@
                 </Grid.RowDefinitions>
                 <TitleBar x:Name="AppTitleBar" Height="{StaticResource TitleBarHeight}" Background="Transparent" Foreground="{ThemeResource AppTextBrush}" />
                 <Border Grid.Row="1" Background="{ThemeResource AppSurfaceBrush}" BorderBrush="{ThemeResource AppBorderBrush}" BorderThickness="{StaticResource CardBorderThickness}" CornerRadius="{StaticResource PanelCornerRadius}">
-                    <Grid>
-                        <ContentControl x:Name="MainContent" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
-                        <Border x:Name="MicrophonePermissionNotice"
-                                HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                Margin="{StaticResource ApplicationNoticeMargin}"
-                                MaxWidth="{StaticResource ApplicationNoticeMaxWidth}"
-                                Background="{ThemeResource AppCardBrush}"
-                                BorderBrush="{ThemeResource AppBorderBrush}"
-                                BorderThickness="{StaticResource CardBorderThickness}"
-                                CornerRadius="{StaticResource CardCornerRadius}"
-                                Padding="{StaticResource ApplicationNoticePadding}"
-                                Visibility="Collapsed"
-                                SizeChanged="MicrophonePermissionNoticeSizeChanged"
-                                AutomationProperties.AutomationId="MicrophonePermissionNotice"
-                                AutomationProperties.Name="Microphone access required"
-                                AutomationProperties.LiveSetting="Polite">
-                            <Grid ColumnSpacing="{StaticResource NavItemGap}">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <FontIcon Grid.Column="0" Glyph="&#xE7BA;" FontSize="{StaticResource IconSize}"
-                                          Foreground="{ThemeResource AccentGraphicBrush}" VerticalAlignment="Top"
-                                          AutomationProperties.AccessibilityView="Raw" />
-                                <StackPanel Grid.Column="1" Spacing="{StaticResource NavItemGap}">
-                                    <TextBlock Text="Microphone access required" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                    <TextBlock x:Name="MicrophonePermissionMessage" Style="{StaticResource CaptionSecondaryStyle}"
-                                               TextWrapping="Wrap" />
-                                    <StackPanel x:Name="MicrophonePermissionActions" Orientation="Horizontal"
-                                                Spacing="{StaticResource NavItemGap}">
-                                        <Button Content="Open settings" Style="{StaticResource AppPrimaryButtonStyle}"
-                                                Click="OpenMicrophoneSettingsClicked"
-                                                AutomationProperties.Name="Open microphone settings" />
-                                        <Button x:Name="CheckMicrophonePermissionButton" Content="Check again"
-                                                Click="CheckMicrophonePermissionClicked"
-                                                AutomationProperties.Name="Check microphone permission again" />
-                                    </StackPanel>
-                                </StackPanel>
-                                <Button Grid.Column="2" Style="{StaticResource NavigationButtonStyle}"
-                                        Width="{StaticResource NavHeight}" Height="{StaticResource NavHeight}"
-                                        HorizontalAlignment="Right" HorizontalContentAlignment="Center"
-                                        VerticalContentAlignment="Center" Padding="0"
-                                        Click="MicrophonePermissionNoticeDismissed"
-                                        AutomationProperties.Name="Dismiss microphone permission notice"
-                                        ToolTipService.ToolTip="Dismiss">
-                                    <FontIcon Glyph="&#xE711;" FontSize="{StaticResource IconSize}" />
-                                </Button>
-                            </Grid>
-                        </Border>
-                    </Grid>
+                    <ContentControl x:Name="MainContent" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
                 </Border>
             </Grid>
         </Grid>
         <StackPanel Grid.Row="1">
+            <InfoBar x:Name="MicrophonePermissionNotice" Margin="{StaticResource ApplicationNoticeMargin}" IsOpen="False" IsClosable="False" Visibility="Collapsed"
+                     Severity="Warning" Title="Microphone access needs attention" AutomationProperties.AutomationId="MicrophonePermissionNotice"
+                     AutomationProperties.LiveSetting="Polite">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Content="Open microphone settings" Click="OpenMicrophoneSettingsClicked" />
+                    <Button x:Name="CheckMicrophonePermissionButton" Content="Check again" Click="CheckMicrophonePermissionClicked" />
+                </StackPanel>
+            </InfoBar>
             <InfoBar x:Name="MeetingSuggestion" Margin="{StaticResource ApplicationNoticeMargin}" IsOpen="False" Visibility="Collapsed"
                      Severity="Informational" Title="Teams microphone is active."
                      Message="Start local notetaking? Recording starts only when you click Start."

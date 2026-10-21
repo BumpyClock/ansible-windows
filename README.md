@@ -6,7 +6,7 @@ in-process native DLL. Release MSIX packages use .NET NativeAOT.
 
 Focus a text field, hold F9, speak, and release the key. Ansible inserts the final
 speech after recognition succeeds. The app also provides manual transcription, meeting transcripts,
-model downloads, custom vocabulary for supported models, and local usage insights.
+model downloads, custom words for supported models, and local usage insights.
 
 Microphone permission is checked at launch. Ansible requests missing consent
 before recording and offers Windows Settings guidance when access is blocked.
@@ -33,11 +33,9 @@ Run these commands in PowerShell from the repository root. You need:
 .\tools\Build-AudioNative.ps1
 ```
 
-Setup downloads and verifies `moonshine-tiny` into `.runtime\models`. The native
+Setup downloads and verifies `nemotron-asr-0.6b-q8` and
+`nemotron-3-diarization-q8` into `.runtime\models`. The native
 build produces the DLL, dependencies, notices, and public validation sample.
-Optional English streaming Kroko weights are available in the app, or through
-`tools\Setup-AudioBackend.ps1 -Models kroko-en-64l-q8`. Kroko supports custom
-hotwords. GPU support and performance remain unqualified.
 For CPU only, replace the second command with:
 
 ```powershell
@@ -59,25 +57,36 @@ To create and verify an unsigned release package:
 ```
 
 The MSIX is written under `Ansible\bin\AppPackages`. This command builds and
-verifies the package; it does not install it. Sideloading requires signing and
-certificate trust. See the [development guide](docs/development.md) for build
+verifies the package; it does not install it. The default path requires a native
+runtime recorded with Vulkan support and rejects a CPU-only artifact. Pass
+`-Backend cpu` for an intentional CPU-only package. Sideloading requires signing
+and certificate trust. See the [development guide](docs/development.md) for build
 options and checks.
 
 ## Current limits
 
-- Meetings start manually from **Meetings** and use VibeVoice ASR Streaming 1.5B.
-  Automatic Teams detection offers a notetaker prompt when Teams holds an active
-  microphone session; it never starts recording. Disable it in Settings.
+- Meetings start manually from **Meetings**. The default pair is Nemotron ASR
+  0.6B Q8 with Nemotron 3 Diarization Q8. Selecting Kroko or VibeVoice streaming
+  in **Speech models** also uses that ASR for meetings. Kroko plus the Nemotron
+  diarizer is an extra option, not the default. Nemotron and Kroko diarization
+  applies to meetings only. Their shortcut dictation, replay, and WAV stay plain
+  ASR speech without speaker labels. Automatic Teams detection offers a
+  notetaker prompt when Teams holds an active microphone session; it never
+  starts recording. Disable it in Settings.
   Capture includes the default microphone and either a selected application
   process tree or explicitly selected system playback. Browser capture includes
   other tabs in that browser's process tree. Pause/Resume keeps one recognition
-  stream; End meeting finishes pending speech. Audio stays in bounded memory.
-  The capture limit is two hours; long-session speaker accuracy and the 5–10
-  second update target need qualification on each model/backend combination.
-  Teams names use visible accessibility evidence matched to confident local
-  timing anchors; unsupported windows retain editable speaker labels. Optional
-  Nemotron CPU timing refinement needs its installed weights and additional memory.
-  Copilot wording cleanup requires an installed, authenticated CLI and keeps originals.
+  stream; End meeting finishes pending speech. Audio stays in bounded memory and
+  is never saved or uploaded. The capture limit is two hours; long-session
+  speaker accuracy and the 5–10 second update target need qualification on each
+  model/backend combination. The default pair labels up to eight anonymous
+  speakers from completed diarizer intervals; overlap and unfinished turns can
+  stay Unknown speaker. This is single-stream attribution, not masked
+  multi-speaker overlap decoding. Teams names use visible accessibility evidence
+  matched to confident local timing anchors; unsupported windows retain editable
+  speaker labels. VibeVoice meetings can still use optional Nemotron CPU timing
+  refinement when those weights are installed. Copilot wording cleanup requires
+  an installed, authenticated CLI and keeps originals.
 
 - Windows x64 only. ARM64 and NPU support are separate work.
 - File transcription accepts WAV only, up to five minutes, 100 MiB on disk,
@@ -102,7 +111,8 @@ options and checks.
   the clipboard or for apps that block paste. Settings offers Ctrl+V, Shift+Insert,
   and Ctrl+Shift+V; choose the chord accepted by the actual destination. Bounded
   UI Automation text checks distinguish verified insertion from unverified input.
-  Check the destination after an unverified or partial send.
+  Neither outcome opens a banner. Rejected or partial input still shows a warning.
+  Check the destination before dictating again or recovering text manually.
 
 ## Documentation
 

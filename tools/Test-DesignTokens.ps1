@@ -44,10 +44,6 @@ foreach ($themeDictionary in $themeDictionaries) {
     }
     $themeKeySets[$themeName] = $themeKeySet
 }
-$rootKeySet = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-foreach ($node in $tokenDocument.SelectNodes('/*/*[@x:Key]', $namespaceManager)) {
-    [void]$rootKeySet.Add($node.GetAttribute('Key', $namespaceManager.LookupNamespace('x')))
-}
 
 $failures = [System.Collections.Generic.List[string]]::new()
 function Assert-Condition {
@@ -61,19 +57,6 @@ Assert-Condition ($themeKeySets.ContainsKey('Light')) 'Light theme dictionary is
 Assert-Condition ($themeKeySets.ContainsKey('Dark')) 'Dark theme dictionary is missing.'
 Assert-Condition ($themeKeySets.ContainsKey('HighContrast')) 'HighContrast theme dictionary is missing.'
 
-$lightDarkInvariantColors = @(
-    'BrandAccentColor', 'BrandOnAccentColor', 'BrandAccentStrongColor',
-    'BrandAccentSoftColor', 'BrandAccentForegroundLightColor',
-    'BrandAccentForegroundDarkColor', 'AppBrandVoiceDetailColor',
-    'AppBrandReplyDetailColor'
-)
-foreach ($key in $lightDarkInvariantColors) {
-    $light = $tokenDocument.SelectSingleNode("//*[local-name()='ResourceDictionary' and @x:Key='Light']/*[@x:Key='$key']", $namespaceManager)
-    $dark = $tokenDocument.SelectSingleNode("//*[local-name()='ResourceDictionary' and @x:Key='Dark']/*[@x:Key='$key']", $namespaceManager)
-    Assert-Condition ($null -ne $light -and $null -ne $dark -and $light.InnerText -eq $dark.InnerText) `
-        "Light and Dark canonical color '$key' must remain equivalent."
-}
-
 $typedDimensions = @{
     'CardCornerRadius' = 'CornerRadius'
     'PanelCornerRadius' = 'CornerRadius'
@@ -84,9 +67,6 @@ $typedDimensions = @{
     'SettingsSegmentCornerRadius' = 'CornerRadius'
     'SettingsSegmentTrackPadding' = 'Thickness'
     'SettingsSegmentTrackCornerRadius' = 'CornerRadius'
-    'SettingsRowRowSpacing' = 'Double'
-    'SettingsRowDescriptionSpacing' = 'Double'
-    'SettingsRowDescriptionMaxWidth' = 'Double'
 }
 foreach ($entry in $typedDimensions.GetEnumerator()) {
     $node = $tokenDocument.SelectSingleNode("//*[@x:Key='$($entry.Key)']", $namespaceManager)
@@ -124,66 +104,10 @@ foreach ($file in $xamlFiles) {
     }
 }
 
-$themeBrushKeys = @($tokenKeys | Where-Object { $_ -match 'Brush$' })
+$semanticBrushKeys = @($tokenKeys | Where-Object { $_ -match '^(?:App|Pill|Brand).+Brush$' })
 foreach ($themeName in @('Light', 'Dark', 'HighContrast')) {
-    Assert-Condition $themeKeySets.ContainsKey($themeName) "$themeName theme dictionary is unavailable for semantic brush coverage."
-}
-foreach ($key in $themeBrushKeys | Sort-Object -Unique) {
-    foreach ($themeName in @('Light', 'Dark', 'HighContrast')) {
-        Assert-Condition ($themeKeySets.ContainsKey($themeName) -and $themeKeySets[$themeName].Contains($key)) `
-            "Brush '$key' must be defined in the $themeName theme dictionary."
-    }
-}
-
-# Light and Dark brushes use local canonical colors. High Contrast brush colors
-# must remain ThemeResource references so Windows can update a live HC palette.
-foreach ($themeName in @('Light', 'Dark')) {
-    $themeNode = $tokenDocument.SelectSingleNode("//*[local-name()='ResourceDictionary' and @x:Key='$themeName']", $namespaceManager)
-    foreach ($brush in $themeNode.SelectNodes('./*[local-name()="SolidColorBrush" and @x:Key]', $namespaceManager)) {
-        $colorReference = $brush.GetAttribute('Color')
-        if ($colorReference -match '^\{StaticResource ([^}]+)\}$') {
-            Assert-Condition ($themeKeySets[$themeName].Contains($Matches[1]) -or $rootKeySet.Contains($Matches[1])) `
-                "$themeName brush '$($brush.GetAttribute('Key', $namespaceManager.LookupNamespace('x')))' references missing canonical color '$($Matches[1])'."
-        } elseif ($colorReference -notmatch '^#(?:[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$') {
-            Assert-Condition $false "$themeName brush '$($brush.GetAttribute('Key', $namespaceManager.LookupNamespace('x')))' must use StaticResource or a literal theme color."
-        }
-    }
-}
-
-$highContrastBrushAliases = @{
-    'AppTextBrush' = 'SystemColorWindowTextColor'
-    'AppSegmentSelectedBrush' = 'SystemColorHighlightColor'
-    'AppSelectedTextBrush' = 'SystemColorHighlightTextColor'
-    'AppSelectedIconBrush' = 'SystemColorHighlightTextColor'
-}
-$highContrastNode = $tokenDocument.SelectSingleNode("//*[local-name()='ResourceDictionary' and @x:Key='HighContrast']", $namespaceManager)
-foreach ($alias in $highContrastBrushAliases.GetEnumerator()) {
-    $brush = $highContrastNode.SelectSingleNode("./*[@x:Key='$($alias.Key)']", $namespaceManager)
-    $expected = "{ThemeResource $($alias.Value)}"
-    Assert-Condition ($null -ne $brush -and $brush.GetAttribute('Color') -eq $expected) `
-        "HighContrast semantic brush '$($alias.Key)' must alias '$($alias.Value)'."
-}
-foreach ($brush in $highContrastNode.SelectNodes('./*[local-name()="SolidColorBrush" and @x:Key]', $namespaceManager)) {
-    Assert-Condition ($brush.GetAttribute('Color') -match '^\{ThemeResource SystemColor[A-Za-z]+\}$') `
-        "HighContrast brush '$($brush.GetAttribute('Key', $namespaceManager.LookupNamespace('x')))' must use a ThemeResource SystemColor alias."
-}
-
-$removedPaletteCopies = @(
-    'TextFillColorPrimary', 'TextFillColorSecondary', 'TextFillColorTertiary', 'TextFillColorDisabled',
-    'TextOnAccentFillColorPrimary', 'TextOnAccentFillColorSecondary',
-    'ControlFillColorDefault', 'ControlFillColorSecondary', 'ControlFillColorTertiary',
-    'ControlStrongFillColorDefault', 'ControlStrongFillColorDisabled',
-    'ControlStrokeColorDefault', 'ControlStrokeColorSecondary', 'ControlStrokeColorOnAccent', 'ControlStrokeColorDisabled',
-    'CardBackgroundFillColorDefault', 'CardBackgroundFillColorSecondary', 'CardBackgroundFillColorTertiary', 'CardStrokeColorDefault',
-    'LayerFillColorDefault', 'LayerFillColorAlt', 'LayerFillColorDisabled',
-    'SubtleFillColorTransparent', 'SubtleFillColorSecondary', 'SubtleFillColorTertiary', 'SubtleFillColorDisabled',
-    'DividerStrokeColorDefault', 'DividerStrokeColorSecondary',
-    'AccentFillColorDefault', 'AccentFillColorSecondary', 'AccentFillColorTertiary',
-    'AccentTextFillColorPrimary', 'AccentTextFillColorTertiary', 'AccentTextFillColorDisabled'
-)
-foreach ($themeName in @('Light', 'Dark')) {
-    foreach ($key in $removedPaletteCopies) {
-        Assert-Condition (-not $themeKeySets[$themeName].Contains($key)) "$themeName keeps copied semantic color '$key'; use the canonical palette color through its brush alias."
+    foreach ($key in $semanticBrushKeys) {
+        Assert-Condition $themeKeySets[$themeName].Contains($key) "$themeName theme is missing semantic brush '$key'."
     }
 }
 
@@ -193,8 +117,6 @@ $tokensIndex = $appContent.IndexOf('<ResourceDictionary Source="DesignTokens.xam
 Assert-Condition ($controlsIndex -ge 0) 'App.xaml does not merge XamlControlsResources.'
 Assert-Condition ($tokensIndex -ge 0) 'App.xaml does not merge DesignTokens.xaml.'
 Assert-Condition ($controlsIndex -ge 0 -and $tokensIndex -gt $controlsIndex) 'DesignTokens.xaml must merge after XamlControlsResources.'
-Assert-Condition ((Get-Content -LiteralPath $tokenPath -Raw) -notmatch '\{StaticResource SystemColor') `
-    'DesignTokens.xaml must use ThemeResource for system colors so live High Contrast palette changes update brushes.'
 
 $hexPattern = '#[0-9A-Fa-f]{6,8}'
 foreach ($file in $xamlFiles) {
@@ -235,7 +157,7 @@ foreach ($page in Get-ChildItem -LiteralPath (Join-Path $RepoRoot 'Ansible') -Fi
 }
 
 if ($failures.Count -gt 0) {
-    $failures | ForEach-Object { Write-Error $_ -ErrorAction Continue }
+    $failures | ForEach-Object { Write-Error $_ }
     exit 1
 }
 

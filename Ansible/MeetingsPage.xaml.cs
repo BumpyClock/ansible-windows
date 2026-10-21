@@ -7,20 +7,28 @@ namespace Ansible;
 
 public sealed partial class MeetingsPage : Page
 {
+    private readonly DictationSession _session;
     private readonly MeetingStore _store;
     private readonly Func<MeetingDocument?, Task> _openMeeting;
     private readonly Func<nint> _windowHandle;
     private CancellationTokenSource _shutdown = new();
     private Task? _exportTask;
     private Task? _refreshTask;
+    private UiSessionObserver? _observer;
 
-    internal MeetingsPage(MeetingStore store, Func<MeetingDocument?, Task> openMeeting, Func<nint> windowHandle)
+    internal MeetingsPage(DictationSession session, MeetingStore store, Func<MeetingDocument?, Task> openMeeting, Func<nint> windowHandle)
     {
         InitializeComponent();
+        _session = session;
         _store = store;
         _openMeeting = openMeeting;
         _windowHandle = windowHandle;
-        Loaded += async (_, _) => await RefreshAsync();
+        Loaded += async (_, _) =>
+        {
+            _observer = new UiSessionObserver(session, DispatcherQueue, RenderNotice);
+            await RefreshAsync();
+        };
+        Unloaded += (_, _) => { _observer?.Dispose(); _observer = null; };
     }
 
     internal Task RefreshAsync()
@@ -92,10 +100,6 @@ public sealed partial class MeetingsPage : Page
             var file = await picker.PickSaveFileAsync().AsTask(_shutdown.Token);
             if (file is null) return;
             await _store.ExportAndRemoveAsync(id, file.Path, _shutdown.Token);
-            ErrorBar.Title = "Transcript exported";
-            ErrorBar.Message = "The original file was saved to your chosen location and removed from Ansible.";
-            ErrorBar.Severity = InfoBarSeverity.Success;
-            ErrorBar.IsOpen = true;
             await RefreshCoreAsync();
             NewMeetingButton.Focus(FocusState.Programmatic);
         }
@@ -130,11 +134,22 @@ public sealed partial class MeetingsPage : Page
         catch (Exception error) { ShowError(error); }
     }
 
-    private void ShowError(Exception error)
+    private void ShowError(Exception error) =>
+        _session.Notify(NoticeKind.Error, "Meeting unavailable", error.Message, NoticeArea.Meetings);
+
+    private void RenderNotice(SessionSnapshot state)
     {
-        ErrorBar.Severity = InfoBarSeverity.Error;
-        ErrorBar.Title = "Meeting unavailable";
-        ErrorBar.Message = error.Message;
-        ErrorBar.IsOpen = true;
+        var notice = state.Notice;
+        ErrorBar.Severity = notice.Kind == NoticeKind.Error ? InfoBarSeverity.Error : InfoBarSeverity.Warning;
+        ErrorBar.Title = notice.Title;
+        ErrorBar.Message = notice.Message;
+        ErrorBar.IsOpen = notice.ShouldDisplayOn(NoticeArea.Meetings);
+        ErrorBar.Visibility = ErrorBar.IsOpen ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void ErrorBarClosing(InfoBar sender, InfoBarClosingEventArgs args)
+    {
+        if (args.Reason == InfoBarCloseReason.CloseButton) _session.DismissNotice(_session.State.Notice);
+        sender.Visibility = Visibility.Collapsed;
     }
 }

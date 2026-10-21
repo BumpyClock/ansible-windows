@@ -13,7 +13,6 @@ public sealed partial class MainWindow : Window
 {
     private readonly DictationSession _session;
     private readonly DictationPage _dictation;
-    private readonly HomeDictationHistory _history;
     private readonly MainPage _settings;
     private readonly ModelManagementPage _models;
     private readonly CustomWordsPage _customWords;
@@ -63,7 +62,6 @@ public sealed partial class MainWindow : Window
     private Task? _microphoneSettingsTask;
     private bool _launchReady;
     private bool _permissionCheckComplete;
-    private MicrophonePermissionStatus? _dismissedMicrophonePermissionStatus;
 
     internal MainWindow(DictationSession session, AppPaths paths, HttpClient modelDownloads, MicrophonePermissionPreflight microphonePermission)
     {
@@ -72,9 +70,8 @@ public sealed partial class MainWindow : Window
         _microphonePermission = microphonePermission;
         _paths = paths;
         _meetingStore = new MeetingStore(Path.Combine(Path.GetDirectoryName(paths.Settings)!, "meetings"));
-        _meetings = new MeetingsPage(_meetingStore, OpenMeetingAsync, () => WinRT.Interop.WindowNative.GetWindowHandle(this));
-        _history = new HomeDictationHistory(session);
-        _dictation = new DictationPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this), _history);
+        _meetings = new MeetingsPage(session, _meetingStore, OpenMeetingAsync, () => WinRT.Interop.WindowNative.GetWindowHandle(this));
+        _dictation = new DictationPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this));
         _settings = new MainPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this),
             ChangeHotkey, ChangeDictationMode, CaptureShortcut);
         _models = new ModelManagementPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this), modelDownloads,
@@ -155,12 +152,12 @@ public sealed partial class MainWindow : Window
                 _hotkey = new GlobalDictationHotkey(WinRT.Interop.WindowNative.GetWindowHandle(this),
                     _configuredHotkey, HotkeyChanged);
             }
-            catch (Exception error) { _session.Notify(NoticeKind.Error, "Shortcut unavailable", error.Message); }
+            catch (Exception error) { _session.Notify(NoticeKind.Error, "Shortcut unavailable", error.Message, NoticeArea.Settings | NoticeArea.Dictation); }
             if (meetingRecoveryError is not null)
-                _session.Notify(NoticeKind.Error, "Meeting recovery failed", meetingRecoveryError.Message);
+                _session.Notify(NoticeKind.Error, "Meeting recovery failed", meetingRecoveryError.Message, NoticeArea.Meetings);
             else if (meetingRecoveryFailures.Count > 0)
                 _session.Notify(NoticeKind.Warning, "Some saved transcripts unavailable",
-                    "Open Meetings to export and remove unreadable files. New meetings are still available.");
+                    "Export and remove unreadable files below. New meetings are still available.", NoticeArea.Meetings);
             StartMeetingDetection();
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
@@ -173,38 +170,17 @@ public sealed partial class MainWindow : Window
         if (!_permissionCheckComplete) return;
         var status = _microphonePermission.Status;
         var allowed = status == MicrophonePermissionStatus.Allowed;
-        if (allowed || (_dismissedMicrophonePermissionStatus is { } dismissed && dismissed != status))
-            _dismissedMicrophonePermissionStatus = null;
-        MicrophonePermissionMessage.Text = status switch
+        MicrophonePermissionNotice.IsOpen = !allowed;
+        MicrophonePermissionNotice.Visibility = allowed ? Visibility.Collapsed : Visibility.Visible;
+        MicrophonePermissionNotice.Message = status switch
         {
-            MicrophonePermissionStatus.DeniedByUser => "Enable microphone access for Ansible and desktop apps in Windows Settings, then check again.",
-            MicrophonePermissionStatus.DeniedBySystem => "Windows is blocking microphone access. Check Windows Settings or contact your administrator.",
-            MicrophonePermissionStatus.NotDeclared => "This package does not declare microphone access. Install an Ansible package with microphone capability.",
-            MicrophonePermissionStatus.PromptRequired => "Microphone access is required. Check again to request access.",
-            _ => "Microphone access could not be checked. Review Windows privacy settings, then check again."
+            MicrophonePermissionStatus.DeniedByUser => "Enable microphone access for Ansible and desktop apps in Windows Settings, then check again. No audio has been captured by this permission check.",
+            MicrophonePermissionStatus.DeniedBySystem => "Windows blocks microphone access. Enable microphone access in Windows Settings, or contact your administrator.",
+            MicrophonePermissionStatus.NotDeclared => "This package does not declare microphone access. Install an Ansible package with the microphone capability.",
+            MicrophonePermissionStatus.PromptRequired => "Microphone permission has not been granted. Check again to request access.",
+            _ => "Microphone permission could not be checked. Review Windows microphone privacy settings, then check again."
         };
-        MicrophonePermissionNotice.Visibility = allowed || _dismissedMicrophonePermissionStatus == status
-            ? Visibility.Collapsed : Visibility.Visible;
         CheckMicrophonePermissionButton.IsEnabled = _permissionRetryTask is not { IsCompleted: false };
-    }
-
-    private void MicrophonePermissionNoticeDismissed(object sender, RoutedEventArgs args)
-    {
-        if (_microphonePermission.Status != MicrophonePermissionStatus.Allowed)
-            _dismissedMicrophonePermissionStatus = _microphonePermission.Status;
-        MicrophonePermissionNotice.Visibility = Visibility.Collapsed;
-    }
-
-    private void MicrophonePermissionNoticeSizeChanged(object sender, SizeChangedEventArgs args)
-    {
-        var available = MicrophonePermissionActions.ActualWidth;
-        if (available <= 0) return;
-        var gap = (double)Application.Current.Resources["NavItemGap"];
-        var required = MicrophonePermissionActions.Children.OfType<FrameworkElement>()
-            .Sum(child => child.DesiredSize.Width) + gap * Math.Max(0, MicrophonePermissionActions.Children.Count - 1);
-        var orientation = required <= available ? Orientation.Horizontal : Orientation.Vertical;
-        if (MicrophonePermissionActions.Orientation != orientation)
-            MicrophonePermissionActions.Orientation = orientation;
     }
 
     private async void CheckMicrophonePermissionClicked(object sender, RoutedEventArgs args)
@@ -216,11 +192,10 @@ public sealed partial class MainWindow : Window
 
     private async Task RetryMicrophonePermissionAsync()
     {
-        _dismissedMicrophonePermissionStatus = null;
         CheckMicrophonePermissionButton.IsEnabled = false;
         try { await _microphonePermission.InitializeAsync(_startupCancellation.Token); }
         catch (OperationCanceledException) when (_startupCancellation.IsCancellationRequested) { }
-        catch (Exception error) { if (!_closing) _session.ReportUiError(error); }
+        catch (Exception error) { if (!_closing) _session.ReportUiError(error, NoticeArea.Application); }
         finally
         {
             RenderMicrophonePermission();
@@ -240,9 +215,9 @@ public sealed partial class MainWindow : Window
         try
         {
             if (!await Windows.System.Launcher.LaunchUriAsync(new Uri("ms-settings:privacy-microphone")) && !_closing)
-                _session.Notify(NoticeKind.Warning, "Windows Settings unavailable", "Open Windows Settings > Privacy & security > Microphone.");
+                _session.Notify(NoticeKind.Warning, "Windows Settings unavailable", "Open Windows Settings > Privacy & security > Microphone.", NoticeArea.Application);
         }
-        catch (Exception error) { if (!_closing) _session.ReportUiError(error); }
+        catch (Exception error) { if (!_closing) _session.ReportUiError(error, NoticeArea.Application); }
     }
 
     private void NavigateClicked(object sender, RoutedEventArgs args) => Navigate((string)((Button)sender).Tag);
@@ -266,11 +241,6 @@ public sealed partial class MainWindow : Window
 
     private void Navigate(string page)
     {
-        if (page == "settings" && _permissionCheckComplete && _microphonePermission.Status != MicrophonePermissionStatus.Allowed)
-        {
-            _dismissedMicrophonePermissionStatus = null;
-            RenderMicrophonePermission();
-        }
         MainContent.Content = page switch { "settings" => _settings, "dictation" => _dictation, "models" => _models,
             "custom-words" => _customWords, "meetings" => _meetings, _ => _dictation };
         foreach (var (button, indicator) in new[]
@@ -315,11 +285,15 @@ public sealed partial class MainWindow : Window
         if (existing.window is not null) return existing.window;
         var state = _session.State;
         var meeting = new MeetingSession(
-            () => new NativeAudioEngine(_paths.NativeLibrary, _paths.ModelCatalog, state.ModelsDirectory,
+            () => new NativeAudioEngine(_paths.NativeLibrary, _paths.ModelCatalog, _session.State.ModelsDirectory,
                 deviceProbePath: _paths.DeviceProbe, benchmarkSamplePath: _paths.PublicSample,
                 benchmarkCachePath: _paths.DeviceBenchmarks),
             new PermissionCheckedMeetingCaptureFactory(new Ansible.Core.Windows.MeetingCaptureFactory(), _microphonePermission), _meetingStore,
-            new RecognitionOptions(state.Language, state.Settings.CustomDictionary, state.Settings.Backend),
+            () =>
+            {
+                var current = _session.State;
+                return new RecognitionOptions(current.Language, current.Settings.CustomDictionary, current.Settings.Backend);
+            },
             reserve: async () =>
             {
                 if (!_launchReady || !_meetingRecoveryComplete)
@@ -330,10 +304,12 @@ public sealed partial class MainWindow : Window
             },
             release: _session.ReleaseMeetingAsync,
             observerFactory: () => new Ansible.Core.Windows.TeamsSpeakerObserver(),
-            alignerFactory: () => new NativeMeetingWordAligner(_paths.NativeLibrary, _paths.ModelCatalog, state.ModelsDirectory));
+            alignerFactory: () => new NativeMeetingWordAligner(_paths.NativeLibrary, _paths.ModelCatalog, _session.State.ModelsDirectory),
+            getModelId: () => _session.State.SelectedModel is { } selected && MeetingSession.SupportsMeeting(selected)
+                ? selected.Id : null);
         var window = new MeetingWindow(meeting, _meetingStore, document);
         try { window.ApplyCapturePrivacy(state.Settings.HideFromCapture); }
-        catch (Exception error) { _session.Notify(NoticeKind.Warning, "Screen capture privacy unavailable", error.Message); }
+        catch (Exception error) { _session.Notify(NoticeKind.Warning, "Screen capture privacy unavailable", error.Message, NoticeArea.Application); }
         _meetingWindows.Add((meeting, window, document?.Id));
         meeting.StateChanged += state => DispatcherQueue.TryEnqueue(() =>
         {
@@ -399,8 +375,7 @@ public sealed partial class MainWindow : Window
                             HideMeetingSuggestion(); // A failed scan does not end or reset the detected episode.
                             if (_detectionUnavailableReported) return;
                             _detectionUnavailableReported = true;
-                            _session.Notify(NoticeKind.Warning, "Meeting detection unavailable",
-                                $"{error.Message} You can start notetaking from Meetings. Detection will retry.");
+                            Trace.TraceWarning("Ansible: meeting detection unavailable. {0}", error.Message);
                         });
                     }
                 }
@@ -468,7 +443,9 @@ public sealed partial class MainWindow : Window
             if (!window.SelectDetectedMeeting(expected))
             {
                 HideMeetingSuggestion();
-                _session.Notify(NoticeKind.Information, "Meeting changed", "The detected Teams app is no longer available. Select your meeting app from Meetings.");
+                _session.Notify(NoticeKind.Warning, "Meeting changed",
+                    "Select your meeting app again before starting.", NoticeArea.Meetings);
+                Navigate("meetings");
                 return;
             }
             _meetingDetection.Dismiss(expected);
@@ -476,7 +453,12 @@ public sealed partial class MainWindow : Window
             window.Activate(); // Only the explicit action activates the notetaker; it never starts capture.
         }
         catch (OperationCanceledException) when (_closing || _closed) { }
-        catch (Exception error) { HideMeetingSuggestion(); _session.Notify(NoticeKind.Warning, "Meeting detection unavailable", error.Message); }
+        catch (Exception error)
+        {
+            HideMeetingSuggestion();
+            _session.Notify(NoticeKind.Warning, "Could not open notetaker", error.Message, NoticeArea.Meetings);
+            Navigate("meetings");
+        }
         finally { _openingSuggestedMeeting = false; }
     }
 
@@ -527,7 +509,7 @@ public sealed partial class MainWindow : Window
             try { _floating?.ApplyCapturePrivacy(state.Settings.HideFromCapture); }
             catch (Exception error) { failures.Add(error.Message); }
             if (failures.Count > 0)
-                _session.Notify(NoticeKind.Warning, "Screen capture privacy unavailable", string.Join(" ", failures.Distinct()));
+                _session.Notify(NoticeKind.Warning, "Screen capture privacy unavailable", string.Join(" ", failures.Distinct()), NoticeArea.Application);
         }
         var showWaveform = state.IsCaptureOpen || state.Phase is DictationPhase.Preparing or DictationPhase.Recording;
         if (!showWaveform) { _popupFailed = false; }
@@ -710,12 +692,6 @@ public sealed partial class MainWindow : Window
             if (delivery.Error is not null)
                 _session.Notify(NoticeKind.Warning, "Insertion stopped",
                     $"{delivery.Error} Check the destination before using Copy transcript; do not repeat text that already appeared.");
-            else if (delivery.Sent)
-                _session.Notify(delivery.Delivery?.Status == TextDeliveryStatus.Verified ? NoticeKind.Success : NoticeKind.Information,
-                    delivery.Delivery?.Status == TextDeliveryStatus.Verified ? "Insertion verified" : "Text sent; unverified",
-                    delivery.Delivery?.Message ?? "The insertion input was sent. Check the destination.", showInStatus: true);
-            else
-                _session.Notify(NoticeKind.Information, "No speech to insert", "The model returned no speech text.", showInStatus: true);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         catch (Exception error) { _session.ReportUiError(error); }
@@ -756,7 +732,6 @@ public sealed partial class MainWindow : Window
             foreach (var meeting in meetings) await meeting.session.DisposeAsync();
             foreach (var meeting in _meetingWindows.ToArray()) meeting.window.Close();
             await Task.WhenAll(_session.CloseAsync(), _models.DisposeAsync().AsTask(), _dictation.FinishBackgroundWorkAsync());
-            _history.Dispose();
             if (_captureTask is { } capture)
             {
                 try { await capture; }
@@ -813,7 +788,6 @@ public sealed partial class MainWindow : Window
     {
         _closed = true;
         _dictation.Dispose();
-        _history.Dispose();
         _hotkey?.Dispose();
         _deliveryCancellation.Dispose();
         _startupCancellation.Dispose();

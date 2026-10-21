@@ -25,11 +25,12 @@ recognition; a CPU-only build does not need the Vulkan SDK.
 .\tools\Build-AudioNative.ps1
 ```
 
-Setup downloads and verifies only `moonshine-tiny` by default. Choose another
-catalog entry with `-Models <model-id>`. Setup does not build the DLL.
+Setup downloads and verifies Nemotron ASR and its diarization companion by
+default. Choose another catalog entry, including optional Kroko ASR, with
+`-Models <model-id>`. Setup does not build the DLL.
 The native build downloads pinned CMake and Ninja tools, checks out audio.cpp
-v0.9.0, applies the tracked Vulkan loader patch, and builds CPU plus Vulkan
-support. It stages `audiocpp.dll`, its app-local dependencies and notices in
+v0.9.0, applies the tracked Vulkan loader and Nemotron timestamp patches, and
+builds CPU plus Vulkan support. It stages `audiocpp.dll`, its app-local dependencies and notices in
 `.runtime\native`, and the public WAV in `.runtime\validation`.
 
 To build CPU only:
@@ -68,6 +69,19 @@ configurations, but the deployment checks reject them until separately qualified
 ```
 
 Publishing stages an existing native runtime; it does not compile one.
+The default publish requires CPU and Vulkan support in the native runtime
+record. A CPU-only artifact is rejected before packaging, even when a compatible
+GPU and Vulkan SDK are installed. Rebuild the native runtime to add Vulkan.
+To publish an intentional CPU-only build, use:
+
+```powershell
+.\tools\Publish-Ansible.ps1 -Backend cpu
+```
+
+The native build checks the compiled `GGML_VULKAN` setting before staging.
+Its runtime record includes the applied native patches and their SHA-256 hashes.
+Staging and package verification reject a native DLL whose hash differs from
+that record.
 The script builds an unsigned, self-contained NativeAOT MSIX and prints its
 verified path under `Ansible\bin\AppPackages`. Change the output directory with:
 
@@ -102,10 +116,6 @@ Debug builds accept `--design-theme=light` and `--design-theme=dark` as launch
 arguments for screenshot qualification. This scopes appearance to the app
 window and does not change Windows settings. Release builds follow Windows.
 
-Independent visual judges must invoke the `ux-designer` skill before reviewing
-actual screenshots. Check both themes and responsive, error, and empty states.
-Showing or dismissing transient notices must not change the page viewport bounds.
-
 The app mark uses exact Pencil geometry. `Ansible/Assets/Brand` retains SVG
 artwork derived from that geometry and native-size PNGs exported through Pencil MCP. There is no design
 JSON snapshot in the repository. Regenerate package icons with the pinned
@@ -120,16 +130,43 @@ node .\tools\Generate-DesignAssets.cjs
 The generated Windows assets use transparent backgrounds and optical cuts for
 small sizes. Tray artwork is available for future integration; the app does not
 currently create a notification-area icon. In-app history is bounded and held
-only in memory. The session emits a typed successful dictation completion after
-cleanup. One app-owned history instance receives it independently of page
-lifetime. History and Insights views consume typed projections; the dictation
-page owns recording and file actions. Failed, cancelled, and unreleased
-operations never enter history. Bounded `PageCanvas` layouts retain a finite minimum
-height and allow outer overflow in short windows, so warnings cannot collapse their lists.
-`SettingsRow` owns the shared adaptive setting
-layout; pages provide labels, descriptions, and controls.
+only in memory. Session snapshots expose the terminal outcome so failed or
+cancelled operations cannot become successful history entries.
 
 ## Tests
+
+### Dictation responsiveness
+
+Use the existing probe's `--stream-only` option to prepare a reusable model
+session without first running offline recognition. Add `--repeat 5` for five
+sequential paced streams on that session:
+
+```powershell
+dotnet run --project .\Ansible.Probe -c Release -- `
+  .\.runtime\native\audiocpp.dll .\.runtime\models .\tools\audio-models.json `
+  .\.runtime\validation\sample_16k.wav nemotron-asr-0.6b-q8 `
+  --backend cpu --stream-only --repeat 5
+```
+
+The selected weights must be installed in the supplied model directory.
+Preparation, first speech preview, audio delivery, and finalization are separate
+measurements. Source-end-to-final time includes capture backlog; the interval
+after the last accepted channel write does not include earlier backpressure.
+No preview means no observed live speech, not a
+zero-millisecond response. Paced elapsed time includes audio delivery and
+backpressure; it is not pure inference time. Compare the same recording, model,
+thread count, build, and warm state. Run model probes sequentially. Nemotron
+Vulkan streaming remains unsafe; use the qualified CPU path for that model.
+
+Successful recognition waits for capture and native cleanup before final text
+delivery. Optional local usage writes use a bounded, serialized background
+worker instead of delaying that result. Shutdown joins accepted writes.
+Write failures remain in `SessionSnapshot.UsageError` and appear in Insights,
+without replacing the recognition notice. This worker stores metadata only.
+
+Push-to-talk still retains a 500 ms release tail to protect trailing speech.
+Do not shorten it based only on amplitude or UI responsiveness. A speech-aware
+replacement needs quiet-speech and release-mid-syllable qualification.
 
 ### Dictation insertion
 
@@ -146,6 +183,15 @@ COM ownership remain joined on the delivery worker; shutdown waits for it.
 Missing, changing, oversized, or unsupported snapshots leave delivery unverified.
 Only an exact document and caret delta in the original field is verified.
 No destination text is logged or persisted.
+
+`SessionNotice` displays only warnings and errors for the matching `NoticeArea`.
+Success and informational outcomes cannot opt into page banners. Insertion
+success, unverified sends, and empty recognition results do not publish
+delivery notices. Rejected or partial sends still report an actionable failure
+on Dictation. Screen-capture privacy failures use the application-wide area.
+Background preload/unload and meeting-detection failures write diagnostics
+instead of opening banners. Optional meeting naming and timing refinement
+also keep failures in diagnostics without adding status rows.
 
 Tests cover target identity loss, field changes, safety properties, exact
 selection replacement, unknown verification, selected paste chords, partial

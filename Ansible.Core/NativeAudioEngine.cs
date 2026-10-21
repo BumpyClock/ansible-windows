@@ -15,6 +15,7 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
     private NativeAudioHandle? _registry;
     private NativeAudioHandle? _model;
     private NativeAudioHandle? _session;
+    private NativeDiarizationSession? _diarization;
     private SessionKey? _sessionKey;
     private readonly NativeModelIntegrity _integrity = new();
     private NativeModelInventory? _inventory;
@@ -167,14 +168,13 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
 
     public Task PrepareMeetingAsync(AudioModel model, RecognitionOptions options, CancellationToken token)
     {
-        if (model.Family != "vibevoice_asr_streaming" || model.Mode != "streaming")
-            throw new NotSupportedException("Meetings require the installed VibeVoice streaming model.");
+        RequireMeetingModel(model);
         return PrepareForModeAsync(model, options, "streaming", 4096, token);
     }
 
     private Task PrepareForModeAsync(AudioModel model, RecognitionOptions options, string mode, int history, CancellationToken cancellationToken)
     {
-        // Kroko hotwords change decoder cost, so qualification must use the same decoder mode.
+        // Kroko hotwords change decoder cost, so its device qualification must use the same decoder mode.
         options = ValidateOptions(model, model.Family == "kroko_asr" ? options : options with { CustomDictionary = "" });
         return RunExclusiveAsync(() =>
         {
@@ -182,6 +182,8 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
             bool Prepare() => NativeOperation.Run(() =>
             {
                 EnsureSession(model, mode, NativeMemory.MaximumStreamFrames * sizeof(float), selected, cancellationToken, history);
+                if (history > 0 && UsesDiarization(model))
+                    EnsureDiarization(selected, cancellationToken);
                 return true;
             }, success => { if (!success) ReleaseModel(); });
             try { return Prepare(); }
@@ -204,6 +206,7 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
         long maximumFrames = NativeMemory.MaximumStreamFrames, int historySteps = 0)
     {
         EnsureSession(model, "streaming", NativeMemory.MaximumStreamFrames * sizeof(float), options, token, historySteps);
+        var diarization = historySteps > 0 && UsesDiarization(model) ? EnsureDiarization(options, token) : null;
         token.ThrowIfCancellationRequested();
         using var request = CreateRequest(options, token);
         token.ThrowIfCancellationRequested();
@@ -229,6 +232,7 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
         long receivedFrames = 0;
         var transcript = new StreamingTranscript();
         NativeOperation.Step(token, () => SetStreamingAudioContract(request));
+        diarization?.Start(token);
         NativeOperation.Step(token, () =>
         {
             _streamStartAttempted = true;
@@ -258,7 +262,7 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
                     index += count;
                     if (used == buffer.Length)
                     {
-                        Push(session, buffer.AsSpan(0, used), offset, model.Family!, transcript, progress, token);
+                        Push(session, buffer.AsSpan(0, used), offset, model.Family!, transcript, progress, token, diarization);
                         offset += used / 2;
                         used = 0;
                     }
@@ -266,17 +270,21 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
             }
         }
         if (used > 0)
-            Push(session, buffer.AsSpan(0, used), offset, model.Family!, transcript, progress, token);
+            Push(session, buffer.AsSpan(0, used), offset, model.Family!, transcript, progress, token, diarization);
         token.ThrowIfCancellationRequested();
+        diarization?.Finish(token);
         NativeAudioApi.Check(NativeAudioApi.StreamFinish(session, out var result), "finish native dictation");
         using var owned = new NativeAudioHandle(result, NativeHandleKind.Result);
         token.ThrowIfCancellationRequested();
-        return ReadResult(result, model.Family!, token);
+        var recognized = ReadResult(result, model.Family!, token);
+        diarization?.PublishFinal(result, recognized.SpeechText
+            ?? throw new InvalidDataException("The ASR model returned no authoritative meeting speech."), receivedFrames, progress, token);
+        return recognized;
     }
 
     private static unsafe void Push(
         nint session, ReadOnlySpan<byte> bytes, long offset, string family, StreamingTranscript transcript,
-        IProgress<TranscriptUpdate>? progress, CancellationToken token)
+        IProgress<TranscriptUpdate>? progress, CancellationToken token, NativeDiarizationSession? diarization = null)
     {
         token.ThrowIfCancellationRequested();
         var frames = bytes.Length / 2;
@@ -289,9 +297,10 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
             }
             fixed (float* pointer = samples)
             {
+                diarization?.Push(pointer, frames, offset, progress, token);
                 NativeAudioApi.Check(NativeAudioApi.StreamPush(session, pointer, (nuint)frames, 16000, 1, offset, out var streamEvent),
                     "process a dictation audio chunk");
-                AppendEvent(streamEvent, family, transcript, progress, token, offset + frames);
+                AppendEvent(streamEvent, family, transcript, progress, token, offset + frames, diarization);
             }
             token.ThrowIfCancellationRequested();
             while (true)
@@ -302,7 +311,7 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
                 {
                     break;
                 }
-                AppendEvent(streamEvent, family, transcript, progress, token, offset + frames);
+                AppendEvent(streamEvent, family, transcript, progress, token, offset + frames, diarization);
             }
         }
         finally
@@ -312,7 +321,7 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
     }
 
     private static void AppendEvent(nint pointer, string family, StreamingTranscript transcript,
-        IProgress<TranscriptUpdate>? progress, CancellationToken token, long processedSamples)
+        IProgress<TranscriptUpdate>? progress, CancellationToken token, long processedSamples, NativeDiarizationSession? diarization = null)
     {
         if (pointer == 0)
         {
@@ -320,6 +329,11 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
         }
         using var owned = new NativeAudioHandle(pointer, NativeHandleKind.Event);
         var resultPointer = NativeAudioApi.EventResult(pointer);
+        if (diarization is not null)
+        {
+            diarization.ReadAsr(resultPointer, processedSamples, progress, token);
+            return;
+        }
         var result = ReadResult(resultPointer, family, token, optionalText: true);
         if (!string.IsNullOrEmpty(result.DisplayText) || !string.IsNullOrEmpty(result.SpeechText))
         {
@@ -425,10 +439,11 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
         var backendName = Marshal.StringToCoTaskMemUTF8(selectedBackend);
         try
         {
-            var sessionOptions = historySteps > 0 ? NativeAudioApi.OptionsCreate() : 0;
+            var boundedVibeVoice = historySteps > 0 && model.Family == "vibevoice_asr_streaming";
+            var sessionOptions = boundedVibeVoice ? NativeAudioApi.OptionsCreate() : 0;
             try
             {
-                if (historySteps > 0)
+                if (boundedVibeVoice)
                 {
                     if (sessionOptions == 0) throw new InvalidOperationException("Cannot create native meeting options.");
                     NativeAudioApi.Check(NativeAudioApi.OptionsSet(sessionOptions,
@@ -462,8 +477,8 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
         var dictionary = CustomVocabulary.Normalize(options.CustomDictionary);
         if (dictionary.Length > 0 && !model.SupportsCustomDictionary)
             throw new NotSupportedException($"{model.Id} does not support custom dictionary hints in this native backend.");
-        if (CustomVocabulary.ModelCompatibilityError(model, dictionary) is { } compatibilityError)
-            throw new InvalidDataException(compatibilityError);
+        if (model.Family == "kroko_asr" && dictionary.Contains('/'))
+            throw new InvalidDataException("Kroko treats '/' as a hotword separator. Use separate dictionary entries instead.");
         return options with { CustomDictionary = dictionary };
     }
 
@@ -544,6 +559,7 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
             {
                 if (started)
                     NativeAudioApi.Check(NativeAudioApi.StreamReset(session.DangerousGetHandle()), "reset the dictation session");
+                _diarization?.Reset();
                 return;
             }
             catch
@@ -571,6 +587,8 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
 
     private void ReleaseModel()
     {
+        _diarization?.Dispose();
+        _diarization = null;
         _session?.Dispose();
         _session = null;
         _sessionKey = null;
@@ -602,12 +620,37 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
     public async Task StreamMeetingAsync(AudioModel model, ChannelReader<byte[]> audio, RecognitionOptions options,
         IProgress<TranscriptUpdate> progress, CancellationToken cancellationToken, Action? onReady = null)
     {
-        if (model.Family != "vibevoice_asr_streaming" || model.Mode != "streaming")
-            throw new NotSupportedException("Meetings require the installed VibeVoice streaming model.");
+        RequireMeetingModel(model);
         options = ValidateOptions(model, options);
         var result = await RunExclusiveAsync(() => RunAutoStream(model, audio, options, progress, cancellationToken, onReady, 4096), cancellationToken);
-        progress.Report(new TranscriptUpdate(result.DisplayText, true, result.SpeechText));
+        if (!UsesDiarization(model))
+            progress.Report(new TranscriptUpdate(result.DisplayText, true, result.SpeechText));
     }
+
+    private static void RequireMeetingModel(AudioModel model)
+    {
+        if (!MeetingSession.SupportsMeeting(model))
+            throw new NotSupportedException("Meetings require Nemotron or Kroko ASR with the Nemotron diarization companion, or VibeVoice streaming.");
+    }
+
+    private static bool UsesDiarization(AudioModel model) => model.Family is "nemotron_asr" or "kroko_asr";
+
+    private NativeDiarizationSession EnsureDiarization(RecognitionOptions options, CancellationToken token)
+    {
+        var model = FindDiarizationModel();
+        if (_diarization is not null && _diarization.Backend == options.Backend && _diarization.DeviceIndex == options.DeviceIndex)
+            return _diarization;
+        _diarization?.Dispose();
+        _diarization = null;
+        var inventory = _inventory!;
+        _diarization = new NativeDiarizationSession(_registry!.DangerousGetHandle(), model, inventory.Entries[model.Id],
+            _integrity, options, _threads, _headroom, inventory.Entries[_loadedId!].Family, token);
+        return _diarization;
+    }
+
+    private AudioModel FindDiarizationModel() =>
+        _inventory!.Models.FirstOrDefault(candidate => candidate.Id == AudioModelDefaults.DiarizationModelId)
+            ?? throw new InvalidOperationException("Install Nemotron 3 Diarization Q8 in Speech models before starting a Nemotron or Kroko meeting.");
 
     private sealed record SessionKey(string ModelId, string Mode, NativeBackend Backend, int DeviceIndex, int HistorySteps = 0);
 }

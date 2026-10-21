@@ -221,10 +221,12 @@ public sealed class DeviceBenchmarkTests
             }));
             Assert.NotEqual(original, Key(request with { Mode = "streaming" }));
             Assert.NotEqual(original, Key(request with { History = 4096 }));
-            Assert.NotEqual(original, Key(request with { UseDictionary = true }));
             Assert.NotEqual(original, Key(request with { Device = 1 }));
             Assert.NotEqual(original, Key(request with { Threads = 2 }));
+            Assert.NotEqual(original, Key(request with { UseDictionary = true }));
             Assert.NotEqual(original, Key(request, "changed-model-sha"));
+            Assert.NotEqual(Key(request, "asr-sha|diar-one|low"), Key(request, "asr-sha|diar-two|low"));
+            Assert.NotEqual(Key(request, "asr-sha|diar-one|low"), Key(request, "asr-sha|diar-one|very_low"));
             Assert.Equal(original, Key(request with { Backend = NativeBackend.Vulkan }));
             File.WriteAllText(dll, "native two");
             Assert.NotEqual(original, Key(request));

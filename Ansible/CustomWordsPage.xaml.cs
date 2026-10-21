@@ -13,7 +13,7 @@ public sealed partial class CustomWordsPage : Page
 
     private readonly DictationSession _session;
     private readonly Action _openModels;
-    private readonly ObservableCollection<DictionaryWord> _words = [];
+    private readonly ObservableCollection<string> _words = [];
     private UiSessionObserver? _observer;
     private SessionSnapshot _state;
     private string? _renderedDictionary;
@@ -55,8 +55,8 @@ public sealed partial class CustomWordsPage : Page
         }
         var model = _state.SelectedModel;
         ModelStatusText.Text = model is null ? "Choose a speech model to use custom words."
-            : !model.SupportsCustomDictionary ? $"{model.DisplayName ?? model.Id} does not support custom words."
-            : CustomVocabulary.ModelCompatibilityError(model, dictionary) ?? "";
+            : model.SupportsCustomDictionary ? ""
+            : $"{model.DisplayName ?? model.Id} does not support custom words.";
         ModelStatusText.Visibility = ModelStatusText.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
         BusyText.Visibility = _state.IsIdle ? Visibility.Collapsed : Visibility.Visible;
         AddWordsButton.IsEnabled = ImportWordsButton.IsEnabled = AddFirstWordButton.IsEnabled = _state.IsIdle;
@@ -76,10 +76,9 @@ public sealed partial class CustomWordsPage : Page
             .Order(StringComparer.CurrentCultureIgnoreCase).ToArray();
         // Preserve unchanged rows so dictionary updates do not discard their focused controls.
         for (var index = _words.Count - 1; index >= 0; index--)
-            if (!filtered.Contains(_words[index].Word, StringComparer.Ordinal)) _words.RemoveAt(index);
+            if (!filtered.Contains(_words[index], StringComparer.Ordinal)) _words.RemoveAt(index);
         for (var index = 0; index < filtered.Length; index++)
-            if (index >= _words.Count || _words[index].Word != filtered[index])
-                _words.Insert(index, new DictionaryWord(filtered[index]));
+            if (index >= _words.Count || _words[index] != filtered[index]) _words.Insert(index, filtered[index]);
         CountText.Text = query.Length == 0
             ? $"{entries.Length} of {CustomVocabulary.MaximumEntries} entries"
             : $"{filtered.Length} of {entries.Length} entries shown";
@@ -115,7 +114,7 @@ public sealed partial class CustomWordsPage : Page
             ValidateEditor();
             await EntryDialog.ShowAsync();
         }
-        catch (Exception error) { _session.ReportUiError(error); }
+        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Dictionary); }
         finally
         {
             _editorOpen = false;
@@ -140,8 +139,6 @@ public sealed partial class CustomWordsPage : Page
             var text = CustomVocabulary.Normalize(EntryBox.Text);
             if (_editorMode != EditorMode.Import && text.Contains('\n'))
                 throw new InvalidDataException("Enter one word or phrase. Use Import to add a list.");
-            if (CustomVocabulary.ModelCompatibilityError(_state.SelectedModel, text) is { } compatibilityError)
-                throw new InvalidDataException(compatibilityError);
             var updated = _editorMode == EditorMode.Edit
                 ? CustomVocabulary.ReplaceEntry(dictionary, _editingWord!, text)
                 : CustomVocabulary.AddEntries(dictionary, text);
@@ -198,7 +195,7 @@ public sealed partial class CustomWordsPage : Page
         }
         catch (Exception error)
         {
-            _session.ReportUiError(error);
+            _session.ReportUiError(error, NoticeArea.Dictionary);
             _state = _session.State;
             Render();
             return false;
@@ -216,10 +213,10 @@ public sealed partial class CustomWordsPage : Page
     {
         if (!_state.IsIdle || sender is not Button { Tag: string word }) return;
         var before = _state.Settings.CustomDictionary;
-        var index = _words.IndexOf(new DictionaryWord(word));
+        var index = _words.IndexOf(word);
         string after;
         try { after = CustomVocabulary.RemoveEntry(before, word); }
-        catch (InvalidOperationException error) { _session.ReportUiError(error); return; }
+        catch (InvalidOperationException error) { _session.ReportUiError(error, NoticeArea.Dictionary); return; }
         if (!ApplyDictionary(after, $"Removed \"{word}\".")) return;
         _undoBefore = before;
         _undoAfter = after;
@@ -247,9 +244,12 @@ public sealed partial class CustomWordsPage : Page
         if (WordsList is not null) RenderWords();
     }
 
-    private void WordsContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+    private void RowButtonLoaded(object sender, RoutedEventArgs args)
     {
-        if (!args.InRecycleQueue) args.ItemContainer.IsEnabled = _state.IsIdle;
+        if (sender is not Button { Tag: string word } button) return;
+        var action = AutomationProperties.GetAutomationId(button) == "EditCustomWordButton" ? "Edit" : "Remove";
+        AutomationProperties.SetName(button, $"{action} {word}");
+        if (WordsList.ContainerFromItem(word) is ListViewItem container) container.IsEnabled = _state.IsIdle;
     }
 
     private void ModelsClicked(object sender, RoutedEventArgs args) => _openModels();
@@ -268,17 +268,11 @@ public sealed partial class CustomWordsPage : Page
     private void RenderNotice()
     {
         var notice = _state.Notice;
-        StatusInfo.IsOpen = notice.ShouldDisplay;
+        StatusInfo.IsOpen = notice.ShouldDisplayOn(NoticeArea.Dictionary);
         StatusInfo.Visibility = StatusInfo.IsOpen ? Visibility.Visible : Visibility.Collapsed;
         StatusInfo.Title = notice.Title;
         StatusInfo.Message = notice.Message;
-        StatusInfo.Severity = notice.Kind switch
-        {
-            NoticeKind.Error => InfoBarSeverity.Error,
-            NoticeKind.Warning => InfoBarSeverity.Warning,
-            NoticeKind.Success => InfoBarSeverity.Success,
-            _ => InfoBarSeverity.Informational
-        };
+        StatusInfo.Severity = notice.Kind == NoticeKind.Error ? InfoBarSeverity.Error : InfoBarSeverity.Warning;
     }
 
     private void StatusInfoClosing(InfoBar sender, InfoBarClosingEventArgs args)

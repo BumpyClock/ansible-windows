@@ -2,7 +2,9 @@ using Ansible.Core;
 
 namespace Ansible;
 
-/// <summary>A session-only history item. Transcript text is never persisted.</summary>
+/// <summary>
+/// Session-only history used by the home surface. The app deliberately does not persist transcript text.
+/// </summary>
 internal sealed record HomeHistoryItem(
     Guid OperationId,
     DateTimeOffset CompletedAt,
@@ -11,85 +13,42 @@ internal sealed record HomeHistoryItem(
     int? Words,
     TimeSpan Elapsed);
 
-/// <summary>
-/// App-owned bounded history projection. The session owns completion eligibility; this store only owns the
-/// in-memory retention policy and notifies views when its snapshot changes.
-/// </summary>
-internal sealed class HomeDictationHistory : IDisposable
+internal static class HomeDictationHistory
 {
-    internal const int MaximumItems = 100;
+    private const int MaximumItems = 100;
+    private static readonly object Gate = new();
+    private static readonly List<HomeHistoryItem> Items = [];
+    private static long _version;
     internal const int MaximumCharacters = 500_000;
 
-    private readonly object _gate = new();
-    private readonly List<HomeHistoryItem> _items = [];
-    private readonly DictationSession? _session;
-    private bool _oversizedCurrentResult;
-    private bool _disposed;
+    public static long Version { get { lock (Gate) { return _version; } } }
 
-    internal HomeDictationHistory() { }
-
-    internal HomeDictationHistory(DictationSession session)
+    public static IReadOnlyList<HomeHistoryItem> Snapshot()
     {
-        _session = session ?? throw new ArgumentNullException(nameof(session));
-        _session.DictationCompleted += OnDictationCompleted;
+        lock (Gate) { return Items.ToArray(); }
     }
 
-    internal event Action? Changed;
-
-    internal bool OversizedCurrentResult
+    public static bool Add(HomeHistoryItem item)
     {
-        get { lock (_gate) { return _oversizedCurrentResult; } }
-    }
-
-    internal IReadOnlyList<HomeHistoryItem> Snapshot()
-    {
-        lock (_gate) { return _items.ToArray(); }
-    }
-
-    internal bool Contains(Guid operationId)
-    {
-        lock (_gate) { return _items.Any(item => item.OperationId == operationId); }
-    }
-
-    /// <summary>Accepts a completion only once and retains at most the newest bounded entries.</summary>
-    internal bool Add(DictationCompletion completion)
-    {
-        var text = (string.IsNullOrWhiteSpace(completion.Result.SpeechText)
-            ? completion.Result.DisplayText
-            : completion.Result.SpeechText).Trim();
-        if (text.Length == 0) { return false; }
-
-        bool accepted;
-        lock (_gate)
+        lock (Gate)
         {
-            if (_disposed || _items.Any(existing => existing.OperationId == completion.OperationId)) { return false; }
-            _oversizedCurrentResult = text.Length > MaximumCharacters;
-            if (_oversizedCurrentResult)
-            {
-                accepted = false;
-            }
-            else
-            {
-                _items.Insert(0, new HomeHistoryItem(completion.OperationId, completion.CompletedAt, text,
-                    completion.ModelId, completion.Result.SpokenWords, completion.Elapsed));
-                while (_items.Count > MaximumItems || _items.Sum(existing => existing.Text.Length) > MaximumCharacters)
-                    _items.RemoveAt(_items.Count - 1);
-                accepted = true;
-            }
+            if (Items.Any(existing => existing.OperationId == item.OperationId)) { return false; }
+            // Keep copy actions authoritative. Oversized transcripts stay in the current result and are omitted here.
+            if (item.Text.Length > MaximumCharacters) { return false; }
+            Items.Insert(0, item);
+            while (Items.Count > MaximumItems || Items.Sum(existing => existing.Text.Length) > MaximumCharacters)
+                Items.RemoveAt(Items.Count - 1);
+            _version++;
+            return true;
         }
-        Changed?.Invoke();
-        return accepted;
     }
 
-    private void OnDictationCompleted(DictationCompletion completion) => Add(completion);
-
-    public void Dispose()
+    internal static void Reset()
     {
-        lock (_gate)
+        lock (Gate)
         {
-            if (_disposed) { return; }
-            _disposed = true;
+            Items.Clear();
+            _version++;
         }
-        if (_session is not null) { _session.DictationCompleted -= OnDictationCompleted; }
     }
 }

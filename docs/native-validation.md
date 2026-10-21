@@ -4,7 +4,9 @@ Build the runtime and download the model under test using the
 [development guide](development.md). Run commands from the repository root in
 PowerShell. Probes use local model weights and a public sample, not the microphone.
 
-The native build pins audio.cpp v0.9.0 and supports CPU and optional Vulkan.
+The native build pins audio.cpp v0.9.0, applies tracked patches including
+`tools/patches/audio-nemotron-stream-timestamps.patch`, and supports CPU and
+optional Vulkan. Compiled families include `nemotron_3_diar` and `kroko_asr`.
 The [catalog](../tools/audio-models.json) pins each model's revision, file length,
 SHA-256, license, and capabilities. Use those capabilities rather than assuming
 that an upstream model feature exists in this backend.
@@ -33,6 +35,8 @@ unknown. Cancellation waits for an executing native call to finish.
 | Option | Effect |
 | --- | --- |
 | `--file-only` | Skip streaming; offline models always skip it |
+| `--stream-only` | Skip WAV transcription; prepare once, then stream |
+| `--repeat <1..20>` | Repeat the paced stream for warm first-preview and input-end-to-final timings. Missing previews stay missing. Cannot combine with `--file-only`. Use `--stream-only` with `--repeat` for buffered offline dictation. |
 | `--backend cpu`, `--backend vulkan`, or `--backend auto` | Select the backend; default CPU. Auto is not implied. |
 | `--device <index>` | Select a nonnegative device index; default 0 |
 | `--device-probe <executable>` | Required for `--backend auto`. Path to `Ansible.DeviceProbe.exe`. The probe does not discover the worker. |
@@ -77,18 +81,6 @@ dotnet run --project .\Ansible.Probe -- `
 The probe reports dictionary support and whether context was supplied, without
 printing the dictionary. Recognition output is printed to the console.
 
-Kroko uses the same command with model ID `kroko-en-64l-q8` and `--backend cpu`.
-Its dictionary selects modified beam-search decoding and supplies per-request
-hotwords. Entries containing `/` are rejected before native work. Automatic
-device qualification distinguishes the hotword decoder from ordinary decoding
-and uses public sample hints rather than the user's vocabulary.
-
-On 2026-10-20, the Kroko CPU probe passed WAV recognition and microphone-paced
-streaming on the 14.072-second public sample with nonempty hotwords. Both final
-results contained "Mother Nature" and reported 28 spoken words. Ten previews
-arrived while streaming input was open. This checks recognition functionality;
-the run occurred alongside builds and does not qualify performance or GPU support.
-
 To check CPU eligibility without loading a model:
 
 ```powershell
@@ -125,9 +117,49 @@ A fresh engine run reused the same measurement timestamps and results. The WAV
 whole-operation time, including calibration, was 8598 ms cold and 1284 ms with
 the cache reused. That is this run only. Paced streaming elapsed time includes
 audio feed time and is not pure inference latency. These measurements do not
-qualify other models, long live dictation, or meeting history.
+qualify other models, long live dictation, or meeting history. A rebuilt native
+runtime changes Auto content-hashed cache keys. Existing CPU-only calibration
+entries are not reused for a Vulkan runtime; do not delete the cache or force
+GPU selection to pick up the new keys. Auto Kroko dictionary mode qualifies
+`modified_beam_search` with a fixed public hint only. The user's dictionary
+never enters worker arguments or the cache. The paired Auto key includes the
+diarizer hash and profile.
+
+## VibeVoice streaming timing
+
+On 2026-10-20, five prepared reused CPU streams then five Vulkan streams used
+`vibevoice-streaming-1.5b-q4` from the pinned catalog, native audio.cpp v0.9.0
+plus both tracked patches, four threads, Vulkan device AMD Radeon 8060S, the
+14.0719-second public WAV, and no dictionary. Packets were 40 ms with absolute
+packet-end availability on a bounded channel. Native DLL SHA-256
+`533dc550f1d7e36b3f55bbbc0b6d173730717ddec952c47b51d69ad1145cb0fe`. Sample
+SHA-256 `a8096a0c2ac136bcaf70143dc80ba576ade8dfbf7f9f30ecdec29b920ab3e3cb`.
+Model SHA-256 is the catalog pin.
+
+All ten streams produced the same normalized 22-word transcript. Each published
+four speech previews before input closed. Timings exclude model preparation, the
+500 ms shortcut tail, and UIA, clipboard, or input delivery.
+Source-duration-to-final includes source backlog. It is not the channel-end-only
+metric. Values are median (min–max) milliseconds across five reused streams.
+
+| Metric | CPU | Vulkan |
+| --- | --- | --- |
+| First preview | 7621.0 (6901.1–11934.7) | 4099.1 (3968.9–4319.8) |
+| Source-duration-to-final | 9265.7 (4923.5–16736.2) | 327.7 (299.9–747.1) |
+
+These are bounded observed wall-clock cases only. They are not a speedup ratio,
+p95, or pure-compute result, and they do not qualify Nemotron or Kroko pairs.
+CPU variance was high. The first CPU trial may have overlapped a short managed
+build. Contention is possible. The cause is not known. Native model buffering
+remains inside first-preview latency.
 
 ## Meeting qualification
+
+Meetings default to Nemotron ASR with the Nemotron 3 Diarization companion.
+VibeVoice streaming remains selectable. Kroko plus the same diarizer is an extra
+option, not the default. Nemotron and Kroko diarization applies to meetings only.
+The measurements below are historical VibeVoice CPU runs. They do not qualify
+the new default pair, Kroko, two-hour sessions, or multi-speaker accuracy.
 
 On 2026-10-09, live microphone plus system/application loopback tests captured an
 in-memory 440 Hz tone in both modes and released their native resources. Core
@@ -167,6 +199,29 @@ debouncing, dismissal, and failure gaps. This does not qualify actual Teams
 join/mute behavior. Its two-second enumeration budget is checked between native
 calls; a blocked Windows call can delay shutdown while its owned worker is joined.
 
+Rerun CPU speaker-pair checks with installed weights and the public sample:
+
+```powershell
+.\tools\Test-SpeakerModels.ps1
+```
+
+`-Model nemotron`, `kroko`, or `both` (default) runs `NativeSpeakerModelTests`
+sequentially. Install Kroko with `.\tools\Setup-AudioBackend.ps1 -Models kroko-en-64l-q8`.
+A non-default setup also needs `nemotron-3-diarization-q8` for the pair. The
+script is CPU only. The public sample cannot qualify two-hour latency or
+multi-speaker accuracy.
+
+On 2026-10-20, `.\tools\Test-SpeakerModels.ps1` passed exactly one native CPU
+case each for `nemotron-asr-0.6b-q8` and `kroko-en-64l-q8` on pinned audio.cpp
+v0.9.0 plus tracked patches and verified downloaded weights. The public sample
+is 14.072 seconds. Each case reported speech while the input channel stayed
+open, a final transcript containing "mother nature", nonempty bounded timed
+speaker labels, and every final turn was non-provisional. The Kroko case supplied
+nonempty `Mother Nature\nUnited States` hotwords. Delivery was unpaced. Another
+app may have calibrated at the same time. These runs are not performance
+results. They do not qualify GPU, multi-speaker accuracy, long sessions, or
+live latency.
+
 ## Known limits
 
 - On 2026-10-10, a read-only `AppCapability.CheckAccess` probe ran under
@@ -199,11 +254,16 @@ calls; a blocked Windows call can delay shutdown while its owned worker is joine
   workspace and reserve headroom; they do not bound every allocation or check a
   dedicated GPU-memory budget. Keep safeguards enabled. Do not close unrelated
   apps to force a model load.
-- The dedicated meeting path uses VibeVoice streaming with a 4096-step rolling
-  native history and a two-hour capture limit. It processes chunks throughout,
+- The dedicated meeting path defaults to Nemotron ASR plus Nemotron 3
+  Diarization, with VibeVoice streaming as an alternative, a 4096-step rolling
+  native history, and a two-hour capture limit. It processes chunks throughout,
   preserving one stream across Pause/Resume. This limit is not evidence of
-  two-hour speaker accuracy or latency. Validate CPU and Vulkan separately with
-  `NativeMeetingTests`, then qualify long meetings and multiple speakers.
+  two-hour speaker accuracy or latency. Kroko plus the Nemotron diarizer is an
+  extra CPU-focused option; upstream notes it may be slow, and Vulkan needs
+  contributor testing. Validate CPU and Vulkan separately with
+  `NativeMeetingTests` and `.\tools\Test-SpeakerModels.ps1`, then qualify long
+  meetings and multiple speakers. The public sample cannot establish those
+  results.
 - Dictation/file recognition operations have a five-minute timeout; the probe uses three
   minutes. WAV input is limited to five minutes, 100 MiB on disk, and 64 MiB of
   decoded floats. Native calls can outlast these deadlines while cleanup waits.

@@ -9,6 +9,10 @@ public sealed class DictationSession
     private readonly IAudioCaptureFactory _captureFactory;
     private readonly IAudioInputReader _input;
     private readonly IUsageStore _usageStore;
+    // One in-flight write and at most 32 pending metadata entries. Admission never waits for disk.
+    private readonly Channel<UsageEntry> _pendingUsage = Channel.CreateBounded<UsageEntry>(
+        new BoundedChannelOptions(32) { SingleReader = true, SingleWriter = true, FullMode = BoundedChannelFullMode.Wait });
+    private readonly Task _usageWork;
     private readonly IAppSettingsStore _settingsStore;
     private readonly SessionNotice? _initialSettingsWarning;
     private readonly TimeProvider _time;
@@ -55,7 +59,7 @@ public sealed class DictationSession
         {
             _initialSettingsWarning = new(NoticeKind.Warning, "Settings unavailable",
                 $"Saved settings could not be read. Defaults apply only to this session; " +
-                $"the saved document remains unchanged: {error.Message}");
+                $"the saved document remains unchanged: {error.Message}", NoticeArea.Settings | NoticeArea.Dictation);
         }
         _state = new SessionSnapshot
         {
@@ -64,11 +68,10 @@ public sealed class DictationSession
             Models = [], SelectedIndex = -1, ModelsDirectory = settings.ModelsDirectory ?? modelsDirectory,
             BackendVersion = "", Settings = settings, Transcript = ""
         };
+        _usageWork = Task.Run(PersistUsageAsync);
     }
 
     public event Action<SessionSnapshot>? StateChanged;
-    /// <summary>Raised once for each successful microphone dictation, after owned cleanup.</summary>
-    public event Action<DictationCompletion>? DictationCompleted;
     public event Action<double>? AudioLevelChanged;
     public SessionSnapshot State { get { lock (_gate) { return _state; } } }
     public string UsagePath => _usageStore.Path;
@@ -123,27 +126,27 @@ public sealed class DictationSession
     }
     public void SetUsageEnabled(bool enabled) =>
         ChangeSettings(state => state with { Settings = state.Settings with { CollectUsage = enabled } },
-            new(NoticeKind.Success, "Settings saved", "Local usage collection was updated."));
+            new(NoticeKind.Success, "Settings saved", "Local usage collection was updated.", NoticeArea.Settings));
     public void SetShortcut(DictationShortcut shortcut) =>
         ChangeSettings(state => state with { Settings = state.Settings with { Shortcut = shortcut } },
-            new(NoticeKind.Success, "Shortcut updated", $"Use {shortcut.DisplayText} in another app."));
+            new(NoticeKind.Success, "Shortcut updated", $"Use {shortcut.DisplayText} in another app.", NoticeArea.Settings));
     public void SetPushToTalk(bool enabled) =>
         ChangeSettings(state => state with { Settings = state.Settings with { PushToTalk = enabled } },
-            new(NoticeKind.Success, "Activation mode updated", enabled ? "Hold the shortcut to dictate." : "Press the shortcut to start and finish."));
+            new(NoticeKind.Success, "Activation mode updated", enabled ? "Hold the shortcut to dictate." : "Press the shortcut to start and finish.", NoticeArea.Settings));
     public void SetInsertionMethod(TextInsertionMethod method) =>
         ChangeSettings(state => state with { Settings = state.Settings with { InsertionMethod = method } },
             new(NoticeKind.Success, "Text insertion updated", method == TextInsertionMethod.Paste
                 ? "Dictated text replaces the clipboard and remains available after the paste shortcut is sent."
-                : "Dictated text is typed one character at a time."));
+                : "Dictated text is typed one character at a time.", NoticeArea.Settings));
     public void SetTypingGap(int milliseconds) =>
         ChangeSettings(state => state with { Settings = state.Settings with { TypingGapMilliseconds = milliseconds } },
-            new(NoticeKind.Success, "Typing gap updated", $"Typed characters are sent {milliseconds} ms apart."));
+            new(NoticeKind.Success, "Typing gap updated", $"Typed characters are sent {milliseconds} ms apart.", NoticeArea.Settings));
     public void SetPasteShortcut(PasteShortcut shortcut) =>
         ChangeSettings(state => state with { Settings = state.Settings with { PasteShortcut = shortcut } },
-            new(NoticeKind.Success, "Paste shortcut updated", "The selected paste shortcut applies to the next dictation. Check that the destination accepts it."));
+            new(NoticeKind.Success, "Paste shortcut updated", "The selected paste shortcut applies to the next dictation. Check that the destination accepts it.", NoticeArea.Settings));
     public void SetMicrophoneBoost(int decibels) =>
         ChangeSettings(state => state with { Settings = state.Settings with { MicrophoneBoostDecibels = decibels } },
-            new(NoticeKind.Success, "Microphone boost updated", "The boost applies to the next microphone dictation."));
+            new(NoticeKind.Success, "Microphone boost updated", "The boost applies to the next microphone dictation.", NoticeArea.Settings));
     public Task<SessionOutcome> MaintainModelsAsync(
         Func<CancellationToken, Task> maintenance, string? directory = null)
     {
@@ -164,22 +167,22 @@ public sealed class DictationSession
                 SelectedIndex = index,
                 Settings = state.Settings with { ModelId = state.Models[index].Id }
             };
-        }, new(NoticeKind.Information, "Model selected", "The selected model applies to the next recognition."));
+        }, new(NoticeKind.Information, "Model selected", "The selected model applies to the next recognition.", NoticeArea.Dictation | NoticeArea.Models));
     }
 
     public void SetLanguage(string language) =>
         ChangeSettings(state => state with { Settings = state.Settings with { Language = language.Trim() } },
-            new(NoticeKind.Success, "Language hint updated", "The language hint applies to the next recognition."));
+            new(NoticeKind.Success, "Language hint updated", "The language hint applies to the next recognition.", NoticeArea.Settings));
 
     public void SetBackend(NativeBackend backend) =>
         ChangeSettings(state => state with { Settings = state.Settings with { Backend = backend } },
-            new(NoticeKind.Success, "Recognition processor updated", "The selected processor applies to the next recognition."));
+            new(NoticeKind.Success, "Recognition processor updated", "The selected processor applies to the next recognition.", NoticeArea.Settings));
 
     public void SetCustomDictionary(string text) =>
         ChangeSettings(state => state with
         {
             Settings = state.Settings with { CustomDictionary = CustomVocabulary.Normalize(text) }
-        }, new(NoticeKind.Success, "Dictionary updated", "Vocabulary hints apply to the next recognition with a supported model."));
+        }, new(NoticeKind.Success, "Dictionary updated", "Vocabulary hints apply to the next recognition with a supported model.", NoticeArea.Dictionary));
 
     public void SetHideFromCapture(bool enabled)
     {
@@ -190,7 +193,7 @@ public sealed class DictationSession
                 throw new InvalidOperationException("The app is closing.");
             var settings = _state.Settings with { HideFromCapture = enabled };
             state = SetState(_state with { Settings = settings,
-                Notice = SaveSettings(settings) ?? new(NoticeKind.Information, "Capture privacy updated",
+                Notice = SaveSettings(settings, NoticeArea.Settings) ?? new(NoticeKind.Information, "Capture privacy updated",
                     enabled ? "Capture exclusion requested for meeting windows and the dictation overlay."
                         : "Meeting windows and the dictation overlay can appear in captures.") });
         }
@@ -206,7 +209,7 @@ public sealed class DictationSession
                 throw new InvalidOperationException("The app is closing.");
             var settings = _state.Settings with { AutoDetectMeetings = enabled };
             state = SetState(_state with { Settings = settings,
-                Notice = SaveSettings(settings) ?? new(NoticeKind.Information, "Meeting detection updated",
+                Notice = SaveSettings(settings, NoticeArea.Settings) ?? new(NoticeKind.Information, "Meeting detection updated",
                     enabled ? "Ansible can offer local notetaking when Teams uses the microphone. Recording starts only when you click Start."
                         : "Automatic meeting suggestions are off. You can still start notetaking from Meetings.") });
         }
@@ -221,34 +224,34 @@ public sealed class DictationSession
             RequireIdle();
             var updated = change(_state);
             updated.Settings.Validate();
-            state = SetState(updated with { Notice = SaveSettings(updated.Settings) ?? notice });
+            state = SetState(updated with { Notice = SaveSettings(updated.Settings, notice.Area) ?? notice });
             // A model or processor change prepares the new session; other settings leave it resident.
             KeepEngineWarm();
         }
         Publish(state);
     }
 
-    private SessionNotice? SaveSettings(AppSettings settings)
+    private SessionNotice? SaveSettings(AppSettings settings, NoticeArea area)
     {
         if (_initialSettingsWarning is not null)
             return new(NoticeKind.Warning, "Settings not saved",
                 "The change applies only to this session because the saved settings could not be read at startup. " +
-                "Resolve the read error and restart the app before saving settings. The saved document remains unchanged.");
+                "Resolve the read error and restart the app before saving settings. The saved document remains unchanged.", area);
         try { _settingsStore.Save(settings); return null; }
         catch (Exception error)
         {
             return new(NoticeKind.Warning, "Settings not saved",
-                $"The change applies to this session, but could not be saved for restart: {error.Message}");
+                $"The change applies to this session, but could not be saved for restart: {error.Message}", area);
         }
     }
 
-    public void Notify(NoticeKind kind, string title, string message, bool showInStatus = false)
+    public void Notify(NoticeKind kind, string title, string message, NoticeArea area = NoticeArea.Dictation)
     {
         SessionSnapshot state;
         lock (_gate)
         {
             if (_closing) { return; }
-            state = SetState(_state with { Notice = new(kind, title, message, showInStatus) });
+            state = SetState(_state with { Notice = new(kind, title, message, area) });
         }
         Publish(state);
     }
@@ -264,7 +267,8 @@ public sealed class DictationSession
         Publish(state);
     }
 
-    public void ReportUiError(Exception error) => Notify(NoticeKind.Error, "Operation failed", error.Message);
+    public void ReportUiError(Exception error, NoticeArea area = NoticeArea.Dictation) =>
+        Notify(NoticeKind.Error, "Operation failed", error.Message, area);
 
     private Task<SessionOutcome> Begin(
         SessionActivity activity, string? path = null, bool initializeUsage = false,
@@ -284,8 +288,6 @@ public sealed class DictationSession
                 {
                     throw new InvalidOperationException("Choose an installed model that supports this recognition mode.");
                 }
-                if (CustomVocabulary.ModelCompatibilityError(model, _state.Settings.CustomDictionary) is { } dictionaryError)
-                    throw new InvalidDataException(dictionaryError);
             }
             var options = new RecognitionOptions(_state.Language,
                 model?.SupportsCustomDictionary == true ? _state.Settings.CustomDictionary : "", _state.Settings.Backend);
@@ -311,9 +313,10 @@ public sealed class DictationSession
                     _ => DictationPhase.Preparing
                 },
                 Transcript = activity is SessionActivity.Connecting or SessionActivity.ModelMaintenance ? _state.Transcript : "",
-                TranscriptOperationId = activity is SessionActivity.Connecting or SessionActivity.ModelMaintenance
-                    ? _state.TranscriptOperationId : null,
                 Result = activity is SessionActivity.Connecting or SessionActivity.ModelMaintenance ? _state.Result : null,
+                Outcome = null,
+                CompletedAt = null,
+                Elapsed = TimeSpan.Zero,
                 Notice = new(NoticeKind.Information, "Preparing operation",
                     "New work is admitted only when the current session has released its resources.")
             });
@@ -358,10 +361,6 @@ public sealed class DictationSession
         if (operation.CommandError is not null) { AddError(errors, operation.CommandError); }
         if (errors.Count != 0) { kind = SessionOutcomeKind.Failed; }
         var elapsed = operation.StartedAt is { } start ? _time.GetElapsedTime(start) : TimeSpan.Zero;
-        if (kind == SessionOutcomeKind.Completed && operation.Result is not null)
-        {
-            await RecordUsageAsync(operation, elapsed);
-        }
         var errorResult = errors.Count switch
         {
             0 => null,
@@ -369,7 +368,6 @@ public sealed class DictationSession
             _ => new AggregateException("Recognition and cleanup reported failures.", errors)
         };
         var outcome = new SessionOutcome(kind, operation.Result, errorResult);
-        DictationCompletion? completion = null;
         SessionSnapshot state;
         lock (_gate)
         {
@@ -388,7 +386,6 @@ public sealed class DictationSession
                 SessionOutcomeKind.Cancelled => new SessionNotice(NoticeKind.Information, "Cancelled", "Partial text is retained; this attempt is not counted."),
                 SessionOutcomeKind.TimedOut => new(NoticeKind.Warning, "Timed out", "The operation exceeded its deadline and is not counted."),
                 SessionOutcomeKind.Failed => new(NoticeKind.Error, "Operation failed", errorResult?.Message ?? "The operation failed."),
-                _ when operation.UsageWarning is not null => new(NoticeKind.Warning, "Transcript ready; statistics unavailable", operation.UsageWarning),
                 _ when operation.Result is not null => new(NoticeKind.Success, "Transcript ready", "Recognition completed and owned resources were released."),
                 _ when operation.SettingsWarning is not null => operation.SettingsWarning,
                 _ when operation.Activity is SessionActivity.Connecting or SessionActivity.ModelMaintenance && _engine is null =>
@@ -397,51 +394,39 @@ public sealed class DictationSession
                     new(NoticeKind.Success, "Native backend ready", $"{_state.Models.Count} installed models; one resident model at a time."),
                 _ => new(NoticeKind.Success, "Operation complete", "Owned resources were released.")
             };
-            var completedAt = _time.GetUtcNow();
+            if (operation.Activity is SessionActivity.Connecting or SessionActivity.ModelMaintenance &&
+                !ReferenceEquals(notice, operation.SettingsWarning))
+                notice = notice with { Area = NoticeArea.Models | NoticeArea.Dictation };
+            var usageWarning = kind == SessionOutcomeKind.Completed && operation.Result is not null
+                ? QueueUsage(operation, elapsed) : null;
             state = SetState(_state with
             {
                 Phase = _closing ? DictationPhase.Closing : _recovery is not null ? DictationPhase.RecoveryRequired :
                     _engine is null ? DictationPhase.Disconnected : DictationPhase.Ready,
                 Notice = _recovery is not null ? new(NoticeKind.Error, "Cleanup requires recovery",
-                    "Native resources remain owned. Close the app to retry release; new work is blocked.") : notice,
+                    "Native resources remain owned. Close the app to retry release; new work is blocked.", NoticeArea.Application) :
+                    notice,
+                UsageError = usageWarning ?? _state.UsageError,
+                Outcome = kind,
+                CompletedAt = _time.GetUtcNow(),
+                Elapsed = elapsed
             });
-            if (_recovery is null && kind == SessionOutcomeKind.Completed && operation.Activity == SessionActivity.Dictation &&
-                operation.Result is { } result && operation.Model is { } model)
-            {
-                completion = new DictationCompletion(operation.Id, model.Id, result, completedAt, elapsed);
-            }
             if (_recovery is null) { KeepEngineWarm(); }
         }
         if (_recovery is null) { operation.Dispose(); }
         try
         {
-            // Publish the terminal snapshot before the typed completion event so UI observers see the final state first.
+            // StateChanged is synchronous. Publish the terminal snapshot before completing the operation so
+            // observers such as session history cannot miss it when an awaiting caller starts new work.
             Publish(state);
         }
         finally
         {
-            try
-            {
-                // Completion observers run after cleanup and terminal state publication. Keep their failures
-                // from changing the recognition outcome or preventing awaiting callers from resuming.
-                if (completion is not null && DictationCompleted is { } observers)
-                {
-                    foreach (Action<DictationCompletion> observer in observers.GetInvocationList())
-                    {
-                        try { observer(completion); }
-                        catch (Exception error)
-                        {
-                            System.Diagnostics.Debug.WriteLine($"Ansible: dictation completion observer failed: {error.Message}");
-                        }
-                    }
-                }
-            }
-            finally
-            {
-                operation.Completion.TrySetResult(outcome);
-                AudioLevelChanged?.Invoke(0);
-            }
+            // Preserve the existing callback-exception policy while guaranteeing that the operation outcome is
+            // observable even if a subscriber fails during terminal publication.
+            operation.Completion.TrySetResult(outcome);
         }
+        AudioLevelChanged?.Invoke(0);
     }
 
     private async Task ConnectCoreAsync(Operation operation)
@@ -461,7 +446,8 @@ public sealed class DictationSession
         operation.Token.ThrowIfCancellationRequested();
         var candidate = _engineFactory(operation.Path!);
         operation.Candidate = candidate;
-        var models = await candidate.ConnectAsync(operation.Token);
+        IReadOnlyList<AudioModel> models = (await candidate.ConnectAsync(operation.Token))
+            .Where(model => model.Task is null or "asr").ToArray();
         operation.Token.ThrowIfCancellationRequested();
         var modelsDirectory = candidate.ModelsDirectory;
         var backendVersion = candidate.Version;
@@ -498,17 +484,20 @@ public sealed class DictationSession
             if (!operation.InitializeUsage)
             {
                 settings = settings with { ModelsDirectory = Path.GetFullPath(modelsDirectory) };
-                operation.SettingsWarning = SaveSettings(settings);
+                operation.SettingsWarning = SaveSettings(settings, NoticeArea.Models);
             }
             var preferredId = settings.ModelId ?? operation.Model?.Id;
             var selectedIndex = models.ToList().FindIndex(model => model.Id == preferredId);
+            if (preferredId is null)
+                selectedIndex = models.ToList().FindIndex(model => model.Id == AudioModelDefaults.RecognitionModelId);
             if (preferredId is not null && selectedIndex < 0)
             {
                 operation.SettingsWarning ??= new(NoticeKind.Warning, "Saved model unavailable",
                     models.Count == 0
                         ? $"The preferred model '{preferredId}' is not installed. Install it or choose another model."
                         : $"The preferred model '{preferredId}' is not installed in this folder. " +
-                          $"Using '{models[0].DisplayName ?? models[0].Id}' for this session; your saved choice is unchanged.");
+                          $"Using '{models[0].DisplayName ?? models[0].Id}' for this session; your saved choice is unchanged.",
+                    NoticeArea.Dictation | NoticeArea.Models);
             }
             state = SetState(_state with
             {
@@ -677,12 +666,13 @@ public sealed class DictationSession
 
     private void ReportEngineWorkFailure(string title, string message)
     {
+        System.Diagnostics.Trace.TraceWarning("Ansible: {0}. {1}", title, message);
         SessionSnapshot state;
         lock (_gate)
         {
             // Never replace an operation's own warning or error with a background consequence of the same cause.
             if (_closing || _operation is not null || _state.Notice.Kind is NoticeKind.Warning or NoticeKind.Error) { return; }
-            state = SetState(_state with { Notice = new(NoticeKind.Warning, title, message) });
+            state = SetState(_state with { Notice = new(NoticeKind.Information, title, message) });
         }
         Publish(state);
     }
@@ -763,25 +753,48 @@ public sealed class DictationSession
         }
     }
 
-    private async Task RecordUsageAsync(Operation operation, TimeSpan elapsed)
+    // Called under _gate so collection, admission and terminal publication are one decision.
+    private string? QueueUsage(Operation operation, TimeSpan elapsed)
     {
-        if (!State.Settings.CollectUsage || State.Usage is null) { return; }
-        try
+        if (!_state.Settings.CollectUsage || _state.Usage is null) { return null; }
+        var entry = new UsageEntry
         {
-            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-            var usage = await _usageStore.RecordAsync(new UsageEntry
+            Id = operation.Id, CompletedAt = _time.GetUtcNow(), ModelId = operation.Model!.Id,
+            Source = operation.Activity == SessionActivity.Dictation ? UsageSource.Dictation : UsageSource.File,
+            Words = operation.Result!.SpokenWords, RecordingSeconds = operation.RecordingSeconds,
+            ElapsedSeconds = elapsed.TotalSeconds
+        };
+        return _pendingUsage.Writer.TryWrite(entry) ? null :
+            _closing ? "The transcript succeeded, but local counts could not be queued because the session is closing." :
+                "The transcript succeeded, but local counts could not be saved because the background usage queue is full.";
+    }
+
+    private async Task PersistUsageAsync()
+    {
+        await foreach (var pending in _pendingUsage.Reader.ReadAllAsync())
+        {
+            UsageDocument? usage = null;
+            string? warning = null;
+            try
             {
-                Id = operation.Id, CompletedAt = _time.GetUtcNow(), ModelId = operation.Model!.Id,
-                Source = operation.Activity == SessionActivity.Dictation ? UsageSource.Dictation : UsageSource.File,
-                Words = operation.Result!.SpokenWords, RecordingSeconds = operation.RecordingSeconds,
-                ElapsedSeconds = elapsed.TotalSeconds
-            }, deadline.Token);
-            UpdateFacts(state => state with { Usage = usage, UsageError = null });
-        }
-        catch (Exception error)
-        {
-            operation.UsageWarning = $"The transcript succeeded, but local counts could not be saved: {error.Message}";
-            UpdateFacts(state => state with { UsageError = operation.UsageWarning });
+                using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                usage = await _usageStore.RecordAsync(pending, deadline.Token);
+            }
+            catch (Exception error)
+            {
+                warning = $"The transcript succeeded, but local counts could not be saved: {error.Message}";
+            }
+            SessionSnapshot state;
+            lock (_gate)
+            {
+                state = SetState(_state with
+                {
+                    Usage = usage ?? _state.Usage,
+                    // A later successful write cannot recover metadata lost to an earlier failure or overflow.
+                    UsageError = warning ?? _state.UsageError
+                });
+            }
+            Publish(state);
         }
     }
 
@@ -815,8 +828,7 @@ public sealed class DictationSession
                 state = SetState(_state with
                 {
                     Phase = DictationPhase.Cancelling,
-                    Notice = new(NoticeKind.Warning, "Cancellation requested",
-                        "The current native step must return before its state can be released.")
+                    Notice = new(NoticeKind.Information, "Cancelling", "Stopping dictation.")
                 });
             }
         }
@@ -836,6 +848,7 @@ public sealed class DictationSession
             if (_state.MeetingActive)
                 throw new InvalidOperationException("End the meeting and release its resources before closing dictation.");
             _closing = true;
+            _pendingUsage.Writer.TryComplete();
             operation = _operation;
             state = SetState(_state with { Phase = DictationPhase.Closing,
                 Notice = new(NoticeKind.Information, "Closing", "Joining owned work and releasing native resources.") });
@@ -855,8 +868,9 @@ public sealed class DictationSession
             if (operation is not null)
             {
                 _ = StopCaptureAsync(operation);
-                await operation.Completion.Task;
+                await operation.Work!;
             }
+            await _usageWork;
             Operation? recovery;
             lock (_gate) { recovery = _recovery; }
             if (recovery?.Capture is not null)
@@ -1021,28 +1035,7 @@ public sealed class DictationSession
     private void UpdateCurrent(Operation operation, Func<SessionSnapshot, SessionSnapshot> update)
     {
         SessionSnapshot state;
-        lock (_gate)
-        {
-            EnsureCurrent(operation);
-            var next = update(_state);
-            var transcriptChanged = !string.Equals(next.Transcript, _state.Transcript, StringComparison.Ordinal);
-            var resultChanged = !Equals(next.Result, _state.Result);
-            if (transcriptChanged || resultChanged)
-            {
-                next = next with
-                {
-                    TranscriptOperationId = next.Result is not null || next.Transcript.Length > 0 ? operation.Id : null
-                };
-            }
-            state = SetState(next);
-        }
-        Publish(state);
-    }
-
-    private void UpdateFacts(Func<SessionSnapshot, SessionSnapshot> update)
-    {
-        SessionSnapshot state;
-        lock (_gate) { state = SetState(update(_state)); }
+        lock (_gate) { EnsureCurrent(operation); state = SetState(update(_state)); }
         Publish(state);
     }
 
@@ -1118,7 +1111,6 @@ public sealed class DictationSession
         public bool HasFinal { get; set; }
         public long? StartedAt { get; set; }
         public double RecordingSeconds { get; set; }
-        public string? UsageWarning { get; set; }
         public Exception? CommandError { get; set; }
         public void RequestCancellation()
         {

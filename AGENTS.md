@@ -73,8 +73,8 @@ Prepare the runtime when the native DLL or models are missing:
 .\tools\Build-AudioNative.ps1
 ```
 
-Default setup installs only `moonshine-tiny`.
-Use `-Models <model-id>` for another catalog entry.
+Default setup installs `nemotron-asr-0.6b-q8` and `nemotron-3-diarization-q8`.
+Use `-Models <model-id>` for another catalog entry, including optional `kroko-en-64l-q8`.
 Do not install every model for routine checks; `-Models all` downloads large weights.
 
 Build and verify an unsigned NativeAOT MSIX after changes to the WinUI app, native interop, or deployment:
