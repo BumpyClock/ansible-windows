@@ -211,6 +211,35 @@ public sealed partial class DictationSessionTests
         finally { await session.CloseAsync().WaitAsync(TimeSpan.FromSeconds(5)); }
     }
 
+    [Fact]
+    public async Task UsageWriteDeadlineFollowsTheSessionClock()
+    {
+        var clock = new ManualTime();
+        var usage = new ControlledUsageStore
+        {
+            Recording = (_, token) => Task.Delay(Timeout.InfiniteTimeSpan, token)
+        };
+        var session = CreateWithUsage(usage, time: clock);
+        var reported = UsageFailureAsync(session);
+        try
+        {
+            await session.InitializeAsync();
+            var outcome = await session.TranscribeFileAsync("sample.wav").WaitAsync(TimeSpan.FromSeconds(2));
+            await usage.Attempts.Reader.ReadAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(2));
+            Assert.Equal(SessionOutcomeKind.Completed, outcome.Kind);
+            Assert.False(reported.IsCompleted);
+
+            clock.Advance(TimeSpan.FromSeconds(2));
+            await reported.WaitAsync(TimeSpan.FromSeconds(2));
+
+            Assert.NotNull(session.State.UsageError);
+            Assert.Empty(usage.Document.Entries);
+            Assert.False(session.State.Notice.ShouldDisplay);
+            await session.CloseAsync().WaitAsync(TimeSpan.FromSeconds(2));
+        }
+        finally { await session.CloseAsync().WaitAsync(TimeSpan.FromSeconds(5)); }
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

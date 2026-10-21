@@ -798,7 +798,7 @@ public sealed class DictationSession
             string? warning = null;
             try
             {
-                using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(2), _time);
                 usage = await _usageStore.RecordAsync(entry, deadline.Token);
             }
             catch (Exception error)
