@@ -54,7 +54,6 @@ public sealed class NativeMeetingPipelineTests(ITestOutputHelper output)
             Assert.Equal(MeetingStatus.Completed, document.Status);
             Assert.NotEmpty(document.Turns);
             Assert.All(document.Turns, turn => Assert.False(turn.IsProvisional));
-            Assert.Contains("Local ASR anchors", session.State.RefinementStatus ?? "");
             if (!document.Turns.Any(turn => turn.TimingQuality == MeetingTimingQuality.Aligned))
                 foreach (var turn in document.Turns)
                 {

@@ -5,12 +5,7 @@ namespace Ansible.Core;
 public enum MeetingSessionPhase { Idle, Starting, Recording, Paused, Finishing, Completed, Failed, Refining }
 
 public sealed record MeetingSessionSnapshot(long Version, MeetingSessionPhase Phase, MeetingDocument? Document,
-    double CapturedSeconds, double PendingSeconds, string? Error)
-{
-    public string? NamingStatus { get; init; }
-    public string? RefinementStatus { get; init; }
-    public string DeviceSelectionSummary { get; init; } = "";
-}
+    double CapturedSeconds, double PendingSeconds, string? Error);
 
 public sealed class MeetingSession : IAsyncDisposable
 {
@@ -89,6 +84,8 @@ public sealed class MeetingSession : IAsyncDisposable
                 ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposing) != 0, this);
                 _preparation = preparation = new();
             }
+            var options = _getOptions() ?? throw new InvalidOperationException("Meeting recognition settings are unavailable.");
+            var selectedId = _getModelId?.Invoke();
             await _reserve();
             lock (_gate)
             {
@@ -113,12 +110,10 @@ public sealed class MeetingSession : IAsyncDisposable
             { SingleWriter = true, SingleReader = true, AllowSynchronousContinuations = false });
             _reader = new PausableReader(_audio.Reader, _timeline.Append);
             await SaveAsync();
-            var options = _getOptions() ?? throw new InvalidOperationException("Meeting recognition settings are unavailable.");
             _engine = _engineFactory();
             var models = await _engine.ConnectAsync(_cancellation.Token);
             var companionInstalled = models.Any(candidate => candidate.Id == AudioModelDefaults.DiarizationModelId &&
                 candidate.Family == "nemotron_3_diar" && candidate.Task == "diar" && candidate.Mode == "streaming");
-            var selectedId = _getModelId?.Invoke();
             AudioModel? model = selectedId is not null
                 ? models.FirstOrDefault(candidate => candidate.Id == selectedId && SupportsMeeting(candidate))
                 : companionInstalled
@@ -511,27 +506,16 @@ public sealed class MeetingSession : IAsyncDisposable
     private async Task StartObserverAsync()
     {
         if (_observerFactory is null || _request?.ProcessId is not > 0)
-        {
-            UpdateRefinementStatus(naming: "Automatic names require a selected Teams meeting window.");
             return;
-        }
         _observer ??= _observerFactory();
         try
         {
-            await _observer.StartAsync(_request.ProcessId.Value, ObservationSamplePosition, observation =>
-            {
-                _speakerMatcher.Observe(observation);
-                UpdateRefinementStatus(naming: observation.Status switch
-                {
-                    MeetingSpeakerReadStatus.Readable => "Teams speaker evidence available; names require consistent timed turns.",
-                    MeetingSpeakerReadStatus.Ambiguous => "Teams speaker evidence is ambiguous; keeping speaker labels.",
-                    _ => "Teams speaker names unavailable in this window; keeping speaker labels."
-                });
-            }, _cancellation!.Token);
+            await _observer.StartAsync(_request.ProcessId.Value, ObservationSamplePosition,
+                _speakerMatcher.Observe, _cancellation!.Token);
         }
         catch (Exception error) when (error is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or System.Runtime.InteropServices.COMException)
         {
-            UpdateRefinementStatus(naming: "Automatic names unavailable for the selected app; keeping editable model labels.");
+            System.Diagnostics.Trace.TraceWarning("Ansible: automatic speaker names unavailable. {0}", error.Message);
         }
     }
 
@@ -560,26 +544,13 @@ public sealed class MeetingSession : IAsyncDisposable
                 if (turns[indices[index]].TimingQuality != MeetingTimingQuality.Aligned && aligned[index].TimingQuality == MeetingTimingQuality.Aligned)
                     turns[indices[index]] = aligned[index] with
                         { StartSeconds = aligned[index].StartSeconds + origin, EndSeconds = aligned[index].EndSeconds + origin };
-            UpdateRefinementStatus(refinement: "Local ASR anchors refine confident turns; other times remain approximate.");
         }
         catch (OperationCanceledException) when (_cancellation!.IsCancellationRequested) { }
         catch (Exception error)
         {
             _alignmentUnavailable = true;
-            UpdateRefinementStatus(refinement: $"Optional timing refinement unavailable: {error.Message}");
+            System.Diagnostics.Trace.TraceWarning("Ansible: optional timing refinement unavailable. {0}", error.Message);
         }
-    }
-
-    private void UpdateRefinementStatus(string? naming = null, string? refinement = null)
-    {
-        lock (_gate)
-        {
-            var nextNaming = naming ?? _state.NamingStatus;
-            var nextRefinement = refinement ?? _state.RefinementStatus;
-            if (nextNaming == _state.NamingStatus && nextRefinement == _state.RefinementStatus) return;
-            _state = _state with { Version = _state.Version + 1, NamingStatus = nextNaming, RefinementStatus = nextRefinement };
-        }
-        Publish();
     }
 
     public async Task RenameSpeakerAsync(string id, string name)
@@ -664,7 +635,6 @@ public sealed class MeetingSession : IAsyncDisposable
     private void SetPhase(MeetingSessionPhase phase, MeetingStatus status, string? error = null)
     {
         lock (_gate) _state = _state with { Version = _state.Version + 1, Phase = phase, Error = error ?? _state.Error,
-            DeviceSelectionSummary = _engine?.DeviceSelectionSummary ?? _state.DeviceSelectionSummary,
             Document = _state.Document is { } document ? document with { Status = status, UpdatedAt = DateTimeOffset.UtcNow } : null };
         Publish();
     }

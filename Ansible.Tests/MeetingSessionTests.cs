@@ -346,7 +346,7 @@ public sealed class MeetingSessionTests : IDisposable
         await WaitUntilAsync(() => engine.ReadBytes == 32000);
         engine.Report("Speaker 0: Local speech");
         await session.EndAsync();
-        Assert.Contains("unavailable", session.State.RefinementStatus);
+        Assert.Null(session.State.Error);
         Assert.Equal(MeetingSessionPhase.Completed, session.State.Phase);
         Assert.Equal("Local speech", session.Document!.Turns[0].Text);
         Assert.Equal(MeetingTimingQuality.Chunk, session.Document.Turns[0].TimingQuality);
@@ -463,40 +463,199 @@ public sealed class MeetingSessionTests : IDisposable
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task MeetingReadsSettingsWhenStartingAndHoldsThemThroughResume(bool supportsDictionary)
+    public async Task MeetingReadsCurrentOptionsAtStartAndKeepsThemUntilTheNextMeeting(bool supportsDictionary)
     {
         var engine = new Engine { SupportsDictionary = supportsDictionary };
-        var options = new RecognitionOptions(CustomDictionary: "opening value");
+        var options = new RecognitionOptions("fr", "word from when the window opened", NativeBackend.Cpu);
         await using var session = new MeetingSession(() => engine, new CaptureFactory(), new(_directory), () => options);
-        options = options with { CustomDictionary = "current value" };
+
+        options = options with { Language = "de", CustomDictionary = "latest word", Backend = NativeBackend.Vulkan };
         await session.StartAsync(Request);
-        Assert.Equal(supportsDictionary ? "current value" : "", engine.PreparedOptions?.CustomDictionary);
+        Assert.Equal(supportsDictionary ? "latest word" : "", engine.PreparedOptions?.CustomDictionary);
+        Assert.Equal("de", engine.PreparedOptions?.Language);
+        Assert.Equal(NativeBackend.Vulkan, engine.PreparedOptions?.Backend);
         Assert.Equal(engine.PreparedOptions, engine.StreamedOptions);
 
-        options = options with { CustomDictionary = "next value" };
+        options = options with { Language = "es", CustomDictionary = "word for next meeting", Backend = NativeBackend.Auto };
         await session.PauseAsync();
         await session.ResumeAsync();
-        Assert.Equal(supportsDictionary ? "current value" : "", engine.StreamedOptions?.CustomDictionary);
+        Assert.Equal(supportsDictionary ? "latest word" : "", engine.StreamedOptions?.CustomDictionary);
+        Assert.Equal("de", engine.StreamedOptions?.Language);
+        Assert.Equal(NativeBackend.Vulkan, engine.StreamedOptions?.Backend);
         await session.EndAsync();
+
         await session.StartAsync(Request);
-        Assert.Equal(supportsDictionary ? "next value" : "", engine.PreparedOptions?.CustomDictionary);
+        Assert.Equal(supportsDictionary ? "word for next meeting" : "", engine.PreparedOptions?.CustomDictionary);
+        Assert.Equal("es", engine.PreparedOptions?.Language);
+        Assert.Equal(NativeBackend.Auto, engine.PreparedOptions?.Backend);
+        Assert.Equal(engine.PreparedOptions, engine.StreamedOptions);
         await session.EndAsync();
     }
 
     [Fact]
-    public async Task UnavailableSettingsReleaseTheMeetingReservation()
+    public async Task UnavailableRecognitionOptionsDoNotLeaveAHeldReservation()
     {
         var releases = 0;
-        var capture = new CaptureFactory();
-        await using var session = new MeetingSession(() => new Engine(), capture, new(_directory),
-            () => throw new InvalidOperationException("Settings unavailable."),
+        var captures = new CaptureFactory();
+        await using var session = new MeetingSession(() => new Engine(), captures, new(_directory),
+            () => throw new InvalidOperationException("Options unavailable."),
             release: () => { releases++; return Task.CompletedTask; });
+
         await Assert.ThrowsAsync<InvalidOperationException>(() => session.StartAsync(Request));
+
         Assert.False(session.IsActive);
-        Assert.Empty(capture.Captures);
+        Assert.Empty(captures.Captures);
+        Assert.Equal(0, releases);
+        Assert.Equal(MeetingSessionPhase.Idle, session.State.Phase);
+    }
+
+    [Fact]
+    public async Task ExplicitMeetingSelectionIsForwardedWithoutAStreamingFallback()
+    {
+        var engine = new Engine { Models = [NemotronAsr(), VibeVoiceStreaming()] };
+        await using var session = new MeetingSession(() => engine, new CaptureFactory(), new(_directory), () => new(),
+            getModelId: () => AudioModelDefaults.RecognitionModelId);
+
+        await session.StartAsync(Request);
+
+        Assert.Equal(AudioModelDefaults.RecognitionModelId, engine.PreparedModel?.Id);
+        await session.EndAsync();
+    }
+
+    [Fact]
+    public async Task StartCapturesModelAndOptionsBeforeAnAsynchronousReservation()
+    {
+        var enteredReserve = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseReserve = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var options = new RecognitionOptions("fr", "", NativeBackend.Cpu);
+        string? selected = AudioModelDefaults.RecognitionModelId;
+        var engine = new Engine { Models = [NemotronAsr(), VibeVoiceStreaming()] };
+        await using var session = new MeetingSession(() => engine, new CaptureFactory(), new(_directory),
+            () => options,
+            reserve: async () => { enteredReserve.TrySetResult(); await releaseReserve.Task; },
+            getModelId: () => selected);
+        try
+        {
+            var starting = session.StartAsync(Request);
+            await enteredReserve.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            options = new RecognitionOptions("de", "", NativeBackend.Vulkan);
+            selected = VibeVoiceStreaming().Id;
+            releaseReserve.SetResult();
+            await starting.WaitAsync(TimeSpan.FromSeconds(2));
+
+            Assert.Equal(AudioModelDefaults.RecognitionModelId, engine.PreparedModel?.Id);
+            Assert.Equal("fr", engine.PreparedOptions?.Language);
+            Assert.Equal(NativeBackend.Cpu, engine.PreparedOptions?.Backend);
+            await session.EndAsync();
+        }
+        finally { releaseReserve.TrySetResult(); }
+    }
+
+    [Fact]
+    public async Task UnconfiguredStartWithoutCompanionFallsBackToVibeVoiceInsteadOfDefaultNemotron()
+    {
+        var engine = new Engine { Models = [NemotronAsr(), VibeVoiceStreaming()] };
+        await using var session = new MeetingSession(() => engine, new CaptureFactory(), new(_directory), () => new(),
+            getModelId: () => null);
+
+        await session.StartAsync(Request);
+
+        Assert.Equal(VibeVoiceStreaming().Id, engine.PreparedModel?.Id);
+        Assert.Equal("vibevoice_asr_streaming", engine.PreparedModel?.Family);
+        await session.EndAsync();
+    }
+
+    [Fact]
+    public async Task UnconfiguredStartWithCompanionPrefersNemotronThenKrokoBeforeVibeVoice()
+    {
+        var nemotron = new Engine { Models = [NemotronAsr(), KrokoAsr(), VibeVoiceStreaming(), DiarCompanion()] };
+        await using (var session = new MeetingSession(() => nemotron, new CaptureFactory(), new(_directory), () => new(),
+            getModelId: () => null))
+        {
+            await session.StartAsync(Request);
+            Assert.Equal(AudioModelDefaults.RecognitionModelId, nemotron.PreparedModel?.Id);
+            await session.EndAsync();
+        }
+
+        var kroko = new Engine { Models = [KrokoAsr(), VibeVoiceStreaming(), DiarCompanion()] };
+        await using (var session = new MeetingSession(() => kroko, new CaptureFactory(), new(_directory), () => new(),
+            getModelId: () => null))
+        {
+            await session.StartAsync(Request);
+            Assert.Equal(AudioModelDefaults.KrokoModelId, kroko.PreparedModel?.Id);
+            await session.EndAsync();
+        }
+
+        var vibevoice = new Engine { Models = [VibeVoiceStreaming(), DiarCompanion()] };
+        await using (var session = new MeetingSession(() => vibevoice, new CaptureFactory(), new(_directory), () => new(),
+            getModelId: () => null))
+        {
+            await session.StartAsync(Request);
+            Assert.Equal(VibeVoiceStreaming().Id, vibevoice.PreparedModel?.Id);
+            await session.EndAsync();
+        }
+    }
+
+    [Fact]
+    public async Task SelectedMeetingModelIsCapturedAtStartAndIgnoresLaterGetModelIdChanges()
+    {
+        string? selected = AudioModelDefaults.RecognitionModelId;
+        var engine = new Engine { Models = [NemotronAsr(), VibeVoiceStreaming()] };
+        await using var session = new MeetingSession(() => engine, new CaptureFactory(), new(_directory), () => new(),
+            getModelId: () => selected);
+
+        await session.StartAsync(Request);
+        Assert.Equal(AudioModelDefaults.RecognitionModelId, engine.PreparedModel?.Id);
+
+        selected = VibeVoiceStreaming().Id;
+        await session.PauseAsync();
+        await session.ResumeAsync();
+        Assert.Equal(AudioModelDefaults.RecognitionModelId, engine.PreparedModel?.Id);
+        await session.EndAsync();
+
+        await session.StartAsync(Request);
+        Assert.Equal(VibeVoiceStreaming().Id, engine.PreparedModel?.Id);
+        await session.EndAsync();
+    }
+
+    [Fact]
+    public async Task MissingOrUnstreamableSelectedMeetingModelReleasesTheReservation()
+    {
+        var releases = 0;
+        var captures = new CaptureFactory();
+        var engine = new Engine { Models = [VibeVoiceStreaming(), DiarCompanion()] };
+        await using var session = new MeetingSession(() => engine, captures, new(_directory), () => new(),
+            release: () => { releases++; return Task.CompletedTask; },
+            getModelId: () => AudioModelDefaults.RecognitionModelId);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => session.StartAsync(Request));
+
+        Assert.Contains(AudioModelDefaults.RecognitionModelId, error.Message);
+        Assert.False(session.IsActive);
+        Assert.Empty(captures.Captures);
         Assert.Equal(1, releases);
         Assert.Equal(MeetingSessionPhase.Failed, session.State.Phase);
     }
+
+    private static AudioModel NemotronAsr() => new()
+    {
+        Id = AudioModelDefaults.RecognitionModelId, Family = "nemotron_asr", Mode = "streaming"
+    };
+
+    private static AudioModel KrokoAsr() => new()
+    {
+        Id = AudioModelDefaults.KrokoModelId, Family = "kroko_asr", Mode = "streaming"
+    };
+
+    private static AudioModel VibeVoiceStreaming() => new()
+    {
+        Id = "vibevoice-streaming-1.5b-q4", Family = "vibevoice_asr_streaming", Mode = "streaming"
+    };
+
+    private static AudioModel DiarCompanion() => new()
+    {
+        Id = AudioModelDefaults.DiarizationModelId, Family = "nemotron_3_diar", Task = "diar", Mode = "streaming"
+    };
 
     private sealed class Engine : IMeetingRecognitionEngine
     {
@@ -512,18 +671,21 @@ public sealed class MeetingSessionTests : IDisposable
         public bool BlockReads { get; init; }
         public Exception? ConnectFailure { get; init; }
         public bool SupportsDictionary { get; init; }
+        public IReadOnlyList<AudioModel>? Models { get; init; }
+        public AudioModel? PreparedModel { get; private set; }
         public RecognitionOptions? PreparedOptions { get; private set; }
         public RecognitionOptions? StreamedOptions { get; private set; }
         public Func<CancellationToken, Task>? Preparing { get; init; }
         public Task PrepareMeetingAsync(AudioModel model, RecognitionOptions options, CancellationToken token)
         {
+            PreparedModel = model;
             PreparedOptions = options;
             return Preparing?.Invoke(token) ?? Task.CompletedTask;
         }
         public TaskCompletionSource AllowReads { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public Task<IReadOnlyList<AudioModel>> ConnectAsync(CancellationToken cancellationToken) => ConnectFailure is { } error
             ? Task.FromException<IReadOnlyList<AudioModel>>(error)
-            : Task.FromResult<IReadOnlyList<AudioModel>>([new() { Id = "vibevoice", Family = "vibevoice_asr_streaming",
+            : Task.FromResult<IReadOnlyList<AudioModel>>(Models ?? [new() { Id = "vibevoice", Family = "vibevoice_asr_streaming",
                 Mode = "streaming", SupportsCustomDictionary = SupportsDictionary }]);
         public async Task StreamMeetingAsync(AudioModel model, ChannelReader<byte[]> audio, RecognitionOptions options,
             IProgress<TranscriptUpdate> progress, CancellationToken cancellationToken, Action? onReady = null)
