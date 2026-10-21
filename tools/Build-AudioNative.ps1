@@ -26,7 +26,21 @@ if ($StageRuntimeOnly -or $VerifyRuntimeOnly) {
     $recordPath = Join-Path $output "native-runtime.json"
     if (-not (Test-Path -LiteralPath $recordPath)) { throw "Build the native runtime before staging or verifying it." }
     $record = Get-Content -LiteralPath $recordPath -Raw | ConvertFrom-Json
-    $runtimeBackends = if ($record.backends) { @($record.backends) } else { @("cpu") }
+    $runtimeBackends = @($record.backends)
+    if ($runtimeBackends.Count -eq 0 -or "cpu" -notin $runtimeBackends -or
+        @($runtimeBackends | Where-Object { $_ -notin @("cpu", "vulkan") }).Count -ne 0) {
+        throw "The native runtime has an invalid backend record. Rebuild it with .\tools\Build-AudioNative.ps1."
+    }
+    if ($PSBoundParameters.ContainsKey("Backend") -and $Backend -notin $runtimeBackends) {
+        throw "The native runtime does not include '$Backend'. Rebuild with .\tools\Build-AudioNative.ps1 -Backend $Backend. To package an intentional CPU-only build, pass -Backend cpu to .\tools\Publish-Ansible.ps1."
+    }
+    $nativePath = Join-Path $output "audiocpp.dll"
+    $nativeRecord = @($record.closure | Where-Object { $_.file -eq "audiocpp.dll" })
+    if ($nativeRecord.Count -ne 1 -or -not (Test-Path -LiteralPath $nativePath -PathType Leaf) -or
+        $nativeRecord[0].sha256 -notmatch '^[a-fA-F0-9]{64}$' -or
+        (Get-FileHash -LiteralPath $nativePath -Algorithm SHA256).Hash -ne $nativeRecord[0].sha256) {
+        throw "The native DLL does not match its runtime record. Rebuild with .\tools\Build-AudioNative.ps1 -Backend $Backend before staging or publishing."
+    }
     $sdkVersion = $record.vulkan_sdk
     $sourcePatches = if ($record.source_patches) { @($record.source_patches) } else { @() }
 }
@@ -201,19 +215,22 @@ if ($LASTEXITCODE -ne 0 -or $commit -ne "795c45fbde0a7d29c93b22199728ff5caaec02e
     throw "The native source is not the expected audio.cpp v0.9.0 commit."
 }
 
-$patch = Join-Path $PSScriptRoot "patches\audio-vulkan-loader.patch"
-$patchCheck = & git -C $source apply --check $patch 2>&1
-if ($LASTEXITCODE -eq 0) {
-    & git -C $source apply $patch
-    if ($LASTEXITCODE -ne 0) { throw "Cannot apply the optional Vulkan loader patch." }
-} else {
-    $reverseCheck = & git -C $source apply --reverse --check $patch 2>&1
-    if ($LASTEXITCODE -ne 0) { throw "The pinned source does not match the Vulkan loader patch: $patchCheck" }
+$sourcePatches = @()
+foreach ($patchName in @("audio-vulkan-loader.patch", "audio-nemotron-stream-timestamps.patch")) {
+    $patch = Join-Path $PSScriptRoot "patches\$patchName"
+    $patchCheck = & git -C $source apply --check $patch 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        & git -C $source apply $patch
+        if ($LASTEXITCODE -ne 0) { throw "Cannot apply the native patch '$patchName'." }
+    } else {
+        & git -C $source apply --reverse --check $patch 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "The pinned source does not match '$patchName': $patchCheck" }
+    }
+    $sourcePatches += @{
+        file = $patchName
+        sha256 = (Get-FileHash -LiteralPath $patch -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
 }
-$sourcePatches = @(@{
-    file = "audio-vulkan-loader.patch"
-    sha256 = (Get-FileHash -LiteralPath $patch -Algorithm SHA256).Hash.ToLowerInvariant()
-})
 
 $vulkanFlags = "-DENGINE_ENABLE_VULKAN=OFF"
 if ($Backend -eq "vulkan") {
@@ -234,13 +251,19 @@ $env:PATH = "$installer;$ninjaRoot;" + ($env:PATH -replace '"', '')
 $configure = "`"$cmake`" -S `"$source`" -B `"$build`" -G Ninja " +
     "-DCMAKE_MAKE_PROGRAM=`"$ninja`" -DCMAKE_BUILD_TYPE=Release " +
     "-DAUDIOCPP_BUILD_C_API=ON -DAUDIOCPP_DEPLOYMENT_BUILD=ON " +
-    "-DAUDIOCPP_MODEL_SET=custom -DAUDIOCPP_MODELS=moonshine_asr,vibevoice_asr,qwen3_asr,nemotron_asr,kroko_asr " +
+    "-DAUDIOCPP_MODEL_SET=custom -DAUDIOCPP_MODELS=moonshine_asr,vibevoice_asr,qwen3_asr,nemotron_asr,nemotron_3_diar,kroko_asr " +
     "-DENGINE_ENABLE_CUDA=OFF -DENGINE_ENABLE_HIP=OFF $vulkanFlags " +
     "-DENGINE_ENABLE_METAL=OFF -DENGINE_ENABLE_NATIVE_CPU=OFF -DENGINE_ENABLE_LLAMAFILE=OFF " +
     "-DGGML_AVX=ON -DGGML_AVX2=ON -DGGML_BMI2=ON -DGGML_AVX512=OFF -DENGINE_BUILD_TESTS=OFF"
 $compile = "`"$cmake`" --build `"$build`" --target audiocpp --parallel $Jobs"
 & $env:ComSpec /d /s /c "call `"$vcvars`" >nul && $configure && $compile"
 if ($LASTEXITCODE -ne 0) { throw "The audio.cpp C ABI build failed." }
+
+$vulkanSetting = @(Select-String -LiteralPath (Join-Path $build "CMakeCache.txt") -Pattern '^GGML_VULKAN:BOOL=(ON|OFF)$')
+if ($vulkanSetting.Count -ne 1 -or
+    ($vulkanSetting[0].Matches[0].Groups[1].Value -eq "ON") -ne ($Backend -eq "vulkan")) {
+    throw "The compiled GGML Vulkan setting does not match the requested backend '$Backend'. The runtime was not staged."
+}
 
 Copy-Item -LiteralPath (Join-Path $build "bin\audiocpp.dll") -Destination $output -Force
 Test-NativeClosure $true

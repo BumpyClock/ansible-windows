@@ -79,7 +79,7 @@
     {
       "id": "nemotron-asr-0.6b-q8",
       "display_name": "Nemotron 3.5 ASR Streaming 0.6B Q8",
-      "description": "Streaming speech recognition with incremental text. Real-time CPU performance is not guaranteed.",
+      "description": "Streaming speech recognition with incremental text. A Nemotron diarization companion is downloadable to prepare for future meeting integration. Real-time CPU performance is not guaranteed.",
       "languages": "Language support depends on the upstream model; not qualified by this app.",
       "precision": "Q8_0",
       "license_notes": "OpenMDW-1.1 model weights. Review the upstream license before redistribution.",
@@ -97,11 +97,12 @@
     {
       "id": "kroko-en-64l-q8",
       "display_name": "Kroko English Community 64-L Q8",
-      "description": "English-only streaming speech recognition with live custom hotwords. CPU performance and GPU support are unqualified.",
+      "description": "English-only streaming speech recognition with live custom hotwords. A Nemotron diarization companion is downloadable to prepare for future meeting integration. CPU performance and GPU support are unqualified.",
       "languages": "English",
       "precision": "Q8_0",
       "license_notes": "The Banafo/Kroko-ASR model card labels community weights CC-BY-SA without specifying a version, and its LICENSE file is empty. Confirm exact terms and attribution/ShareAlike obligations before redistribution; the engine license is separate.",
       "family": "kroko_asr",
+      "task": "asr",
       "supports_custom_dictionary": true,
       "mode": "streaming",
       "preview": "live",
@@ -112,6 +113,25 @@
       "bytes": 167756928,
       "sha256": "596c749fcb6c582f2d7aaa9aefcff2929e405867a4d04864a55b2c9c2963baa5",
       "license": "CC-BY-SA"
+    },
+    {
+      "id": "nemotron-3-diarization-q8",
+      "display_name": "Nemotron 3 Diarization Q8",
+      "description": "Speaker diarization companion for Nemotron ASR, downloadable ahead of future meeting integration. Labels speaker turns; does not transcribe speech or identify people by name. Results arrive after Finish.",
+      "languages": "Language support depends on the upstream model; not qualified by this app.",
+      "precision": "Q8_0",
+      "license_notes": "OpenMDW-1.1 model weights. Review the upstream license before redistribution.",
+      "family": "nemotron_3_diar",
+      "task": "diar",
+      "mode": "streaming",
+      "preview": "final-only",
+      "repo": "audio-cpp/Nemotron-3-Diarization-GGUF",
+      "revision": "647d39feaa0e91dca5ce355a95403837b76dff56",
+      "remote_file": "nemotron-3-diarization-q8_0.gguf",
+      "filename": "nemotron-3-diarization-q8_0.gguf",
+      "bytes": 106675136,
+      "sha256": "9a737455bd10123bcf1e036d9a0b07b6e8c42e7d0dd1a5ee4141dc386db46d0b",
+      "license": "OpenMDW-1.1"
     }
   ]
 }

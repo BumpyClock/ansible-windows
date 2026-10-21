@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string[]]$Models = @("moonshine-tiny")
+    [string[]]$Models = @("nemotron-asr-0.6b-q8", "nemotron-3-diarization-q8")
 )
 
 $ErrorActionPreference = "Stop"
