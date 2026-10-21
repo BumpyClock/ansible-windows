@@ -27,6 +27,16 @@ public partial class App : Application
                 new PermissionCheckedAudioCaptureFactory(new WaveInCaptureFactory(), microphonePermission), new AudioInputReader(), new UsageStore(paths.Usage), paths.ModelsDirectory,
                 settingsStore: new AppSettingsStore(paths.Settings));
             Window = new MainWindow(session, paths, ModelDownloadManager.CreateHttpClient(), microphonePermission);
+#if DEBUG
+            // Scope screenshot qualification to this window without changing Windows appearance.
+            if (Window.Content is FrameworkElement previewRoot)
+                previewRoot.RequestedTheme = Environment.GetCommandLineArgs().Skip(1).FirstOrDefault() switch
+                {
+                    "--design-theme=light" => ElementTheme.Light,
+                    "--design-theme=dark" => ElementTheme.Dark,
+                    _ => ElementTheme.Default
+                };
+#endif
             Window.Activate();
         }
         catch (Exception error)

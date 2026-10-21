@@ -1,0 +1,872 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Microsoft.UI.Xaml.Controls">
+    <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Light">
+            <Color x:Key="AppBackgroundColor">#E9EDF2</Color>
+            <Color x:Key="AppSurfaceColor">#F6F8FB</Color>
+            <Color x:Key="AppCardColor">#FFFFFF</Color>
+            <Color x:Key="AppControlColor">#E9EEF4</Color>
+            <Color x:Key="AppBorderColor">#D6DEE8</Color>
+            <Color x:Key="AppHoverColor">#EFF3E6</Color>
+            <Color x:Key="AppActiveColor">#DDE5D4</Color>
+            <Color x:Key="AppSearchColor">#F1F4F8</Color>
+            <Color x:Key="AppTextColor">#1C2636</Color>
+            <Color x:Key="AppSecondaryTextColor">#536174</Color>
+            <Color x:Key="AppMutedTextColor">#657286</Color>
+            <Color x:Key="AppTranscriptColor">#29364A</Color>
+            <Color x:Key="AppSelectedColor">#FFFFFF</Color>
+            <Color x:Key="AppKeyBorderColor">#BCC7D4</Color>
+            <Color x:Key="AppTrackColor">#BCC7D4</Color>
+            <Color x:Key="AppActivityColor">#E0E6ED</Color>
+            <Color x:Key="AppTagColor">#805214</Color>
+            <Color x:Key="AppTagBackgroundColor">#FFF2CB</Color>
+
+            <Color x:Key="SystemAccentColor">#D3EB62</Color>
+            <Color x:Key="SystemAccentColorLight1">#E0F08C</Color>
+            <Color x:Key="SystemAccentColorLight2">#EAF5B1</Color>
+            <Color x:Key="SystemAccentColorLight3">#F4F9D7</Color>
+            <Color x:Key="SystemAccentColorDark1">#526719</Color>
+            <Color x:Key="SystemAccentColorDark2">#435414</Color>
+            <Color x:Key="SystemAccentColorDark3">#35420F</Color>
+
+            <SolidColorBrush x:Key="AppBackgroundBrush" Color="{ThemeResource AppBackgroundColor}" />
+            <SolidColorBrush x:Key="AppWindowBrush" Color="#00FFFFFF" />
+            <SolidColorBrush x:Key="AppSurfaceBrush" Color="{ThemeResource AppSurfaceColor}" />
+            <SolidColorBrush x:Key="AppCardBrush" Color="{ThemeResource AppCardColor}" />
+            <SolidColorBrush x:Key="AppControlBrush" Color="{ThemeResource AppControlColor}" />
+            <SolidColorBrush x:Key="AppBorderBrush" Color="{ThemeResource AppBorderColor}" />
+            <SolidColorBrush x:Key="AppHoverBrush" Color="{ThemeResource AppHoverColor}" />
+            <SolidColorBrush x:Key="AppActiveBrush" Color="{ThemeResource AppActiveColor}" />
+            <SolidColorBrush x:Key="AppSearchBrush" Color="{ThemeResource AppSearchColor}" />
+            <SolidColorBrush x:Key="AppTextBrush" Color="{ThemeResource AppTextColor}" />
+            <SolidColorBrush x:Key="AppSecondaryTextBrush" Color="{ThemeResource AppSecondaryTextColor}" />
+            <SolidColorBrush x:Key="AppMutedTextBrush" Color="{ThemeResource AppMutedTextColor}" />
+            <SolidColorBrush x:Key="AppTranscriptBrush" Color="{ThemeResource AppTranscriptColor}" />
+            <SolidColorBrush x:Key="AppSelectedBrush" Color="{ThemeResource AppSelectedColor}" />
+            <SolidColorBrush x:Key="AppKeyBorderBrush" Color="{ThemeResource AppKeyBorderColor}" />
+            <SolidColorBrush x:Key="AppTrackBrush" Color="{ThemeResource AppTrackColor}" />
+            <SolidColorBrush x:Key="AppTagBrush" Color="{ThemeResource AppTagColor}" />
+            <SolidColorBrush x:Key="AppTagBackgroundBrush" Color="{ThemeResource AppTagBackgroundColor}" />
+            <SolidColorBrush x:Key="AppAccentBrush" Color="{ThemeResource BrandAccentColor}" />
+            <SolidColorBrush x:Key="AppOnAccentBrush" Color="{ThemeResource BrandOnAccentColor}" />
+            <SolidColorBrush x:Key="AccentButtonBackground" Color="{ThemeResource BrandAccentColor}" />
+            <SolidColorBrush x:Key="AccentButtonBackgroundPointerOver" Color="{ThemeResource AccentFillColorSecondary}" />
+            <SolidColorBrush x:Key="AccentButtonBackgroundPressed" Color="{ThemeResource AccentFillColorTertiary}" />
+            <SolidColorBrush x:Key="AccentButtonBackgroundDisabled" Color="{ThemeResource AccentFillColorDisabled}" />
+            <SolidColorBrush x:Key="AccentButtonForeground" Color="{ThemeResource BrandOnAccentColor}" />
+            <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="{ThemeResource BrandOnAccentColor}" />
+            <SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="{ThemeResource BrandOnAccentColor}" />
+            <SolidColorBrush x:Key="AccentButtonForegroundDisabled" Color="{ThemeResource TextFillColorDisabled}" />
+            <SolidColorBrush x:Key="AccentButtonBorderBrush" Color="{ThemeResource BrandAccentColor}" />
+            <SolidColorBrush x:Key="AccentButtonBorderBrushPointerOver" Color="{ThemeResource AccentFillColorSecondary}" />
+            <SolidColorBrush x:Key="AccentButtonBorderBrushPressed" Color="{ThemeResource AccentFillColorTertiary}" />
+            <SolidColorBrush x:Key="AccentButtonBorderBrushDisabled" Color="{ThemeResource AccentFillColorDisabled}" />
+            <SolidColorBrush x:Key="AccentGraphicBrush" Color="{ThemeResource BrandAccentForegroundLightColor}" />
+            <SolidColorBrush x:Key="AccentSoftBrush" Color="#1F657F1E" />
+            <SolidColorBrush x:Key="AccentForegroundBrush" Color="{ThemeResource BrandAccentForegroundLightColor}" />
+            <SolidColorBrush x:Key="InactiveChartBrush" Color="{ThemeResource AppActivityColor}" />
+            <SolidColorBrush x:Key="ActivityLowBrush" Color="#D5E3AB" />
+            <SolidColorBrush x:Key="ActivityMediumBrush" Color="#A9C45C" />
+            <SolidColorBrush x:Key="ActivityHighBrush" Color="{ThemeResource BrandAccentForegroundLightColor}" />
+            <SolidColorBrush x:Key="PrimaryTextBrush" Color="{ThemeResource AppTextColor}" />
+            <x:Double x:Key="FutureActivityOpacity">0.35</x:Double>
+
+            <LinearGradientBrush x:Key="AppBrandVoiceBrush" StartPoint="0.124748886,0.095063823" EndPoint="0.635967368,0.887388920">
+                <GradientStop Color="#687384" Offset="0" />
+                <GradientStop Color="#414B5E" Offset="0.35" />
+                <GradientStop Color="#293144" Offset="0.7" />
+                <GradientStop Color="#161C2A" Offset="1" />
+            </LinearGradientBrush>
+            <LinearGradientBrush x:Key="AppBrandReplyBrush" StartPoint="0.203780099,0.108486502" EndPoint="0.915343807,0.919447693">
+                <GradientStop Color="#FAFFD2" Offset="0" />
+                <GradientStop Color="#E9F797" Offset="0.35" />
+                <GradientStop Color="#D3EB62" Offset="0.7" />
+                <GradientStop Color="#B9D63F" Offset="1" />
+            </LinearGradientBrush>
+            <SolidColorBrush x:Key="AppBrandVoiceDetailBrush" Color="#DFE5EB" />
+            <SolidColorBrush x:Key="AppBrandReplyDetailBrush" Color="#4A5F1C" />
+            <SolidColorBrush x:Key="PillBackgroundBrush" Color="{ThemeResource AppSurfaceColor}" />
+            <SolidColorBrush x:Key="PillStrokeBrush" Color="{ThemeResource AppBorderColor}" />
+            <SolidColorBrush x:Key="PillWaveBrush" Color="{ThemeResource BrandAccentForegroundLightColor}" />
+
+            <!-- WinUI semantic colors and brushes mapped to the app roles. -->
+            <Color x:Key="TextFillColorPrimary">#1C2636</Color>
+            <Color x:Key="TextFillColorSecondary">#536174</Color>
+            <Color x:Key="TextFillColorTertiary">#657286</Color>
+            <Color x:Key="TextFillColorDisabled">#657286</Color>
+            <Color x:Key="TextOnAccentFillColorPrimary">#19210D</Color>
+            <Color x:Key="TextOnAccentFillColorSecondary">#526719</Color>
+            <Color x:Key="ControlFillColorDefault">#E9EEF4</Color>
+            <Color x:Key="ControlFillColorSecondary">#EFF3E6</Color>
+            <Color x:Key="ControlFillColorTertiary">#F6F8FB</Color>
+            <Color x:Key="ControlFillColorDisabled">#E1E6EC</Color>
+            <Color x:Key="ControlFillColorTransparent">#00FFFFFF</Color>
+            <Color x:Key="ControlStrongFillColorDefault">#536174</Color>
+            <Color x:Key="ControlStrongFillColorDisabled">#BCC7D4</Color>
+            <Color x:Key="ControlStrokeColorDefault">#D6DEE8</Color>
+            <Color x:Key="ControlStrokeColorSecondary">#BCC7D4</Color>
+            <Color x:Key="ControlStrokeColorOnAccent">#19210D</Color>
+            <Color x:Key="ControlStrokeColorDisabled">#D6DEE8</Color>
+            <Color x:Key="CardBackgroundFillColorDefault">#FFFFFF</Color>
+            <Color x:Key="CardBackgroundFillColorSecondary">#F6F8FB</Color>
+            <Color x:Key="CardBackgroundFillColorTertiary">#E9EDF2</Color>
+            <Color x:Key="CardStrokeColorDefault">#D6DEE8</Color>
+            <Color x:Key="LayerFillColorDefault">#E9EDF2</Color>
+            <Color x:Key="LayerFillColorAlt">#F6F8FB</Color>
+            <Color x:Key="LayerFillColorDisabled">#E9EDF2</Color>
+            <Color x:Key="SubtleFillColorTransparent">#00FFFFFF</Color>
+            <Color x:Key="SubtleFillColorSecondary">#DDE5D4</Color>
+            <Color x:Key="SubtleFillColorTertiary">#EFF3E6</Color>
+            <Color x:Key="SubtleFillColorDisabled">#E9EDF2</Color>
+            <Color x:Key="DividerStrokeColorDefault">#D6DEE8</Color>
+            <Color x:Key="DividerStrokeColorSecondary">#BCC7D4</Color>
+            <Color x:Key="AccentFillColorDefault">#D3EB62</Color>
+            <Color x:Key="AccentFillColorSecondary">#B9D63F</Color>
+            <Color x:Key="AccentFillColorTertiary">#E9F797</Color>
+            <Color x:Key="AccentFillColorDisabled">#BCC7D4</Color>
+            <Color x:Key="AccentTextFillColorPrimary">#526719</Color>
+            <Color x:Key="AccentTextFillColorSecondary">#657F1E</Color>
+            <Color x:Key="AccentTextFillColorTertiary">#657286</Color>
+            <Color x:Key="AccentTextFillColorDisabled">#BCC7D4</Color>
+
+            <SolidColorBrush x:Key="TextFillColorPrimaryBrush" Color="{ThemeResource TextFillColorPrimary}" />
+            <SolidColorBrush x:Key="TextFillColorSecondaryBrush" Color="{ThemeResource TextFillColorSecondary}" />
+            <SolidColorBrush x:Key="TextFillColorTertiaryBrush" Color="{ThemeResource TextFillColorTertiary}" />
+            <SolidColorBrush x:Key="TextFillColorDisabledBrush" Color="{ThemeResource TextFillColorDisabled}" />
+            <SolidColorBrush x:Key="TextOnAccentFillColorPrimaryBrush" Color="{ThemeResource TextOnAccentFillColorPrimary}" />
+            <SolidColorBrush x:Key="TextOnAccentFillColorSecondaryBrush" Color="{ThemeResource TextOnAccentFillColorSecondary}" />
+            <SolidColorBrush x:Key="ControlFillColorDefaultBrush" Color="{ThemeResource ControlFillColorDefault}" />
+            <SolidColorBrush x:Key="ControlFillColorSecondaryBrush" Color="{ThemeResource ControlFillColorSecondary}" />
+            <SolidColorBrush x:Key="ControlFillColorTertiaryBrush" Color="{ThemeResource ControlFillColorTertiary}" />
+            <SolidColorBrush x:Key="ControlFillColorDisabledBrush" Color="{ThemeResource ControlFillColorDisabled}" />
+            <SolidColorBrush x:Key="ControlFillColorTransparentBrush" Color="{ThemeResource ControlFillColorTransparent}" />
+            <SolidColorBrush x:Key="ControlStrongFillColorDefaultBrush" Color="{ThemeResource ControlStrongFillColorDefault}" />
+            <SolidColorBrush x:Key="ControlStrongFillColorDisabledBrush" Color="{ThemeResource ControlStrongFillColorDisabled}" />
+            <SolidColorBrush x:Key="ControlStrokeColorDefaultBrush" Color="{ThemeResource ControlStrokeColorDefault}" />
+            <SolidColorBrush x:Key="ControlStrokeColorSecondaryBrush" Color="{ThemeResource ControlStrokeColorSecondary}" />
+            <SolidColorBrush x:Key="ControlStrokeColorOnAccentBrush" Color="{ThemeResource ControlStrokeColorOnAccent}" />
+            <SolidColorBrush x:Key="ControlStrokeColorDisabledBrush" Color="{ThemeResource ControlStrokeColorDisabled}" />
+            <SolidColorBrush x:Key="CardBackgroundFillColorDefaultBrush" Color="{ThemeResource CardBackgroundFillColorDefault}" />
+            <SolidColorBrush x:Key="CardBackgroundFillColorSecondaryBrush" Color="{ThemeResource CardBackgroundFillColorSecondary}" />
+            <SolidColorBrush x:Key="CardBackgroundFillColorTertiaryBrush" Color="{ThemeResource CardBackgroundFillColorTertiary}" />
+            <SolidColorBrush x:Key="CardStrokeColorDefaultBrush" Color="{ThemeResource CardStrokeColorDefault}" />
+            <SolidColorBrush x:Key="LayerFillColorDefaultBrush" Color="{ThemeResource LayerFillColorDefault}" />
+            <SolidColorBrush x:Key="LayerFillColorAltBrush" Color="{ThemeResource LayerFillColorAlt}" />
+            <SolidColorBrush x:Key="LayerFillColorDisabledBrush" Color="{ThemeResource LayerFillColorDisabled}" />
+            <SolidColorBrush x:Key="SubtleFillColorTransparentBrush" Color="{ThemeResource SubtleFillColorTransparent}" />
+            <SolidColorBrush x:Key="SubtleFillColorSecondaryBrush" Color="{ThemeResource SubtleFillColorSecondary}" />
+            <SolidColorBrush x:Key="SubtleFillColorTertiaryBrush" Color="{ThemeResource SubtleFillColorTertiary}" />
+            <SolidColorBrush x:Key="SubtleFillColorDisabledBrush" Color="{ThemeResource SubtleFillColorDisabled}" />
+            <SolidColorBrush x:Key="DividerStrokeColorDefaultBrush" Color="{ThemeResource DividerStrokeColorDefault}" />
+            <SolidColorBrush x:Key="DividerStrokeColorSecondaryBrush" Color="{ThemeResource DividerStrokeColorSecondary}" />
+            <SolidColorBrush x:Key="AccentFillColorDefaultBrush" Color="{ThemeResource AccentFillColorDefault}" />
+            <SolidColorBrush x:Key="AccentFillColorSecondaryBrush" Color="{ThemeResource AccentFillColorSecondary}" />
+            <SolidColorBrush x:Key="AccentFillColorTertiaryBrush" Color="{ThemeResource AccentFillColorTertiary}" />
+            <SolidColorBrush x:Key="AccentFillColorDisabledBrush" Color="{ThemeResource AccentFillColorDisabled}" />
+            <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush" Color="{ThemeResource AccentTextFillColorPrimary}" />
+            <SolidColorBrush x:Key="AccentTextFillColorSecondaryBrush" Color="{ThemeResource AccentTextFillColorSecondary}" />
+            <SolidColorBrush x:Key="AccentTextFillColorTertiaryBrush" Color="{ThemeResource AccentTextFillColorTertiary}" />
+            <SolidColorBrush x:Key="AccentTextFillColorDisabledBrush" Color="{ThemeResource AccentTextFillColorDisabled}" />
+        </ResourceDictionary>
+
+        <ResourceDictionary x:Key="Dark">
+            <Color x:Key="AppBackgroundColor">#121720</Color>
+            <Color x:Key="AppSurfaceColor">#191F29</Color>
+            <Color x:Key="AppCardColor">#222A36</Color>
+            <Color x:Key="AppControlColor">#303A49</Color>
+            <Color x:Key="AppBorderColor">#354052</Color>
+            <Color x:Key="AppHoverColor">#2B3544</Color>
+            <Color x:Key="AppActiveColor">#2A3443</Color>
+            <Color x:Key="AppSearchColor">#161C26</Color>
+            <Color x:Key="AppTextColor">#F1F3F4</Color>
+            <Color x:Key="AppSecondaryTextColor">#9CA1A7</Color>
+            <Color x:Key="AppMutedTextColor">#6B7076</Color>
+            <Color x:Key="AppTranscriptColor">#E3E6E8</Color>
+            <Color x:Key="AppSelectedColor">#3A4555</Color>
+            <Color x:Key="AppKeyBorderColor">#34373B</Color>
+            <Color x:Key="AppTrackColor">#5A5E64</Color>
+            <Color x:Key="AppActivityColor">#2A3443</Color>
+            <Color x:Key="AppTagColor">#E8B450</Color>
+            <Color x:Key="AppTagBackgroundColor">#1FE8B450</Color>
+
+            <Color x:Key="SystemAccentColor">#D3EB62</Color>
+            <Color x:Key="SystemAccentColorLight1">#E9F797</Color>
+            <Color x:Key="SystemAccentColorLight2">#D3EB62</Color>
+            <Color x:Key="SystemAccentColorLight3">#B9D63F</Color>
+            <Color x:Key="SystemAccentColorDark1">#A9C45C</Color>
+            <Color x:Key="SystemAccentColorDark2">#879B45</Color>
+            <Color x:Key="SystemAccentColorDark3">#657F1E</Color>
+
+            <SolidColorBrush x:Key="AppBackgroundBrush" Color="{ThemeResource AppBackgroundColor}" />
+            <SolidColorBrush x:Key="AppWindowBrush" Color="#00FFFFFF" />
+            <SolidColorBrush x:Key="AppSurfaceBrush" Color="{ThemeResource AppSurfaceColor}" />
+            <SolidColorBrush x:Key="AppCardBrush" Color="{ThemeResource AppCardColor}" />
+            <SolidColorBrush x:Key="AppControlBrush" Color="{ThemeResource AppControlColor}" />
+            <SolidColorBrush x:Key="AppBorderBrush" Color="{ThemeResource AppBorderColor}" />
+            <SolidColorBrush x:Key="AppHoverBrush" Color="{ThemeResource AppHoverColor}" />
+            <SolidColorBrush x:Key="AppActiveBrush" Color="{ThemeResource AppActiveColor}" />
+            <SolidColorBrush x:Key="AppSearchBrush" Color="{ThemeResource AppSearchColor}" />
+            <SolidColorBrush x:Key="AppTextBrush" Color="{ThemeResource AppTextColor}" />
+            <SolidColorBrush x:Key="AppSecondaryTextBrush" Color="{ThemeResource AppSecondaryTextColor}" />
+            <SolidColorBrush x:Key="AppMutedTextBrush" Color="{ThemeResource AppMutedTextColor}" />
+            <SolidColorBrush x:Key="AppTranscriptBrush" Color="{ThemeResource AppTranscriptColor}" />
+            <SolidColorBrush x:Key="AppSelectedBrush" Color="{ThemeResource AppSelectedColor}" />
+            <SolidColorBrush x:Key="AppKeyBorderBrush" Color="{ThemeResource AppKeyBorderColor}" />
+            <SolidColorBrush x:Key="AppTrackBrush" Color="{ThemeResource AppTrackColor}" />
+            <SolidColorBrush x:Key="AppTagBrush" Color="{ThemeResource AppTagColor}" />
+            <SolidColorBrush x:Key="AppTagBackgroundBrush" Color="{ThemeResource AppTagBackgroundColor}" />
+            <SolidColorBrush x:Key="AppAccentBrush" Color="{ThemeResource BrandAccentColor}" />
+            <SolidColorBrush x:Key="AppOnAccentBrush" Color="{ThemeResource BrandOnAccentColor}" />
+            <SolidColorBrush x:Key="AccentButtonBackground" Color="{ThemeResource BrandAccentColor}" />
+            <SolidColorBrush x:Key="AccentButtonBackgroundPointerOver" Color="{ThemeResource AccentFillColorSecondary}" />
+            <SolidColorBrush x:Key="AccentButtonBackgroundPressed" Color="{ThemeResource AccentFillColorTertiary}" />
+            <SolidColorBrush x:Key="AccentButtonBackgroundDisabled" Color="{ThemeResource AccentFillColorDisabled}" />
+            <SolidColorBrush x:Key="AccentButtonForeground" Color="{ThemeResource BrandOnAccentColor}" />
+            <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="{ThemeResource BrandOnAccentColor}" />
+            <SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="{ThemeResource BrandOnAccentColor}" />
+            <SolidColorBrush x:Key="AccentButtonForegroundDisabled" Color="{ThemeResource TextFillColorDisabled}" />
+            <SolidColorBrush x:Key="AccentButtonBorderBrush" Color="{ThemeResource BrandAccentColor}" />
+            <SolidColorBrush x:Key="AccentButtonBorderBrushPointerOver" Color="{ThemeResource AccentFillColorSecondary}" />
+            <SolidColorBrush x:Key="AccentButtonBorderBrushPressed" Color="{ThemeResource AccentFillColorTertiary}" />
+            <SolidColorBrush x:Key="AccentButtonBorderBrushDisabled" Color="{ThemeResource AccentFillColorDisabled}" />
+            <SolidColorBrush x:Key="AccentGraphicBrush" Color="{ThemeResource BrandAccentForegroundDarkColor}" />
+            <SolidColorBrush x:Key="AccentSoftBrush" Color="#1FD3EB62" />
+            <SolidColorBrush x:Key="AccentForegroundBrush" Color="{ThemeResource BrandAccentForegroundDarkColor}" />
+            <SolidColorBrush x:Key="InactiveChartBrush" Color="{ThemeResource AppActivityColor}" />
+            <SolidColorBrush x:Key="ActivityLowBrush" Color="#3C4B31" />
+            <SolidColorBrush x:Key="ActivityMediumBrush" Color="#607D3D" />
+            <SolidColorBrush x:Key="ActivityHighBrush" Color="{ThemeResource BrandAccentForegroundDarkColor}" />
+            <SolidColorBrush x:Key="PrimaryTextBrush" Color="{ThemeResource AppTextColor}" />
+            <x:Double x:Key="FutureActivityOpacity">0.35</x:Double>
+
+            <LinearGradientBrush x:Key="AppBrandVoiceBrush" StartPoint="0.124748886,0.095063823" EndPoint="0.635967368,0.887388920">
+                <GradientStop Color="#687384" Offset="0" />
+                <GradientStop Color="#414B5E" Offset="0.35" />
+                <GradientStop Color="#293144" Offset="0.7" />
+                <GradientStop Color="#161C2A" Offset="1" />
+            </LinearGradientBrush>
+            <LinearGradientBrush x:Key="AppBrandReplyBrush" StartPoint="0.203780099,0.108486502" EndPoint="0.915343807,0.919447693">
+                <GradientStop Color="#FAFFD2" Offset="0" />
+                <GradientStop Color="#E9F797" Offset="0.35" />
+                <GradientStop Color="#D3EB62" Offset="0.7" />
+                <GradientStop Color="#B9D63F" Offset="1" />
+            </LinearGradientBrush>
+            <SolidColorBrush x:Key="AppBrandVoiceDetailBrush" Color="#DFE5EB" />
+            <SolidColorBrush x:Key="AppBrandReplyDetailBrush" Color="#4A5F1C" />
+            <SolidColorBrush x:Key="PillBackgroundBrush" Color="{ThemeResource AppSurfaceColor}" />
+            <SolidColorBrush x:Key="PillStrokeBrush" Color="{ThemeResource AppBorderColor}" />
+            <SolidColorBrush x:Key="PillWaveBrush" Color="{ThemeResource BrandAccentForegroundDarkColor}" />
+
+            <Color x:Key="TextFillColorPrimary">#F1F3F4</Color>
+            <Color x:Key="TextFillColorSecondary">#9CA1A7</Color>
+            <Color x:Key="TextFillColorTertiary">#6B7076</Color>
+            <Color x:Key="TextFillColorDisabled">#6B7076</Color>
+            <Color x:Key="TextOnAccentFillColorPrimary">#19210D</Color>
+            <Color x:Key="TextOnAccentFillColorSecondary">#526719</Color>
+            <Color x:Key="ControlFillColorDefault">#303A49</Color>
+            <Color x:Key="ControlFillColorSecondary">#2B3544</Color>
+            <Color x:Key="ControlFillColorTertiary">#191F29</Color>
+            <Color x:Key="ControlFillColorDisabled">#252D39</Color>
+            <Color x:Key="ControlFillColorTransparent">#00121720</Color>
+            <Color x:Key="ControlStrongFillColorDefault">#9CA1A7</Color>
+            <Color x:Key="ControlStrongFillColorDisabled">#5A5E64</Color>
+            <Color x:Key="ControlStrokeColorDefault">#354052</Color>
+            <Color x:Key="ControlStrokeColorSecondary">#34373B</Color>
+            <Color x:Key="ControlStrokeColorOnAccent">#19210D</Color>
+            <Color x:Key="ControlStrokeColorDisabled">#354052</Color>
+            <Color x:Key="CardBackgroundFillColorDefault">#222A36</Color>
+            <Color x:Key="CardBackgroundFillColorSecondary">#191F29</Color>
+            <Color x:Key="CardBackgroundFillColorTertiary">#121720</Color>
+            <Color x:Key="CardStrokeColorDefault">#354052</Color>
+            <Color x:Key="LayerFillColorDefault">#121720</Color>
+            <Color x:Key="LayerFillColorAlt">#191F29</Color>
+            <Color x:Key="LayerFillColorDisabled">#121720</Color>
+            <Color x:Key="SubtleFillColorTransparent">#00121720</Color>
+            <Color x:Key="SubtleFillColorSecondary">#2A3443</Color>
+            <Color x:Key="SubtleFillColorTertiary">#2B3544</Color>
+            <Color x:Key="SubtleFillColorDisabled">#121720</Color>
+            <Color x:Key="DividerStrokeColorDefault">#354052</Color>
+            <Color x:Key="DividerStrokeColorSecondary">#34373B</Color>
+            <Color x:Key="AccentFillColorDefault">#D3EB62</Color>
+            <Color x:Key="AccentFillColorSecondary">#B9D63F</Color>
+            <Color x:Key="AccentFillColorTertiary">#E9F797</Color>
+            <Color x:Key="AccentFillColorDisabled">#5A5E64</Color>
+            <Color x:Key="AccentTextFillColorPrimary">#D3EB62</Color>
+            <Color x:Key="AccentTextFillColorSecondary">#B9D63F</Color>
+            <Color x:Key="AccentTextFillColorTertiary">#9CA1A7</Color>
+            <Color x:Key="AccentTextFillColorDisabled">#5A5E64</Color>
+
+            <SolidColorBrush x:Key="TextFillColorPrimaryBrush" Color="{ThemeResource TextFillColorPrimary}" />
+            <SolidColorBrush x:Key="TextFillColorSecondaryBrush" Color="{ThemeResource TextFillColorSecondary}" />
+            <SolidColorBrush x:Key="TextFillColorTertiaryBrush" Color="{ThemeResource TextFillColorTertiary}" />
+            <SolidColorBrush x:Key="TextFillColorDisabledBrush" Color="{ThemeResource TextFillColorDisabled}" />
+            <SolidColorBrush x:Key="TextOnAccentFillColorPrimaryBrush" Color="{ThemeResource TextOnAccentFillColorPrimary}" />
+            <SolidColorBrush x:Key="TextOnAccentFillColorSecondaryBrush" Color="{ThemeResource TextOnAccentFillColorSecondary}" />
+            <SolidColorBrush x:Key="ControlFillColorDefaultBrush" Color="{ThemeResource ControlFillColorDefault}" />
+            <SolidColorBrush x:Key="ControlFillColorSecondaryBrush" Color="{ThemeResource ControlFillColorSecondary}" />
+            <SolidColorBrush x:Key="ControlFillColorTertiaryBrush" Color="{ThemeResource ControlFillColorTertiary}" />
+            <SolidColorBrush x:Key="ControlFillColorDisabledBrush" Color="{ThemeResource ControlFillColorDisabled}" />
+            <SolidColorBrush x:Key="ControlFillColorTransparentBrush" Color="{ThemeResource ControlFillColorTransparent}" />
+            <SolidColorBrush x:Key="ControlStrongFillColorDefaultBrush" Color="{ThemeResource ControlStrongFillColorDefault}" />
+            <SolidColorBrush x:Key="ControlStrongFillColorDisabledBrush" Color="{ThemeResource ControlStrongFillColorDisabled}" />
+            <SolidColorBrush x:Key="ControlStrokeColorDefaultBrush" Color="{ThemeResource ControlStrokeColorDefault}" />
+            <SolidColorBrush x:Key="ControlStrokeColorSecondaryBrush" Color="{ThemeResource ControlStrokeColorSecondary}" />
+            <SolidColorBrush x:Key="ControlStrokeColorOnAccentBrush" Color="{ThemeResource ControlStrokeColorOnAccent}" />
+            <SolidColorBrush x:Key="ControlStrokeColorDisabledBrush" Color="{ThemeResource ControlStrokeColorDisabled}" />
+            <SolidColorBrush x:Key="CardBackgroundFillColorDefaultBrush" Color="{ThemeResource CardBackgroundFillColorDefault}" />
+            <SolidColorBrush x:Key="CardBackgroundFillColorSecondaryBrush" Color="{ThemeResource CardBackgroundFillColorSecondary}" />
+            <SolidColorBrush x:Key="CardBackgroundFillColorTertiaryBrush" Color="{ThemeResource CardBackgroundFillColorTertiary}" />
+            <SolidColorBrush x:Key="CardStrokeColorDefaultBrush" Color="{ThemeResource CardStrokeColorDefault}" />
+            <SolidColorBrush x:Key="LayerFillColorDefaultBrush" Color="{ThemeResource LayerFillColorDefault}" />
+            <SolidColorBrush x:Key="LayerFillColorAltBrush" Color="{ThemeResource LayerFillColorAlt}" />
+            <SolidColorBrush x:Key="LayerFillColorDisabledBrush" Color="{ThemeResource LayerFillColorDisabled}" />
+            <SolidColorBrush x:Key="SubtleFillColorTransparentBrush" Color="{ThemeResource SubtleFillColorTransparent}" />
+            <SolidColorBrush x:Key="SubtleFillColorSecondaryBrush" Color="{ThemeResource SubtleFillColorSecondary}" />
+            <SolidColorBrush x:Key="SubtleFillColorTertiaryBrush" Color="{ThemeResource SubtleFillColorTertiary}" />
+            <SolidColorBrush x:Key="SubtleFillColorDisabledBrush" Color="{ThemeResource SubtleFillColorDisabled}" />
+            <SolidColorBrush x:Key="DividerStrokeColorDefaultBrush" Color="{ThemeResource DividerStrokeColorDefault}" />
+            <SolidColorBrush x:Key="DividerStrokeColorSecondaryBrush" Color="{ThemeResource DividerStrokeColorSecondary}" />
+            <SolidColorBrush x:Key="AccentFillColorDefaultBrush" Color="{ThemeResource AccentFillColorDefault}" />
+            <SolidColorBrush x:Key="AccentFillColorSecondaryBrush" Color="{ThemeResource AccentFillColorSecondary}" />
+            <SolidColorBrush x:Key="AccentFillColorTertiaryBrush" Color="{ThemeResource AccentFillColorTertiary}" />
+            <SolidColorBrush x:Key="AccentFillColorDisabledBrush" Color="{ThemeResource AccentFillColorDisabled}" />
+            <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush" Color="{ThemeResource AccentTextFillColorPrimary}" />
+            <SolidColorBrush x:Key="AccentTextFillColorSecondaryBrush" Color="{ThemeResource AccentTextFillColorSecondary}" />
+            <SolidColorBrush x:Key="AccentTextFillColorTertiaryBrush" Color="{ThemeResource AccentTextFillColorTertiary}" />
+            <SolidColorBrush x:Key="AccentTextFillColorDisabledBrush" Color="{ThemeResource AccentTextFillColorDisabled}" />
+        </ResourceDictionary>
+
+        <ResourceDictionary x:Key="HighContrast">
+            <SolidColorBrush x:Key="AppBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="AppWindowBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="AppSurfaceBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
+            <SolidColorBrush x:Key="AppCardBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="AppControlBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
+            <SolidColorBrush x:Key="AppBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="AppHoverBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="AppActiveBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="AppSearchBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
+            <SolidColorBrush x:Key="AppTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="AppSecondaryTextBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
+            <SolidColorBrush x:Key="AppMutedTextBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
+            <SolidColorBrush x:Key="AppTranscriptBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="AppSelectedBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="AppKeyBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="AppTrackBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
+            <SolidColorBrush x:Key="AppTagBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="AppTagBackgroundBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
+            <SolidColorBrush x:Key="AppAccentBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="AppOnAccentBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
+            <SolidColorBrush x:Key="AccentButtonBackground" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="AccentButtonBackgroundPointerOver" Color="{ThemeResource SystemColorHotlightColor}" />
+            <SolidColorBrush x:Key="AccentButtonBackgroundPressed" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="AccentButtonBackgroundDisabled" Color="{ThemeResource SystemColorButtonFaceColor}" />
+            <SolidColorBrush x:Key="AccentButtonForeground" Color="{ThemeResource SystemColorHighlightTextColor}" />
+            <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="{ThemeResource SystemColorHighlightTextColor}" />
+            <SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="{ThemeResource SystemColorHighlightTextColor}" />
+            <SolidColorBrush x:Key="AccentButtonForegroundDisabled" Color="{ThemeResource SystemColorGrayTextColor}" />
+            <SolidColorBrush x:Key="AccentButtonBorderBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="AccentButtonBorderBrushPointerOver" Color="{ThemeResource SystemColorHotlightColor}" />
+            <SolidColorBrush x:Key="AccentButtonBorderBrushPressed" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="AccentButtonBorderBrushDisabled" Color="{ThemeResource SystemColorGrayTextColor}" />
+            <SolidColorBrush x:Key="AccentGraphicBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="AccentSoftBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
+            <SolidColorBrush x:Key="AccentForegroundBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="InactiveChartBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
+            <SolidColorBrush x:Key="ActivityLowBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ActivityMediumBrush" Color="{ThemeResource SystemColorHotlightColor}" />
+            <SolidColorBrush x:Key="ActivityHighBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="PrimaryTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <x:Double x:Key="FutureActivityOpacity">1</x:Double>
+            <SolidColorBrush x:Key="AppBrandVoiceBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="AppBrandReplyBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="AppBrandVoiceDetailBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="AppBrandReplyDetailBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="PillBackgroundBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
+            <SolidColorBrush x:Key="PillStrokeBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="PillWaveBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+
+            <SolidColorBrush x:Key="TextFillColorPrimaryBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="TextFillColorSecondaryBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
+            <SolidColorBrush x:Key="TextFillColorTertiaryBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
+            <SolidColorBrush x:Key="TextFillColorDisabledBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
+            <SolidColorBrush x:Key="TextOnAccentFillColorPrimaryBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
+            <SolidColorBrush x:Key="TextOnAccentFillColorSecondaryBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
+            <SolidColorBrush x:Key="ControlFillColorDefaultBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
+            <SolidColorBrush x:Key="ControlFillColorSecondaryBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
+            <SolidColorBrush x:Key="ControlFillColorTertiaryBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
+            <SolidColorBrush x:Key="ControlFillColorDisabledBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
+            <SolidColorBrush x:Key="ControlFillColorTransparentBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="ControlStrongFillColorDefaultBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ControlStrongFillColorDisabledBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
+            <SolidColorBrush x:Key="ControlStrokeColorDefaultBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ControlStrokeColorSecondaryBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
+            <SolidColorBrush x:Key="ControlStrokeColorOnAccentBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
+            <SolidColorBrush x:Key="ControlStrokeColorDisabledBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
+            <SolidColorBrush x:Key="CardBackgroundFillColorDefaultBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="CardBackgroundFillColorSecondaryBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
+            <SolidColorBrush x:Key="CardBackgroundFillColorTertiaryBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
+            <SolidColorBrush x:Key="CardStrokeColorDefaultBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="LayerFillColorDefaultBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="LayerFillColorAltBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
+            <SolidColorBrush x:Key="LayerFillColorDisabledBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
+            <SolidColorBrush x:Key="SubtleFillColorTransparentBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="SubtleFillColorSecondaryBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="SubtleFillColorTertiaryBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
+            <SolidColorBrush x:Key="SubtleFillColorDisabledBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
+            <SolidColorBrush x:Key="DividerStrokeColorDefaultBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="DividerStrokeColorSecondaryBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
+            <SolidColorBrush x:Key="AccentFillColorDefaultBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="AccentFillColorSecondaryBrush" Color="{ThemeResource SystemColorHotlightColor}" />
+            <SolidColorBrush x:Key="AccentFillColorTertiaryBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
+            <SolidColorBrush x:Key="AccentFillColorDisabledBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
+            <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="AccentTextFillColorSecondaryBrush" Color="{ThemeResource SystemColorHotlightColor}" />
+            <SolidColorBrush x:Key="AccentTextFillColorTertiaryBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
+            <SolidColorBrush x:Key="AccentTextFillColorDisabledBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+
+    <!--
+        The Ink / Citron palette is kept separate from light and dark surfaces so a
+        future brand scheme can replace the palette roles without changing controls.
+        All app colors, dimensions, and styles live in this dictionary.
+    -->
+    <Color x:Key="BrandAccentColor">#D3EB62</Color>
+    <Color x:Key="BrandOnAccentColor">#19210D</Color>
+    <Color x:Key="BrandAccentForegroundLightColor">#526719</Color>
+    <Color x:Key="BrandAccentForegroundDarkColor">#D3EB62</Color>
+
+    <x:Double x:Key="PageContentMaxWidth">1440</x:Double>
+    <Thickness x:Key="PagePadding">36,34,36,36</Thickness>
+    <Thickness x:Key="CompactPagePadding">18</Thickness>
+    <x:Double x:Key="CompactPageThreshold">800</x:Double>
+    <x:Double x:Key="NarrowActionsThreshold">400</x:Double>
+    <x:Double x:Key="HomeHeaderStackThreshold">760</x:Double>
+    <x:Double x:Key="ShortcutStackThreshold">440</x:Double>
+    <x:Double x:Key="HistorySearchStackThreshold">520</x:Double>
+    <x:Double x:Key="HomeColumnsStackThreshold">900</x:Double>
+    <x:Double x:Key="ModelTwoColumnThreshold">620</x:Double>
+    <Thickness x:Key="PageSectionBottomMargin">0,0,0,20</Thickness>
+    <Thickness x:Key="PageFooterTopMargin">0,20,0,0</Thickness>
+    <x:Double x:Key="PageSectionSpacing">28</x:Double>
+    <Thickness x:Key="ApplicationNoticeMargin">16,8,16,16</Thickness>
+    <x:Double x:Key="CardGap">20</x:Double>
+    <x:Double x:Key="HomeCardGap">16</x:Double>
+    <x:Double x:Key="NavLabelGap">12</x:Double>
+    <Thickness x:Key="CardBorderThickness">1</Thickness>
+    <Thickness x:Key="CardPadding">24</Thickness>
+    <Thickness x:Key="SettingsCardPadding">28,24</Thickness>
+    <CornerRadius x:Key="CardCornerRadius">16</CornerRadius>
+    <CornerRadius x:Key="PanelCornerRadius">14</CornerRadius>
+    <CornerRadius x:Key="ControlCornerRadius">8</CornerRadius>
+    <x:Double x:Key="IconSize">18</x:Double>
+    <x:Double x:Key="RadioButtonsColumnSpacing">2</x:Double>
+    <x:Double x:Key="RadioButtonsRowSpacing">2</x:Double>
+    <x:Double x:Key="NavHeight">40</x:Double>
+    <x:Double x:Key="SidebarWidth">248</x:Double>
+    <GridLength x:Key="SidebarColumnWidth">248</GridLength>
+    <GridLength x:Key="CompactSidebarColumnWidth">72</GridLength>
+    <x:Double x:Key="CompactNavigationThreshold">1000</x:Double>
+    <Thickness x:Key="CompactSidebarPadding">8,30,8,18</Thickness>
+    <Thickness x:Key="ShellPadding">0,0,10,10</Thickness>
+    <Thickness x:Key="SidebarPadding">14,30,14,18</Thickness>
+    <Thickness x:Key="SidebarBrandMargin">10,0,10,28</Thickness>
+    <Thickness x:Key="SettingsSegmentPadding">14,0</Thickness>
+    <x:Double x:Key="SettingsSegmentMinWidth">0</x:Double>
+    <CornerRadius x:Key="SettingsSegmentCornerRadius">8</CornerRadius>
+    <CornerRadius x:Key="SettingsCheckBoxCornerRadius">4</CornerRadius>
+    <x:Double x:Key="BenchmarkBarHeight">6</x:Double>
+    <CornerRadius x:Key="BenchmarkBarCornerRadius">3</CornerRadius>
+    <Thickness x:Key="SettingsSegmentTrackPadding">3</Thickness>
+    <CornerRadius x:Key="SettingsSegmentTrackCornerRadius">11</CornerRadius>
+    <x:Double x:Key="SettingsSegmentGap">2</x:Double>
+    <x:Double x:Key="SettingsSegmentMinHeight">32</x:Double>
+    <x:Double x:Key="SettingsSelectWidth">320</x:Double>
+    <x:Double x:Key="SettingsNumberWidth">132</x:Double>
+    <x:Double x:Key="SettingsLanguageWidth">180</x:Double>
+    <x:Double x:Key="SettingsProcessorWidth">220</x:Double>
+    <x:Double x:Key="SettingsWideMinWidth">700</x:Double>
+    <x:Double x:Key="NavItemGap">4</x:Double>
+    <x:Double x:Key="BrandSize">32</x:Double>
+    <x:Double x:Key="TitleBarHeight">44</x:Double>
+    <x:Double x:Key="PageTitleFontSize">28</x:Double>
+    <x:Double x:Key="MetricValueFontSize">30</x:Double>
+    <x:Double x:Key="PageTitleLineHeight">34</x:Double>
+    <x:Double x:Key="StatValueLineHeight">36</x:Double>
+    <x:Double x:Key="BodyFontSize">14</x:Double>
+    <x:Double x:Key="BodyLineHeight">18</x:Double>
+    <x:Double x:Key="BodyStrongFontSize">14</x:Double>
+    <x:Double x:Key="CaptionFontSize">12.5</x:Double>
+    <x:Double x:Key="CaptionLineHeight">16</x:Double>
+    <x:Double x:Key="SubtitleFontSize">14.5</x:Double>
+    <x:Double x:Key="KeycapFontSize">12.5</x:Double>
+    <x:Double x:Key="KeycapLineHeight">16</x:Double>
+    <x:Double x:Key="KeycapMinHeight">24</x:Double>
+    <x:Double x:Key="SearchKeycapFontSize">11.5</x:Double>
+    <x:Double x:Key="SearchKeycapLineHeight">14</x:Double>
+    <x:Double x:Key="SearchKeycapMinHeight">22</x:Double>
+    <Thickness x:Key="KeycapPadding">8,3</Thickness>
+    <Thickness x:Key="SearchKeycapPadding">8,2</Thickness>
+    <Thickness x:Key="SearchKeycapMargin">0,0,8,0</Thickness>
+    <Thickness x:Key="KeycapBorderThickness">0,0,0,2</Thickness>
+    <CornerRadius x:Key="KeycapCornerRadius">6</CornerRadius>
+    <Thickness x:Key="HistoryCountPadding">9,3</Thickness>
+    <CornerRadius x:Key="HistoryCountCornerRadius">20</CornerRadius>
+    <Thickness x:Key="HistorySearchPadding">36,7,68,7</Thickness>
+    <x:Double x:Key="HistorySearchFontSize">13.5</x:Double>
+    <Thickness x:Key="HomeActivityStreakPadding">10,4</Thickness>
+    <CornerRadius x:Key="HomeActivityStreakCornerRadius">20</CornerRadius>
+    <x:Double x:Key="HomeLegendChipSize">11</x:Double>
+    <CornerRadius x:Key="HomeLegendChipCornerRadius">3</CornerRadius>
+    <x:Double x:Key="HomeActivityCardMinHeight">298</x:Double>
+
+
+
+    <Style x:Key="BodyTextBlockStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="{StaticResource BodyFontSize}" />
+        <Setter Property="LineHeight" Value="{StaticResource BodyLineHeight}" />
+        <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
+        <Setter Property="Foreground" Value="{ThemeResource AppTextBrush}" />
+    </Style>
+    <Style x:Key="BodyStrongTextBlockStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style x:Key="CaptionTextBlockStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
+        <Setter Property="FontSize" Value="{StaticResource CaptionFontSize}" />
+        <Setter Property="LineHeight" Value="{StaticResource CaptionLineHeight}" />
+        <Setter Property="Foreground" Value="{ThemeResource AppMutedTextBrush}" />
+    </Style>
+    <Style x:Key="SubtitleTextBlockStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
+        <Setter Property="FontSize" Value="{StaticResource SubtitleFontSize}" />
+        <Setter Property="Foreground" Value="{ThemeResource AppSecondaryTextBrush}" />
+    </Style>
+    <Style x:Key="TitleTextBlockStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
+        <Setter Property="FontSize" Value="{StaticResource PageTitleFontSize}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style x:Key="MetricValueTextBlockStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
+        <Setter Property="FontSize" Value="{StaticResource MetricValueFontSize}" />
+        <Setter Property="LineHeight" Value="{StaticResource StatValueLineHeight}" />
+        <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style x:Key="AppWordmarkStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
+        <Setter Property="FontSize" Value="18" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style x:Key="PageTitleStyle" TargetType="TextBlock" BasedOn="{StaticResource TitleTextBlockStyle}">
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="Margin" Value="0,0,0,8" />
+        <Setter Property="LineHeight" Value="{StaticResource PageTitleLineHeight}" />
+        <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
+    </Style>
+    <Style x:Key="PageSubtitleStyle" TargetType="TextBlock" BasedOn="{StaticResource SubtitleTextBlockStyle}">
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="LineHeight" Value="{StaticResource BodyLineHeight}" />
+        <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
+    </Style>
+    <Style x:Key="StatValueTextStyle" TargetType="TextBlock" BasedOn="{StaticResource TitleTextBlockStyle}">
+        <Setter Property="FontSize" Value="{StaticResource MetricValueFontSize}" />
+        <Setter Property="LineHeight" Value="{StaticResource StatValueLineHeight}" />
+        <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
+    </Style>
+    <!-- Shared input surfaces keep native WinUI templates and interaction states. -->
+    <Style TargetType="ComboBox">
+        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
+        <Setter Property="Background" Value="{ThemeResource AppControlBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource AppTextBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource AppBorderBrush}" />
+    </Style>
+    <Style TargetType="TextBox">
+        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
+        <Setter Property="Background" Value="{ThemeResource AppControlBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource AppTextBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource AppBorderBrush}" />
+    </Style>
+    <Style TargetType="controls:NumberBox">
+        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
+        <Setter Property="Background" Value="{ThemeResource AppControlBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource AppTextBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource AppBorderBrush}" />
+    </Style>
+    <Style x:Key="SecondaryTextStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
+        <Setter Property="Foreground" Value="{ThemeResource AppSecondaryTextBrush}" />
+    </Style>
+    <Style x:Key="SectionHeaderStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
+        <Setter Property="Margin" Value="0,8,0,0" />
+    </Style>
+    <Style x:Key="CaptionSecondaryStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="Foreground" Value="{ThemeResource AppSecondaryTextBrush}" />
+    </Style>
+    <Style x:Key="NavigationButtonStyle" TargetType="Button">
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{ThemeResource AppSecondaryTextBrush}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="MinHeight" Value="{StaticResource NavHeight}" />
+        <Setter Property="FontSize" Value="{StaticResource BodyFontSize}" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+    </Style>
+    <Style x:Key="SelectedNavigationButtonStyle" TargetType="Button" BasedOn="{StaticResource NavigationButtonStyle}">
+        <Setter Property="Background" Value="{ThemeResource AppActiveBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource AppTextBrush}" />
+    </Style>
+    <Style x:Key="KeycapStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource AppControlBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource AppKeyBorderBrush}" />
+        <Setter Property="BorderThickness" Value="{StaticResource KeycapBorderThickness}" />
+        <Setter Property="CornerRadius" Value="{StaticResource KeycapCornerRadius}" />
+        <Setter Property="Padding" Value="{StaticResource KeycapPadding}" />
+        <Setter Property="MinHeight" Value="{StaticResource KeycapMinHeight}" />
+    </Style>
+    <Style x:Key="KeycapTextStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
+        <Setter Property="FontSize" Value="{StaticResource KeycapFontSize}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="LineHeight" Value="{StaticResource KeycapLineHeight}" />
+        <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
+    </Style>
+    <Style x:Key="SearchKeycapStyle" TargetType="Border" BasedOn="{StaticResource KeycapStyle}">
+        <Setter Property="Margin" Value="{StaticResource SearchKeycapMargin}" />
+        <Setter Property="Padding" Value="{StaticResource SearchKeycapPadding}" />
+        <Setter Property="MinHeight" Value="{StaticResource SearchKeycapMinHeight}" />
+    </Style>
+    <Style x:Key="HistoryCountStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource AppControlBrush}" />
+        <Setter Property="CornerRadius" Value="{StaticResource HistoryCountCornerRadius}" />
+        <Setter Property="Padding" Value="{StaticResource HistoryCountPadding}" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style x:Key="SearchKeycapTextStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
+        <Setter Property="FontSize" Value="{StaticResource SearchKeycapFontSize}" />
+        <Setter Property="FontWeight" Value="Normal" />
+        <Setter Property="Foreground" Value="{ThemeResource AppSecondaryTextBrush}" />
+        <Setter Property="LineHeight" Value="{StaticResource SearchKeycapLineHeight}" />
+        <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
+    </Style>
+    <Style x:Key="CardStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource AppCardBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource AppBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource CardCornerRadius}" />
+        <Setter Property="Padding" Value="{StaticResource CardPadding}" />
+    </Style>
+    <Style x:Key="SettingsCardStyle" TargetType="Border" BasedOn="{StaticResource CardStyle}">
+        <Setter Property="Padding" Value="{StaticResource SettingsCardPadding}" />
+    </Style>
+    <Style x:Key="SettingsSegmentTrackStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource AppBackgroundBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource AppBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource SettingsSegmentTrackCornerRadius}" />
+        <Setter Property="Padding" Value="{StaticResource SettingsSegmentTrackPadding}" />
+    </Style>
+    <Style x:Key="MetricCardStyle" TargetType="Border" BasedOn="{StaticResource CardStyle}">
+        <Setter Property="Background" Value="{ThemeResource AppCardBrush}" />
+    </Style>
+    <Style x:Key="AppPrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}">
+        <Setter Property="Background" Value="{ThemeResource AppAccentBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource AppOnAccentBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource AppAccentBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style x:Key="RecordButtonStyle" TargetType="Button" BasedOn="{StaticResource AppPrimaryButtonStyle}">
+        <Setter Property="Width" Value="72" />
+        <Setter Property="Height" Value="72" />
+        <Setter Property="CornerRadius" Value="36" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="FontSize" Value="26" />
+    </Style>
+    <Style x:Key="TranscriptTextBoxStyle" TargetType="TextBox">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="FontSize" Value="17" />
+        <Setter Property="Foreground" Value="{ThemeResource AppTranscriptBrush}" />
+    </Style>
+    <Style x:Key="NavIconStyle" TargetType="controls:PathIcon">
+        <Setter Property="Width" Value="{StaticResource IconSize}" />
+        <Setter Property="Height" Value="{StaticResource IconSize}" />
+        <Setter Property="Foreground" Value="{ThemeResource AppSecondaryTextBrush}" />
+    </Style>
+    <Style x:Key="NavigationIconStyle" TargetType="Path">
+        <Setter Property="Width" Value="{StaticResource IconSize}" />
+        <Setter Property="Height" Value="{StaticResource IconSize}" />
+        <Setter Property="Stretch" Value="Uniform" />
+        <Setter Property="Fill" Value="{ThemeResource AppSecondaryTextBrush}" />
+    </Style>
+    <Style x:Key="SelectedNavigationIconStyle" TargetType="Path" BasedOn="{StaticResource NavigationIconStyle}">
+        <Setter Property="Fill" Value="{ThemeResource AccentGraphicBrush}" />
+    </Style>
+
+    <!-- Segmented settings options use the RadioButtons selection model without circular radio glyphs. -->
+    <Style x:Key="SegmentedRadioButtonStyle" TargetType="RadioButton">
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="MinWidth" Value="{StaticResource SettingsSegmentMinWidth}" />
+        <Setter Property="MinHeight" Value="{StaticResource SettingsSegmentMinHeight}" />
+        <Setter Property="Padding" Value="{StaticResource SettingsSegmentPadding}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Foreground" Value="{ThemeResource AppTextBrush}" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <Grid x:Name="RootGrid">
+                        <Border x:Name="SegmentBackground"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{StaticResource SettingsSegmentCornerRadius}" />
+                        <Border x:Name="CheckedBackground"
+                                Background="{ThemeResource AppKeyBorderBrush}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{StaticResource SettingsSegmentCornerRadius}"
+                                Opacity="0" />
+                        <Border x:Name="HoverOverlay"
+                                Background="{ThemeResource AppHoverBrush}"
+                                CornerRadius="{StaticResource SettingsSegmentCornerRadius}"
+                                Opacity="0" />
+                        <Border x:Name="PressedOverlay"
+                                Background="{ThemeResource AppActiveBrush}"
+                                CornerRadius="{StaticResource SettingsSegmentCornerRadius}"
+                                Opacity="0" />
+                        <ContentPresenter x:Name="ContentPresenter"
+                                          Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          ContentTransitions="{TemplateBinding ContentTransitions}"
+                                          FontSize="{TemplateBinding FontSize}"
+                                          FontWeight="{TemplateBinding FontWeight}"
+                                          Foreground="{TemplateBinding Foreground}"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          Padding="{TemplateBinding Padding}" />
+                        <Border x:Name="FocusVisual"
+                                BorderBrush="{ThemeResource AppAccentBrush}"
+                                BorderThickness="2"
+                                CornerRadius="{StaticResource SettingsSegmentCornerRadius}"
+                                IsHitTestVisible="False"
+                                Opacity="0" />
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="PointerOver">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="HoverOverlay"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         To="1" Duration="0" />
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="PressedOverlay"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         To="1" Duration="0" />
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Disabled">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="RootGrid"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         To="0.55" Duration="0" />
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+                            <VisualStateGroup x:Name="CheckStates">
+                                <VisualState x:Name="Unchecked" />
+                                <VisualState x:Name="Checked">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="CheckedBackground"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         To="1" Duration="0" />
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Indeterminate" />
+                            </VisualStateGroup>
+                            <VisualStateGroup x:Name="FocusStates">
+                                <VisualState x:Name="Unfocused" />
+                                <VisualState x:Name="Focused">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="FocusVisual"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         To="1" Duration="0" />
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="ActivityEmptyCellStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource InactiveChartBrush}" />
+    </Style>
+    <Style x:Key="ActivityLowCellStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource ActivityLowBrush}" />
+    </Style>
+    <Style x:Key="ActivityMediumCellStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource ActivityMediumBrush}" />
+    </Style>
+    <Style x:Key="ActivityHighCellStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource ActivityHighBrush}" />
+    </Style>
+    <Style x:Key="ActivityFutureCellStyle" TargetType="Border" BasedOn="{StaticResource ActivityEmptyCellStyle}">
+        <Setter Property="Opacity" Value="{ThemeResource FutureActivityOpacity}" />
+    </Style>
+    <Style x:Key="HomeActivityStreakStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource AccentSoftBrush}" />
+        <Setter Property="CornerRadius" Value="{StaticResource HomeActivityStreakCornerRadius}" />
+        <Setter Property="Padding" Value="{StaticResource HomeActivityStreakPadding}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style x:Key="HomeLegendChipStyle" TargetType="Border">
+        <Setter Property="Width" Value="{StaticResource HomeLegendChipSize}" />
+        <Setter Property="Height" Value="{StaticResource HomeLegendChipSize}" />
+        <Setter Property="CornerRadius" Value="{StaticResource HomeLegendChipCornerRadius}" />
+        <Setter Property="Background" Value="{ThemeResource InactiveChartBrush}" />
+    </Style>
+    <Style x:Key="HomeLegendLowChipStyle" TargetType="Border" BasedOn="{StaticResource HomeLegendChipStyle}">
+        <Setter Property="Background" Value="{ThemeResource ActivityLowBrush}" />
+    </Style>
+    <Style x:Key="HomeLegendMediumChipStyle" TargetType="Border" BasedOn="{StaticResource HomeLegendChipStyle}">
+        <Setter Property="Background" Value="{ThemeResource ActivityMediumBrush}" />
+    </Style>
+    <Style x:Key="HomeLegendHighChipStyle" TargetType="Border" BasedOn="{StaticResource HomeLegendChipStyle}">
+        <Setter Property="Background" Value="{ThemeResource ActivityHighBrush}" />
+    </Style>
+    <Style x:Key="HomeLegendFutureChipStyle" TargetType="Border" BasedOn="{StaticResource HomeLegendChipStyle}">
+        <Setter Property="Opacity" Value="{ThemeResource FutureActivityOpacity}" />
+    </Style>
+        <Style x:Key="HistoryDividerStyle" TargetType="Border">
+            <Setter Property="Height" Value="1" />
+            <Setter Property="Background" Value="{ThemeResource AppBorderBrush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <Style x:Key="HistoryRowStyle" TargetType="Border">
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Padding" Value="12,10,8,10" />
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+
+        <Style x:Key="HomeModelDotStyle" TargetType="Ellipse">
+            <Setter Property="Width" Value="7" />
+            <Setter Property="Height" Value="7" />
+            <Setter Property="Fill" Value="{ThemeResource AccentGraphicBrush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+</ResourceDictionary>
