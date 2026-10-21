@@ -10,6 +10,10 @@
   patch.
 - Add Ansible.Probe `--stream-only` and `--repeat` for warm paced first-preview
   and input-end-to-final timings. Missing previews stay missing.
+- Reject stale or tampered `native-runtime.json` records whose patch names,
+  hashes, or compiled model families do not match the current
+  `Build-AudioNative.ps1` recipe. Rebuild after recipe changes.
+  `tools/Test-NativeBuildRecipe.ps1` covers that rejection.
 - Require a Vulkan-capable native runtime for the default `Publish-Ansible.ps1`
   path. Pass `-Backend cpu` for an intentional CPU-only package.
 - Show microphone permission guidance in a compact, dismissible overlay without

@@ -90,9 +90,13 @@ To publish an intentional CPU-only build, use:
 ```
 
 The native build checks the compiled `GGML_VULKAN` setting before staging.
-Its runtime record includes the applied native patches and their SHA-256 hashes.
-Staging and package verification reject a native DLL whose hash differs from
-that record.
+`native-runtime.json` records patch names and SHA-256 hashes plus compiled
+model families. Staging and package verification reject a DLL whose hash
+differs from that record, and reject a record whose patches or families do
+not match the current recipe. Rebuild with `.\tools\Build-AudioNative.ps1`
+after changing patches or compiled families; a matching DLL hash is not
+enough. `.\tools\Test-NativeBuildRecipe.ps1` checks that stale and tampered
+records are rejected. It does not compile the native runtime.
 The script builds an unsigned, self-contained NativeAOT MSIX and prints its
 verified path under `Ansible\bin\AppPackages`. Change the output directory with:
 
