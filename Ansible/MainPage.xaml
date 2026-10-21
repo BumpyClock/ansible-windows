@@ -44,6 +44,17 @@
 
                         <Border Height="1" Background="{ThemeResource AppBorderBrush}" />
 
+                        <local:SettingsRow Title="Overlay position"
+                                            Description="Show the waveform under the text cursor while you dictate. When Windows cannot report the cursor position, or when this is off, it appears at the bottom of the screen.">
+                            <!-- The template keeps a fixed 12 DIP column for the empty On/Off content; the negative margin aligns the switch with the other row controls. -->
+                            <ToggleSwitch x:Name="OverlayFollowsCaretToggle" VerticalAlignment="Center" Margin="0,0,-12,0"
+                                          AutomationProperties.AutomationId="OverlayFollowsCaretToggle"
+                                          AutomationProperties.Name="Overlay position"
+                                          OnContent="" OffContent="" MinWidth="0" Toggled="OverlayFollowsCaretToggled" />
+                        </local:SettingsRow>
+
+                        <Border Height="1" Background="{ThemeResource AppBorderBrush}" />
+
                         <local:SettingsRow Title="Shortcut">
                             <StackPanel x:Name="ShortcutControl" Orientation="Horizontal" Spacing="8">
                                 <!-- Read-only keycap. Focus or click records a new shortcut; Esc cancels. -->

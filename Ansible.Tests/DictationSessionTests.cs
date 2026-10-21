@@ -226,6 +226,30 @@ public sealed partial class DictationSessionTests : IDisposable
     }
 
     [Fact]
+    public async Task OverlayPositionPersistsAcrossRestartAndWaitsForIdle()
+    {
+        var session = Create(new FakeEngine(), new FakeCaptureFactory(), settings: new AppSettingsStore(SettingsPath));
+        await session.InitializeAsync();
+        Assert.True(session.State.Settings.OverlayFollowsCaret);
+        session.SetOverlayFollowsCaret(false);
+        Assert.False(session.State.Settings.OverlayFollowsCaret);
+        Assert.False(new AppSettingsStore(SettingsPath).Load().OverlayFollowsCaret);
+        var recording = session.StartDictationAsync();
+        await WaitForStateAsync(session, DictationPhase.Recording);
+        Assert.Throws<InvalidOperationException>(() => session.SetOverlayFollowsCaret(true));
+        Assert.False(session.State.Settings.OverlayFollowsCaret);
+        await session.FinishAsync();
+        Assert.Equal(SessionOutcomeKind.Completed, (await recording).Kind);
+        await session.CloseAsync();
+        var restarted = Create(new FakeEngine(), settings: new AppSettingsStore(SettingsPath));
+        await restarted.InitializeAsync();
+        Assert.False(restarted.State.Settings.OverlayFollowsCaret);
+        restarted.SetOverlayFollowsCaret(true);
+        Assert.True(new AppSettingsStore(SettingsPath).Load().OverlayFollowsCaret);
+        await restarted.CloseAsync();
+    }
+
+    [Fact]
     public async Task CapturePrivacyCanChangeDuringRecordingAndPersistsAcrossRestart()
     {
         var session = Create(new FakeEngine(), new FakeCaptureFactory(), settings: new AppSettingsStore(SettingsPath));

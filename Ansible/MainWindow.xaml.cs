@@ -34,6 +34,8 @@ public sealed partial class MainWindow : Window
     private bool _closing;
     private bool _popupFailed;
     private bool _creatingFloating;
+    // Caret of the shortcut destination, read once at press time. Null for in-app dictation or an unknown caret.
+    private CaretBounds? _overlayAnchor;
     private bool? _capturePrivacy;
     private readonly ShortcutCaptureCoordinator _captureCoordinator = new();
     private CancellationTokenSource _deliveryCancellation = new();
@@ -548,7 +550,7 @@ public sealed partial class MainWindow : Window
                 _session.Notify(NoticeKind.Warning, "Screen capture privacy unavailable", string.Join(" ", failures.Distinct()), NoticeArea.Application);
         }
         var showWaveform = state.IsCaptureOpen || state.Phase is DictationPhase.Preparing or DictationPhase.Recording;
-        if (!showWaveform) { _popupFailed = false; }
+        if (!showWaveform) { _popupFailed = false; _overlayAnchor = null; }
         if (showWaveform && _floating is null && !_popupFailed && !_creatingFloating)
         {
             _creatingFloating = true;
@@ -564,7 +566,7 @@ public sealed partial class MainWindow : Window
             }
             finally { _creatingFloating = false; }
         }
-        if (showWaveform) { _floating?.ShowPreview(); }
+        if (showWaveform) { _floating?.ShowPreview(_overlayAnchor); }
         else { _floating?.HidePreview(); }
     }
 
@@ -648,9 +650,10 @@ public sealed partial class MainWindow : Window
         var capture = _captureCoordinator.TryBeginCapture(state.Settings.PushToTalk, _deliveryTask is { IsCompleted: false });
         if (capture is null) { return; }
         var windowHandle = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        var locateCaret = state.Settings.OverlayFollowsCaret;
         var inspection = Task.Run(() =>
         {
-            var available = WindowsTextTarget.TryCapture(windowHandle, out var target, out var reason);
+            var available = WindowsTextTarget.TryCapture(windowHandle, locateCaret, out var target, out var reason);
             return (available, target, reason);
         });
         _captureTask = inspection;
@@ -691,6 +694,7 @@ public sealed partial class MainWindow : Window
             isCurrent: IsDeliveryCurrent,
             typingDeferred: () => _shortcutHeld && modifiers != 0);
         _delivery = delivery;
+        _overlayAnchor = target.Caret;
         try
         {
             var operation = _session.StartDictationAsync();
@@ -701,6 +705,7 @@ public sealed partial class MainWindow : Window
         catch
         {
             _delivery = null;
+            _overlayAnchor = null;
             _deliveryOperation = null;
             _deliveryOperationId = null;
             throw;

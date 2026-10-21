@@ -122,21 +122,94 @@ public sealed class FloatingPreviewTests
     }
 
     [Theory]
-    [InlineData(1, 850, 968, 220, 56)]
-    [InlineData(1.5, 795, 932, 330, 84)]
+    [InlineData(1, 896, 992, 128, 32)]
+    [InlineData(1.5, 864, 968, 192, 48)]
     public void WaveformOnlyPillUsesCompactNativeBounds(
         double scale, int x, int y, int width, int height) =>
         Assert.Equal(new PreviewPlacement(x, y, width, height),
             FloatingPreviewPresentation.Place(0, 0, 1920, 1040, scale,
                 FloatingPreviewPresentation.WaveformWidth, FloatingPreviewPresentation.WaveformHeight));
 
+    [Fact]
+    public void PillSitsCentredUnderTheCaretLine()
+    {
+        var caret = new CaretBounds(600, 300, 2, 20);
+        var bounds = FloatingPreviewPresentation.Place(0, 0, 1920, 1040, 1, 128, 32, caret);
+        Assert.Equal(new PreviewPlacement(601 - 64, 300 + 20 + 8, 128, 32), bounds);
+        var scaled = FloatingPreviewPresentation.Place(0, 0, 1920, 1040, 2, 128, 32, caret);
+        Assert.Equal(new PreviewPlacement(601 - 128, 300 + 20 + 16, 256, 64), scaled);
+    }
+
+    [Fact]
+    public void PillFlipsAboveTheCaretAtTheBottomOfTheWorkArea()
+    {
+        var caret = new CaretBounds(600, 1010, 1, 20);
+        var bounds = FloatingPreviewPresentation.Place(0, 0, 1920, 1040, 1, 128, 32, caret);
+        Assert.Equal(new PreviewPlacement(600 - 64, 1010 - 8 - 32, 128, 32), bounds);
+    }
+
     [Theory]
-    [InlineData(0, 4)]
-    [InlineData(0.5, 16)]
-    [InlineData(1, 28)]
-    [InlineData(2, 28)]
-    public void SilentBarsStayVisibleAndLoudBarsStayInsideThePill(double level, double expected) =>
-        Assert.Equal(expected, FloatingPreviewPresentation.BarHeight(level));
+    [InlineData(5, 0)]
+    [InlineData(1915, 1920 - 128)]
+    public void PillStaysInsideTheWorkAreaHorizontally(int caretLeft, int expectedX)
+    {
+        var bounds = FloatingPreviewPresentation.Place(0, 0, 1920, 1040, 1, 128, 32, new CaretBounds(caretLeft, 300, 1, 20));
+        Assert.Equal(expectedX, bounds.X);
+        Assert.Equal(328, bounds.Y);
+    }
+
+    [Fact]
+    public void CaretWithoutRoomAboveOrBelowUsesTheBottomFallback()
+    {
+        var caret = new CaretBounds(100, 10, 1, 80);
+        var bounds = FloatingPreviewPresentation.Place(0, 0, 320, 100, 1, 128, 32, caret);
+        Assert.Equal(FloatingPreviewPresentation.Place(0, 0, 320, 100, 1, 128, 32), bounds);
+    }
+
+    [Theory]
+    [InlineData(0, 0, 0, 0)]
+    [InlineData(100, 100, 1, 0)]
+    [InlineData(100, 100, 1, 401)]
+    [InlineData(100, 100, -1, 20)]
+    public void UnusableCaretBoundsUseTheBottomFallback(int left, int top, int width, int height)
+    {
+        var caret = new CaretBounds(left, top, width, height);
+        Assert.False(caret.IsUsable);
+        Assert.Equal(FloatingPreviewPresentation.Place(0, 0, 1920, 1040, 1, 128, 32),
+            FloatingPreviewPresentation.Place(0, 0, 1920, 1040, 1, 128, 32, caret));
+    }
+
+    [Theory]
+    [InlineData(0, 7, 3)]
+    [InlineData(0.5, 7, 11.5)]
+    [InlineData(1, 7, 20)]
+    [InlineData(2, 7, 20)]
+    [InlineData(1, 0, 8.1)]
+    [InlineData(1, 14, 8.1)]
+    public void SilentBarsStayVisibleAndLoudBarsStayInsideThePill(double level, int index, double expected) =>
+        Assert.Equal(expected, FloatingPreviewPresentation.BarHeight(level, index), 6);
+
+    [Fact]
+    public void BarEnvelopeIsSymmetricAndPeaksAtTheCentre()
+    {
+        var count = FloatingPreviewPresentation.WaveformBarCount;
+        for (var index = 0; index < count / 2; index++)
+        {
+            Assert.Equal(FloatingPreviewPresentation.BarWeight(index), FloatingPreviewPresentation.BarWeight(count - 1 - index), 9);
+            Assert.True(FloatingPreviewPresentation.BarWeight(index) < FloatingPreviewPresentation.BarWeight(index + 1));
+        }
+        Assert.Equal(1, FloatingPreviewPresentation.BarWeight(count / 2), 9);
+        Assert.Throws<ArgumentOutOfRangeException>(() => FloatingPreviewPresentation.BarWeight(count));
+    }
+
+    [Theory]
+    [InlineData(0.2, 0.9, 0.05, 0.9)]
+    [InlineData(0.9, 0.2, 0.05, 0.7)]
+    [InlineData(0.9, 0.2, 1, 0.2)]
+    [InlineData(0.9, double.NaN, 0.05, 0.7)]
+    [InlineData(0.9, 0.2, double.NaN, 0.2)]
+    public void LevelRisesAtOnceAndFallsAtABoundedRate(double shown, double measured, double seconds, double expected) =>
+        Assert.Equal(expected, FloatingPreviewPresentation.Release(shown, measured, seconds), 9);
 
     private static SessionSnapshot State(DictationPhase phase) => new()
     {

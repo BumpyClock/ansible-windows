@@ -31,6 +31,8 @@ public sealed record AppSettings
     public bool CollectUsage { get; init; } = true;
     public bool HideFromCapture { get; init; }
     public bool AutoDetectMeetings { get; init; } = true;
+    /// <summary>Show the dictation overlay under the destination caret when Windows reports its position; otherwise at the bottom of the screen.</summary>
+    public bool OverlayFollowsCaret { get; init; } = true;
     public string CustomDictionary { get; init; } = "";
     [JsonConverter(typeof(JsonStringEnumConverter<TextInsertionMethod>))]
     public TextInsertionMethod InsertionMethod { get; init; } = TextInsertionMethod.Paste;

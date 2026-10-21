@@ -91,6 +91,8 @@ public sealed partial class MainPage : Page
             ResetShortcutButton.IsEnabled = idle;
             PushToTalkChoice.IsEnabled = idle;
             PushToTalkChoice.SelectedIndex = _state.Settings.PushToTalk ? 0 : 1;
+            OverlayFollowsCaretToggle.IsOn = _state.Settings.OverlayFollowsCaret;
+            OverlayFollowsCaretToggle.IsEnabled = idle;
             RenderInsertion(idle);
             MicrophoneBoostBox.IsEnabled = idle;
             MicrophoneBoostBox.Value = _state.Settings.MicrophoneBoostDecibels;
@@ -162,6 +164,13 @@ public sealed partial class MainPage : Page
     {
         if (_rendering) { return; }
         try { _session.SetUsageEnabled(UsageToggle.IsOn); }
+        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); Render(); }
+    }
+
+    private void OverlayFollowsCaretToggled(object sender, RoutedEventArgs args)
+    {
+        if (_rendering || OverlayFollowsCaretToggle.IsOn == _session.State.Settings.OverlayFollowsCaret) { return; }
+        try { _session.SetOverlayFollowsCaret(OverlayFollowsCaretToggle.IsOn); }
         catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); Render(); }
     }
 

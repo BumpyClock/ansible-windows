@@ -145,6 +145,11 @@ public sealed class DictationSession
     public void SetPasteShortcut(PasteShortcut shortcut) =>
         ChangeSettings(state => state with { Settings = state.Settings with { PasteShortcut = shortcut } },
             new(NoticeKind.Success, "Paste shortcut updated", "The selected paste shortcut applies to the next dictation. Check that the destination accepts it.", NoticeArea.Settings));
+    public void SetOverlayFollowsCaret(bool enabled) =>
+        ChangeSettings(state => state with { Settings = state.Settings with { OverlayFollowsCaret = enabled } },
+            new(NoticeKind.Success, "Overlay position updated", enabled
+                ? "The waveform appears under the text cursor when Windows reports its position, otherwise at the bottom of the screen."
+                : "The waveform always appears at the bottom of the screen.", NoticeArea.Settings));
     public void SetMicrophoneBoost(int decibels) =>
         ChangeSettings(state => state with { Settings = state.Settings with { MicrophoneBoostDecibels = decibels } },
             new(NoticeKind.Success, "Microphone boost updated", "The boost applies to the next microphone dictation.", NoticeArea.Settings));

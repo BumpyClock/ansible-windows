@@ -3,7 +3,7 @@ using Ansible.Core;
 
 namespace Ansible;
 
-internal sealed record CapturedTextTarget(nint Window, nint FocusWindow, int[]? RuntimeId)
+internal sealed record CapturedTextTarget(nint Window, nint FocusWindow, int[]? RuntimeId, CaretBounds? Caret = null)
 {
     public bool Matches(nint window, nint focusWindow, int[]? runtimeId) =>
         Window == window && FocusWindow == focusWindow &&
@@ -31,20 +31,39 @@ internal static unsafe partial class WindowsTextTarget
     private static readonly Guid AutomationInterface = new("34723aff-0c9d-49d0-9896-7ab52df8cd8a");
     private static readonly Guid ValuePatternInterface = new("a94cd8b1-0844-4cd6-9d2d-640537ab39e9");
 
-    internal static bool TryCapture(nint appWindow, out CapturedTextTarget? target, out string reason)
+    /// <summary>
+    /// Identifies the destination field. With <paramref name="locateCaret"/>, also reads the caret position
+    /// from the Win32 caret or, failing that, the UI Automation text selection. A missing caret never
+    /// changes the field identification or rejects the destination.
+    /// </summary>
+    internal static bool TryCapture(nint appWindow, bool locateCaret, out CapturedTextTarget? target, out string reason)
     {
         target = null;
         if (!TryFocus(appWindow, out var window, out var focusWindow, out reason)) { return false; }
-        if (!TryFocusedElement(out var runtimeId, out reason)) { return false; }
+        var caret = locateCaret ? ReadWin32Caret(window) : null;
+        if (!TryFocusedElement(locateCaret && caret is null, out var runtimeId, out var automationCaret, out reason)) { return false; }
+        caret ??= automationCaret;
         if (!TryFocus(appWindow, out var currentWindow, out var currentFocus, out reason) ||
             currentWindow != window || currentFocus != focusWindow)
         {
             reason = "The focused window changed while selecting the destination.";
             return false;
         }
-        target = new CapturedTextTarget(window, focusWindow, runtimeId);
+        target = new CapturedTextTarget(window, focusWindow, runtimeId, caret);
         reason = "";
         return true;
+    }
+
+    // Classic Win32 edit controls own a system caret; its rectangle is in the caret window's client space.
+    private static CaretBounds? ReadWin32Caret(nint window)
+    {
+        var info = new GuiThreadInfo { Size = (uint)Marshal.SizeOf<GuiThreadInfo>() };
+        if (!GetGUIThreadInfo(0, ref info) || info.Active != window || info.Caret == 0) { return null; }
+        var topLeft = new NativePoint { X = info.Left, Y = info.Top };
+        var bottomRight = new NativePoint { X = info.Right, Y = info.Bottom };
+        if (!ClientToScreen(info.Caret, ref topLeft) || !ClientToScreen(info.Caret, ref bottomRight)) { return null; }
+        var bounds = new CaretBounds(topLeft.X, topLeft.Y, bottomRight.X - topLeft.X, bottomRight.Y - topLeft.Y);
+        return bounds.IsUsable ? bounds : null;
     }
 
     internal static TextDeliveryOutcome Insert(
@@ -192,9 +211,10 @@ internal static unsafe partial class WindowsTextTarget
         return true;
     }
 
-    private static bool TryFocusedElement(out int[]? id, out string reason)
+    private static bool TryFocusedElement(bool locateCaret, out int[]? id, out CaretBounds? caret, out string reason)
     {
         id = null;
+        caret = null;
         reason = "The focused field cannot be verified for safe insertion.";
         try
         {
@@ -202,6 +222,12 @@ internal static unsafe partial class WindowsTextTarget
             var field = read.ReadField();
             id = field.RuntimeId;
             reason = FieldSafetyReason(field);
+            if (reason.Length == 0 && locateCaret)
+            {
+                // The caret is a placement hint only. Any provider failure leaves the field result untouched.
+                try { caret = read.ReadCaret(); }
+                catch (COMException) { caret = null; }
+            }
             return reason.Length == 0;
         }
         catch (COMException error) when (IsAccessibilityUnavailable(error.HResult))
@@ -256,6 +282,9 @@ internal static unsafe partial class WindowsTextTarget
     }
 
     [StructLayout(LayoutKind.Sequential)]
+    private struct NativePoint { public int X, Y; }
+
+    [StructLayout(LayoutKind.Sequential)]
     internal struct KeybdInput
     {
         public ushort VirtualKey, ScanCode;
@@ -283,6 +312,9 @@ internal static unsafe partial class WindowsTextTarget
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool GetGUIThreadInfo(uint threadId, ref GuiThreadInfo info);
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool ClientToScreen(nint window, ref NativePoint point);
     [LibraryImport("user32.dll")]
     private static partial short GetAsyncKeyState(int key);
     [LibraryImport("user32.dll", SetLastError = true)]
