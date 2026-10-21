@@ -14,6 +14,14 @@ public enum NativeBackend
     Auto = 2
 }
 
+public sealed record DeviceComparisonSnapshot(
+    double? CpuMilliseconds,
+    double? GpuMilliseconds,
+    NativeBackend RecommendedBackend,
+    DateTimeOffset MeasuredAt,
+    string? CpuError = null,
+    string? GpuError = null);
+
 public sealed record RecognitionOptions(string? Language = null, string CustomDictionary = "",
     NativeBackend Backend = NativeBackend.Auto, int DeviceIndex = 0)
 {
@@ -30,6 +38,7 @@ public interface IRecognitionEngine : IAsyncDisposable
     string ModelsDirectory { get; }
     string Version { get; }
     string DeviceSelectionSummary => "";
+    DeviceComparisonSnapshot? DeviceComparison => null;
     Task<IReadOnlyList<AudioModel>> ConnectAsync(CancellationToken cancellationToken);
     Task<RecognitionResult> TranscribeAsync(
         AudioModel model, WaveAudio audio, RecognitionOptions options,

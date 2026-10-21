@@ -449,16 +449,19 @@
     <x:Double x:Key="ShortcutStackThreshold">440</x:Double>
     <x:Double x:Key="HistorySearchStackThreshold">520</x:Double>
     <x:Double x:Key="HomeColumnsStackThreshold">900</x:Double>
+    <GridLength x:Key="HomeInsightsColumnWidth">400</GridLength>
+    <GridLength x:Key="HistorySearchColumnWidth">280</GridLength>
     <x:Double x:Key="ModelTwoColumnThreshold">620</x:Double>
     <Thickness x:Key="PageSectionBottomMargin">0,0,0,20</Thickness>
     <Thickness x:Key="PageFooterTopMargin">0,20,0,0</Thickness>
     <x:Double x:Key="PageSectionSpacing">28</x:Double>
     <Thickness x:Key="ApplicationNoticeMargin">16,8,16,16</Thickness>
     <x:Double x:Key="CardGap">20</x:Double>
-    <x:Double x:Key="HomeCardGap">16</x:Double>
+    <x:Double x:Key="HomeCardGap">14</x:Double>
     <x:Double x:Key="NavLabelGap">12</x:Double>
     <Thickness x:Key="CardBorderThickness">1</Thickness>
     <Thickness x:Key="CardPadding">24</Thickness>
+    <Thickness x:Key="HomeMetricCardPadding">20</Thickness>
     <Thickness x:Key="SettingsCardPadding">28,24</Thickness>
     <CornerRadius x:Key="CardCornerRadius">16</CornerRadius>
     <CornerRadius x:Key="PanelCornerRadius">14</CornerRadius>
@@ -480,6 +483,7 @@
     <CornerRadius x:Key="SettingsSegmentCornerRadius">8</CornerRadius>
     <CornerRadius x:Key="SettingsCheckBoxCornerRadius">4</CornerRadius>
     <x:Double x:Key="BenchmarkBarHeight">6</x:Double>
+    <x:Double x:Key="BenchmarkValueMaxWidth">160</x:Double>
     <CornerRadius x:Key="BenchmarkBarCornerRadius">3</CornerRadius>
     <Thickness x:Key="SettingsSegmentTrackPadding">3</Thickness>
     <CornerRadius x:Key="SettingsSegmentTrackCornerRadius">11</CornerRadius>
@@ -514,6 +518,21 @@
     <Thickness x:Key="SearchKeycapMargin">0,0,8,0</Thickness>
     <Thickness x:Key="KeycapBorderThickness">0,0,0,2</Thickness>
     <CornerRadius x:Key="KeycapCornerRadius">6</CornerRadius>
+    <Thickness x:Key="HistoryHeaderPadding">24,16,24,14</Thickness>
+    <Thickness x:Key="HistoryListPadding">16,12,16,16</Thickness>
+    <x:Double x:Key="HomeStatsGap">16</x:Double>
+    <x:Double x:Key="HomeMetricColumnGap">12</x:Double>
+    <x:Double x:Key="HomeModelRowsGap">8</x:Double>
+    <x:Double x:Key="HomeModelTrackHeight">6</x:Double>
+    <CornerRadius x:Key="HomeModelTrackCornerRadius">3</CornerRadius>
+    <x:Double x:Key="HomeModelsCardGap">14</x:Double>
+    <x:Double x:Key="HomeCardTitleFontSize">15</x:Double>
+    <x:Double x:Key="HomeCardMetaFontSize">12.5</x:Double>
+    <x:Double x:Key="HomeCardFootnoteFontSize">12</x:Double>
+    <x:Double x:Key="HistoryEmptyTitleFontSize">14</x:Double>
+    <x:Double x:Key="HistoryEmptyDetailFontSize">12.5</x:Double>
+    <x:Double x:Key="HistoryEmptyGap">4</x:Double>
+    <x:Double x:Key="HomeActivityHeatmapGap">4</x:Double>
     <Thickness x:Key="HistoryCountPadding">9,3</Thickness>
     <CornerRadius x:Key="HistoryCountCornerRadius">20</CornerRadius>
     <Thickness x:Key="HistorySearchPadding">36,7,68,7</Thickness>
@@ -522,7 +541,7 @@
     <CornerRadius x:Key="HomeActivityStreakCornerRadius">20</CornerRadius>
     <x:Double x:Key="HomeLegendChipSize">11</x:Double>
     <CornerRadius x:Key="HomeLegendChipCornerRadius">3</CornerRadius>
-    <x:Double x:Key="HomeActivityCardMinHeight">298</x:Double>
+    <x:Double x:Key="HomeActivityCardMinHeight">292</x:Double>
 
 
 
@@ -603,6 +622,31 @@
         <Setter Property="TextWrapping" Value="Wrap" />
         <Setter Property="Foreground" Value="{ThemeResource AppSecondaryTextBrush}" />
     </Style>
+    <Style x:Key="HomeCardTitleStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
+        <Setter Property="FontSize" Value="{StaticResource HomeCardTitleFontSize}" />
+        <Setter Property="Foreground" Value="{ThemeResource AppTextBrush}" />
+    </Style>
+    <Style x:Key="HomeCardMetaStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionSecondaryStyle}">
+        <Setter Property="FontSize" Value="{StaticResource HomeCardMetaFontSize}" />
+        <Setter Property="Foreground" Value="{ThemeResource AppMutedTextBrush}" />
+    </Style>
+    <Style x:Key="HomeCardFootnoteStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionSecondaryStyle}">
+        <Setter Property="FontSize" Value="{StaticResource HomeCardFootnoteFontSize}" />
+        <Setter Property="Foreground" Value="{ThemeResource AppMutedTextBrush}" />
+    </Style>
+    <Style x:Key="HomeMetricLabelStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionSecondaryStyle}">
+        <Setter Property="FontSize" Value="{StaticResource CaptionFontSize}" />
+    </Style>
+    <Style x:Key="HistoryEmptyTitleStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
+        <Setter Property="FontSize" Value="{StaticResource HistoryEmptyTitleFontSize}" />
+        <Setter Property="Foreground" Value="{ThemeResource AppTextBrush}" />
+        <Setter Property="TextAlignment" Value="Center" />
+    </Style>
+    <Style x:Key="HistoryEmptyDetailStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionSecondaryStyle}">
+        <Setter Property="FontSize" Value="{StaticResource HistoryEmptyDetailFontSize}" />
+        <Setter Property="Foreground" Value="{ThemeResource AppSecondaryTextBrush}" />
+        <Setter Property="TextAlignment" Value="Center" />
+    </Style>
     <Style x:Key="NavigationButtonStyle" TargetType="Button">
         <Setter Property="HorizontalAlignment" Value="Stretch" />
         <Setter Property="HorizontalContentAlignment" Value="Left" />
@@ -671,6 +715,7 @@
     </Style>
     <Style x:Key="MetricCardStyle" TargetType="Border" BasedOn="{StaticResource CardStyle}">
         <Setter Property="Background" Value="{ThemeResource AppCardBrush}" />
+        <Setter Property="Padding" Value="{StaticResource HomeMetricCardPadding}" />
     </Style>
     <Style x:Key="AppPrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}">
         <Setter Property="Background" Value="{ThemeResource AppAccentBrush}" />
@@ -707,102 +752,84 @@
         <Setter Property="Fill" Value="{ThemeResource AccentGraphicBrush}" />
     </Style>
 
-    <!-- Segmented settings options use the RadioButtons selection model without circular radio glyphs. -->
-    <Style x:Key="SegmentedRadioButtonStyle" TargetType="RadioButton">
-        <Setter Property="HorizontalAlignment" Value="Stretch" />
+    <Style x:Key="SegmentedListBoxStyle" TargetType="ListBox">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="ItemsPanel">
+            <Setter.Value>
+                <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource SettingsSegmentGap}" />
+                </ItemsPanelTemplate>
+            </Setter.Value>
+        </Setter>
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+        <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled" />
+        <Setter Property="ScrollViewer.HorizontalScrollMode" Value="Disabled" />
+        <Setter Property="ScrollViewer.VerticalScrollMode" Value="Disabled" />
+    </Style>
+    <Style x:Key="SegmentedListBoxItemStyle" TargetType="ListBoxItem">
         <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="FocusVisualPrimaryBrush" Value="{ThemeResource AppAccentBrush}" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
-        <Setter Property="MinWidth" Value="{StaticResource SettingsSegmentMinWidth}" />
         <Setter Property="MinHeight" Value="{StaticResource SettingsSegmentMinHeight}" />
         <Setter Property="Padding" Value="{StaticResource SettingsSegmentPadding}" />
-        <Setter Property="Background" Value="Transparent" />
-        <Setter Property="BorderBrush" Value="Transparent" />
-        <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Foreground" Value="{ThemeResource AppTextBrush}" />
-        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Template">
             <Setter.Value>
-                <ControlTemplate TargetType="RadioButton">
-                    <Grid x:Name="RootGrid">
-                        <Border x:Name="SegmentBackground"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="{StaticResource SettingsSegmentCornerRadius}" />
-                        <Border x:Name="CheckedBackground"
-                                Background="{ThemeResource AppKeyBorderBrush}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="{StaticResource SettingsSegmentCornerRadius}"
-                                Opacity="0" />
-                        <Border x:Name="HoverOverlay"
-                                Background="{ThemeResource AppHoverBrush}"
-                                CornerRadius="{StaticResource SettingsSegmentCornerRadius}"
-                                Opacity="0" />
-                        <Border x:Name="PressedOverlay"
-                                Background="{ThemeResource AppActiveBrush}"
-                                CornerRadius="{StaticResource SettingsSegmentCornerRadius}"
-                                Opacity="0" />
-                        <ContentPresenter x:Name="ContentPresenter"
-                                          Content="{TemplateBinding Content}"
+                <ControlTemplate TargetType="ListBoxItem">
+                    <Grid x:Name="RootGrid" Control.IsTemplateFocusTarget="True">
+                        <Border x:Name="SelectedBackground" Background="{ThemeResource AppKeyBorderBrush}"
+                                CornerRadius="{StaticResource SettingsSegmentCornerRadius}" Opacity="0" />
+                        <Border x:Name="HoverOverlay" Background="{ThemeResource AppHoverBrush}"
+                                CornerRadius="{StaticResource SettingsSegmentCornerRadius}" Opacity="0" />
+                        <ContentPresenter Content="{TemplateBinding Content}"
                                           ContentTemplate="{TemplateBinding ContentTemplate}"
-                                          ContentTransitions="{TemplateBinding ContentTransitions}"
                                           FontSize="{TemplateBinding FontSize}"
                                           FontWeight="{TemplateBinding FontWeight}"
                                           Foreground="{TemplateBinding Foreground}"
                                           HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
                                           Padding="{TemplateBinding Padding}" />
-                        <Border x:Name="FocusVisual"
-                                BorderBrush="{ThemeResource AppAccentBrush}"
-                                BorderThickness="2"
-                                CornerRadius="{StaticResource SettingsSegmentCornerRadius}"
-                                IsHitTestVisible="False"
-                                Opacity="0" />
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CommonStates">
                                 <VisualState x:Name="Normal" />
                                 <VisualState x:Name="PointerOver">
                                     <Storyboard>
-                                        <DoubleAnimation Storyboard.TargetName="HoverOverlay"
-                                                         Storyboard.TargetProperty="Opacity"
-                                                         To="1" Duration="0" />
+                                        <DoubleAnimation Storyboard.TargetName="HoverOverlay" Storyboard.TargetProperty="Opacity" To="1" Duration="0" />
                                     </Storyboard>
                                 </VisualState>
-                                <VisualState x:Name="Pressed">
+                                <VisualState x:Name="Selected">
                                     <Storyboard>
-                                        <DoubleAnimation Storyboard.TargetName="PressedOverlay"
-                                                         Storyboard.TargetProperty="Opacity"
-                                                         To="1" Duration="0" />
+                                        <DoubleAnimation Storyboard.TargetName="SelectedBackground" Storyboard.TargetProperty="Opacity" To="1" Duration="0" />
                                     </Storyboard>
                                 </VisualState>
+                                <VisualState x:Name="SelectedUnfocused">
+                                    <VisualState.Setters>
+                                        <Setter Target="SelectedBackground.Opacity" Value="1" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="SelectedPointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="SelectedBackground.Opacity" Value="1" />
+                                        <Setter Target="HoverOverlay.Opacity" Value="1" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="SelectedPressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="SelectedBackground.Opacity" Value="1" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Pressed" />
                                 <VisualState x:Name="Disabled">
-                                    <Storyboard>
-                                        <DoubleAnimation Storyboard.TargetName="RootGrid"
-                                                         Storyboard.TargetProperty="Opacity"
-                                                         To="0.55" Duration="0" />
-                                    </Storyboard>
-                                </VisualState>
-                            </VisualStateGroup>
-                            <VisualStateGroup x:Name="CheckStates">
-                                <VisualState x:Name="Unchecked" />
-                                <VisualState x:Name="Checked">
-                                    <Storyboard>
-                                        <DoubleAnimation Storyboard.TargetName="CheckedBackground"
-                                                         Storyboard.TargetProperty="Opacity"
-                                                         To="1" Duration="0" />
-                                    </Storyboard>
-                                </VisualState>
-                                <VisualState x:Name="Indeterminate" />
-                            </VisualStateGroup>
-                            <VisualStateGroup x:Name="FocusStates">
-                                <VisualState x:Name="Unfocused" />
-                                <VisualState x:Name="Focused">
-                                    <Storyboard>
-                                        <DoubleAnimation Storyboard.TargetName="FocusVisual"
-                                                         Storyboard.TargetProperty="Opacity"
-                                                         To="1" Duration="0" />
-                                    </Storyboard>
+                                    <VisualState.Setters>
+                                        <Setter Target="RootGrid.Opacity" Value="0.55" />
+                                    </VisualState.Setters>
                                 </VisualState>
                             </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
@@ -825,7 +852,9 @@
         <Setter Property="Background" Value="{ThemeResource ActivityHighBrush}" />
     </Style>
     <Style x:Key="ActivityFutureCellStyle" TargetType="Border" BasedOn="{StaticResource ActivityEmptyCellStyle}">
-        <Setter Property="Opacity" Value="{ThemeResource FutureActivityOpacity}" />
+        <Setter Property="Background" Value="{ThemeResource AppCardBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource AppBorderBrush}" />
+        <Setter Property="BorderThickness" Value="{StaticResource CardBorderThickness}" />
     </Style>
     <Style x:Key="HomeActivityStreakStyle" TargetType="Border">
         <Setter Property="Background" Value="{ThemeResource AccentSoftBrush}" />
@@ -869,4 +898,16 @@
             <Setter Property="Fill" Value="{ThemeResource AccentGraphicBrush}" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
+    <Style x:Key="HomeModelPrimaryBarStyle" TargetType="ProgressBar">
+        <Setter Property="Height" Value="{StaticResource HomeModelTrackHeight}" />
+        <Setter Property="MinHeight" Value="{StaticResource HomeModelTrackHeight}" />
+        <Setter Property="Background" Value="{ThemeResource AppControlBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource AccentGraphicBrush}" />
+    </Style>
+    <Style x:Key="HomeModelSecondaryBarStyle" TargetType="ProgressBar">
+        <Setter Property="Height" Value="{StaticResource HomeModelTrackHeight}" />
+        <Setter Property="MinHeight" Value="{StaticResource HomeModelTrackHeight}" />
+        <Setter Property="Background" Value="{ThemeResource AppControlBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource ActivityMediumBrush}" />
+    </Style>
 </ResourceDictionary>

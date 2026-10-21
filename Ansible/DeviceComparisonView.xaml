@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl x:Class="Ansible.DeviceComparisonView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <StaticResource x:Key="ProgressBarTrackHeight" ResourceKey="BenchmarkBarHeight" />
+        <StaticResource x:Key="ProgressBarIndicatorHeight" ResourceKey="BenchmarkBarHeight" />
+        <StaticResource x:Key="ProgressBarTrackCornerRadius" ResourceKey="BenchmarkBarCornerRadius" />
+        <StaticResource x:Key="ProgressBarCornerRadius" ResourceKey="BenchmarkBarCornerRadius" />
+    </UserControl.Resources>
+    <Border Background="{ThemeResource AppSurfaceBrush}"
+            BorderBrush="{ThemeResource AppBorderBrush}"
+            BorderThickness="1"
+            CornerRadius="{StaticResource PanelCornerRadius}"
+            Padding="{StaticResource CardPadding}">
+        <Grid x:Name="ComparisonLayout" ColumnSpacing="{StaticResource CardGap}"
+              RowSpacing="{StaticResource CardGap}" SizeChanged="ComparisonLayoutSizeChanged">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="2*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel x:Name="ComparisonMetrics" Spacing="12">
+                <TextBlock Text="Last device comparison" Style="{StaticResource CaptionSecondaryStyle}" />
+                <TextBlock Text="Lower elapsed time is better." Style="{StaticResource CaptionSecondaryStyle}" />
+                <Grid ColumnSpacing="12" RowSpacing="10">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="56" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="CPU" Style="{StaticResource CaptionSecondaryStyle}" />
+                    <ProgressBar x:Name="CpuComparisonBar" Grid.Column="1" MinHeight="{StaticResource BenchmarkBarHeight}"
+                                 Height="{StaticResource BenchmarkBarHeight}"
+                                 VerticalAlignment="Center" Minimum="0" Foreground="{ThemeResource AppAccentBrush}" />
+                    <TextBlock x:Name="CpuComparisonValue" Grid.Column="2" MaxWidth="{StaticResource BenchmarkValueMaxWidth}"
+                               Style="{StaticResource CaptionSecondaryStyle}" />
+                    <TextBlock Grid.Row="1" Text="Vulkan" Style="{StaticResource CaptionSecondaryStyle}" />
+                    <ProgressBar x:Name="GpuComparisonBar" Grid.Row="1" Grid.Column="1" MinHeight="{StaticResource BenchmarkBarHeight}"
+                                 Height="{StaticResource BenchmarkBarHeight}"
+                                 VerticalAlignment="Center" Minimum="0" Foreground="{ThemeResource AppBorderBrush}" />
+                    <TextBlock x:Name="GpuComparisonValue" Grid.Row="1" Grid.Column="2" MaxWidth="{StaticResource BenchmarkValueMaxWidth}"
+                               Style="{StaticResource CaptionSecondaryStyle}" />
+                </Grid>
+            </StackPanel>
+
+            <StackPanel x:Name="ComparisonDetails" Grid.Column="1" Spacing="12">
+                <Border x:Name="RecommendationChip" HorizontalAlignment="Left"
+                        Background="{ThemeResource AccentSoftBrush}"
+                        CornerRadius="{StaticResource ControlCornerRadius}"
+                        Padding="10,5">
+                    <TextBlock x:Name="RecommendationText" Style="{StaticResource CaptionSecondaryStyle}" />
+                </Border>
+                <TextBlock x:Name="ComparisonDetailsText" TextWrapping="Wrap"
+                           Style="{StaticResource CaptionSecondaryStyle}" />
+            </StackPanel>
+
+            <TextBlock x:Name="SummaryOnlyText" Grid.Row="1" Grid.ColumnSpan="2"
+                       TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}"
+                       Visibility="Collapsed" />
+        </Grid>
+    </Border>
+</UserControl>
