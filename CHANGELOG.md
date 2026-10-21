@@ -5,9 +5,15 @@
 - Prefer installed Nemotron ASR (`nemotron-asr-0.6b-q8`) when no dictation model
   is saved. Default setup downloads and verifies that ASR and Nemotron 3
   Diarization (`nemotron-3-diarization-q8`). The companion cannot be selected for
-  dictation and is not wired into meetings. The native build compiles
-  `nemotron_3_diar` and applies the cumulative Nemotron streaming timestamp
-  patch.
+  dictation. The native build compiles `nemotron_3_diar` and applies the
+  cumulative Nemotron streaming timestamp patch.
+- Pair unconfigured meetings with installed Nemotron ASR and Nemotron 3
+  Diarization. If Nemotron ASR is missing, installed Kroko uses that companion
+  before VibeVoice. Keep VibeVoice streaming when no paired Nemotron or Kroko
+  ASR is available, even if the companion is present.
+  Native paired meetings publish cumulative timed anonymous speaker turns and
+  abstain on unknown or overlapping speech. Dictation, replay, and WAV stay
+  plain ASR. There is no meeting model picker.
 - Add Ansible.Probe `--stream-only` and `--repeat` for warm paced first-preview
   and input-end-to-final timings. Missing previews stay missing.
 - Reject stale or tampered `native-runtime.json` records whose patch names,

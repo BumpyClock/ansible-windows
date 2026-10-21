@@ -29,8 +29,12 @@ Setup downloads and verifies `nemotron-asr-0.6b-q8` and
 `nemotron-3-diarization-q8` by default. Choose another catalog entry with
 `-Models <model-id>`, including `moonshine-tiny`. Setup does not build the DLL.
 When no model ID is saved, dictation uses the installed Nemotron ASR. The
-diarization companion is catalogued and compiled; it cannot be selected for
-dictation and is not used by meetings.
+diarization companion cannot be selected for dictation, replay, or WAV
+transcription. Unconfigured meetings use Nemotron ASR with that companion when
+both are installed. If Nemotron ASR is missing, installed Kroko uses the same
+companion. If no paired Nemotron or Kroko ASR is available, meetings keep
+VibeVoice streaming, even when the companion is present.
+There is no meeting model picker.
 
 The native build downloads pinned CMake and Ninja tools, checks out audio.cpp
 v0.9.0, applies the tracked Vulkan loader and Nemotron streaming-timestamp
@@ -207,6 +211,18 @@ accepts `DICTATION_MODELS_DIRECTORY` for an existing model folder;
 `NativeEngineTests` reads `.runtime\models`. They do not require the
 diarization companion.
 
+Paired meeting speaker checks need the native DLL, the public sample, and the
+selected ASR plus `nemotron-3-diarization-q8`. The suite requires exactly one
+passing native test per selected model. Missing weights, DLL, or sample fail
+the run; tests are not skipped. This does not qualify GPU, multi-speaker, or
+performance behavior:
+
+```powershell
+.\tools\Test-SpeakerModels.ps1 -Model nemotron
+.\tools\Test-SpeakerModels.ps1 -Model kroko
+.\tools\Test-SpeakerModels.ps1 -Model both
+```
+
 Use `--stream-only` to skip WAV transcription, prepare once, then stream.
 Add `--repeat 5` for five sequential paced streams on that session. The
 selected ASR weights must be installed. Missing previews stay missing:
@@ -240,13 +256,14 @@ a native rebuild.
 ## Source and ownership
 
 Meeting capture, persistence, speaker parsing, and lifecycle tests live in
-`MeetingCaptureTests`, `MeetingStoreTests`, `MeetingTranscriptTests`, and
-`MeetingSessionTests`. Live capture tests are marked `NativeIntegration` and
+`MeetingCaptureTests`, `MeetingStoreTests`, `MeetingTranscriptTests`,
+`MeetingSessionTests`, and `DiarizedMeetingSessionTests`. Live capture tests are marked `NativeIntegration` and
 generate an in-memory tone; they require microphone access and an output device.
-`NativeMeetingTests` exercises the installed VibeVoice streaming model with the
+`NativeMeetingTests` exercises the retained VibeVoice streaming path with the
 public sample and checks that speech appears before input ends. Set
 `DICTATION_MODELS_DIRECTORY` when using an existing model folder. Run native
-probes sequentially.
+probes sequentially. Use `Test-SpeakerModels.ps1` for paired Nemotron or Kroko
+speaker checks.
 
 `MeetingSession` owns the meeting operation and reserves `DictationSession`
 before loading its own native engine. Reservation joins/unloads dictation
@@ -265,13 +282,19 @@ they do not block healthy history or capture. The Meetings recovery action
 exports the original bytes, flushes and completes the destination file, then
 removes the app copy. Cancellation or export failure preserves the source.
 
-The meeting path bounds the VibeVoice native history with
-`vibevoice_asr_streaming.max_history_steps=4096` and admits at most two hours of
-audio. The model's rolling history can affect speaker continuity. The app parses
-native speaker labels and records approximate native input-window timestamps.
-Optional Nemotron token anchors refine confident bounds; Teams observation
-matching names only supported, source-exclusive aligned turns. Update latency,
-memory over two hours, and multi-speaker accuracy require separate qualification.
+Paired Nemotron or Kroko meetings load the Nemotron 3 diarizer beside the ASR.
+Both consume the same captured PCM, share memory admission, and reset or
+dispose together. Native paired output is cumulative timed anonymous speaker
+turns; unknown or overlapping speech stays unlabeled. The VibeVoice streaming
+path remains when no paired Nemotron or Kroko ASR is available. That path still bounds native
+history with `vibevoice_asr_streaming.max_history_steps=4096`. Capture admits
+at most two hours of audio. The model's rolling history can affect speaker
+continuity. The app parses native speaker labels and records approximate native
+input-window timestamps. Optional Nemotron token anchors refine confident
+untimed VibeVoice bounds; Teams observation matching names only supported,
+source-exclusive aligned turns. Snapshot `NamingStatus` and `RefinementStatus`
+fields remain. Update latency, memory over two hours, and multi-speaker
+accuracy require separate qualification.
 
 | Location | Responsibility |
 | --- | --- |

@@ -6,14 +6,15 @@ PowerShell. Probes use local model weights and a public sample, not the micropho
 
 Default setup installs `nemotron-asr-0.6b-q8` and `nemotron-3-diarization-q8`.
 Moonshine examples below need `moonshine-tiny` installed. The diarization
-companion is catalogued and compiled; it is not a probe ASR model and is not
-meeting integration.
+companion is not a probe ASR model. Unconfigured meetings use it with
+installed Nemotron ASR, or installed Kroko if that ASR is missing. Dictation,
+replay, and WAV stay plain ASR. There is no meeting model picker.
 
 The native build pins audio.cpp v0.9.0, applies tracked patches including
 `tools/patches/audio-nemotron-stream-timestamps.patch`, and supports CPU and
 optional Vulkan. Compiled families include `nemotron_3_diar`. The patch publishes
-cumulative Nemotron token timestamps on stream updates; it does not by itself
-enable meeting diarization in the app.
+cumulative Nemotron token timestamps on stream updates. Paired meetings combine
+those timestamps with the Nemotron 3 diarizer on the same captured stream.
 
 The [catalog](../tools/audio-models.json) pins each model's revision, file length,
 SHA-256, license, task, and capabilities. Use those capabilities rather than assuming
@@ -154,6 +155,22 @@ qualify other models, long live dictation, or meeting history.
 
 ## Meeting qualification
 
+Paired Nemotron or Kroko speaker checks use the native DLL, the public sample,
+and the selected ASR plus `nemotron-3-diarization-q8`:
+
+```powershell
+.\tools\Test-SpeakerModels.ps1 -Model nemotron
+.\tools\Test-SpeakerModels.ps1 -Model kroko
+.\tools\Test-SpeakerModels.ps1 -Model both
+```
+
+The suite requires exactly one passing native test per selected model. Missing
+weights, DLL, or sample fail the run; tests are not skipped. On 2026-10-20,
+`.\tools\Test-SpeakerModels.ps1 -Model nemotron` parsed and then rejected a
+skipped test because local native assets were missing. Paired native
+qualification is not recorded. That absence is not a GPU, multi-speaker, or
+performance result.
+
 On 2026-10-09, live microphone plus system/application loopback tests captured an
 in-memory 440 Hz tone in both modes and released their native resources. Core
 tests cover incremental transcript saving, Pause/Resume, finalization, bounded
@@ -224,11 +241,16 @@ calls; a blocked Windows call can delay shutdown while its owned worker is joine
   workspace and reserve headroom; they do not bound every allocation or check a
   dedicated GPU-memory budget. Keep safeguards enabled. Do not close unrelated
   apps to force a model load.
-- The dedicated meeting path uses VibeVoice streaming with a 4096-step rolling
-  native history and a two-hour capture limit. It processes chunks throughout,
-  preserving one stream across Pause/Resume. This limit is not evidence of
-  two-hour speaker accuracy or latency. Validate CPU and Vulkan separately with
-  `NativeMeetingTests`, then qualify long meetings and multiple speakers.
+- Unconfigured meetings use Nemotron ASR with the Nemotron 3 companion when
+  both are installed. If Nemotron ASR is missing, installed Kroko uses that
+  companion. Recognition and the diarizer share the captured stream, joint
+  memory admission, and native reset or disposal. If no paired Nemotron or Kroko
+  ASR is available, meetings keep VibeVoice streaming with a 4096-step rolling
+  native history, even when the companion is present. Capture is limited to two hours and Pause/Resume keeps one stream.
+  Those limits are not evidence of two-hour speaker accuracy or latency.
+  `NativeMeetingTests` covers the retained VibeVoice path. Paired speaker
+  checks use `Test-SpeakerModels.ps1` when the native runtime and weights are
+  present. GPU, long meetings, and multiple speakers remain unqualified.
 - Dictation/file recognition operations have a five-minute timeout; the probe uses three
   minutes. WAV input is limited to five minutes, 100 MiB on disk, and 64 MiB of
   decoded floats. Native calls can outlast these deadlines while cleanup waits.
