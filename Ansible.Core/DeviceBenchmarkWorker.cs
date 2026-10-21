@@ -74,7 +74,10 @@ public sealed partial class NativeAudioEngine
     internal Task<double> BenchmarkAsync(AudioModel model, WaveAudio audio, RecognitionOptions options, string mode, int history) =>
         RunExclusiveAsync(() => NativeOperation.Run(() =>
         {
-            EnsureSession(model, mode, NativeMemory.ValidateAudio(audio, CancellationToken.None), options, CancellationToken.None, history);
+            var decodedBytes = NativeMemory.ValidateAudio(audio, CancellationToken.None);
+            if (history > 0 && UsesDiarization(model))
+                EnsurePairedSession(model, options, CancellationToken.None);
+            else EnsureSession(model, mode, decodedBytes, options, CancellationToken.None, history);
             RecognitionResult Recognize()
             {
                 if (mode == "offline")

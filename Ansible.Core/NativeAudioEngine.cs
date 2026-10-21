@@ -578,15 +578,26 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
     private void CleanupOperation(bool success)
     {
         var session = _session;
+        var diarization = _diarization;
         _session = null;
         _sessionKey = null;
+        _diarization = null;
         var reset = _streamStartAttempted;
         _streamStartAttempted = false;
         NativeOperation.Cleanup(success,
-            reset && session is not null
-                ? () => NativeAudioApi.Check(NativeAudioApi.StreamReset(session.DangerousGetHandle()), "reset the dictation session")
+            (reset && session is not null) || diarization is not null
+                ? () =>
+                {
+                    if (reset && session is not null)
+                        NativeAudioApi.Check(NativeAudioApi.StreamReset(session.DangerousGetHandle()), "reset the dictation session");
+                    diarization?.Reset();
+                }
                 : null,
-            () => session?.Dispose(), ReleaseModel);
+            () =>
+            {
+                try { session?.Dispose(); }
+                finally { diarization?.Dispose(); }
+            }, ReleaseModel);
     }
 
     private void ReleaseModel()
