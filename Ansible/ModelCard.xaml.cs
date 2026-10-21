@@ -71,7 +71,7 @@ public sealed partial class ModelCard : UserControl
             "moonshine_asr" => "moonshine",
             "qwen3_asr" => "qwen",
             "vibevoice_asr" or "vibevoice_asr_streaming" => "vibevoice",
-            "nemotron_asr" => "nvidia",
+            "nemotron_asr" or "nemotron_3_diar" => "nvidia",
             _ => null
         };
         Monogram.Text = char.ToUpperInvariant(entry.Family[0]).ToString();
@@ -87,7 +87,8 @@ public sealed partial class ModelCard : UserControl
         _state = state;
 
         // Not installed and Installed have no state label; the Download, Use and Remove buttons already say it.
-        var stateLabel = !snapshot.Supported ? "Unsupported" : active ? "In use" : StateLabel(state);
+        var stateLabel = !snapshot.Supported ? "Unsupported" : active ? "In use" :
+            entry.Task == "diar" && state == ModelInstallState.Installed ? "Meeting companion" : StateLabel(state);
         // Installed cards carry behaviour and memory on this line; other cards carry them on the caption row below.
         var installed = snapshot.HasModelFile || active;
         var memory = FormatBytes(entry.EstimatedMemoryBytes);
@@ -174,7 +175,7 @@ public sealed partial class ModelCard : UserControl
 
         // Use appears only when it can be clicked; a disabled Use cannot explain itself. A card that is still
         // downloading or verifying offers Pause or Stop only, so selection follows a finished install.
-        UseButton.Visibility = state == ModelInstallState.Installed && !active && snapshot.Supported && canSelect
+        UseButton.Visibility = entry.Task != "diar" && state == ModelInstallState.Installed && !active && snapshot.Supported && canSelect
             ? Visibility.Visible : Visibility.Collapsed;
         ActionRow.Visibility = PrimaryHost.Visibility == Visibility.Visible || UseButton.Visibility == Visibility.Visible
             ? Visibility.Visible : Visibility.Collapsed;
@@ -257,6 +258,7 @@ public sealed partial class ModelCard : UserControl
     private void UseClicked(object sender, RoutedEventArgs e) => UseRequested?.Invoke(ModelId);
 
     private static string BehaviorLabel(NativeModelEntry entry) =>
+        entry.Task == "diar" ? "Meeting speaker detection" :
         entry.Family == "vibevoice_asr" && entry.Mode == "offline" ? "Text after you finish" :
         entry.Mode == "offline" ? "WAV files only" :
         entry.Preview == "live" ? "Live transcript" :
