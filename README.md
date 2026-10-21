@@ -33,8 +33,17 @@ Run these commands in PowerShell from the repository root. You need:
 .\tools\Build-AudioNative.ps1
 ```
 
-Setup downloads and verifies `moonshine-tiny` into `.runtime\models`. The native
-build produces the DLL, dependencies, notices, and public validation sample.
+Setup downloads and verifies `nemotron-asr-0.6b-q8` and
+`nemotron-3-diarization-q8` into `.runtime\models`. After that install, an
+unconfigured dictation session uses Nemotron ASR. A saved model choice is kept.
+The diarization companion is catalogued and compiled; it cannot be selected for
+dictation and is not used by meetings. Meetings still use VibeVoice ASR
+Streaming 1.5B.
+
+The native build produces the DLL, dependencies, notices, and public validation
+sample. It compiles `nemotron_asr` and `nemotron_3_diar` and applies the tracked
+Vulkan loader and Nemotron streaming-timestamp patches.
+
 Optional English streaming Kroko weights are available in the app, or through
 `tools\Setup-AudioBackend.ps1 -Models kroko-en-64l-q8`. Kroko supports custom
 hotwords. GPU support and performance remain unqualified.
@@ -59,8 +68,10 @@ To create and verify an unsigned release package:
 ```
 
 The MSIX is written under `Ansible\bin\AppPackages`. This command builds and
-verifies the package; it does not install it. Sideloading requires signing and
-certificate trust. See the [development guide](docs/development.md) for build
+verifies the package; it does not install it. The default path requires a native
+runtime recorded with Vulkan support and rejects a CPU-only artifact. Pass
+`-Backend cpu` for an intentional CPU-only package. Sideloading requires signing
+and certificate trust. See the [development guide](docs/development.md) for build
 options and checks.
 
 ## Current limits
@@ -111,7 +122,7 @@ options and checks.
 - [Validate native recognition](docs/native-validation.md): probes, model capabilities,
   and hardware limits.
 
-The [model catalog](tools/audio-models.json) pins downloads, hashes, capabilities,
-and licenses. audio.cpp uses Apache-2.0; model licenses are separate. Preserve
+The [model catalog](tools/audio-models.json) pins downloads, hashes, tasks,
+capabilities, and licenses. audio.cpp uses Apache-2.0; model licenses are separate. Preserve
 runtime and model notices when redistributing. Model artwork attribution is in
 [NOTICE.txt](Ansible/Assets/ModelIcons/NOTICE.txt).

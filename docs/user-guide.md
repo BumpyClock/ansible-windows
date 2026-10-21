@@ -55,9 +55,20 @@ both require confirmation. Installation, removal, and folder changes are availab
 only while recognition is idle. Removing the last model leaves the app disconnected
 until another model is installed.
 
-The app remembers the selected model by ID. If it is missing from the chosen
-folder, the app warns and uses the first available model for that session. The
-saved choice is retained until you explicitly select another model.
+The app remembers the selected model by ID. If none is saved and
+`nemotron-asr-0.6b-q8` is installed, dictation uses it. Default setup installs
+that ASR and `nemotron-3-diarization-q8`, so a fresh `.runtime\models` folder
+already has the unconfigured dictation default. If the saved choice is missing
+from the chosen folder, the app warns and uses the first available ASR model
+for that session. The saved choice is retained until you explicitly select
+another model.
+
+`nemotron-3-diarization-q8` is in the catalog and can be downloaded from
+**Speech models**. Installed diarization cards show **Meeting companion**. Use
+is hidden; the companion cannot be selected for dictation. Installing only that
+companion leaves dictation disconnected. The native backend compiles its family.
+Meetings still use VibeVoice ASR Streaming 1.5B; the companion is not meeting
+integration.
 
 ### Model behavior
 
@@ -73,9 +84,11 @@ and in the [catalog](../tools/audio-models.json).
 | `kroko-en-64l-q8` | Microphone and WAV | Live English previews; custom hotwords | Yes, after final recognition |
 | `vibevoice-streaming-1.5b-q4` | Microphone and WAV | Can produce live previews with annotations | Yes, after final recognition |
 | `vibevoice-asr-7b-q8` | Microphone and WAV | Buffered until Finish; final only | Yes, after final recognition |
+| `nemotron-3-diarization-q8` | Not a dictation model | Speaker-turn companion; does not transcribe | No |
 
 Live previews can appear in the main transcript, but a short recording may end
-before any preview arrives. VibeVoice output can contain speaker labels. Shortcut
+before any preview arrives. Nemotron ASR shortcut dictation, replay, and WAV
+stay plain speech. VibeVoice output can contain speaker labels. Shortcut
 insertion uses speech metadata or parses the streaming model's speaker format to
 remove labels. Unrecognized output is not inserted. The offline 7B model keeps
 microphone audio in memory until Finish, then runs offline recognition; it has no

@@ -25,12 +25,24 @@ recognition; a CPU-only build does not need the Vulkan SDK.
 .\tools\Build-AudioNative.ps1
 ```
 
-Setup downloads and verifies only `moonshine-tiny` by default. Choose another
-catalog entry with `-Models <model-id>`. Setup does not build the DLL.
+Setup downloads and verifies `nemotron-asr-0.6b-q8` and
+`nemotron-3-diarization-q8` by default. Choose another catalog entry with
+`-Models <model-id>`, including `moonshine-tiny`. Setup does not build the DLL.
+When no model ID is saved, dictation uses the installed Nemotron ASR. The
+diarization companion is catalogued and compiled; it cannot be selected for
+dictation and is not used by meetings.
+
 The native build downloads pinned CMake and Ninja tools, checks out audio.cpp
-v0.9.0, applies the tracked Vulkan loader patch, and builds CPU plus Vulkan
-support. It stages `audiocpp.dll`, its app-local dependencies and notices in
-`.runtime\native`, and the public WAV in `.runtime\validation`.
+v0.9.0, applies the tracked Vulkan loader and Nemotron streaming-timestamp
+patches, and builds CPU plus Vulkan support. Compiled families include
+`nemotron_asr` and `nemotron_3_diar`. It stages `audiocpp.dll`, its app-local
+dependencies and notices in `.runtime\native`, and the public WAV in
+`.runtime\validation`.
+
+A Vulkan CMake configure can fail on a long worktree path when nested
+shader-generator sources exceed `MAX_PATH`. Mapping a drive letter onto the
+worktree (`subst Z: <worktree>`) and building from that root has progressed
+past that failure. That is not evidence that the native build completed.
 
 To build CPU only:
 
@@ -68,6 +80,19 @@ configurations, but the deployment checks reject them until separately qualified
 ```
 
 Publishing stages an existing native runtime; it does not compile one.
+The default publish requires CPU and Vulkan support in the native runtime
+record. A CPU-only artifact is rejected before packaging, even when a compatible
+GPU and Vulkan SDK are installed. Rebuild the native runtime to add Vulkan.
+To publish an intentional CPU-only build, use:
+
+```powershell
+.\tools\Publish-Ansible.ps1 -Backend cpu
+```
+
+The native build checks the compiled `GGML_VULKAN` setting before staging.
+Its runtime record includes the applied native patches and their SHA-256 hashes.
+Staging and package verification reject a native DLL whose hash differs from
+that record.
 The script builds an unsigned, self-contained NativeAOT MSIX and prints its
 verified path under `Ansible\bin\AppPackages`. Change the output directory with:
 
@@ -163,7 +188,8 @@ dotnet test .\Ansible.Tests\Ansible.Tests.csproj --filter 'Category!=NativeInteg
 
 An unfiltered test run also executes native integration tests. Those require
 the built DLL, public sample, and installed model weights. The mandatory
-integration tests need both Moonshine and Nemotron:
+integration tests need both Moonshine and Nemotron ASR. Default setup does not
+install Moonshine:
 
 ```powershell
 .\tools\Setup-AudioBackend.ps1 -Models moonshine-tiny,nemotron-asr-0.6b-q8
@@ -174,7 +200,23 @@ dotnet test .\Ansible.Tests\Ansible.Tests.csproj --filter 'FullyQualifiedName~Na
 Wait for each command to finish before starting the next. These tests use the
 public sample and do not open a microphone. `NativeStreamingDeliveryTests`
 accepts `DICTATION_MODELS_DIRECTORY` for an existing model folder;
-`NativeEngineTests` reads `.runtime\models`.
+`NativeEngineTests` reads `.runtime\models`. They do not require the
+diarization companion.
+
+Use `--stream-only` to skip WAV transcription, prepare once, then stream.
+Add `--repeat 5` for five sequential paced streams on that session. The
+selected ASR weights must be installed. Missing previews stay missing:
+
+```powershell
+dotnet run --project .\Ansible.Probe -- `
+  .\.runtime\native\audiocpp.dll .\.runtime\models .\tools\audio-models.json `
+  .\.runtime\validation\sample_16k.wav nemotron-asr-0.6b-q8 `
+  --backend cpu --stream-only --repeat 5
+```
+
+Paced elapsed time includes audio delivery and backpressure; it is not pure
+inference latency. Nemotron Vulkan streaming remains unsafe; use CPU for that
+model. The probe rejects a `diar` model ID.
 
 Dictionary integration tests run for installed Qwen and VibeVoice weights,
 and skip entries with missing weights. They also accept
@@ -237,7 +279,7 @@ memory over two hours, and multi-speaker accuracy require separate qualification
 | `Ansible.Probe` | Real WAV and paced streaming recognition outside the UI |
 | `Ansible.DeviceProbe` | Isolated CPU/Vulkan qualification worker, packaged under `DeviceProbe\` |
 | `Ansible.Tests` | Deterministic contract tests and tagged native integration tests |
-| `tools\audio-models.json` | Pinned model IDs, capabilities, downloads, checksums and licenses |
+| `tools\audio-models.json` | Pinned model IDs, tasks, capabilities, downloads, checksums and licenses |
 | `tools` | Setup, native build and package verification |
 
 `App` supplies installation resources and per-user storage through `AppPaths`.

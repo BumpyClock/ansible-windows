@@ -28,7 +28,9 @@ The code map below describes the current layout, not required module boundaries.
 - The app targets .NET 10 and uses single-project MSIX with self-contained .NET NativeAOT and Windows App SDK deployment.
 - The build scripts target Windows x64 with CPU and Vulkan inference. Qualify each model/GPU combination separately; ARM64 and NPU support remain separate work.
 - Recognition runs in-process through the audio.cpp C ABI, using `audiocpp.dll`.
-- The native build pins audio.cpp v0.9.0. Upstream support does not imply support in this compiled backend.
+- The native build pins audio.cpp v0.9.0. It applies tracked patches, including the Nemotron cumulative streaming timestamp patch, and compiles `nemotron_3_diar`. Upstream support does not imply support in this compiled backend.
+- Catalog entries carry an `asr` or `diar` task. Omitted task means ASR. Only family `nemotron_3_diar` may be `diar`.
+- Diarization companions cannot be selected for dictation and are not meeting integration. Unconfigured dictation prefers installed `nemotron-asr-0.6b-q8` and keeps a saved model ID. Default setup installs that ASR and `nemotron-3-diarization-q8`.
 - The UI includes Dictation, Settings, Insights, Speech models, and a floating waveform pill.
 - Automatic Teams detection reads active Windows capture-session metadata and offers a notetaker prompt; only an explicit Start captures meeting audio.
 - Launch checks microphone permission before session initialization; capture factories recheck access without prompting and never open devices just to request consent.
@@ -52,7 +54,7 @@ Use the current source to determine implemented UI behavior.
 - `Ansible.Probe\` exercises actual native WAV and streaming recognition independently of the UI.
 - `Ansible.Tests\` contains xUnit tests for core behavior.
 - `tools\` contains model setup, native build, and NativeAOT publish scripts.
-- `tools\audio-models.json` owns model IDs, capabilities, pinned downloads, checksums, and licenses.
+- `tools\audio-models.json` owns model IDs, tasks, capabilities, pinned downloads, checksums, and licenses.
 - `.runtime\` holds downloaded models, upstream source, native tools, and generated binaries. Keep it out of Git.
 
 ## Development commands
@@ -73,9 +75,10 @@ Prepare the runtime when the native DLL or models are missing:
 .\tools\Build-AudioNative.ps1
 ```
 
-Default setup installs only `moonshine-tiny`.
-Use `-Models <model-id>` for another catalog entry.
+Default setup installs `nemotron-asr-0.6b-q8` and `nemotron-3-diarization-q8`.
+Use `-Models <model-id>` for another catalog entry, including `moonshine-tiny`.
 Do not install every model for routine checks; `-Models all` downloads large weights.
+Unconfigured dictation prefers installed `nemotron-asr-0.6b-q8`. It does not override a saved model ID.
 
 Build and verify an unsigned NativeAOT MSIX after changes to the WinUI app, native interop, or deployment:
 
@@ -83,6 +86,7 @@ Build and verify an unsigned NativeAOT MSIX after changes to the WinUI app, nati
 .\tools\Publish-Ansible.ps1
 ```
 
+The default publish requires a Vulkan runtime record. Pass `-Backend cpu` for an intentional CPU-only package.
 Use the packaged Visual Studio launch profile for development. Package signing, certificate trust, and installation are separate operations.
 
 Use `docs/native-validation.md` when changing model integration or streaming behavior. Native integration tests require the native runtime, public sample, and specific weights; see `docs/development.md` before running them.
@@ -97,7 +101,7 @@ Documentation-only edits do not require model downloads or a native rebuild.
 - Keep capture and inference off the UI thread. Dispatch UI updates and make session ownership explicit.
 - Intercept the final window close before shutdown. Join every owned operation; unresolved native resources must remain owned and block new work.
 - Support cancellation, release native handles, and bound audio queues. Surface failures instead of dropping samples or silently changing models.
-- Respect each model's offline, streaming, language, and preview capabilities. Streaming input does not guarantee incremental recognition.
+- Respect each model's offline, streaming, language, preview, and task capabilities. Streaming input does not guarantee incremental recognition. Diarization companions are not dictation models.
 - Never simulate transcripts or usage statistics. Distinguish installed weights, successful loading, successful recognition, and measured live performance.
 - When adding models, update the pinned catalog, compiled native families, capability handling, and relevant tests together.
 - Pin upstream revisions and verify download lengths and SHA-256 checksums. Include upstream notices; model licenses are separate from audio.cpp's license.
