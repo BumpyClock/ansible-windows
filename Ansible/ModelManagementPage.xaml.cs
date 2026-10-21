@@ -12,9 +12,10 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
     private readonly AppPaths _paths;
     private readonly Func<nint> _windowHandle;
     private readonly HttpClient _http;
+    private readonly Func<Task> _transcribeFile;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly List<ModelCard> _cardList = [];
-    private const double TwoColumnThreshold = 620;
+    private static double TwoColumnThreshold => (double)Application.Current.Resources["ModelTwoColumnThreshold"];
     private int _columns;
     private IReadOnlyList<ModelCard> _ordered = [];
     private ModelCard[] _laidOut = [];
@@ -25,16 +26,19 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
     private Task? _disposal;
     private bool _loaded;
     private bool _dialogActive;
+    private bool _transcribingFile;
     private bool _closed;
     private string? _error;
 
-    internal ModelManagementPage(DictationSession session, AppPaths paths, Func<nint> windowHandle, HttpClient http)
+    internal ModelManagementPage(DictationSession session, AppPaths paths, Func<nint> windowHandle,
+        HttpClient http, Func<Task> transcribeFile)
     {
         InitializeComponent();
         _session = session;
         _paths = paths;
         _windowHandle = windowHandle;
         _http = http;
+        _transcribeFile = transcribeFile;
         Loaded += PageLoaded;
         Unloaded += (_, _) =>
         {
@@ -114,6 +118,19 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
     private void OnModelsGridSizeChanged(object sender, SizeChangedEventArgs args) =>
         LayoutCards(_ordered, args.NewSize.Width >= TwoColumnThreshold ? 2 : 1);
 
+    private void ModelHeaderSizeChanged(object sender, SizeChangedEventArgs args)
+    {
+        var compact = args.NewSize.Width < (double)Application.Current.Resources["CompactPageThreshold"];
+        Grid.SetColumnSpan(ModelPageTitle, compact ? 2 : 1);
+        Grid.SetRow(ModelHeaderActions, compact ? 1 : 0);
+        Grid.SetColumn(ModelHeaderActions, compact ? 0 : 1);
+        Grid.SetColumnSpan(ModelHeaderActions, compact ? 2 : 1);
+        ModelHeaderActions.HorizontalAlignment = compact ? HorizontalAlignment.Left : HorizontalAlignment.Right;
+        ModelHeaderActions.Orientation = args.NewSize.Width < (double)Application.Current.Resources["NarrowActionsThreshold"]
+            ? Orientation.Vertical : Orientation.Horizontal;
+        ModelHeaderActions.Margin = compact ? new Thickness(0, 8, 0, 0) : new Thickness(0);
+    }
+
     // Children are re-added in display order so keyboard navigation follows the visual order; the
     // StaggeredPanel packs cards of different heights into the shortest column.
     private void LayoutCards(IReadOnlyList<ModelCard> cards, int columns)
@@ -139,6 +156,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         FolderButton.IsEnabled = idle;
         RefreshButton.IsEnabled = _initialization is not { IsCompleted: false } && !managerBusy && !_dialogActive;
         FolderMenuButton.IsEnabled = !_dialogActive;
+        TranscribeFileButton.IsEnabled = idle && state.SelectedModel is not null && !_dialogActive && !_transcribingFile;
         BackendText.Text = $"audio.cpp {state.BackendVersion} \u00B7 selected: {(state.Settings.Backend == NativeBackend.Vulkan ? "GPU (Vulkan)" : "CPU")}";
         BackendText.Visibility = string.IsNullOrEmpty(state.BackendVersion) ? Visibility.Collapsed : Visibility.Visible;
 
@@ -311,6 +329,16 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         }
         catch (Exception error) { ShowError(error); }
         finally { _dialogActive = false; Render(); }
+    }
+
+    private async void TranscribeFileClicked(object sender, RoutedEventArgs args)
+    {
+        if (_closed || _transcribingFile || !_session.State.IsIdle || _session.State.SelectedModel is null) return;
+        _transcribingFile = true;
+        Render();
+        try { await _transcribeFile(); }
+        catch (Exception error) { _session.ReportUiError(error); Render(); }
+        finally { _transcribingFile = false; Render(); }
     }
 
     private async Task RefreshAsync()

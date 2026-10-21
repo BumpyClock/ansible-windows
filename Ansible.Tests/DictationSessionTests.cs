@@ -3,7 +3,7 @@ using Ansible.Core;
 
 namespace Ansible.Tests;
 
-public sealed class DictationSessionTests : IDisposable
+public sealed partial class DictationSessionTests : IDisposable
 {
     private readonly string _settingsDirectory = Path.Combine(Path.GetTempPath(), "LocalVoiceSettingsTests", Guid.NewGuid().ToString("N"));
     private string SettingsPath => Path.Combine(_settingsDirectory, "settings.json");
@@ -340,6 +340,20 @@ public sealed class DictationSessionTests : IDisposable
         await session.InitializeAsync();
         await WaitUntilAsync(() => session.State.DeviceSelectionSummary == engine.PreparedDeviceSummary);
         Assert.Equal(engine.PreparedDeviceSummary, session.State.DeviceSelectionSummary);
+        await session.CloseAsync();
+    }
+
+    [Fact]
+    public async Task PreloadPublishesMeasuredDeviceComparisonInANewSnapshot()
+    {
+        var comparison = new DeviceComparisonSnapshot(100, 80, NativeBackend.Vulkan, DateTimeOffset.UtcNow);
+        var engine = new FakeEngine { PreparedDeviceComparison = comparison };
+        var session = Create(engine);
+
+        await session.InitializeAsync();
+        await WaitUntilAsync(() => session.State.DeviceComparison == comparison);
+
+        Assert.Equal(comparison, session.State.DeviceComparison);
         await session.CloseAsync();
     }
 
@@ -1339,6 +1353,8 @@ public sealed class DictationSessionTests : IDisposable
     {
         public string DeviceSelectionSummary { get; private set; } = "";
         public string PreparedDeviceSummary { get; init; } = "";
+        public DeviceComparisonSnapshot? DeviceComparison { get; private set; }
+        public DeviceComparisonSnapshot? PreparedDeviceComparison { get; init; }
         public string ModelsDirectory { get; init; } = "models";
         public string Version => "test";
         public RecognitionResult Result { get; init; } = new("hello world", "hello world");
@@ -1407,6 +1423,7 @@ public sealed class DictationSessionTests : IDisposable
             PrepareCalled.TrySetResult();
             if (Preparing is not null) { await Preparing(token); }
             DeviceSelectionSummary = PreparedDeviceSummary;
+            DeviceComparison = PreparedDeviceComparison;
         }
         public Task UnloadAsync(CancellationToken token)
         {

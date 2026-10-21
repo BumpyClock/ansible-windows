@@ -64,7 +64,7 @@
                 <TextBlock x:Name="PrivacyText" Text="Get consent before transcribing others. Audio stays in memory; only text is saved." Style="{StaticResource CaptionSecondaryStyle}"/>
                 <Grid ColumnSpacing="12">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                    <Button x:Name="StartButton" Content="Start meeting" Click="StartClicked" Style="{StaticResource AccentButtonStyle}" MinHeight="44"/>
+                    <Button x:Name="StartButton" Content="Start meeting" Click="StartClicked" Style="{StaticResource AppPrimaryButtonStyle}" MinHeight="44"/>
                     <Button x:Name="PauseButton" Content="Pause" Click="PauseClicked" Visibility="Collapsed" MinHeight="44"/>
                     <Button x:Name="CleanupButton" Content="Clean up wording" Click="CleanupClicked" Visibility="Collapsed" MinHeight="44"/>
                     <Button x:Name="CancelCleanupButton" Content="Cancel cleanup" Click="CancelCleanupClicked" Visibility="Collapsed" MinHeight="44"/>

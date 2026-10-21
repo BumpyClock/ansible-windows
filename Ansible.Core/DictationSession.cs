@@ -308,6 +308,9 @@ public sealed class DictationSession
                 },
                 Transcript = activity is SessionActivity.Connecting or SessionActivity.ModelMaintenance ? _state.Transcript : "",
                 Result = activity is SessionActivity.Connecting or SessionActivity.ModelMaintenance ? _state.Result : null,
+                Outcome = null,
+                CompletedAt = null,
+                Elapsed = TimeSpan.Zero,
                 Notice = new(NoticeKind.Information, "Preparing operation",
                     "New work is admitted only when the current session has released its resources.")
             });
@@ -395,13 +398,26 @@ public sealed class DictationSession
                 Phase = _closing ? DictationPhase.Closing : _recovery is not null ? DictationPhase.RecoveryRequired :
                     _engine is null ? DictationPhase.Disconnected : DictationPhase.Ready,
                 Notice = _recovery is not null ? new(NoticeKind.Error, "Cleanup requires recovery",
-                    "Native resources remain owned. Close the app to retry release; new work is blocked.") : notice
+                    "Native resources remain owned. Close the app to retry release; new work is blocked.") : notice,
+                Outcome = kind,
+                CompletedAt = _time.GetUtcNow(),
+                Elapsed = elapsed
             });
             if (_recovery is null) { KeepEngineWarm(); }
         }
         if (_recovery is null) { operation.Dispose(); }
-        operation.Completion.TrySetResult(outcome);
-        Publish(state);
+        try
+        {
+            // StateChanged is synchronous. Publish the terminal snapshot before completing the operation so
+            // observers such as session history cannot miss it when an awaiting caller starts new work.
+            Publish(state);
+        }
+        finally
+        {
+            // Preserve the existing callback-exception policy while guaranteeing that the operation outcome is
+            // observable even if a subscriber fails during terminal publication.
+            operation.Completion.TrySetResult(outcome);
+        }
         AudioLevelChanged?.Invoke(0);
     }
 
@@ -1013,7 +1029,8 @@ public sealed class DictationSession
         Version = ++_version,
         IsCaptureOpen = (_operation ?? _recovery) is { Capture.IsReleased: false } owner &&
             owner.StopWork?.IsCompletedSuccessfully != true,
-        DeviceSelectionSummary = _engine?.DeviceSelectionSummary ?? ""
+        DeviceSelectionSummary = _engine?.DeviceSelectionSummary ?? "",
+        DeviceComparison = _engine?.DeviceComparison
     };
     private void Publish(SessionSnapshot state) => StateChanged?.Invoke(state);
 

@@ -12,10 +12,10 @@ namespace Ansible;
 public sealed partial class MainWindow : Window
 {
     private readonly DictationSession _session;
-    private readonly InsightsPage _insights;
     private readonly DictationPage _dictation;
     private readonly MainPage _settings;
     private readonly ModelManagementPage _models;
+    private readonly CustomWordsPage _customWords;
     private readonly MeetingsPage _meetings;
     private readonly MeetingStore _meetingStore;
     private readonly AppPaths _paths;
@@ -26,6 +26,7 @@ public sealed partial class MainWindow : Window
     private volatile bool _shortcutHeld;
     private FloatingDictationWindow? _floating;
     private bool _initialized;
+    private bool _compactNavigation;
     private bool _meetingRecoveryComplete;
     private bool _closed;
     private bool _allowClose;
@@ -70,11 +71,12 @@ public sealed partial class MainWindow : Window
         _paths = paths;
         _meetingStore = new MeetingStore(Path.Combine(Path.GetDirectoryName(paths.Settings)!, "meetings"));
         _meetings = new MeetingsPage(_meetingStore, OpenMeetingAsync, () => WinRT.Interop.WindowNative.GetWindowHandle(this));
-        _insights = new InsightsPage(session);
         _dictation = new DictationPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this));
         _settings = new MainPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this),
             ChangeHotkey, ChangeDictationMode, CaptureShortcut);
-        _models = new ModelManagementPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this), modelDownloads);
+        _models = new ModelManagementPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this), modelDownloads,
+            () => { Navigate("dictation"); return _dictation.TranscribeFileAsync(); });
+        _customWords = new CustomWordsPage(session, () => Navigate("models"));
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
@@ -220,23 +222,53 @@ public sealed partial class MainWindow : Window
 
     private void NavigateClicked(object sender, RoutedEventArgs args) => Navigate((string)((Button)sender).Tag);
 
+    private void ShellSizeChanged(object sender, SizeChangedEventArgs args)
+    {
+        var compact = args.NewSize.Width < (double)Application.Current.Resources["CompactNavigationThreshold"];
+        if (_compactNavigation == compact) return;
+        _compactNavigation = compact;
+        SidebarColumn.Width = (GridLength)Application.Current.Resources[compact ? "CompactSidebarColumnWidth" : "SidebarColumnWidth"];
+        Sidebar.Padding = (Thickness)Application.Current.Resources[compact ? "CompactSidebarPadding" : "SidebarPadding"];
+        AppWordmark.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        foreach (var button in new[] { DictationNav, MeetingsNav, ModelsNav, CustomWordsNav, SettingsNav })
+        {
+            if (button.Content is StackPanel content)
+                foreach (var label in content.Children.OfType<TextBlock>())
+                    label.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+            ToolTipService.SetToolTip(button, compact ? AutomationProperties.GetName(button) : null);
+        }
+    }
+
     private void Navigate(string page)
     {
-        MainContent.Content = page switch { "settings" => _settings, "dictation" => _dictation, "models" => _models, "meetings" => _meetings, _ => _insights };
+        MainContent.Content = page switch { "settings" => _settings, "dictation" => _dictation, "models" => _models,
+            "custom-words" => _customWords, "meetings" => _meetings, _ => _dictation };
         foreach (var (button, indicator) in new[]
         {
             (DictationNav, DictationIndicator), (ModelsNav, ModelsIndicator),
             (MeetingsNav, MeetingsIndicator),
-            (InsightsNav, InsightsIndicator), (SettingsNav, SettingsIndicator),
+            (CustomWordsNav, CustomWordsIndicator),
+            (SettingsNav, SettingsIndicator),
         })
         {
             var selected = (string)button.Tag == page;
             button.Style = (Style)Application.Current.Resources[
                 selected ? "SelectedNavigationButtonStyle" : "NavigationButtonStyle"];
-            indicator.Visibility = selected ? Visibility.Visible : Visibility.Collapsed;
+            indicator.Style = (Style)Application.Current.Resources[
+                selected ? "SelectedNavigationIconStyle" : "NavigationIconStyle"];
             AutomationProperties.SetHelpText(button, selected ? "Current page" : "");
             AutomationProperties.SetItemStatus(button, selected ? "Current page" : "");
         }
+    }
+
+    private void ShellThemeChanged(FrameworkElement sender, object args)
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (_closed || AppTitleBar is null) return;
+            AppWindow.TitleBar.ButtonForegroundColor = ((SolidColorBrush)AppTitleBar.Foreground).Color;
+            AppWindow.TitleBar.ButtonInactiveForegroundColor = ((SolidColorBrush)ShellRoot.BorderBrush).Color;
+        });
     }
 
     private Task OpenMeetingAsync(MeetingDocument? document)
@@ -693,7 +725,7 @@ public sealed partial class MainWindow : Window
             await Task.WhenAll(meetings.Select(meeting => meeting.window.BeginShutdownAsync()));
             foreach (var meeting in meetings) await meeting.session.DisposeAsync();
             foreach (var meeting in _meetingWindows.ToArray()) meeting.window.Close();
-            await Task.WhenAll(_session.CloseAsync(), _models.DisposeAsync().AsTask());
+            await Task.WhenAll(_session.CloseAsync(), _models.DisposeAsync().AsTask(), _dictation.FinishBackgroundWorkAsync());
             if (_captureTask is { } capture)
             {
                 try { await capture; }
@@ -749,6 +781,7 @@ public sealed partial class MainWindow : Window
     private void WindowClosed(object sender, WindowEventArgs args)
     {
         _closed = true;
+        _dictation.Dispose();
         _hotkey?.Dispose();
         _deliveryCancellation.Dispose();
         _startupCancellation.Dispose();

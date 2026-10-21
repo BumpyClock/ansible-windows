@@ -1,71 +1,157 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <Page x:Class="Ansible.MainPage"
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-        <Grid>
-            <StackPanel MaxWidth="{StaticResource PageContentMaxWidth}" Padding="{StaticResource PagePadding}" Spacing="16">
-            <TextBlock Text="Settings" Style="{StaticResource PageTitleStyle}" />
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:local="using:Ansible">
+    <local:PageCanvas x:Name="SettingsCanvas">
+            <StackPanel x:Name="SettingsLayoutRoot"
+                        Spacing="{StaticResource CardGap}"
+                        SizeChanged="SettingsLayoutRootSizeChanged">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Settings" Margin="0" Style="{StaticResource PageTitleStyle}" />
+                    <TextBlock Text="Control how Ansible listens, recognizes speech, and protects your data."
+                               Style="{StaticResource PageSubtitleStyle}" />
+                </StackPanel>
 
-            <!-- A closed InfoBar stays Visible and still takes stack spacing, so RenderNotice collapses it too. -->
-            <InfoBar x:Name="StatusInfo" IsOpen="False" IsClosable="True" Visibility="Collapsed" Closing="StatusInfoClosing" />
+                <!-- A closed InfoBar stays Visible and still takes stack spacing, so RenderNotice collapses it too. -->
+                <InfoBar x:Name="StatusInfo" IsOpen="False" IsClosable="True" Visibility="Collapsed" Closing="StatusInfoClosing" />
 
-            <Border Style="{StaticResource CardStyle}">
-                <StackPanel>
-                    <StackPanel Spacing="8">
-                        <TextBlock Text="Activation mode" VerticalAlignment="Center"
-                                   Style="{StaticResource BodyTextBlockStyle}" />
-                        <RadioButtons x:Name="PushToTalkChoice" HorizontalAlignment="Stretch" MaxColumns="1"
-                                      AutomationProperties.AutomationId="PushToTalkToggle"
-                                      AutomationProperties.Name="Activation mode"
-                                      SelectionChanged="DictationModeChanged">
-                            <RadioButtons.Resources>
-                                <Thickness x:Key="RadioButtonsTopHeaderMargin">0</Thickness>
-                            </RadioButtons.Resources>
-                            <x:String>Hold to talk</x:String>
-                            <x:String>Press to start and stop</x:String>
-                        </RadioButtons>
-                    </StackPanel>
-                    <Border Height="1" Margin="0,12" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
-                    <Grid ColumnSpacing="16">
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                        <TextBlock Text="Shortcut" VerticalAlignment="Center"
-                                   Style="{StaticResource BodyTextBlockStyle}" />
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                            <!-- Read-only keycap. Focus or click records a new shortcut; Esc cancels. -->
-                            <!-- Shown only when the shortcut differs from the default. -->
-                            <HyperlinkButton x:Name="ResetShortcutButton" Content="Reset" VerticalAlignment="Center"
-                                             AutomationProperties.AutomationId="ResetShortcutButton"
-                                             AutomationProperties.Name="Reset shortcut"
-                                             Visibility="Collapsed" Click="ResetShortcutClicked" />
-                            <TextBox x:Name="HotkeyCaptureBox" VerticalAlignment="Center"
-                                     AutomationProperties.AutomationId="HotkeyCaptureBox"
-                                     AutomationProperties.Name="Shortcut" MinWidth="140" MaxWidth="280"
-                                     IsReadOnly="True" TextAlignment="Center"
-                                     Background="{ThemeResource ControlFillColorDefaultBrush}"
-                                     BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1"
-                                     GotFocus="ShortcutGotFocus" KeyDown="ShortcutKeyDown"
-                                     KeyUp="ShortcutKeyUp" LostFocus="ShortcutLostFocus" />
-                        </StackPanel>
-                    </Grid>
-                    <Border Height="1" Margin="0,12" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
-                    <StackPanel Spacing="8">
-                        <TextBlock Text="Text insertion" VerticalAlignment="Center"
-                                   Style="{StaticResource BodyTextBlockStyle}" />
-                        <RadioButtons x:Name="InsertionChoice" HorizontalAlignment="Stretch" MaxColumns="1"
-                                      AutomationProperties.AutomationId="InsertionChoice"
-                                      AutomationProperties.Name="Text insertion"
-                                      SelectionChanged="InsertionMethodChanged">
-                            <RadioButtons.Resources>
-                                <Thickness x:Key="RadioButtonsTopHeaderMargin">0</Thickness>
-                            </RadioButtons.Resources>
-                            <x:String>Paste (replaces clipboard)</x:String>
-                            <x:String>Type characters</x:String>
-                        </RadioButtons>
-                        <TextBlock x:Name="InsertionHelpText" TextWrapping="Wrap"
-                                   Style="{StaticResource CaptionSecondaryStyle}" />
-                        <StackPanel x:Name="PasteShortcutRow" Spacing="4">
-                            <ComboBox x:Name="PasteShortcutChoice" Header="Destination paste shortcut"
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <StackPanel Spacing="{StaticResource CardGap}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Dictation" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                            <TextBlock Grid.Column="1" Text="Input and insertion" Style="{StaticResource CaptionSecondaryStyle}" />
+                        </Grid>
+
+                        <Grid ColumnSpacing="{StaticResource CardGap}" RowSpacing="8">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="5" MaxWidth="620" HorizontalAlignment="Left">
+                                <TextBlock Text="Activation mode" Style="{StaticResource BodyTextBlockStyle}" />
+                                <TextBlock Text="Hold the shortcut while you speak, or press once to start and again to stop."
+                                           TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}" />
+                            </StackPanel>
+                            <Border x:Name="PushToTalkTrack" Grid.Row="1"
+                                    HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                                    Style="{StaticResource SettingsSegmentTrackStyle}">
+                                <ListBox x:Name="PushToTalkChoice"
+                                         Style="{StaticResource SegmentedListBoxStyle}"
+                                         ItemContainerStyle="{StaticResource SegmentedListBoxItemStyle}"
+                                         AutomationProperties.AutomationId="PushToTalkToggle"
+                                         AutomationProperties.Name="Activation mode"
+                                         SelectionChanged="DictationModeChanged">
+                                    <x:String>Hold to talk</x:String>
+                                    <x:String>Press to start and stop</x:String>
+                                </ListBox>
+                            </Border>
+                        </Grid>
+
+                        <Border Height="1" Background="{ThemeResource AppBorderBrush}" />
+
+                        <Grid ColumnSpacing="{StaticResource CardGap}">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="5" MaxWidth="620" HorizontalAlignment="Left">
+                                <TextBlock Text="Shortcut" Style="{StaticResource BodyTextBlockStyle}" />
+                            </StackPanel>
+                            <StackPanel x:Name="ShortcutControl" Grid.Row="1" Orientation="Horizontal" Spacing="8"
+                                        HorizontalAlignment="Stretch" VerticalAlignment="Center">
+                                <!-- Read-only keycap. Focus or click records a new shortcut; Esc cancels. -->
+                                <!-- Shown only when the shortcut differs from the default. -->
+                                <HyperlinkButton x:Name="ResetShortcutButton" Content="Reset" VerticalAlignment="Center"
+                                                 AutomationProperties.AutomationId="ResetShortcutButton"
+                                                 AutomationProperties.Name="Reset shortcut"
+                                                 Visibility="Collapsed" Click="ResetShortcutClicked" />
+                                <Grid MinWidth="140" MaxWidth="280" MinHeight="32">
+                                    <StackPanel x:Name="HotkeyKeycaps" Orientation="Horizontal"
+                                                HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6">
+                                        <Border x:Name="HotkeyModifierKeycap" Style="{StaticResource KeycapStyle}">
+                                            <TextBlock x:Name="HotkeyModifierText" Style="{StaticResource KeycapTextStyle}" />
+                                        </Border>
+                                        <TextBlock x:Name="HotkeyPlusText" Text="+" VerticalAlignment="Center"
+                                                   Style="{StaticResource CaptionSecondaryStyle}" />
+                                        <Border x:Name="HotkeyPrimaryKeycap" Style="{StaticResource KeycapStyle}">
+                                            <TextBlock x:Name="HotkeyPrimaryText" Style="{StaticResource KeycapTextStyle}" />
+                                        </Border>
+                                    </StackPanel>
+                                    <TextBlock x:Name="HotkeyCaptureStatus" Visibility="Collapsed"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               TextAlignment="Center" TextWrapping="Wrap"
+                                               Style="{StaticResource CaptionSecondaryStyle}" />
+                                    <TextBox x:Name="HotkeyCaptureBox"
+                                             AutomationProperties.AutomationId="HotkeyCaptureBox"
+                                             AutomationProperties.Name="Shortcut"
+                                             IsReadOnly="True" TextAlignment="Center"
+                                             Background="Transparent" BorderThickness="0"
+                                             Foreground="Transparent" Opacity="0.01"
+                                             GotFocus="ShortcutGotFocus" KeyDown="ShortcutKeyDown"
+                                             KeyUp="ShortcutKeyUp" LostFocus="ShortcutLostFocus" />
+                                </Grid>
+                            </StackPanel>
+                        </Grid>
+
+                        <Border Height="1" Background="{ThemeResource AppBorderBrush}" />
+
+                        <Grid ColumnSpacing="{StaticResource CardGap}">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="5" MaxWidth="620" HorizontalAlignment="Left">
+                                <TextBlock Text="Text insertion" Style="{StaticResource BodyTextBlockStyle}" />
+                                <TextBlock x:Name="InsertionHelpText" TextWrapping="Wrap"
+                                           Style="{StaticResource CaptionSecondaryStyle}" />
+                            </StackPanel>
+                            <Border x:Name="InsertionTrack" Grid.Row="1"
+                                    HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                                    Style="{StaticResource SettingsSegmentTrackStyle}">
+                                <ListBox x:Name="InsertionChoice"
+                                         Style="{StaticResource SegmentedListBoxStyle}"
+                                         ItemContainerStyle="{StaticResource SegmentedListBoxItemStyle}"
+                                         AutomationProperties.AutomationId="InsertionChoice"
+                                         AutomationProperties.Name="Text insertion"
+                                         SelectionChanged="InsertionMethodChanged">
+                                    <x:String>Paste text</x:String>
+                                    <x:String>Type characters</x:String>
+                                </ListBox>
+                            </Border>
+                        </Grid>
+
+                        <Grid x:Name="PasteShortcutRow" ColumnSpacing="{StaticResource CardGap}">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="5" MaxWidth="620" HorizontalAlignment="Left">
+                                <TextBlock Text="Destination paste shortcut" Style="{StaticResource BodyTextBlockStyle}" />
+                                <TextBlock Text="Choose the shortcut accepted by the focused editor or terminal. This applies to all paste dictation; it is not detected automatically."
+                                           TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}" />
+                            </StackPanel>
+                            <ComboBox x:Name="PasteShortcutChoice" Grid.Row="1"
                                       HorizontalAlignment="Stretch"
                                       AutomationProperties.AutomationId="PasteShortcutChoice"
                                       AutomationProperties.Name="Destination paste shortcut"
@@ -74,17 +160,24 @@
                                 <x:String>Shift+Insert</x:String>
                                 <x:String>Ctrl+Shift+V</x:String>
                             </ComboBox>
-                            <TextBlock Text="Choose the shortcut accepted by the focused editor or terminal. This applies to all paste dictation; it is not detected automatically."
-                                       TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}" />
-                        </StackPanel>
-                        <Grid x:Name="TypingGapRow" ColumnSpacing="16" Visibility="Collapsed">
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                            <StackPanel VerticalAlignment="Center">
+                        </Grid>
+
+                        <Grid x:Name="TypingGapRow" ColumnSpacing="{StaticResource CardGap}" Visibility="Collapsed">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="5" MaxWidth="620" HorizontalAlignment="Left">
                                 <TextBlock Text="Gap between characters (ms)" Style="{StaticResource BodyTextBlockStyle}" />
                                 <TextBlock Text="0 sends all text at once, which some apps such as Notepad garble. Windows may round short gaps up to about 15 ms."
                                            TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}" />
                             </StackPanel>
-                            <NumberBox x:Name="TypingGapBox" Grid.Column="1" VerticalAlignment="Center" MinWidth="120"
+                            <NumberBox x:Name="TypingGapBox" Grid.Row="1"
+                                       HorizontalAlignment="Stretch"
                                        AutomationProperties.AutomationId="TypingGapBox"
                                        AutomationProperties.Name="Gap between typed characters in milliseconds"
                                        Minimum="0" Maximum="200" SmallChange="5" LargeChange="20"
@@ -92,106 +185,162 @@
                                        ValueChanged="TypingGapChanged" />
                         </Grid>
                     </StackPanel>
-                    <Border Height="1" Margin="0,12" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
-                    <StackPanel Spacing="8">
-                        <NumberBox x:Name="MicrophoneBoostBox" Header="Microphone boost (dB)"
-                                   HorizontalAlignment="Left" MinWidth="180"
-                                   AutomationProperties.AutomationId="MicrophoneBoostBox"
-                                   AutomationProperties.Name="Microphone boost in decibels"
-                                   AutomationProperties.HelpText="0 is off. Applies to the next microphone dictation."
-                                   Minimum="0" Maximum="24" SmallChange="6" LargeChange="12"
-                                   SpinButtonPlacementMode="Inline" ValidationMode="InvalidInputOverwritten"
-                                   ValueChanged="MicrophoneBoostChanged" />
-                        <TextBlock Text="For quiet speech or whispering. 0 is off; try 6 or 12 dB first. Higher boost also raises background noise and can distort louder speech. Applies to the next microphone dictation."
-                                   TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}" />
-                    </StackPanel>
-                    <Border Height="1" Margin="0,12" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
-                    <StackPanel Spacing="8">
-                        <TextBlock Text="Language hint" VerticalAlignment="Center"
-                                   Style="{StaticResource BodyTextBlockStyle}" />
-                        <TextBox x:Name="LanguageBox" MaxWidth="180" HorizontalAlignment="Stretch"
-                                 AutomationProperties.Name="Language hint" PlaceholderText="Model default"
-                                 TextChanged="LanguageChanged" />
-                    </StackPanel>
-                    <Border Height="1" Margin="0,12" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
-                    <StackPanel Spacing="8">
-                        <ComboBox x:Name="BackendChoice" Header="Recognition processor" MinWidth="180"
-                                  AutomationProperties.Name="Recognition processor"
-                                  AutomationProperties.AutomationId="BackendChoice"
-                                  SelectionChanged="BackendChanged">
-                            <x:String>Auto (recommended)</x:String>
-                            <x:String>CPU</x:String>
-                            <x:String>GPU (Vulkan)</x:String>
-                        </ComboBox>
-                        <TextBlock x:Name="BackendHint" Text="Auto compares CPU and GPU using a bundled speech sample, then remembers the faster working device for each model. Audio stays local."
-                                   TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}" />
-                    </StackPanel>
-                </StackPanel>
-            </Border>
+                </Border>
 
-            <Border Style="{StaticResource CardStyle}">
-                <StackPanel Spacing="12">
-                    <TextBlock Text="Custom vocabulary" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                    <TextBox x:Name="DictionaryBox" AutomationProperties.AutomationId="DictionaryBox"
-                             AutomationProperties.Name="Custom vocabulary"
-                             ToolTipService.ToolTip="One name, word, or phrase per line. Supported models use these as recognition hints, not replacement rules. Up to 100 entries, 100 characters each."
-                             PlaceholderText="Contoso&#x0a;WinUI&#x0a;audio.cpp"
-                             PlaceholderForeground="{ThemeResource TextFillColorTertiaryBrush}"
-                             AcceptsReturn="True" TextWrapping="Wrap" MinHeight="112" MaxHeight="200"
-                             MaxLength="8192" TextChanged="DictionaryChanged"
-                             ScrollViewer.VerticalScrollBarVisibility="Auto" />
-                    <Grid ColumnSpacing="12">
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                        <Button x:Name="SaveDictionaryButton" AutomationProperties.AutomationId="SaveDictionaryButton"
-                                Content="Save dictionary" Click="SaveDictionaryClicked" />
-                        <TextBlock x:Name="DictionaryStatusText" Grid.Column="1" VerticalAlignment="Center"
-                                   TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}"
-                                   AutomationProperties.LiveSetting="Polite" />
-                    </Grid>
-                </StackPanel>
-            </Border>
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <StackPanel Spacing="{StaticResource CardGap}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Audio and recognition" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                            <TextBlock Grid.Column="1" Text="Applies to the next dictation" Style="{StaticResource CaptionSecondaryStyle}" />
+                        </Grid>
 
-            <Border Style="{StaticResource CardStyle}">
-                <StackPanel Spacing="10">
-                    <TextBlock Text="Screen capture privacy" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                    <CheckBox x:Name="HideFromCaptureChoice"
-                              AutomationProperties.AutomationId="HideFromCaptureChoice"
-                              Checked="HideFromCaptureChanged" Unchecked="HideFromCaptureChanged">
-                        <TextBlock Text="Hide dictation overlay and meeting windows from capture" TextWrapping="Wrap" />
-                    </CheckBox>
-                    <TextBlock Text="Applies to supported Windows screenshots and screen sharing. The main window remains visible. Some recorders can still capture protected windows."
-                               Style="{StaticResource CaptionSecondaryStyle}" />
-                </StackPanel>
-            </Border>
+                        <Grid ColumnSpacing="{StaticResource CardGap}">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="5" MaxWidth="620" HorizontalAlignment="Left">
+                                <TextBlock Text="Microphone boost (dB)" Style="{StaticResource BodyTextBlockStyle}" />
+                                <TextBlock Text="For quiet speech or whispering. 0 is off; try 6 or 12 dB first. Higher boost also raises background noise and can distort louder speech."
+                                           TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}" />
+                            </StackPanel>
+                            <NumberBox x:Name="MicrophoneBoostBox" Grid.Row="1"
+                                       HorizontalAlignment="Stretch"
+                                       AutomationProperties.AutomationId="MicrophoneBoostBox"
+                                       AutomationProperties.Name="Microphone boost in decibels"
+                                       AutomationProperties.HelpText="0 is off. Applies to the next microphone dictation."
+                                       Minimum="0" Maximum="24" SmallChange="6" LargeChange="12"
+                                       SpinButtonPlacementMode="Inline" ValidationMode="InvalidInputOverwritten"
+                                       ValueChanged="MicrophoneBoostChanged" />
+                        </Grid>
 
-            <Border Style="{StaticResource CardStyle}">
-                <StackPanel Spacing="10">
-                    <TextBlock Text="Meeting suggestions" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                    <CheckBox x:Name="AutoDetectMeetingsChoice" AutomationProperties.AutomationId="AutoDetectMeetingsChoice"
-                              Checked="AutoDetectMeetingsChanged" Unchecked="AutoDetectMeetingsChanged">
-                        <TextBlock Text="Suggest notetaking when Teams uses the microphone" TextWrapping="Wrap" />
-                    </CheckBox>
-                    <TextBlock Text="Detection checks app activity without recording audio. Suggestions open the notetaker; you must click Start to capture your meeting. Calendar access is not used."
-                               Style="{StaticResource CaptionSecondaryStyle}" />
-                </StackPanel>
-            </Border>
+                        <Border Height="1" Background="{ThemeResource AppBorderBrush}" />
 
-            <Border Style="{StaticResource CardStyle}">
-                <Grid x:Name="UsageRow" ColumnSpacing="16" Background="Transparent">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                    <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="Usage statistics" Style="{StaticResource BodyTextBlockStyle}" />
-                        <TextBlock Text="Session counts only. Never audio or text." TextWrapping="Wrap"
-                                   Style="{StaticResource CaptionSecondaryStyle}" />
+                        <Grid ColumnSpacing="{StaticResource CardGap}">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="5" MaxWidth="620" HorizontalAlignment="Left">
+                                <TextBlock Text="Language hint" Style="{StaticResource BodyTextBlockStyle}" />
+                                <TextBlock Text="Leave this empty to use the model default."
+                                           TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}" />
+                            </StackPanel>
+                            <TextBox x:Name="LanguageBox" Grid.Row="1"
+                                     HorizontalAlignment="Stretch"
+                                     AutomationProperties.Name="Language hint" PlaceholderText="Model default"
+                                     TextChanged="LanguageChanged" />
+                        </Grid>
+
+                        <Border Height="1" Background="{ThemeResource AppBorderBrush}" />
+
+                        <Grid ColumnSpacing="{StaticResource CardGap}">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="5" MaxWidth="620" HorizontalAlignment="Left">
+                                <TextBlock Text="Recognition processor" Style="{StaticResource BodyTextBlockStyle}" />
+                                <TextBlock x:Name="BackendHint"
+                                           Text="Auto compares CPU and GPU using a bundled speech sample, then remembers the faster working device for each model. Audio stays local."
+                                           TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}" />
+                            </StackPanel>
+                            <Border x:Name="BackendTrack" Grid.Row="1"
+                                    HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                                    Style="{StaticResource SettingsSegmentTrackStyle}">
+                                <ListBox x:Name="BackendChoice"
+                                         Style="{StaticResource SegmentedListBoxStyle}"
+                                         ItemContainerStyle="{StaticResource SegmentedListBoxItemStyle}"
+                                         AutomationProperties.Name="Recognition processor"
+                                         AutomationProperties.AutomationId="BackendChoice"
+                                         SelectionChanged="BackendChanged">
+                                    <x:String>Auto</x:String>
+                                    <x:String>CPU</x:String>
+                                    <x:String>Vulkan</x:String>
+                                </ListBox>
+                            </Border>
+                        </Grid>
+
+                        <local:DeviceComparisonView x:Name="DeviceComparison" />
                     </StackPanel>
-                    <!-- The template keeps a fixed 12 DIP column for the empty On/Off content; the negative margin aligns the switch with the other row controls. -->
-                    <ToggleSwitch x:Name="UsageToggle" Grid.Column="1" VerticalAlignment="Center" Margin="0,0,-12,0"
-                                  AutomationProperties.AutomationId="UsageToggle"
-                                  AutomationProperties.Name="Usage statistics"
-                                  OnContent="" OffContent="" MinWidth="0" Toggled="UsageToggled" />
-                </Grid>
-            </Border>
-        </StackPanel>
-    </Grid>
-    </ScrollViewer>
+                </Border>
+
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <StackPanel Spacing="{StaticResource CardGap}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Privacy" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                            <TextBlock Grid.Column="1" Text="Capture, meetings, telemetry" Style="{StaticResource CaptionSecondaryStyle}" />
+                        </Grid>
+
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="Screen capture privacy" Style="{StaticResource BodyTextBlockStyle}" />
+                            <CheckBox x:Name="HideFromCaptureChoice"
+                                      CornerRadius="{StaticResource SettingsCheckBoxCornerRadius}"
+                                      AutomationProperties.AutomationId="HideFromCaptureChoice"
+                                      Checked="HideFromCaptureChanged" Unchecked="HideFromCaptureChanged">
+                                <TextBlock Text="Hide dictation overlay and meeting windows from capture" TextWrapping="Wrap" />
+                            </CheckBox>
+                            <TextBlock Text="Applies to supported Windows screenshots and screen sharing. The main window remains visible. Some recorders can still capture protected windows."
+                                       TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}" MaxWidth="620"
+                                       HorizontalAlignment="Left" />
+                        </StackPanel>
+
+                        <Border Height="1" Background="{ThemeResource AppBorderBrush}" />
+
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="Meeting suggestions" Style="{StaticResource BodyTextBlockStyle}" />
+                            <CheckBox x:Name="AutoDetectMeetingsChoice"
+                                      CornerRadius="{StaticResource SettingsCheckBoxCornerRadius}"
+                                      AutomationProperties.AutomationId="AutoDetectMeetingsChoice"
+                                      Checked="AutoDetectMeetingsChanged" Unchecked="AutoDetectMeetingsChanged">
+                                <TextBlock Text="Suggest notetaking when Teams uses the microphone" TextWrapping="Wrap" />
+                            </CheckBox>
+                            <TextBlock Text="Detection checks app activity without recording audio. Suggestions open the notetaker; you must click Start to capture your meeting. Calendar access is not used."
+                                       TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}" MaxWidth="620"
+                                       HorizontalAlignment="Left" />
+                        </StackPanel>
+
+                        <Border Height="1" Background="{ThemeResource AppBorderBrush}" />
+
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="Usage statistics" Style="{StaticResource BodyTextBlockStyle}" />
+                            <Grid x:Name="UsageRow" ColumnSpacing="12" Background="Transparent">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Session counts only. Never audio or text." TextWrapping="Wrap"
+                                           Style="{StaticResource CaptionSecondaryStyle}" MaxWidth="620"
+                                           HorizontalAlignment="Left" />
+                                <!-- The template keeps a fixed 12 DIP column for the empty On/Off content; the negative margin aligns the switch with the other row controls. -->
+                                <ToggleSwitch x:Name="UsageToggle" Grid.Column="1" VerticalAlignment="Center" Margin="0,0,-12,0"
+                                              AutomationProperties.AutomationId="UsageToggle"
+                                              AutomationProperties.Name="Usage statistics"
+                                              OnContent="" OffContent="" MinWidth="0" Toggled="UsageToggled" />
+                            </Grid>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+    </local:PageCanvas>
 </Page>

@@ -2,6 +2,23 @@
 
 See the [README](../README.md#build-and-run) to build and launch the app.
 
+## Home and appearance
+
+**Home** shows recent completed dictations with timestamps, search, and Copy.
+History stays in memory for this app session. Closing Ansible clears it. The
+history keeps at most 100 entries within a bounded text budget. The current
+transcript remains available separately. Audio is never saved.
+
+Use **Dictate** or your configured shortcut to record. Choose the active model
+and use **Transcribe WAV file** on **Models**.
+The Insights cards show actual local usage counts. History and local usage
+counts are separate. Turning off usage statistics does not save transcripts.
+
+Ansible uses a Mica window base and follows Windows light, dark, and High Contrast appearance. The default
+Ink / Citron identity matches the Pencil design. Additional color schemes are
+prepared through shared brand tokens; a scheme picker is not yet available.
+Compact windows use an icon sidebar, smaller page padding, and stacked controls.
+
 ## Microphone access
 
 Ansible checks microphone permission at launch, before recording can start. If
@@ -21,7 +38,7 @@ are not requested because these features do not use them.
 
 Open **Speech models**. Select **Download** on a model card, or open **Model folder**
 and use **Choose folder** to select a folder containing catalog weights. Select
-**Use** on an installed model, or select it from **Speech model** on the Dictation page.
+**Use** on an installed model to make it active.
 
 Downloads start only when requested. **Pause** keeps partial files for **Resume**.
 The app verifies the length and SHA-256 before installing weights. If recognition
@@ -146,12 +163,12 @@ recover text manually; repeating an uncertain send can duplicate speech.
 
 ## Transcribe without automatic insertion
 
-On **Dictation**, use the round record button to start microphone capture, then
+On **Home**, use **Dictate** to start microphone capture, then
 **Finish** to recognize the remaining audio. **Cancel** stops capture and waits for
 the current native step; partial text can remain visible for copying. A blocking
 native call cannot be forcibly interrupted.
 
-Select **Transcribe WAV file…** for a recording. **Copy** copies the visible
+On **Models**, select **Transcribe WAV file** for a recording. **Copy** copies the visible
 transcript. These page controls do not automatically insert text into another app.
 
 WAV input is limited to five minutes, 100 MiB on disk, and 64 MiB of decoded float
@@ -188,14 +205,18 @@ Leave **Language hint** blank for English-only Moonshine. Other models have
 model-dependent language support; individual languages are not qualified by this
 app. Unsupported native options produce an error.
 
-Under **Custom vocabulary**, enter one name, word, or phrase per line and select
-**Save dictionary**. Save an empty list to clear it. Blank lines are removed,
-whitespace is normalized, and duplicate entries are merged. Limits are 100 unique
-entries, 100 characters per entry, and 4 KiB of UTF-8 text.
+Open **Dictionary** in the sidebar. **Add new** adds one name, word, or phrase.
+**Import** accepts one entry per line. Search filters the list. Each row offers
+Edit and Remove. **Undo remove** restores the latest deletion. Existing saved
+words stay in the list. Changes save immediately.
+
+Blank lines are removed, whitespace is normalized, and duplicate entries are
+merged. Limits are 100 unique entries, 100 characters per entry, and 4 KiB of
+UTF-8 text. The page warns if a change could not be saved.
 
 Qwen3-ASR and both VibeVoice models accept this context; offline VibeVoice uses it
 only for WAV transcription. Moonshine and Nemotron do not use it. The selected
-model's support is shown beside the vocabulary field. Each operation uses the
+model's support is shown on Dictionary. Each operation uses the
 saved list at startup.
 
 Entries are recognition hints, not guaranteed spellings or replacement rules.

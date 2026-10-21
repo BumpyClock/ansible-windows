@@ -146,7 +146,7 @@ public sealed partial class ModelCard : UserControl
               state is ModelInstallState.NotInstalled or ModelInstallState.Paused or ModelInstallState.Failed);
         // Accent marks an enabled forward step only; Pause, Stop and disabled buttons use the default style.
         PrimaryButton.Style = (Style)Application.Current.Resources[
-            transferring || !PrimaryButton.IsEnabled ? "DefaultButtonStyle" : "AccentButtonStyle"];
+            transferring || !PrimaryButton.IsEnabled ? "DefaultButtonStyle" : "AppPrimaryButtonStyle"];
         PrimaryHost.Visibility = !active && (transferring || !snapshot.HasModelFile) ? Visibility.Visible : Visibility.Collapsed;
         // A disabled button shows no tooltip, so the host explains a wait on another model operation. A Border has
         // no automation peer, so the button carries the same help text for keyboard and Narrator users.

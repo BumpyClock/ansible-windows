@@ -19,6 +19,9 @@ public sealed record SessionSnapshot
 {
     public required long Version { get; init; }
     public Guid? OperationId { get; init; }
+    public SessionOutcomeKind? Outcome { get; init; }
+    public DateTimeOffset? CompletedAt { get; init; }
+    public TimeSpan Elapsed { get; init; }
     public bool MeetingActive { get; init; }
     public bool IsCaptureOpen { get; init; }
     public required DictationPhase Phase { get; init; }
@@ -29,6 +32,7 @@ public sealed record SessionSnapshot
     public required string ModelsDirectory { get; init; }
     public required string BackendVersion { get; init; }
     public string DeviceSelectionSummary { get; init; } = "";
+    public DeviceComparisonSnapshot? DeviceComparison { get; init; }
     public AppSettings Settings { get; init; } = new();
     public string Language => Settings.Language;
     public required string Transcript { get; init; }
