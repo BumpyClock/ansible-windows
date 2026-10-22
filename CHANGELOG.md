@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Prefer installed Nemotron ASR (`nemotron-asr-0.6b-q8`) when no dictation model
+  is saved. Default setup downloads and verifies that ASR and Nemotron 3
+  Diarization (`nemotron-3-diarization-q8`). The companion cannot be selected for
+  dictation and is not wired into meetings. The native build compiles
+  `nemotron_3_diar` and applies the cumulative Nemotron streaming timestamp
+  patch.
+- Add Ansible.Probe `--stream-only` and `--repeat` for warm paced first-preview
+  and input-end-to-final timings. Missing previews stay missing.
+- Reject stale or tampered `native-runtime.json` records whose patch names,
+  hashes, or compiled model families do not match the current
+  `Build-AudioNative.ps1` recipe. Rebuild after recipe changes.
+  `tools/Test-NativeBuildRecipe.ps1` covers that rejection.
+- Require a Vulkan-capable native runtime for the default `Publish-Ansible.ps1`
+  path. Pass `-Backend cpu` for an intentional CPU-only package.
 - Show microphone permission guidance in a compact, dismissible overlay without
   moving page content. Open Settings to show the guidance again.
 - Restore Kroko English Community 64-L Q8 downloads and streaming dictation,

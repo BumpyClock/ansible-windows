@@ -35,6 +35,28 @@ public sealed class AudioModelCapabilityTests
     }
 
     [Theory]
+    [InlineData("nemotron_3_diar", "streaming")]
+    [InlineData("nemotron_asr", "streaming")]
+    [InlineData("kroko_asr", "streaming")]
+    [InlineData("vibevoice_asr", "offline")]
+    public void DiarizationCannotBeUsedForMicrophoneDictation(string family, string mode)
+    {
+        var model = Model(family, mode, "final-only") with { Task = "diar" };
+        Assert.False(model.SupportsMicrophone);
+        Assert.False(model.CanInsertDictation);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("asr")]
+    public void MissingOrExplicitAsrTaskRetainsDictationSupport(string? task)
+    {
+        var model = Model("nemotron_asr", "streaming", "live") with { Task = task };
+        Assert.True(model.SupportsMicrophone);
+        Assert.True(model.CanInsertDictation);
+    }
+
+    [Theory]
     [InlineData("moonshine_asr", true)]
     [InlineData("qwen3_asr", true)]
     [InlineData("nemotron_asr", true)]

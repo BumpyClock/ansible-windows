@@ -4,10 +4,21 @@ Build the runtime and download the model under test using the
 [development guide](development.md). Run commands from the repository root in
 PowerShell. Probes use local model weights and a public sample, not the microphone.
 
-The native build pins audio.cpp v0.9.0 and supports CPU and optional Vulkan.
+Default setup installs `nemotron-asr-0.6b-q8` and `nemotron-3-diarization-q8`.
+Moonshine examples below need `moonshine-tiny` installed. The diarization
+companion is catalogued and compiled; it is not a probe ASR model and is not
+meeting integration.
+
+The native build pins audio.cpp v0.9.0, applies tracked patches including
+`tools/patches/audio-nemotron-stream-timestamps.patch`, and supports CPU and
+optional Vulkan. Compiled families include `nemotron_3_diar`. The patch publishes
+cumulative Nemotron token timestamps on stream updates; it does not by itself
+enable meeting diarization in the app.
+
 The [catalog](../tools/audio-models.json) pins each model's revision, file length,
-SHA-256, license, and capabilities. Use those capabilities rather than assuming
-that an upstream model feature exists in this backend.
+SHA-256, license, task, and capabilities. Use those capabilities rather than assuming
+that an upstream model feature exists in this backend. Omitted task means ASR.
+Only family `nemotron_3_diar` may be `diar`.
 
 ## Run the probe
 
@@ -21,8 +32,9 @@ dotnet run --project .\Ansible.Probe -- `
 ```
 
 Use the directory containing your weights instead of `.runtime\models` when
-needed. Supply an exact model ID to avoid the probe's default model selection.
-Run probes sequentially and wait for each process to exit before starting another.
+needed. Supply an exact ASR model ID to avoid the probe's default model selection.
+A `diar` model ID is rejected; the companion does not transcribe. Run probes
+sequentially and wait for each process to exit before starting another.
 
 The probe defaults to CPU, four threads, a blank language hint, and 512 MB of
 memory headroom. Each recognition operation has a three-minute timeout. It
@@ -32,7 +44,9 @@ unknown. Cancellation waits for an executing native call to finish.
 
 | Option | Effect |
 | --- | --- |
-| `--file-only` | Skip streaming; offline models always skip it |
+| `--file-only` | Skip streaming. Offline models also skip it unless `--stream-only` is specified. |
+| `--stream-only` | Skip WAV transcription; prepare once, then stream |
+| `--repeat <1..20>` | Repeat the paced stream for warm first-preview and input-end-to-final timings. Missing previews stay missing. Cannot combine with `--file-only`. Use `--stream-only` with `--repeat` for buffered offline dictation. |
 | `--backend cpu`, `--backend vulkan`, or `--backend auto` | Select the backend; default CPU. Auto is not implied. |
 | `--device <index>` | Select a nonnegative device index; default 0 |
 | `--device-probe <executable>` | Required for `--backend auto`. Path to `Ansible.DeviceProbe.exe`. The probe does not discover the worker. |
@@ -77,6 +91,16 @@ dotnet run --project .\Ansible.Probe -- `
 The probe reports dictionary support and whether context was supplied, without
 printing the dictionary. Recognition output is printed to the console.
 
+Warm stream example, after installing `nemotron-asr-0.6b-q8`. This checks
+command wiring; it is not a performance result:
+
+```powershell
+dotnet run --project .\Ansible.Probe -- `
+  .\.runtime\native\audiocpp.dll .\.runtime\models .\tools\audio-models.json `
+  .\.runtime\validation\sample_16k.wav nemotron-asr-0.6b-q8 `
+  --backend cpu --stream-only --repeat 5
+```
+
 Kroko uses the same command with model ID `kroko-en-64l-q8` and `--backend cpu`.
 Its dictionary selects modified beam-search decoding and supplies per-request
 hotwords. Entries containing `/` are rejected before native work. Automatic
@@ -100,7 +124,8 @@ dotnet run --project .\Ansible.Probe -- --cpu-check
 A successful build, installed file, or GPU listing is not a recognition check.
 Verify the pinned weights, load the model, and check actual speech output.
 WAV success does not establish streaming success. For models that advertise live
-previews, inspect previews received while input is still open. Shortcut insertion
+previews, inspect previews received while input is still open. No preview means
+no observed live speech, not a zero-millisecond result. Shortcut insertion
 still waits for the successful final result.
 
 Record the source revision, model ID and hash, backend, CPU/GPU, driver, available

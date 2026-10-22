@@ -1,6 +1,8 @@
 [CmdletBinding()]
 param(
-    [string]$OutputDirectory = ""
+    [string]$OutputDirectory = "",
+    [ValidateSet("cpu", "vulkan")]
+    [string]$Backend = "vulkan"
 )
 
 $ErrorActionPreference = "Stop"
@@ -13,7 +15,7 @@ $directory = if ($OutputDirectory) {
 }
 $directory = $directory.TrimEnd('\')
 
-& (Join-Path $PSScriptRoot "Build-AudioNative.ps1") -StageRuntimeOnly
+& (Join-Path $PSScriptRoot "Build-AudioNative.ps1") -StageRuntimeOnly -Backend $Backend
 if ($LASTEXITCODE -ne 0) { throw "Native runtime staging failed." }
 $vsInstaller = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer"
 $vswhere = Join-Path $vsInstaller "vswhere.exe"
@@ -112,7 +114,7 @@ try {
             throw "The NativeAOT MSIX unexpectedly contains '$managedRuntime'."
         }
     }
-    & (Join-Path $PSScriptRoot "Build-AudioNative.ps1") -VerifyRuntimeOnly -NativeDirectory $inspection
+    & (Join-Path $PSScriptRoot "Build-AudioNative.ps1") -VerifyRuntimeOnly -NativeDirectory $inspection -Backend $Backend
     if ($LASTEXITCODE -ne 0) { throw "Packaged native import closure verification failed." }
 }
 finally {

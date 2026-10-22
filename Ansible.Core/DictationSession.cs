@@ -461,7 +461,8 @@ public sealed class DictationSession
         operation.Token.ThrowIfCancellationRequested();
         var candidate = _engineFactory(operation.Path!);
         operation.Candidate = candidate;
-        var models = await candidate.ConnectAsync(operation.Token);
+        IReadOnlyList<AudioModel> models = (await candidate.ConnectAsync(operation.Token))
+            .Where(model => model.Task is null or "asr").ToArray();
         operation.Token.ThrowIfCancellationRequested();
         var modelsDirectory = candidate.ModelsDirectory;
         var backendVersion = candidate.Version;
@@ -500,8 +501,10 @@ public sealed class DictationSession
                 settings = settings with { ModelsDirectory = Path.GetFullPath(modelsDirectory) };
                 operation.SettingsWarning = SaveSettings(settings);
             }
-            var preferredId = settings.ModelId ?? operation.Model?.Id;
+            var preferredId = settings.ModelId;
             var selectedIndex = models.ToList().FindIndex(model => model.Id == preferredId);
+            if (preferredId is null)
+                selectedIndex = models.ToList().FindIndex(model => model.Id == AudioModelDefaults.RecognitionModelId);
             if (preferredId is not null && selectedIndex < 0)
             {
                 operation.SettingsWarning ??= new(NoticeKind.Warning, "Saved model unavailable",
