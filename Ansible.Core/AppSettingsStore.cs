@@ -17,6 +17,8 @@ public sealed class AppSettingsStore(string path) : IAppSettingsStore
             settings = settings with { AutoDetectMeetings = true };
         if (!document.RootElement.TryGetProperty(nameof(AppSettings.Backend), out _))
             settings = settings with { Backend = NativeBackend.Auto };
+        if (!document.RootElement.TryGetProperty(nameof(AppSettings.OverlayFollowsCaret), out _))
+            settings = settings with { OverlayFollowsCaret = true };
         settings.Validate();
         return settings;
     }

@@ -123,10 +123,22 @@ recording open; its next release starts a new 500 ms tail. Cancellation and
 window shutdown do not wait for the tail. **Press to start and stop** and manual
 Finish keep their immediate-stop behavior.
 
-The waveform pill shows microphone energy while capture is active. It hides when
+The waveform pill shows microphone energy while capture is active. Every bar
+follows the current level through a fixed shape, tallest in the middle, so the
+pill breathes with your voice instead of scrolling through time. Loud moments
+settle at a bounded rate rather than snapping to silence. The pill hides when
 capture stops, including after the hold-to-talk release tail. If stopping fails,
-it remains visible until capture is released. It does not show
-transcript text. Reduced-motion mode uses a level meter.
+it remains visible until capture is released. It does not show transcript text.
+Reduced-motion mode shows the same shape without bar animation.
+
+**Settings > Overlay position** chooses where the pill appears. By default it
+sits just under the text cursor of the destination field. The cursor position is
+read once when you press the shortcut, from the Windows caret or the field's
+UI Automation text provider; the pill does not follow later cursor movement.
+If the pill would leave the work area it moves above the cursor line. When
+Windows cannot report a cursor position, for dictation started from the app
+window, or when the option is off, the pill appears at the bottom centre of the
+screen. The option applies to the next dictation and persists across restarts.
 
 ### Text insertion
 

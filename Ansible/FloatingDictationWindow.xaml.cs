@@ -20,7 +20,10 @@ public sealed partial class FloatingDictationWindow : Window
     private SessionSnapshot _state;
     private readonly UiSessionObserver _observer;
     private readonly MainWindow _owner;
-    private readonly double[] _levels = new double[FloatingPreviewPresentation.WaveformBarCount];
+    // Displayed meter level after release smoothing, and the clock that times the release.
+    private double _level;
+    private readonly Stopwatch _levelClock = new();
+    private CaretBounds? _anchor;
     private readonly UISettings _settings = new();
     private readonly AccessibilitySettings _accessibility = new();
     private XamlRoot? _xamlRoot;
@@ -42,6 +45,9 @@ public sealed partial class FloatingDictationWindow : Window
         _session = session;
         _state = session.State;
         _owner = owner;
+        PillBorder.Width = FloatingPreviewPresentation.WaveformWidth;
+        PillBorder.Height = FloatingPreviewPresentation.WaveformHeight;
+        PillBorder.CornerRadius = new CornerRadius(FloatingPreviewPresentation.WaveformHeight / 2);
         var presenter = OverlappedPresenter.Create();
         presenter.IsAlwaysOnTop = true;
         presenter.IsResizable = false;
@@ -104,16 +110,26 @@ public sealed partial class FloatingDictationWindow : Window
         catch (Exception error) { _cleanupTasks.Add(Task.FromException(error)); }
     }
 
-    internal void ShowPreview()
+    /// <summary>
+    /// Shows the pill for the live operation. <paramref name="anchor"/> is the destination caret in
+    /// physical pixels; the pill follows it when the setting allows, otherwise it rests at the bottom
+    /// of the owner's display.
+    /// </summary>
+    internal void ShowPreview(CaretBounds? anchor = null)
     {
         if (_closed || _visible || !_session.State.IsLiveOperation) { return; }
         _state = _session.State;
+        _anchor = anchor;
         Render();
         _reducedMotion = !_settings.AnimationsEnabled;
-        Array.Clear(_levels);
+        _level = 0;
+        _levelClock.Restart();
         PaintWaveform();
-        var area = DisplayArea.GetFromWindowId(_owner.AppWindow.Id, DisplayAreaFallback.Nearest).WorkArea;
-        AppWindow.Move(new Windows.Graphics.PointInt32(area.X + area.Width / 2, area.Y + area.Height / 2));
+        // Start on the display that will host the pill so the first DPI read is already correct.
+        var area = PlacementArea(ActiveAnchor);
+        AppWindow.Move(ActiveAnchor is { } caret
+            ? new Windows.Graphics.PointInt32(caret.Left, caret.Top)
+            : new Windows.Graphics.PointInt32(area.X + area.Width / 2, area.Y + area.Height / 2));
         SizeToContent();
         AppWindow.Show(false);
         _visible = true;
@@ -135,7 +151,7 @@ public sealed partial class FloatingDictationWindow : Window
         _pill?.SetAccessibleText($"{presentation.Status}. {presentation.Hint}");
         if (!_state.IsLiveOperation)
         {
-            Array.Clear(_levels);
+            _level = 0;
             PaintWaveform();
         }
         if (_state.Phase is DictationPhase.Connecting or DictationPhase.Closed ||
@@ -202,19 +218,27 @@ public sealed partial class FloatingDictationWindow : Window
         }
     }
 
+    private CaretBounds? ActiveAnchor => _state.Settings.OverlayFollowsCaret ? _anchor : null;
+
+    private Windows.Graphics.RectInt32 PlacementArea(CaretBounds? anchor) => anchor is { } caret
+        ? DisplayArea.GetFromRect(new Windows.Graphics.RectInt32(caret.Left, caret.Top, Math.Max(1, caret.Width), caret.Height),
+            DisplayAreaFallback.Nearest).WorkArea
+        : DisplayArea.GetFromWindowId((_visible ? AppWindow : _owner.AppWindow).Id, DisplayAreaFallback.Nearest).WorkArea;
+
     private void SizeToContent()
     {
         if (_closed || _sizing) { return; }
         _sizing = true;
         try
         {
-            var area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Nearest).WorkArea;
+            var anchor = ActiveAnchor;
+            var area = PlacementArea(anchor);
             var scale = GetDpiForWindow(WinRT.Interop.WindowNative.GetWindowHandle(this)) / 96.0;
             var width = Math.Min(FloatingPreviewPresentation.WaveformWidth, area.Width / scale);
             PillBorder.Width = width;
             PreviewRoot.Measure(new Size(width, double.PositiveInfinity));
             var bounds = FloatingPreviewPresentation.Place(area.X, area.Y, area.Width, area.Height,
-                scale, width, Math.Max(1, PreviewRoot.DesiredSize.Height));
+                scale, width, Math.Max(1, PreviewRoot.DesiredSize.Height), anchor);
             if (AppWindow.Size.Width != bounds.Width || AppWindow.Size.Height != bounds.Height)
             {
                 AppWindow.Resize(new Windows.Graphics.SizeInt32(bounds.Width, bounds.Height));
@@ -250,7 +274,7 @@ public sealed partial class FloatingDictationWindow : Window
                 ((SolidColorBrush)PillBorder.BorderBrush).Color, ((SolidColorBrush)WaveBars.Background).Color,
                 _accessibility.HighContrast,
                 _settings.AdvancedEffectsEnabled);
-            _pill.UpdateLevels(_levels, !_reducedMotion);
+            _pill.UpdateLevel(_level, !_reducedMotion);
         }
         finally { _sizing = false; }
     }
@@ -287,28 +311,21 @@ public sealed partial class FloatingDictationWindow : Window
     {
         if (_closed) { return; }
         _reducedMotion = !_settings.AnimationsEnabled;
-        Array.Fill(_levels, _levels[^1]);
         PaintWaveform();
     });
 
+    // Every bar shows the current measured level through a fixed envelope. Nothing scrolls through time.
     private void UpdateWaveform(double level)
     {
         if (_closed || !_visible || _state.Phase != DictationPhase.Recording) { return; }
-        level = FloatingPreviewPresentation.MeterLevel(level);
-        if (_reducedMotion) { Array.Fill(_levels, level); }
-        else
-        {
-            Array.Copy(_levels, 1, _levels, 0, _levels.Length - 1);
-            _levels[^1] = level;
-        }
+        var measured = FloatingPreviewPresentation.MeterLevel(level);
+        var elapsed = _levelClock.Elapsed.TotalSeconds;
+        _levelClock.Restart();
+        _level = _reducedMotion ? measured : FloatingPreviewPresentation.Release(_level, measured, elapsed);
         PaintWaveform();
     }
 
-    private void PaintWaveform()
-    {
-        AutomationProperties.SetName(WaveBars, _reducedMotion ? "Current real audio energy" : "Real audio energy history");
-        _pill?.UpdateLevels(_levels, !_reducedMotion);
-    }
+    private void PaintWaveform() => _pill?.UpdateLevel(_level, !_reducedMotion);
 
     private static void SetStyle(nint handle, int index, nint style)
     {
@@ -469,14 +486,14 @@ public sealed partial class FloatingDictationWindow : Window
             }
         }
 
-        public void UpdateLevels(double[] levels, bool animate)
+        public void UpdateLevel(double level, bool animate)
         {
             if (_disposed || _scale == 0) { return; }
             var motionChanged = _animated != animate;
             _animated = animate;
             for (var index = 0; index < _bars.Count; index++)
             {
-                var height = (float)(FloatingPreviewPresentation.BarHeight(levels[index]) * _scale);
+                var height = (float)(FloatingPreviewPresentation.BarHeight(level, index) * _scale);
                 var geometry = (Windows.UI.Composition.CompositionRoundedRectangleGeometry)_bars[index].Geometry;
                 if (motionChanged) { geometry.ImplicitAnimations = animate ? _barMotion : null; }
                 geometry.Size = new Vector2((float)(BarWidth * _scale), height);

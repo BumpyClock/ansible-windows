@@ -20,6 +20,7 @@ public sealed class AppSettingsStoreTests : IDisposable
         Assert.Equal(0, store.Load().MicrophoneBoostDecibels);
         Assert.False(store.Load().HideFromCapture);
         Assert.True(store.Load().AutoDetectMeetings);
+        Assert.True(store.Load().OverlayFollowsCaret);
         Assert.Equal(PasteShortcut.ControlV, store.Load().PasteShortcut);
         Assert.False(File.Exists(store.Path));
     }
@@ -76,7 +77,8 @@ public sealed class AppSettingsStoreTests : IDisposable
             TypingGapMilliseconds = 35,
             MicrophoneBoostDecibels = 20,
             HideFromCapture = true,
-            AutoDetectMeetings = false
+            AutoDetectMeetings = false,
+            OverlayFollowsCaret = false
         };
         CreateStore().Save(settings);
 
@@ -92,6 +94,19 @@ public sealed class AppSettingsStoreTests : IDisposable
         Assert.Equal(35, document.RootElement.GetProperty("TypingGapMilliseconds").GetInt32());
         Assert.True(document.RootElement.GetProperty("HideFromCapture").GetBoolean());
         Assert.False(document.RootElement.GetProperty("AutoDetectMeetings").GetBoolean());
+        Assert.False(document.RootElement.GetProperty("OverlayFollowsCaret").GetBoolean());
+    }
+
+    [Fact]
+    public void ExistingSettingsWithoutOverlayPositionFollowTheCaret()
+    {
+        var store = CreateStore();
+        store.Save(new AppSettings { Language = "en", OverlayFollowsCaret = false });
+        var document = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(store.Path))!.AsObject();
+        Assert.True(document.Remove("OverlayFollowsCaret"));
+        File.WriteAllText(store.Path, document.ToJsonString());
+        Assert.True(store.Load().OverlayFollowsCaret);
+        Assert.Equal("en", store.Load().Language);
     }
 
     [Fact]

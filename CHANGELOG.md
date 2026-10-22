@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Shrink the dictation overlay to a 128 by 32 DIP pill and drive every bar from
+  the current microphone level through a fixed centre-weighted shape, with a
+  bounded release, instead of scrolling energy history across the pill.
+- Add **Settings > Overlay position**. By default the pill appears under the
+  destination text cursor, read once at shortcut press from the Windows caret or
+  the field's UI Automation text provider, and flips above the line when the
+  work area ends. The bottom-centre placement remains the fallback and the only
+  placement when the option is off.
 - Queue local usage writes on a 32-entry background channel so disk work never
   delays final insertion. Drain and join that writer at shutdown. Show
   `UsageError` in Insights after a failed or overflowed write.

@@ -137,6 +137,16 @@ internal static unsafe partial class WindowsTextTarget
         private nint _automation, _element;
         private bool _initialized;
         private static readonly Guid TextPatternInterface = new("32eba289-3583-42c9-9c59-3b6d9a1e9b6a");
+        private static readonly Guid TextPattern2Interface = new("506a921a-fcc9-409f-b23b-37eb74106872");
+        private const int TextPattern2 = 10024;
+        // IUIAutomationTextRange slots from UIAutomationClient.h: Clone 3, ExpandToEnclosingUnit 6,
+        // GetBoundingRectangles 10, MoveEndpointByUnit 14. TextUnit_Character is 0.
+        private const int ExpandToEnclosingUnitSlot = 6, BoundingRectanglesSlot = 10, MoveEndpointByUnitSlot = 14;
+        private const int CaretRangeSlot = 10;
+        // The caret is a placement hint. It gets at most this share of the shared clock so a slow
+        // provider cannot delay opening the microphone by the full field-verification budget.
+        private const int CaretBudget = 250;
+        private int? _caretDeadline;
 
         public AutomationRead(CancellationToken cancellationToken = default,
             Func<bool>? stillCurrent = null, Stopwatch? deadline = null)
@@ -165,7 +175,7 @@ internal static unsafe partial class WindowsTextTarget
         {
             _cancellationToken.ThrowIfCancellationRequested();
             if (!_stillCurrent()) { throw new OperationCanceledException("The delivery operation was superseded."); }
-            if (_clock.ElapsedMilliseconds >= _budget) { throw new COMException("Accessibility observation deadline elapsed.", UiaTimedOut); }
+            if (_clock.ElapsedMilliseconds >= (_caretDeadline ?? _budget)) { throw new COMException("Accessibility observation deadline elapsed.", UiaTimedOut); }
         }
 
         private void SetTimeout(int slot, uint milliseconds)
@@ -352,6 +362,103 @@ internal static unsafe partial class WindowsTextTarget
                 if (document != 0) { Release(document); }
                 Release(pattern);
             }
+        }
+
+        /// <summary>
+        /// Reads the caret rectangle in physical screen pixels from the focused element's text provider.
+        /// Prefers the provider's caret range, then the first selection range. Collapsed ranges often
+        /// report no rectangle, so the range is widened to the adjacent character on this private copy;
+        /// the destination's own selection is never changed.
+        /// </summary>
+        public CaretBounds? ReadCaret()
+        {
+            var elapsed = _clock.ElapsedMilliseconds;
+            if (elapsed >= CaretBudget) { return null; }
+            _caretDeadline = (int)Math.Min(_budget, elapsed + CaretBudget);
+            nint range = 0;
+            try
+            {
+                var caretPattern = Pattern(TextPattern2, TextPattern2Interface);
+                if (caretPattern != 0)
+                {
+                    try
+                    {
+                        BeforeCall();
+                        var active = 0;
+                        var status = ((delegate* unmanaged[Stdcall]<nint, int*, nint*, int>)Method(caretPattern, CaretRangeSlot))(
+                            caretPattern, &active, &range);
+                        if (status < 0 || active == 0)
+                        {
+                            if (range != 0) { Release(range); range = 0; }
+                        }
+                    }
+                    finally { Release(caretPattern); }
+                }
+                if (range == 0)
+                {
+                    var pattern = Pattern(10014, TextPatternInterface);
+                    if (pattern == 0) { return null; }
+                    try
+                    {
+                        var selections = Pointer(pattern, 5);
+                        if (selections == 0) { return null; }
+                        try
+                        {
+                            if (Integer(selections, 3) < 1) { return null; }
+                            range = Selection(selections);
+                        }
+                        finally { Release(selections); }
+                    }
+                    finally { Release(pattern); }
+                }
+                if (range == 0) { return null; }
+                if (BoundingRectangle(range) is { } exact) { return exact; }
+                // Widen forward over the next character and anchor on its left edge.
+                BeforeCall();
+                Marshal.ThrowExceptionForHR(((delegate* unmanaged[Stdcall]<nint, int, int>)Method(range, ExpandToEnclosingUnitSlot))(range, 0));
+                if (BoundingRectangle(range) is { } next) { return next with { Width = 0 }; }
+                // At the end of the document, widen backward over the previous character and anchor on its right edge.
+                BeforeCall();
+                var moved = 0;
+                Marshal.ThrowExceptionForHR(((delegate* unmanaged[Stdcall]<nint, int, int, int, int*, int>)Method(range, MoveEndpointByUnitSlot))(
+                    range, 0, 0, -1, &moved));
+                if (moved == 0) { return null; }
+                return BoundingRectangle(range) is { } previous
+                    ? previous with { Left = previous.Left + previous.Width, Width = 0 } : null;
+            }
+            finally
+            {
+                _caretDeadline = null;
+                if (range != 0) { Release(range); }
+            }
+        }
+
+        private CaretBounds? BoundingRectangle(nint range)
+        {
+            BeforeCall();
+            nint array = 0;
+            var status = ((delegate* unmanaged[Stdcall]<nint, nint*, int>)Method(range, BoundingRectanglesSlot))(range, &array);
+            try
+            {
+                Marshal.ThrowExceptionForHR(status);
+                if (array == 0 || SafeArrayGetDim(array) != 1) { return null; }
+                Marshal.ThrowExceptionForHR(SafeArrayGetLBound(array, 1, out var lower));
+                Marshal.ThrowExceptionForHR(SafeArrayGetUBound(array, 1, out var upper));
+                var length = (long)upper - lower + 1;
+                if (length < 4 || length > 4096) { return null; }
+                Marshal.ThrowExceptionForHR(SafeArrayAccessData(array, out var data));
+                var values = new double[4];
+                try { Marshal.Copy(data, values, 0, values.Length); }
+                finally { Marshal.ThrowExceptionForHR(SafeArrayUnaccessData(array)); }
+                foreach (var value in values)
+                {
+                    if (!double.IsFinite(value) || Math.Abs(value) > 1 << 24) { return null; }
+                }
+                var bounds = new CaretBounds((int)Math.Round(values[0]), (int)Math.Round(values[1]),
+                    (int)Math.Round(values[2]), (int)Math.Round(values[3]));
+                return bounds.IsUsable ? bounds : null;
+            }
+            finally { if (array != 0) { Marshal.ThrowExceptionForHR(SafeArrayDestroy(array)); } }
         }
 
         private nint Selection(nint selections)
