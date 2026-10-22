@@ -24,6 +24,9 @@ public static class NemotronSpeakerAttribution
     // ASR tokens are stamped when the decoder emits them, after the audio they describe. Real timing on
     // 2026-10-22: Nemotron closed a phrase 30 ms after the diarizer's activity ended, Kroko 150 ms after.
     internal const long EmissionLagSamples = SampleRate * 32 / 100;
+    // A Kroko span opens after its word has begun: on 2026-10-22 "Some" was spoken at 0.40 s and its span
+    // opened at 0.84 s, so the speech up to 450 ms before the opening still belongs to the span's word.
+    internal const long WordSpanStartLagSamples = SampleRate * 45 / 100;
     // Diarizer activity is reported in 80 ms frames; a gap of up to two frames is one run of speech.
     internal const long MaximumRunGapSamples = 2 * 1280;
 
@@ -249,11 +252,11 @@ public static class NemotronSpeakerAttribution
             TokenTimingModel.EmissionFrame => TryGetMajority(start, end)
                 ?? (start > 0 ? TryGetMajority(Math.Max(0, start - EmissionLagSamples), start) : null)
                 ?? UnknownSpeaker,
-            // A word span opens about one emission lag into the word and can run through the following
+            // A word span opens up to one start lag into the word and can run through the following
             // pause into the next speaker's onset, so the speech around its opening decides. A span that
             // opened in silence (the previous word closed on a pause) holds its own word as the first run
             // of speech inside it; later runs belong to the next word.
-            TokenTimingModel.WordSpan => TryGetMajority(Math.Max(0, start - EmissionLagSamples), Math.Min(end, start + EmissionLagSamples))
+            TokenTimingModel.WordSpan => TryGetMajority(Math.Max(0, start - WordSpanStartLagSamples), Math.Min(end, start + EmissionLagSamples))
                 ?? TryGetFirstRunMajority(start, end)
                 ?? UnknownSpeaker,
             _ => throw new ArgumentOutOfRangeException(nameof(timing))

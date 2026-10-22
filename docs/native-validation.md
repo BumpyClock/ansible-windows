@@ -187,8 +187,9 @@ punctuation at the end of the following pause; Kroko ends each word where the
 next word starts. Attribution therefore ignores silence inside a word and
 keeps punctuation out of word timing. A Nemotron word whose emission frames
 hold no speech is credited to the speaker active in the 320 ms before it. A
-Kroko span is credited by the speech within 320 ms of its opening, or, when it
-opened in silence, by the first run of speech inside it, so a span that runs
+Kroko span is credited by the speech from 450 ms before its opening (the
+largest measured start lag) to 320 ms after it, or, when none, by the first
+run of speech inside it, so a span that runs
 through a pause into the next speaker's onset stays with its own speaker
 (checked on the real spans with alternating speaker labels). Both paired
 functional tests passed on that date.
