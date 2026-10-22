@@ -4,6 +4,15 @@ namespace Ansible.Core;
 
 public sealed record SpeakerActivity(string SpeakerId, long StartSample, long EndSample);
 
+/// <summary>How an ASR family stamps its tokens, which decides where a word's speaker is looked up.</summary>
+public enum TokenTimingModel
+{
+    /// <summary>Each token carries the 80 ms frame on which the decoder emitted it (Nemotron).</summary>
+    EmissionFrame,
+    /// <summary>A word opens where the previous word closed and closes where the next one opens (Kroko).</summary>
+    WordSpan
+}
+
 public static class NemotronSpeakerAttribution
 {
     private const long SampleRate = 16000;
@@ -15,10 +24,12 @@ public static class NemotronSpeakerAttribution
     // ASR tokens are stamped when the decoder emits them, after the audio they describe. Real timing on
     // 2026-10-22: Nemotron closed a phrase 30 ms after the diarizer's activity ended, Kroko 150 ms after.
     internal const long EmissionLagSamples = SampleRate * 32 / 100;
+    // Diarizer activity is reported in 80 ms frames; a gap of up to two frames is one run of speech.
+    internal const long MaximumRunGapSamples = 2 * 1280;
 
     public static TranscriptUpdate Create(IReadOnlyList<MeetingTimedToken> tokens,
         IReadOnlyList<SpeakerActivity> activities, long processedSamples, bool isFinal,
-        CancellationToken cancellationToken = default)
+        TokenTimingModel timing = TokenTimingModel.EmissionFrame, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(tokens);
         ArgumentNullException.ThrowIfNull(activities);
@@ -82,7 +93,7 @@ public static class NemotronSpeakerAttribution
             var quality = word.HasNativeTiming && word.End > word.Start
                 ? MeetingTimingQuality.Aligned : MeetingTimingQuality.Unknown;
             var speaker = quality == MeetingTimingQuality.Aligned
-                ? timeline.GetSpeaker(word.Start, word.End) : UnknownSpeaker;
+                ? timeline.GetSpeaker(word.Start, word.End, timing) : UnknownSpeaker;
             if (turnText.Length > 0 && (speaker != turnSpeaker || quality != turnQuality ||
                 word.Start - turnEnd > SampleRate || Math.Max(turnEnd, word.End) - turnStart > 10 * SampleRate))
                 FinishTurn();
@@ -231,12 +242,40 @@ public static class NemotronSpeakerAttribution
             _count = point;
         }
 
-        public string GetSpeaker(long start, long end) =>
-            // A word with no diarized speech inside its span was usually emitted just after its speaker
-            // stopped, so the emission allowance before it decides; beyond that nobody is credited.
-            TryGetMajority(start, end)
+        public string GetSpeaker(long start, long end, TokenTimingModel timing) => timing switch
+        {
+            // Emission frames sit inside or just after the word. A frame with no diarized speech was usually
+            // emitted just after its speaker stopped, so the emission allowance before it decides.
+            TokenTimingModel.EmissionFrame => TryGetMajority(start, end)
                 ?? (start > 0 ? TryGetMajority(Math.Max(0, start - EmissionLagSamples), start) : null)
-                ?? UnknownSpeaker;
+                ?? UnknownSpeaker,
+            // A word span opens about one emission lag into the word and can run through the following
+            // pause into the next speaker's onset, so the speech around its opening decides. A span that
+            // opened in silence (the previous word closed on a pause) holds its own word as the first run
+            // of speech inside it; later runs belong to the next word.
+            TokenTimingModel.WordSpan => TryGetMajority(Math.Max(0, start - EmissionLagSamples), Math.Min(end, start + EmissionLagSamples))
+                ?? TryGetFirstRunMajority(start, end)
+                ?? UnknownSpeaker,
+            _ => throw new ArgumentOutOfRangeException(nameof(timing))
+        };
+
+        // Majority over the first run of diarized speech inside the span, or null when there is none.
+        private string? TryGetFirstRunMajority(long start, long end)
+        {
+            long runStart = -1, runEnd = -1;
+            for (var point = Math.Max(0, FindPoint(start)); point < _count && _samples[point] < end; point++)
+            {
+                var segmentStart = Math.Max(_samples[point], start);
+                var segmentEnd = Math.Min(point + 1 < _count ? _samples[point + 1] : long.MaxValue, end);
+                if (_masks[point] != 0)
+                {
+                    if (runStart < 0) runStart = segmentStart;
+                    runEnd = segmentEnd;
+                }
+                else if (runStart >= 0 && segmentEnd - segmentStart > MaximumRunGapSamples) break;
+            }
+            return runStart < 0 ? null : TryGetMajority(runStart, runEnd);
+        }
 
         // Null means the span holds no diarized speech at all; overlap and ties are Unknown.
         private string? TryGetMajority(long start, long end)

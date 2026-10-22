@@ -23,9 +23,12 @@
   0.31x real time for paired Nemotron on a 4-thread CPU where the stock
   low-latency profile measured 0.95x; speaker labels trail speech by up to
   about five seconds. Speaker attribution no longer counts silence inside a
-  word, no longer lets a late punctuation token stretch a word into the pause,
-  and credits a phrase-final word emitted within 320 ms after its speaker
-  stopped. The paired final is published only after the native reset succeeds.
+  word and no longer lets a late punctuation token stretch a word into the
+  pause. Nemotron words emitted within 320 ms after their speaker stopped keep
+  that speaker. Kroko word spans, which run from the previous word's close to
+  the next word's open, are judged by the speech around their opening, so a
+  phrase-final word no longer follows the next speaker's onset. The paired
+  final is published only after the native reset succeeds.
 - Add Ansible.Probe `--stream-only` and `--repeat` for warm paced first-preview
   and input-end-to-final timings. Missing previews stay missing.
 - Reject stale or tampered `native-runtime.json` records whose patch names,

@@ -26,6 +26,7 @@ internal sealed class NativeDiarizationSession : IDisposable
     private readonly HashSet<SpeakerActivity> _seenActivities = [];
     private IReadOnlyList<MeetingTimedToken> _tokens = [];
     private readonly bool _wholeWords;
+    private readonly TokenTimingModel _timing;
 
     public NativeDiarizationSession(nint registry, AudioModel model, NativeModelEntry entry,
         NativeModelIntegrity integrity, RecognitionOptions options, int threads, int headroom,
@@ -38,6 +39,7 @@ internal sealed class NativeDiarizationSession : IDisposable
             "nemotron_asr" => false,
             _ => throw new NotSupportedException("Paired speaker attribution requires Nemotron or Kroko ASR.")
         };
+        _timing = _wholeWords ? TokenTimingModel.WordSpan : TokenTimingModel.EmissionFrame;
         Backend = options.Backend;
         DeviceIndex = options.DeviceIndex;
         nint family = 0, backendName = 0, sessionOptions = 0;
@@ -233,7 +235,7 @@ internal sealed class NativeDiarizationSession : IDisposable
         if (samples != _processedSamples)
             throw new InvalidDataException("Speech and speaker audio must share cumulative sample positions.");
         ReadTokens(result, NativeAudioApi.WordCount(result), token);
-        var update = NemotronSpeakerAttribution.Create(_tokens, _activities, samples, true, token);
+        var update = NemotronSpeakerAttribution.Create(_tokens, _activities, samples, true, _timing, token);
         if (!string.Equals(update.SpeechText, speech.Trim(), StringComparison.Ordinal))
             throw new InvalidDataException("Speech and timestamp text disagree. The meeting cannot assign speakers safely.");
         token.ThrowIfCancellationRequested();
@@ -242,7 +244,7 @@ internal sealed class NativeDiarizationSession : IDisposable
     }
 
     private void Publish(bool final, IProgress<TranscriptUpdate>? progress, CancellationToken token) =>
-        progress?.Report(NemotronSpeakerAttribution.Create(_tokens, _activities, _processedSamples, final, token));
+        progress?.Report(NemotronSpeakerAttribution.Create(_tokens, _activities, _processedSamples, final, _timing, token));
 
     public void Reset()
     {

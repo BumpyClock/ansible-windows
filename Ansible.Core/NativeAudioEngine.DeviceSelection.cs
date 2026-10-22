@@ -128,7 +128,7 @@ public sealed partial class NativeAudioEngine
         selection.Cpu.Error,
         selection.Gpu.Error);
 
-    private RecognitionResult RunAutoStream(AudioModel model, ChannelReader<byte[]> audio, RecognitionOptions options,
+    private StreamOutcome RunAutoStream(AudioModel model, ChannelReader<byte[]> audio, RecognitionOptions options,
         IProgress<TranscriptUpdate>? progress, CancellationToken token, Action? onReady, int history = 0)
     {
         var selected = ResolveBackend(model, "streaming", history, NativeMemory.MaximumStreamFrames * sizeof(float), options, token);

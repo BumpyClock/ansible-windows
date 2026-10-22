@@ -336,7 +336,9 @@ Kroko meetings publish cumulative timed anonymous speaker turns (`Speaker 0`
 through `Speaker 7`). The diarizer works in four-second chunks, so the newest
 words can show **Unknown speaker** for up to about five seconds before their
 label arrives. Overlapping speech and words with no speaker activity near them
-stay **Unknown speaker**.
+stay **Unknown speaker**. Kroko words that run through a pause are judged by
+the speech where they begin, so the last word before a pause stays with its
+speaker when someone else speaks next.
 VibeVoice meetings keep that model's speaker labels. Rename a speaker by
 selecting its heading. When Teams is selected,
 the app reads visible speaking markers through Windows accessibility. Names require

@@ -182,10 +182,14 @@ with 4 frames of right context, and Auto rejects meeting candidates above 0.50x
 real time on the selected device. The same run showed native token timing:
 Nemotron stamps each token on its 80 ms emission frame and emits phrase
 punctuation at the end of the following pause; Kroko ends each word where the
-next word starts. Attribution therefore ignores silence inside a word, keeps
-punctuation out of word timing, and looks back 320 ms for a word that was
-emitted just after its speaker stopped. Both paired functional tests passed on
-that date.
+next word starts. Attribution therefore ignores silence inside a word and
+keeps punctuation out of word timing. A Nemotron word whose emission frames
+hold no speech is credited to the speaker active in the 320 ms before it. A
+Kroko span is credited by the speech within 320 ms of its opening, or, when it
+opened in silence, by the first run of speech inside it, so a span that runs
+through a pause into the next speaker's onset stays with its own speaker
+(checked on the real spans with alternating speaker labels). Both paired
+functional tests passed on that date.
 With the shipped 50-frame chunks, the same path measured paired Nemotron at 4.38 s (0.31x) and paired Kroko at 3.06 s (0.22x). `NemotronPairedCpuKeepsPaceWithTwoMinutesOfLiveAudio` then paced the public sample nine times (126.6 s) in 80 ms packets through a 300-packet channel on CPU: the backlog peaked at 8 packets, no packet waited, the first speaker label arrived 5.0 s after start, the final arrived 0.7 s after input ended, and all nine Mother Nature anchors were recognized across 36 turns. That is one single-speaker run on one machine, not a multi-speaker or two-hour qualification.
 
 

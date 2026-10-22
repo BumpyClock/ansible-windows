@@ -24,7 +24,6 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
     private bool _languageOption;
     private bool _streamStartAttempted;
     private bool _disposed;
-    private TranscriptUpdate? _meetingFinal;
 
     public NativeAudioEngine(string libraryPath, string catalogPath, string modelsDirectory, int threads = 4, int memoryHeadroomMB = 512,
         string? deviceProbePath = null, string? benchmarkSamplePath = null, string? benchmarkCachePath = null)
@@ -159,7 +158,7 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
             var recording = await DictationAudioBuffer.ReadAsync(audio, cancellationToken);
             return await TranscribeAsync(model, recording, options, progress, cancellationToken);
         }
-        var result = await RunExclusiveAsync(() => RunAutoStream(model, audio, options, progress, cancellationToken, onReady), cancellationToken);
+        var result = (await RunExclusiveAsync(() => RunAutoStream(model, audio, options, progress, cancellationToken, onReady), cancellationToken)).Result;
         progress?.Report(new TranscriptUpdate(result.DisplayText, true, result.SpeechText));
         return result;
     }
@@ -201,7 +200,10 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
     public Task UnloadAsync(CancellationToken cancellationToken) =>
         RunExclusiveAsync(() => { ReleaseModel(); return true; }, cancellationToken);
 
-    private RecognitionResult StreamCore(
+    // A paired meeting's final is created inside the stream and published by the caller after cleanup.
+    internal sealed record StreamOutcome(RecognitionResult Result, TranscriptUpdate? MeetingFinal);
+
+    private StreamOutcome StreamCore(
         AudioModel model, ChannelReader<byte[]> audio, RecognitionOptions options,
         IProgress<TranscriptUpdate>? progress, CancellationToken token, Action? onReady,
         long maximumFrames = NativeMemory.MaximumStreamFrames, int historySteps = 0)
@@ -210,7 +212,6 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
             EnsurePairedSession(model, options, token);
         else EnsureSession(model, "streaming", NativeMemory.MaximumStreamFrames * sizeof(float), options, token, historySteps);
         var diarization = historySteps > 0 && UsesDiarization(model) ? _diarization : null;
-        _meetingFinal = null;
         token.ThrowIfCancellationRequested();
         using var request = CreateRequest(options, token);
         token.ThrowIfCancellationRequested();
@@ -281,10 +282,9 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
         using var owned = new NativeAudioHandle(result, NativeHandleKind.Result);
         token.ThrowIfCancellationRequested();
         var recognized = ReadResult(result, model.Family!, token);
-        if (diarization is not null)
-            _meetingFinal = diarization.CreateFinal(result, recognized.SpeechText
-                ?? throw new InvalidDataException("The ASR model returned no authoritative meeting speech."), receivedFrames, token);
-        return recognized;
+        var meetingFinal = diarization?.CreateFinal(result, recognized.SpeechText
+            ?? throw new InvalidDataException("The ASR model returned no authoritative meeting speech."), receivedFrames, token);
+        return new(recognized, meetingFinal);
     }
 
     private static unsafe void Push(
@@ -640,13 +640,11 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
     {
         RequireMeetingModel(model);
         options = ValidateOptions(model, options);
-        var result = await RunExclusiveAsync(() => RunAutoStream(model, audio, options, progress, cancellationToken, onReady, 4096), cancellationToken);
+        var outcome = await RunExclusiveAsync(() => RunAutoStream(model, audio, options, progress, cancellationToken, onReady, 4096), cancellationToken);
         // The final is published after the exclusive operation reset or released its native sessions.
-        var final = UsesDiarization(model)
-            ? _meetingFinal ?? throw new InvalidOperationException("Paired recognition finished without a speaker-attributed final.")
-            : new TranscriptUpdate(result.DisplayText, true, result.SpeechText);
-        _meetingFinal = null;
-        progress.Report(final);
+        progress.Report(UsesDiarization(model)
+            ? outcome.MeetingFinal ?? throw new InvalidOperationException("Paired recognition finished without a speaker-attributed final.")
+            : new TranscriptUpdate(outcome.Result.DisplayText, true, outcome.Result.SpeechText));
     }
 
     private static void RequireMeetingModel(AudioModel model)
