@@ -162,7 +162,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
 
         // Warnings and errors only. A missing catalog counts only after initialization finishes, so the
         // page does not flash "Catalog unavailable" while the catalog is still loading.
-        var attention = state.Notice.Kind is NoticeKind.Warning or NoticeKind.Error;
+        var attention = state.Notice.ShouldDisplayOn(NoticeArea.Models);
         var catalogMissing = _manager is null && _initialization?.IsCompleted == true;
         StatusInfo.Severity = _error is not null || catalogMissing || state.Notice.Kind == NoticeKind.Error
             ? InfoBarSeverity.Error : InfoBarSeverity.Warning;
@@ -205,12 +205,12 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         if (index < 0)
         {
             _session.Notify(NoticeKind.Warning, "Model not loaded",
-                "Open Model folder, then Verify installed files to load this model.");
+                "Open Model folder, then Verify installed files to load this model.", NoticeArea.Models);
         }
         else
         {
             try { _session.SelectModel(index); }
-            catch (Exception error) { _session.ReportUiError(error); }
+            catch (Exception error) { _session.ReportUiError(error, NoticeArea.Models); }
         }
         Render();
     }
@@ -235,7 +235,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         }
         catch (OperationCanceledException)
         {
-            if (!_closed) { _session.Notify(NoticeKind.Information, "Download paused", "Partial weights remain available for Resume."); }
+            if (!_closed) { _session.Notify(NoticeKind.Information, "Download paused", "Partial weights remain available for Resume.", NoticeArea.Models); }
         }
         catch (Exception error) { ShowError(error); }
         finally { Render(); }
@@ -337,7 +337,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         _transcribingFile = true;
         Render();
         try { await _transcribeFile(); }
-        catch (Exception error) { _session.ReportUiError(error); Render(); }
+        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Models); Render(); }
         finally { _transcribingFile = false; Render(); }
     }
 
@@ -353,7 +353,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         }
         catch (OperationCanceledException)
         {
-            if (!_closed) { _session.Notify(NoticeKind.Information, "Verification paused", "Verify installed files again to complete the checks."); }
+            if (!_closed) { _session.Notify(NoticeKind.Information, "Verification paused", "Verify installed files again to complete the checks.", NoticeArea.Models); }
         }
         catch (Exception error) { ShowError(error); }
         finally { Render(); }
@@ -375,7 +375,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
     private void ShowError(Exception error)
     {
         _error = error.Message;
-        _session.ReportUiError(error);
+        _session.ReportUiError(error, NoticeArea.Models);
         Render();
     }
 

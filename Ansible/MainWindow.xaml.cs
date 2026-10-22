@@ -72,7 +72,7 @@ public sealed partial class MainWindow : Window
         _microphonePermission = microphonePermission;
         _paths = paths;
         _meetingStore = new MeetingStore(Path.Combine(Path.GetDirectoryName(paths.Settings)!, "meetings"));
-        _meetings = new MeetingsPage(_meetingStore, OpenMeetingAsync, () => WinRT.Interop.WindowNative.GetWindowHandle(this));
+        _meetings = new MeetingsPage(session, _meetingStore, OpenMeetingAsync, () => WinRT.Interop.WindowNative.GetWindowHandle(this));
         _history = new HomeDictationHistory(session);
         _dictation = new DictationPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this), _history);
         _settings = new MainPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this),
@@ -155,16 +155,16 @@ public sealed partial class MainWindow : Window
                 _hotkey = new GlobalDictationHotkey(WinRT.Interop.WindowNative.GetWindowHandle(this),
                     _configuredHotkey, HotkeyChanged);
             }
-            catch (Exception error) { _session.Notify(NoticeKind.Error, "Shortcut unavailable", error.Message); }
+            catch (Exception error) { _session.Notify(NoticeKind.Error, "Shortcut unavailable", error.Message, NoticeArea.Settings | NoticeArea.Dictation); }
             if (meetingRecoveryError is not null)
-                _session.Notify(NoticeKind.Error, "Meeting recovery failed", meetingRecoveryError.Message);
+                _session.Notify(NoticeKind.Error, "Meeting recovery failed", meetingRecoveryError.Message, NoticeArea.Meetings);
             else if (meetingRecoveryFailures.Count > 0)
                 _session.Notify(NoticeKind.Warning, "Some saved transcripts unavailable",
-                    "Open Meetings to export and remove unreadable files. New meetings are still available.");
+                    "Open Meetings to export and remove unreadable files. New meetings are still available.", NoticeArea.Meetings);
             StartMeetingDetection();
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
-        catch (Exception error) { _session.ReportUiError(error); }
+        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Application); }
     }
 
     private void RenderMicrophonePermission()
@@ -220,7 +220,7 @@ public sealed partial class MainWindow : Window
         CheckMicrophonePermissionButton.IsEnabled = false;
         try { await _microphonePermission.InitializeAsync(_startupCancellation.Token); }
         catch (OperationCanceledException) when (_startupCancellation.IsCancellationRequested) { }
-        catch (Exception error) { if (!_closing) _session.ReportUiError(error); }
+        catch (Exception error) { if (!_closing) _session.ReportUiError(error, NoticeArea.Application); }
         finally
         {
             RenderMicrophonePermission();
@@ -240,9 +240,9 @@ public sealed partial class MainWindow : Window
         try
         {
             if (!await Windows.System.Launcher.LaunchUriAsync(new Uri("ms-settings:privacy-microphone")) && !_closing)
-                _session.Notify(NoticeKind.Warning, "Windows Settings unavailable", "Open Windows Settings > Privacy & security > Microphone.");
+                _session.Notify(NoticeKind.Warning, "Windows Settings unavailable", "Open Windows Settings > Privacy & security > Microphone.", NoticeArea.Application);
         }
-        catch (Exception error) { if (!_closing) _session.ReportUiError(error); }
+        catch (Exception error) { if (!_closing) _session.ReportUiError(error, NoticeArea.Application); }
     }
 
     private void NavigateClicked(object sender, RoutedEventArgs args) => Navigate((string)((Button)sender).Tag);
@@ -313,9 +313,8 @@ public sealed partial class MainWindow : Window
             ? item.savedId is null && (item.session.IsActive || item.session.Document is null)
             : item.savedId == document.Id || item.session.Document?.Id == document.Id);
         if (existing.window is not null) return existing.window;
-        var state = _session.State;
         var meeting = new MeetingSession(
-            () => new NativeAudioEngine(_paths.NativeLibrary, _paths.ModelCatalog, state.ModelsDirectory,
+            () => new NativeAudioEngine(_paths.NativeLibrary, _paths.ModelCatalog, _session.State.ModelsDirectory,
                 deviceProbePath: _paths.DeviceProbe, benchmarkSamplePath: _paths.PublicSample,
                 benchmarkCachePath: _paths.DeviceBenchmarks),
             new PermissionCheckedMeetingCaptureFactory(new Ansible.Core.Windows.MeetingCaptureFactory(), _microphonePermission), _meetingStore,
@@ -334,10 +333,18 @@ public sealed partial class MainWindow : Window
             },
             release: _session.ReleaseMeetingAsync,
             observerFactory: () => new Ansible.Core.Windows.TeamsSpeakerObserver(),
-            alignerFactory: () => new NativeMeetingWordAligner(_paths.NativeLibrary, _paths.ModelCatalog, state.ModelsDirectory));
+            alignerFactory: () => new NativeMeetingWordAligner(_paths.NativeLibrary, _paths.ModelCatalog, _session.State.ModelsDirectory),
+            getModelId: () =>
+            {
+                var current = _session.State;
+                return current.SelectedModel is { } selected
+                    && current.Settings.ModelId == selected.Id
+                    && MeetingSession.SupportsMeeting(selected)
+                    ? selected.Id : null;
+            });
         var window = new MeetingWindow(meeting, _meetingStore, document);
-        try { window.ApplyCapturePrivacy(state.Settings.HideFromCapture); }
-        catch (Exception error) { _session.Notify(NoticeKind.Warning, "Screen capture privacy unavailable", error.Message); }
+        try { window.ApplyCapturePrivacy(_session.State.Settings.HideFromCapture); }
+        catch (Exception error) { _session.Notify(NoticeKind.Warning, "Screen capture privacy unavailable", error.Message, NoticeArea.Application); }
         _meetingWindows.Add((meeting, window, document?.Id));
         meeting.StateChanged += state => DispatcherQueue.TryEnqueue(() =>
         {
@@ -350,7 +357,7 @@ public sealed partial class MainWindow : Window
         {
             _meetingWindows.RemoveAll(item => ReferenceEquals(item.window, window));
             try { await meeting.DisposeAsync(); await _meetings.RefreshAsync(); }
-            catch (Exception error) { _session.ReportUiError(error); }
+            catch (Exception error) { _session.ReportUiError(error, NoticeArea.Meetings); }
         };
         return window;
     }
@@ -404,7 +411,7 @@ public sealed partial class MainWindow : Window
                             if (_detectionUnavailableReported) return;
                             _detectionUnavailableReported = true;
                             _session.Notify(NoticeKind.Warning, "Meeting detection unavailable",
-                                $"{error.Message} You can start notetaking from Meetings. Detection will retry.");
+                                $"{error.Message} You can start notetaking from Meetings. Detection will retry.", NoticeArea.Meetings);
                         });
                     }
                 }
@@ -472,7 +479,9 @@ public sealed partial class MainWindow : Window
             if (!window.SelectDetectedMeeting(expected))
             {
                 HideMeetingSuggestion();
-                _session.Notify(NoticeKind.Information, "Meeting changed", "The detected Teams app is no longer available. Select your meeting app from Meetings.");
+                _session.Notify(NoticeKind.Warning, "Meeting changed",
+                    "The detected Teams app is no longer available. Select your meeting app from Meetings.", NoticeArea.Meetings);
+                Navigate("meetings");
                 return;
             }
             _meetingDetection.Dismiss(expected);
@@ -480,7 +489,12 @@ public sealed partial class MainWindow : Window
             window.Activate(); // Only the explicit action activates the notetaker; it never starts capture.
         }
         catch (OperationCanceledException) when (_closing || _closed) { }
-        catch (Exception error) { HideMeetingSuggestion(); _session.Notify(NoticeKind.Warning, "Meeting detection unavailable", error.Message); }
+        catch (Exception error)
+        {
+            HideMeetingSuggestion();
+            _session.Notify(NoticeKind.Warning, "Could not open notetaker", error.Message, NoticeArea.Meetings);
+            Navigate("meetings");
+        }
         finally { _openingSuggestedMeeting = false; }
     }
 
@@ -531,7 +545,7 @@ public sealed partial class MainWindow : Window
             try { _floating?.ApplyCapturePrivacy(state.Settings.HideFromCapture); }
             catch (Exception error) { failures.Add(error.Message); }
             if (failures.Count > 0)
-                _session.Notify(NoticeKind.Warning, "Screen capture privacy unavailable", string.Join(" ", failures.Distinct()));
+                _session.Notify(NoticeKind.Warning, "Screen capture privacy unavailable", string.Join(" ", failures.Distinct()), NoticeArea.Application);
         }
         var showWaveform = state.IsCaptureOpen || state.Phase is DictationPhase.Preparing or DictationPhase.Recording;
         if (!showWaveform) { _popupFailed = false; }
@@ -714,12 +728,9 @@ public sealed partial class MainWindow : Window
             if (delivery.Error is not null)
                 _session.Notify(NoticeKind.Warning, "Insertion stopped",
                     $"{delivery.Error} Check the destination before using Copy transcript; do not repeat text that already appeared.");
-            else if (delivery.Sent)
-                _session.Notify(delivery.Delivery?.Status == TextDeliveryStatus.Verified ? NoticeKind.Success : NoticeKind.Information,
-                    delivery.Delivery?.Status == TextDeliveryStatus.Verified ? "Insertion verified" : "Text sent; unverified",
-                    delivery.Delivery?.Message ?? "The insertion input was sent. Check the destination.", showInStatus: true);
-            else
-                _session.Notify(NoticeKind.Information, "No speech to insert", "The model returned no speech text.", showInStatus: true);
+            else if (delivery.Sent && delivery.Delivery?.Status != TextDeliveryStatus.Verified)
+                _session.Notify(NoticeKind.Warning, "Text sent; unverified",
+                    delivery.Delivery?.Message ?? "The insertion input was sent. Check the destination.");
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         catch (Exception error) { _session.ReportUiError(error); }

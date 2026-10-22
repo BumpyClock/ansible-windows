@@ -30,11 +30,14 @@ Setup downloads and verifies `nemotron-asr-0.6b-q8` and
 `-Models <model-id>`, including `moonshine-tiny`. Setup does not build the DLL.
 When no model ID is saved, dictation uses the installed Nemotron ASR. The
 diarization companion cannot be selected for dictation, replay, or WAV
-transcription. Unconfigured meetings use Nemotron ASR with that companion when
-both are installed. If Nemotron ASR is missing, installed Kroko uses the same
-companion. If no paired Nemotron or Kroko ASR is available, meetings keep
-VibeVoice streaming, even when the companion is present.
-There is no meeting model picker.
+transcription. There is no meeting model picker. Start honors an explicit saved
+streaming **Use** selection only when that model can stream meetings. An
+automatic dictation default is not a meeting override. Explicit Nemotron or
+Kroko without the companion fails Start rather than switching models.
+Unconfigured meetings use Nemotron ASR with that companion when both are
+installed. If Nemotron ASR is missing, installed Kroko uses the same companion.
+If no paired Nemotron or Kroko ASR is available, meetings keep VibeVoice
+streaming, including when the companion is absent.
 
 The native build downloads pinned CMake and Ninja tools, checks out audio.cpp
 v0.9.0, applies the tracked Vulkan loader and Nemotron streaming-timestamp
@@ -157,7 +160,12 @@ only in memory. The session emits a typed successful dictation completion after
 cleanup. One app-owned history instance receives it independently of page
 lifetime. History and Insights views consume typed projections; the dictation
 page owns recording and file actions. Failed, cancelled, and unreleased
-operations never enter history. Bounded `PageCanvas` layouts retain a finite minimum
+operations never enter history. Usage writes use a 32-entry bounded queue so
+disk work never delays that completion or final insertion. Shutdown drains and
+joins the writer. `UsageError` is shown in Insights after a failed or overflowed
+write. Session notices display only undismissed warnings and errors, scoped by
+area; capture-privacy failures are app-wide. Routine success and cancel notices
+are not shown. Bounded `PageCanvas` layouts retain a finite minimum
 height and allow outer overflow in short windows, so warnings cannot collapse their lists.
 `SettingsRow` owns the shared adaptive setting
 layout; pages provide labels, descriptions, and controls.
@@ -274,7 +282,11 @@ capture and inference resources are released. Recognition, including final
 transcript callbacks and their saves, runs without the UI synchronization
 context. End joins this work before releasing the reservation. Session tests
 exercise completion from a single-thread UI context to catch save/refinement
-deadlocks. Capture privacy is a visual
+deadlocks. Start snapshots recognition options before reserve. It honors an
+explicit saved streaming dictation model only when that saved ID matches the
+current selected meeting-capable ASR; otherwise it uses the unconfigured
+Nemotron pair, Kroko pair, then VibeVoice path. Explicit Nemotron or Kroko
+without the companion fails Start rather than switching models. Capture privacy is a visual
 setting that can change during a meeting. Pause gates the same channel
 reader; it does not reset the native stream. Capture writes 16 kHz mono PCM16
 into bounded queues. Transcripts use atomic source-generated JSON saves; audio
@@ -294,9 +306,11 @@ at most two hours of audio. The model's rolling history can affect speaker
 continuity. The app parses native speaker labels and records approximate native
 input-window timestamps. Optional Nemotron token anchors refine confident
 untimed VibeVoice bounds; Teams observation matching names only supported,
-source-exclusive aligned turns. Snapshot `NamingStatus` and `RefinementStatus`
-fields remain. Update latency, memory over two hours, and multi-speaker
-accuracy require separate qualification.
+source-exclusive aligned turns. Optional naming and refinement failures write
+trace warnings. The meeting UI keeps editable speaker labels and does not show
+`NamingStatus`, `RefinementStatus`, or `DeviceSelectionSummary` cards. Update
+latency, memory over two hours, and multi-speaker accuracy require separate
+qualification.
 
 | Location | Responsibility |
 | --- | --- |

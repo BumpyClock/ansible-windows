@@ -37,11 +37,15 @@ Setup downloads and verifies `nemotron-asr-0.6b-q8` and
 `nemotron-3-diarization-q8` into `.runtime\models`. After that install, an
 unconfigured dictation session uses Nemotron ASR. A saved model choice is kept.
 The diarization companion cannot be selected for dictation, replay, or WAV
-transcription. Unconfigured meetings use Nemotron ASR with that companion when
-both are installed. If Nemotron ASR is missing, installed Kroko uses the same
-companion. If no paired Nemotron or Kroko ASR is available, meetings keep
-VibeVoice ASR Streaming 1.5B, even when the companion is present. There is no
-meeting model picker.
+transcription. There is no meeting model picker. Start uses an explicitly saved
+**Use** selection only when that model is meeting-capable streaming ASR
+(Nemotron, Kroko, or VibeVoice streaming). An automatic dictation default is
+not a meeting override. Explicit Nemotron or Kroko requires the installed
+companion; a missing companion fails Start instead of switching models.
+Unconfigured meetings use Nemotron ASR with that companion when both are
+installed. If Nemotron ASR is missing, installed Kroko uses the same companion.
+If no paired Nemotron or Kroko ASR is available, meetings keep VibeVoice ASR
+Streaming 1.5B, including when the companion is absent.
 
 The native build produces the DLL, dependencies, notices, and public validation
 sample. It compiles `nemotron_asr` and `nemotron_3_diar` and applies the tracked
@@ -79,14 +83,17 @@ options and checks.
 
 ## Current limits
 
-- Meetings start manually from **Meetings**. Installed Nemotron ASR plus Nemotron 3
-  Diarization is the default pair. If Nemotron ASR is missing, installed Kroko uses
-  that companion. If no paired Nemotron or Kroko ASR is available, meetings keep
-  VibeVoice ASR Streaming 1.5B, even when the companion is present. Auto skips a
-  candidate that measured slower than 0.50x real time on the selected device
-  and says so in the Meetings window; speaker labels trail speech by up to
-  about five seconds.
-  There is no meeting model picker. Ordinary dictation stays plain ASR.
+- Meetings start manually from **Meetings**. There is no meeting model picker.
+  Start snapshots processor, language hint, and vocabulary, and honors an
+  explicitly saved streaming **Use** selection when that model can stream
+  meetings. An automatic dictation default is not a meeting override. Explicit
+  Nemotron or Kroko without the diarization companion fails Start rather than
+  switching models. Unconfigured meetings use installed Nemotron ASR plus
+  Nemotron 3 Diarization, then installed Kroko with that companion, then
+  VibeVoice ASR Streaming 1.5B, including when the companion is absent. Auto
+  skips a candidate that measured slower than 0.50x real time on the selected
+  device and says so in the Meetings window; speaker labels trail speech by up
+  to about five seconds. Ordinary dictation stays plain ASR.
   Automatic Teams detection offers a notetaker prompt when Teams holds an active
   microphone session; it never starts recording. Disable it in Settings.
   Capture includes the default microphone and either a selected application

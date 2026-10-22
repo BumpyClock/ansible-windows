@@ -25,6 +25,9 @@ public sealed partial class HomeInsightsView : UserControl
 
     internal void Render(HomeInsightsViewModel model)
     {
+        UsageWarningBar.Message = model.UsageWarning ?? "";
+        UsageWarningBar.IsOpen = model.UsageWarning is not null;
+        UsageWarningBar.Visibility = UsageWarningBar.IsOpen ? Visibility.Visible : Visibility.Collapsed;
         HomePaceText.Text = model.PaceText;
         HomeSessionsText.Text = model.SessionsText;
         HomeWordsText.Text = model.WordsText;

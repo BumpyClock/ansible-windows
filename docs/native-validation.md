@@ -6,9 +6,11 @@ PowerShell. Probes use local model weights and a public sample, not the micropho
 
 Default setup installs `nemotron-asr-0.6b-q8` and `nemotron-3-diarization-q8`.
 Moonshine examples below need `moonshine-tiny` installed. The diarization
-companion is not a probe ASR model. Unconfigured meetings use it with
-installed Nemotron ASR, or installed Kroko if that ASR is missing. Dictation,
-replay, and WAV stay plain ASR. There is no meeting model picker.
+companion is not a probe ASR model. Probes take an explicit ASR model ID.
+App meetings have no model picker; Start may honor an explicitly saved
+meeting-capable streaming dictation model, otherwise the unconfigured
+Nemotron pair, Kroko pair, then VibeVoice path. Dictation, replay, and WAV
+stay plain ASR.
 
 The native build pins audio.cpp v0.9.0, applies tracked patches including
 `tools/patches/audio-nemotron-stream-timestamps.patch`, and supports CPU and
@@ -269,7 +271,7 @@ calls; a blocked Windows call can delay shutdown while its owned worker is joine
   companion. Recognition and the diarizer share the captured stream, joint
   memory admission, and native reset or disposal. If no paired Nemotron or Kroko
   ASR is available, meetings keep VibeVoice streaming with a 4096-step rolling
-  native history, even when the companion is present. Capture is limited to two hours and Pause/Resume keeps one stream.
+  native history, including when the companion is absent. Capture is limited to two hours and Pause/Resume keeps one stream.
   Those limits are not evidence of two-hour speaker accuracy or latency.
   `NativeMeetingTests` covers the retained VibeVoice path. Paired speaker
   checks use `Test-SpeakerModels.ps1` when the native runtime and weights are

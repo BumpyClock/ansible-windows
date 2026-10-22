@@ -8,10 +8,18 @@ public enum DictationPhase
 
 public enum SessionActivity { None, Connecting, Dictation, Replay, File, ModelMaintenance }
 public enum NoticeKind { Information, Success, Warning, Error }
-public enum SessionOutcomeKind { Completed, Cancelled, TimedOut, Failed }
-public sealed record SessionNotice(NoticeKind Kind, string Title, string Message, bool ShowInStatus = false, bool IsDismissed = false)
+[Flags]
+public enum NoticeArea
 {
-    public bool ShouldDisplay => !IsDismissed && (ShowInStatus || Kind is NoticeKind.Warning or NoticeKind.Error);
+    Dictation = 1, Settings = 2, Models = 4, Dictionary = 8, Meetings = 16,
+    Application = Dictation | Settings | Models | Dictionary | Meetings
+}
+public enum SessionOutcomeKind { Completed, Cancelled, TimedOut, Failed }
+public sealed record SessionNotice(
+    NoticeKind Kind, string Title, string Message, NoticeArea Area = NoticeArea.Dictation, bool IsDismissed = false)
+{
+    public bool ShouldDisplay => !IsDismissed && Kind is NoticeKind.Warning or NoticeKind.Error;
+    public bool ShouldDisplayOn(NoticeArea area) => ShouldDisplay && (Area & area) != 0;
 }
 public sealed record SessionOutcome(SessionOutcomeKind Kind, RecognitionResult? Result = null, Exception? Error = null);
 

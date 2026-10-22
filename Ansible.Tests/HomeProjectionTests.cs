@@ -60,6 +60,19 @@ public sealed class HomeProjectionTests
     }
 
     [Fact]
+    public void InsightsKeepExistingCountsAndExposeLaterUsageWriteFailures()
+    {
+        const string error = "Local counts could not be saved because the background usage queue is full.";
+        var view = HomeInsightsProjection.Create(new UsageDocument(), error, _ => null,
+            new DateOnly(2026, 10, 20), TimeZoneInfo.Utc);
+
+        Assert.Equal("0", view.SessionsText);
+        Assert.NotNull(view.Activity);
+        Assert.Null(view.AvailabilityMessage);
+        Assert.Equal(error, view.UsageWarning);
+    }
+
+    [Fact]
     public void InsightsCountDictationWordsAndCompareModelsAgainstAllSessions()
     {
         var time = new DateTimeOffset(2026, 10, 20, 12, 0, 0, TimeSpan.Zero);

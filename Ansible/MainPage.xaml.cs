@@ -117,19 +117,13 @@ public sealed partial class MainPage : Page
     private void RenderNotice()
     {
         var notice = _state.Notice;
-        if (!notice.ShouldDisplay)
+        if (!notice.ShouldDisplayOn(NoticeArea.Settings))
         {
             StatusInfo.IsOpen = false;
             StatusInfo.Visibility = Visibility.Collapsed;
             return;
         }
-        StatusInfo.Severity = notice.Kind switch
-        {
-            NoticeKind.Error => InfoBarSeverity.Error,
-            NoticeKind.Warning => InfoBarSeverity.Warning,
-            NoticeKind.Success => InfoBarSeverity.Success,
-            _ => InfoBarSeverity.Informational
-        };
+        StatusInfo.Severity = notice.Kind == NoticeKind.Error ? InfoBarSeverity.Error : InfoBarSeverity.Warning;
         StatusInfo.Title = notice.Title;
         StatusInfo.Message = notice.Message;
         StatusInfo.IsOpen = true;
@@ -155,34 +149,34 @@ public sealed partial class MainPage : Page
                 _ => throw new InvalidOperationException("Choose a recognition processor.")
             });
         }
-        catch (Exception error) { _session.ReportUiError(error); }
+        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); }
     }
 
     private void LanguageChanged(object sender, TextChangedEventArgs args)
     {
         if (_rendering || LanguageBox is null) { return; }
         try { _session.SetLanguage(LanguageBox.Text); }
-        catch (Exception error) { _session.ReportUiError(error); }
+        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); }
     }
     private void UsageToggled(object sender, RoutedEventArgs args)
     {
         if (_rendering) { return; }
         try { _session.SetUsageEnabled(UsageToggle.IsOn); }
-        catch (Exception error) { _session.ReportUiError(error); Render(); }
+        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); Render(); }
     }
 
     private void HideFromCaptureChanged(object sender, RoutedEventArgs args)
     {
         if (_rendering || HideFromCaptureChoice.IsChecked is not bool enabled || enabled == _session.State.Settings.HideFromCapture) return;
         try { _session.SetHideFromCapture(enabled); }
-        catch (Exception error) { _session.ReportUiError(error); Render(); }
+        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); Render(); }
     }
 
     private void AutoDetectMeetingsChanged(object sender, RoutedEventArgs args)
     {
         if (_rendering || AutoDetectMeetingsChoice.IsChecked is not bool enabled || enabled == _session.State.Settings.AutoDetectMeetings) return;
         try { _session.SetAutoDetectMeetings(enabled); }
-        catch (Exception error) { _session.ReportUiError(error); Render(); }
+        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); Render(); }
     }
 
     private void DictationModeChanged(object sender, SelectionChangedEventArgs args)
@@ -192,7 +186,7 @@ public sealed partial class MainPage : Page
         // Selection controls can raise SelectionChanged after Render returns; ignore echoes of the current setting.
         if (pushToTalk == _session.State.Settings.PushToTalk) { return; }
         try { _changeMode(pushToTalk); }
-        catch (Exception error) { _session.ReportUiError(error); Render(); }
+        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); Render(); }
     }
 
     private void InsertionMethodChanged(object sender, SelectionChangedEventArgs args)
@@ -201,7 +195,7 @@ public sealed partial class MainPage : Page
         var method = InsertionChoice.SelectedIndex == 0 ? TextInsertionMethod.Paste : TextInsertionMethod.Type;
         if (method == _session.State.Settings.InsertionMethod) { return; }
         try { _session.SetInsertionMethod(method); }
-        catch (Exception error) { _session.ReportUiError(error); Render(); }
+        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); Render(); }
     }
 
     private void TypingGapChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
@@ -211,7 +205,7 @@ public sealed partial class MainPage : Page
         var gap = (int)Math.Round(Math.Clamp(args.NewValue, 0, AppSettings.MaxTypingGapMilliseconds));
         if (gap == _session.State.Settings.TypingGapMilliseconds) { return; }
         try { _session.SetTypingGap(gap); }
-        catch (Exception error) { _session.ReportUiError(error); Render(); }
+        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); Render(); }
     }
 
     private void PasteShortcutChanged(object sender, SelectionChangedEventArgs args)
@@ -220,7 +214,7 @@ public sealed partial class MainPage : Page
         var shortcut = (PasteShortcut)PasteShortcutChoice.SelectedIndex;
         if (shortcut == _session.State.Settings.PasteShortcut) { return; }
         try { _session.SetPasteShortcut(shortcut); }
-        catch (Exception error) { _session.ReportUiError(error); Render(); }
+        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); Render(); }
     }
 
     private void MicrophoneBoostChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
@@ -230,13 +224,13 @@ public sealed partial class MainPage : Page
         var boost = (int)Math.Round(Math.Clamp(args.NewValue, 0, MicrophoneBoost.MaxDecibels));
         if (boost == _session.State.Settings.MicrophoneBoostDecibels) { Render(); return; }
         try { _session.SetMicrophoneBoost(boost); }
-        catch (Exception error) { _session.ReportUiError(error); Render(); }
+        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); Render(); }
     }
 
     private void ResetShortcutClicked(object sender, RoutedEventArgs args)
     {
         try { _changeHotkey(DictationShortcut.Default); }
-        catch (Exception error) { _session.Notify(NoticeKind.Error, "Shortcut unavailable", error.Message); }
+        catch (Exception error) { _session.Notify(NoticeKind.Error, "Shortcut unavailable", error.Message, NoticeArea.Settings); }
     }
 
     private void ShortcutGotFocus(object sender, RoutedEventArgs args) => StartShortcutCapture();
@@ -252,7 +246,7 @@ public sealed partial class MainPage : Page
             _pendingShortcut = null;
             SetShortcutDisplay("Press a shortcut; Esc cancels");
         }
-        catch (Exception error) { _session.ReportUiError(error); }
+        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); }
     }
 
     private void ShortcutKeyDown(object sender, KeyRoutedEventArgs args)
@@ -288,7 +282,7 @@ public sealed partial class MainPage : Page
         if (!_recordingShortcut || _pendingShortcut is not { } shortcut || (uint)args.Key != shortcut.Key) { return; }
         args.Handled = true;
         try { _changeHotkey(shortcut); }
-        catch (Exception error) { _session.Notify(NoticeKind.Error, "Shortcut unavailable", error.Message); }
+        catch (Exception error) { _session.Notify(NoticeKind.Error, "Shortcut unavailable", error.Message, NoticeArea.Settings); }
         finally { EndShortcutCapture(); }
     }
 
@@ -303,7 +297,7 @@ public sealed partial class MainPage : Page
         _recordingShortcut = false;
         _pendingShortcut = null;
         try { _captureShortcut(false); }
-        catch (Exception error) { _session.Notify(NoticeKind.Error, "Shortcut unavailable", error.Message); }
+        catch (Exception error) { _session.Notify(NoticeKind.Error, "Shortcut unavailable", error.Message, NoticeArea.Settings); }
         SetShortcutDisplay(_session.State.Settings.Shortcut.DisplayText);
     }
 
