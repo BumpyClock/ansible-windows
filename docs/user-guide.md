@@ -6,16 +6,17 @@ See the [README](../README.md#build-and-run) to build and launch the app.
 
 **Home** shows recent completed dictations grouped by day, with the time, the
 transcript, search, **Copy transcript**, and a **More** menu with **Remove from
-history**. Shortcut dictations carry an insertion tag: **Inserted** when the
-target field confirmed the text, **Not verified** when the app accepted it
-without confirmation, **Partially inserted**, or **Not inserted**. In-app
-dictations have no tag. History stays in memory for this app session. Closing
-Ansible clears it. The history keeps at most 100 entries within a bounded text
-budget. Search can hide entries until you clear its filter. WAV results and
-dictations too large for history remain available in the separate transcript
-area. Audio is never saved. The Activity card shades each day by its recorded
-dictation count, up to four levels; days with no recorded dictations stay
-unshaded.
+history**. Removing the current dictation's row also hides its transcript
+card; the text is gone from Home until you dictate again. Shortcut dictations
+carry an insertion tag: **Inserted** when the target field confirmed the text,
+**Not verified** when the app accepted it without confirmation, **Partially
+inserted**, or **Not inserted**. In-app dictations have no tag. History stays in
+memory for this app session. Closing Ansible clears it. The history keeps at
+most 100 entries within a bounded text budget. Search can hide entries until
+you clear its filter. WAV results and dictations too large for history remain
+available in the separate transcript area. Audio is never saved. The Activity
+card shades each day by its recorded dictation count, up to four levels; days
+with no recorded dictations stay unshaded.
 
 Use **Dictate** or your configured shortcut to record. Choose the active model
 and use **Transcribe WAV file** on **Models**.
