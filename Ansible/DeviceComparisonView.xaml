@@ -7,64 +7,122 @@
         <StaticResource x:Key="ProgressBarIndicatorHeight" ResourceKey="BenchmarkBarHeight" />
         <StaticResource x:Key="ProgressBarTrackCornerRadius" ResourceKey="BenchmarkBarCornerRadius" />
         <StaticResource x:Key="ProgressBarCornerRadius" ResourceKey="BenchmarkBarCornerRadius" />
+        <Style x:Key="BenchmarkBarStyle" TargetType="ProgressBar">
+            <Setter Property="Height" Value="{StaticResource BenchmarkBarHeight}" />
+            <Setter Property="MinHeight" Value="{StaticResource BenchmarkBarHeight}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Minimum" Value="0" />
+            <Setter Property="Background" Value="{ThemeResource AppControlBrush}" />
+            <Setter Property="Foreground" Value="{ThemeResource AppTrackBrush}" />
+        </Style>
+        <Style x:Key="BenchmarkDeviceStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
+            <Setter Property="FontSize" Value="{StaticResource BenchmarkLabelFontSize}" />
+            <Setter Property="FontWeight" Value="Medium" />
+            <Setter Property="Width" Value="{StaticResource BenchmarkLabelWidth}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Foreground" Value="{ThemeResource AppSecondaryTextBrush}" />
+        </Style>
+        <Style x:Key="BenchmarkValueStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
+            <Setter Property="FontSize" Value="{StaticResource BenchmarkLabelFontSize}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="MinWidth" Value="{StaticResource BenchmarkValueMinWidth}" />
+            <Setter Property="MaxWidth" Value="{StaticResource BenchmarkValueMaxWidth}" />
+            <Setter Property="TextAlignment" Value="Right" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Foreground" Value="{ThemeResource AppSecondaryTextBrush}" />
+        </Style>
+        <Style x:Key="BenchmarkFootnoteStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
+            <Setter Property="FontSize" Value="{StaticResource BenchmarkFootnoteFontSize}" />
+            <Setter Property="LineHeight" Value="{StaticResource BenchmarkFootnoteLineHeight}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
     </UserControl.Resources>
     <Border Background="{ThemeResource AppSurfaceBrush}"
-            BorderBrush="{ThemeResource AppBorderBrush}"
-            BorderThickness="1"
-            CornerRadius="{StaticResource PanelCornerRadius}"
-            Padding="{StaticResource CardPadding}">
-        <Grid x:Name="ComparisonLayout" ColumnSpacing="{StaticResource CardGap}"
-              RowSpacing="{StaticResource CardGap}" SizeChanged="ComparisonLayoutSizeChanged">
+            CornerRadius="{StaticResource BenchmarkPanelCornerRadius}"
+            Padding="{StaticResource BenchmarkPanelPadding}">
+        <!-- The faster measured device gets the accent bar and primary text; the other stays on the neutral track. -->
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="LeaderStates">
+                <VisualState x:Name="NoLeader" />
+                <VisualState x:Name="CpuLeads">
+                    <VisualState.Setters>
+                        <Setter Target="CpuComparisonBar.Foreground" Value="{ThemeResource AppAccentBrush}" />
+                        <Setter Target="CpuLabel.Foreground" Value="{ThemeResource AppTextBrush}" />
+                        <Setter Target="CpuComparisonValue.Foreground" Value="{ThemeResource AppTextBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="GpuLeads">
+                    <VisualState.Setters>
+                        <Setter Target="GpuComparisonBar.Foreground" Value="{ThemeResource AppAccentBrush}" />
+                        <Setter Target="GpuLabel.Foreground" Value="{ThemeResource AppTextBrush}" />
+                        <Setter Target="GpuComparisonValue.Foreground" Value="{ThemeResource AppTextBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+        <Grid x:Name="ComparisonLayout" ColumnSpacing="{StaticResource BenchmarkColumnGap}"
+              SizeChanged="ComparisonLayoutSizeChanged">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="2*" />
                 <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <StackPanel x:Name="ComparisonMetrics" Spacing="12">
-                <TextBlock Text="Last device comparison" Style="{StaticResource CaptionSecondaryStyle}" />
-                <TextBlock Text="Lower elapsed time is better." Style="{StaticResource CaptionSecondaryStyle}" />
-                <Grid ColumnSpacing="12" RowSpacing="10">
+            <StackPanel x:Name="ComparisonMetrics" Spacing="{StaticResource BenchmarkRowGap}" VerticalAlignment="Center">
+                <StackPanel Spacing="2">
+                    <TextBlock Text="Last device comparison" FontWeight="Medium" Style="{StaticResource CaptionSecondaryStyle}" />
+                    <TextBlock Text="Lower elapsed time is better." Style="{StaticResource BenchmarkFootnoteStyle}" />
+                </StackPanel>
+                <Grid ColumnSpacing="{StaticResource BenchmarkBarGap}" RowSpacing="{StaticResource BenchmarkRowGap}">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="56" />
+                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="CPU" Style="{StaticResource CaptionSecondaryStyle}" />
-                    <ProgressBar x:Name="CpuComparisonBar" Grid.Column="1" MinHeight="{StaticResource BenchmarkBarHeight}"
-                                 Height="{StaticResource BenchmarkBarHeight}"
-                                 VerticalAlignment="Center" Minimum="0" Foreground="{ThemeResource AppAccentBrush}" />
-                    <TextBlock x:Name="CpuComparisonValue" Grid.Column="2" MaxWidth="{StaticResource BenchmarkValueMaxWidth}"
-                               Style="{StaticResource CaptionSecondaryStyle}" />
-                    <TextBlock Grid.Row="1" Text="Vulkan" Style="{StaticResource CaptionSecondaryStyle}" />
-                    <ProgressBar x:Name="GpuComparisonBar" Grid.Row="1" Grid.Column="1" MinHeight="{StaticResource BenchmarkBarHeight}"
-                                 Height="{StaticResource BenchmarkBarHeight}"
-                                 VerticalAlignment="Center" Minimum="0" Foreground="{ThemeResource AppBorderBrush}" />
-                    <TextBlock x:Name="GpuComparisonValue" Grid.Row="1" Grid.Column="2" MaxWidth="{StaticResource BenchmarkValueMaxWidth}"
-                               Style="{StaticResource CaptionSecondaryStyle}" />
+                    <TextBlock x:Name="CpuLabel" Text="CPU" Style="{StaticResource BenchmarkDeviceStyle}" />
+                    <ProgressBar x:Name="CpuComparisonBar" Grid.Column="1" Style="{StaticResource BenchmarkBarStyle}"
+                                 AutomationProperties.Name="CPU elapsed time" />
+                    <TextBlock x:Name="CpuComparisonValue" Grid.Column="2" Style="{StaticResource BenchmarkValueStyle}" />
+                    <TextBlock x:Name="GpuLabel" Grid.Row="1" Text="Vulkan" Style="{StaticResource BenchmarkDeviceStyle}" />
+                    <ProgressBar x:Name="GpuComparisonBar" Grid.Row="1" Grid.Column="1" Style="{StaticResource BenchmarkBarStyle}"
+                                 AutomationProperties.Name="Vulkan elapsed time" />
+                    <TextBlock x:Name="GpuComparisonValue" Grid.Row="1" Grid.Column="2" Style="{StaticResource BenchmarkValueStyle}" />
                 </Grid>
             </StackPanel>
 
-            <StackPanel x:Name="ComparisonDetails" Grid.Column="1" Spacing="12">
+            <Border x:Name="ComparisonDivider" Grid.Column="1" Width="1"
+                    VerticalAlignment="Stretch" Background="{ThemeResource AppBorderBrush}" />
+
+            <StackPanel x:Name="ComparisonDetails" Grid.Column="2" Width="{StaticResource BenchmarkResultWidth}"
+                        Spacing="12" VerticalAlignment="Center">
                 <Border x:Name="RecommendationChip" HorizontalAlignment="Left"
                         Background="{ThemeResource AccentSoftBrush}"
-                        CornerRadius="{StaticResource ControlCornerRadius}"
-                        Padding="10,5">
-                    <TextBlock x:Name="RecommendationText" Style="{StaticResource CaptionSecondaryStyle}" />
+                        CornerRadius="{StaticResource BenchmarkTagCornerRadius}"
+                        Padding="{StaticResource BenchmarkTagPadding}">
+                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource BenchmarkTagGap}">
+                        <FontIcon Glyph="&#xE945;" FontSize="{StaticResource BenchmarkTagFontSize}"
+                                  Foreground="{ThemeResource AccentForegroundBrush}"
+                                  AutomationProperties.AccessibilityView="Raw" />
+                        <TextBlock x:Name="RecommendationText" FontSize="{StaticResource BenchmarkTagFontSize}"
+                                   FontWeight="Medium" VerticalAlignment="Center"
+                                   Foreground="{ThemeResource AccentForegroundBrush}" />
+                    </StackPanel>
                 </Border>
-                <TextBlock x:Name="ComparisonDetailsText" TextWrapping="Wrap"
-                           Style="{StaticResource CaptionSecondaryStyle}" />
+                <TextBlock x:Name="ComparisonDetailsText" Style="{StaticResource BenchmarkFootnoteStyle}" />
             </StackPanel>
 
-            <TextBlock x:Name="SummaryOnlyText" Grid.Row="1" Grid.ColumnSpan="2"
-                       TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}"
+            <!-- Empty state shares the first row; it never shows alongside measurements. -->
+            <TextBlock x:Name="SummaryOnlyText" Grid.ColumnSpan="3"
+                       Style="{StaticResource CaptionSecondaryStyle}"
                        Visibility="Collapsed" />
         </Grid>
     </Border>

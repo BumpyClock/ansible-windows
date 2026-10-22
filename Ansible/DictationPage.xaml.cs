@@ -29,6 +29,8 @@ public sealed partial class DictationPage : Page
     private bool _homeDataInitialized;
     private DateTime _homeDataDate;
     private bool _disposed;
+    // Removing the current transcript's history row must not bring it back as the separate transcript card.
+    private Guid? _removedTranscriptOperationId;
 
     internal DictationPage(DictationSession session, AppPaths paths, Func<nint> windowHandle, HomeDictationHistory history)
     {
@@ -45,12 +47,13 @@ public sealed partial class DictationPage : Page
             var dateChanged = _homeDataDate != DateTime.Today;
             if (!dateChanged && _homeGreetingHour == DateTime.Now.Hour) return;
             RenderHomeData();
-            if (dateChanged) RenderHomeHistory();
+            if (dateChanged) RenderHomeHistory(animate: false);
         };
         _copiedTimer.Tick += (_, _) => { _copiedTimer.Stop(); CopyLabel.Text = "Copy"; };
         _history.Changed += HistoryChanged;
         HistoryView.QueryChanged += HistoryQueryChanged;
         HistoryView.CopyRequested += CopyHistoryItem;
+        HistoryView.RemoveRequested += RemoveHistoryItem;
         HistoryChanged();
         _observer = new UiSessionObserver(session, DispatcherQueue, state =>
         {
@@ -61,7 +64,7 @@ public sealed partial class DictationPage : Page
         {
             _clock.Start();
             Render();
-            RenderHomeHistory();
+            RenderHomeHistory(animate: false);
         };
         Unloaded += (_, _) =>
         {
@@ -78,6 +81,7 @@ public sealed partial class DictationPage : Page
         _history.Changed -= HistoryChanged;
         HistoryView.QueryChanged -= HistoryQueryChanged;
         HistoryView.CopyRequested -= CopyHistoryItem;
+        HistoryView.RemoveRequested -= RemoveHistoryItem;
         _observer?.Dispose();
         _observer = null;
         _clock.Stop();
@@ -93,7 +97,8 @@ public sealed partial class DictationPage : Page
         RenderHomeData();
         if (TranscriptBox.Text != _state.Transcript) { TranscriptBox.Text = _state.Transcript; }
         var empty = string.IsNullOrWhiteSpace(_state.Transcript);
-        var retainedInHistory = _state.TranscriptOperationId is { } operationId && _history.Contains(operationId);
+        var retainedInHistory = _state.TranscriptOperationId is { } operationId &&
+            (_history.Contains(operationId) || operationId == _removedTranscriptOperationId);
         var showTranscript = !empty && !retainedInHistory;
         TranscriptCard.Visibility = showTranscript ? Visibility.Visible : Visibility.Collapsed;
         TranscriptHeader.Visibility = showTranscript ? Visibility.Visible : Visibility.Collapsed;
@@ -116,7 +121,7 @@ public sealed partial class DictationPage : Page
                 foreach (var pair in names) { _homeCatalogNames[pair.Key] = pair.Value; }
                 _homeDataInitialized = false;
                 RenderHomeData();
-                RenderHomeHistory();
+                RenderHomeHistory(animate: false);
             });
         }
         catch
@@ -173,10 +178,10 @@ public sealed partial class DictationPage : Page
         }
     }
 
-    private void RenderHomeHistory()
+    private void RenderHomeHistory(bool animate)
     {
         HistoryView.Render(HomeHistoryProjection.Create(_history.Snapshot(), HistoryView.Query,
-            _history.OversizedCurrentResult, HomeModelDisplayName, DateTime.Today));
+            _history.OversizedCurrentResult, HomeModelDisplayName, DateTime.Today), animate);
     }
 
     private void HistoryChanged()
@@ -186,11 +191,11 @@ public sealed partial class DictationPage : Page
         {
             if (_disposed || !IsLoaded) return;
             Render();
-            RenderHomeHistory();
+            RenderHomeHistory(animate: true);
         });
     }
 
-    private void HistoryQueryChanged() => RenderHomeHistory();
+    private void HistoryQueryChanged() => RenderHomeHistory(animate: false);
 
     private void CopyHistoryItem(HomeHistoryItem item)
     {
@@ -200,7 +205,20 @@ public sealed partial class DictationPage : Page
             package.SetText(item.Text);
             Clipboard.SetContent(package);
         }
-        catch (Exception error) { _session.ReportUiError(error); }
+        catch (Exception error)
+        {
+            _session.ReportUiError(error);
+            return;
+        }
+        HistoryView.ShowCopied(item.OperationId);
+    }
+
+    // Renders synchronously so the view can move keyboard focus to the row that took the removed row's place.
+    private void RemoveHistoryItem(HomeHistoryItem item)
+    {
+        if (!_history.Remove(item.OperationId)) { return; }
+        if (item.OperationId == _state.TranscriptOperationId) { _removedTranscriptOperationId = item.OperationId; }
+        RenderHomeHistory(animate: true);
     }
 
     private Style AppStyle(string key)
@@ -218,9 +236,10 @@ public sealed partial class DictationPage : Page
         HomeHeader.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         if (narrow) HomeHeader.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         else HomeHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        Grid.SetColumn(CompactDictateCard, narrow ? 0 : 1);
-        Grid.SetRow(CompactDictateCard, narrow ? 1 : 0);
-        CompactDictateCard.HorizontalAlignment = narrow ? HorizontalAlignment.Stretch : HorizontalAlignment.Right;
+        // The dictate row has no container; below the threshold it reads as a line under the greeting.
+        Grid.SetColumn(DictateControl, narrow ? 0 : 1);
+        Grid.SetRow(DictateControl, narrow ? 1 : 0);
+        DictateControl.HorizontalAlignment = narrow ? HorizontalAlignment.Left : HorizontalAlignment.Right;
         var stackedHelper = args.NewSize.Width < (double)Application.Current.Resources["ShortcutStackThreshold"];
         Grid.SetRow(ShortcutButtons, stackedHelper ? 1 : 0);
         Grid.SetColumn(ShortcutButtons, stackedHelper ? 0 : 1);
@@ -237,7 +256,6 @@ public sealed partial class DictationPage : Page
         {
             HomeColumns.ClearValue(FrameworkElement.HeightProperty);
             HomeColumns.ClearValue(FrameworkElement.MinHeightProperty);
-            HomeInsightsColumn.SetWideLayout(false);
             HomeColumns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             HomeColumns.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             HomeColumns.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -246,7 +264,6 @@ public sealed partial class DictationPage : Page
         }
         else
         {
-            HomeInsightsColumn.SetWideLayout(true);
             HomeColumns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             HomeColumns.ColumnDefinitions.Add(new ColumnDefinition { Width = (GridLength)Application.Current.Resources["HomeInsightsColumnWidth"] });
             HomeColumns.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });

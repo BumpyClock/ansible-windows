@@ -3,8 +3,46 @@
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:local="using:Ansible">
+    <Page.Resources>
+        <!-- Group headers sit on the window base above their card, so the card holds settings only. -->
+        <Style x:Key="SettingsCardHeaderStyle" TargetType="Grid">
+            <Setter Property="Padding" Value="{StaticResource SettingsGroupHeaderPadding}" />
+        </Style>
+        <Style x:Key="SettingsCardMetaStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="SettingsOptionStyle" TargetType="StackPanel">
+            <Setter Property="Spacing" Value="{StaticResource SettingsOptionGap}" />
+            <Setter Property="Padding" Value="{StaticResource SettingsRowPadding}" />
+            <Setter Property="BorderBrush" Value="{ThemeResource AppBorderBrush}" />
+            <Setter Property="BorderThickness" Value="{StaticResource SettingsRowBorderThickness}" />
+        </Style>
+        <Style x:Key="SettingsLabelStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
+            <Setter Property="FontSize" Value="{StaticResource SettingsLabelFontSize}" />
+            <Setter Property="LineHeight" Value="{StaticResource SettingsLabelLineHeight}" />
+            <Setter Property="FontWeight" Value="Medium" />
+        </Style>
+        <Style x:Key="SettingsDescriptionStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionSecondaryStyle}">
+            <Setter Property="FontSize" Value="{StaticResource SettingsDescriptionFontSize}" />
+            <Setter Property="LineHeight" Value="{StaticResource SettingsDescriptionLineHeight}" />
+            <Setter Property="MaxWidth" Value="{StaticResource SettingsRowDescriptionMaxWidth}" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style x:Key="SettingsOptionTextStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
+            <Setter Property="FontSize" Value="{StaticResource SettingsOptionFontSize}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+    </Page.Resources>
+
     <local:PageCanvas x:Name="SettingsCanvas">
-            <StackPanel Spacing="{StaticResource CardGap}">
+            <StackPanel Spacing="{StaticResource PageSectionSpacing}">
+                <!-- Groups slide when the InfoBar appears; theme transitions follow the Windows animation setting. -->
+                <StackPanel.ChildrenTransitions>
+                    <TransitionCollection>
+                        <RepositionThemeTransition IsStaggeringEnabled="False" />
+                    </TransitionCollection>
+                </StackPanel.ChildrenTransitions>
                 <StackPanel Spacing="6">
                     <TextBlock Text="Settings" Margin="0" Style="{StaticResource PageTitleStyle}" />
                     <TextBlock Text="Control how Ansible listens, recognizes speech, and protects your data."
@@ -14,16 +52,23 @@
                 <!-- A closed InfoBar stays Visible and still takes stack spacing, so RenderNotice collapses it too. -->
                 <InfoBar x:Name="StatusInfo" IsOpen="False" IsClosable="True" Visibility="Collapsed" Closing="StatusInfoClosing" />
 
+                <StackPanel Spacing="{StaticResource SectionHeaderGap}">
+                    <Grid Style="{StaticResource SettingsCardHeaderStyle}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Dictation" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <TextBlock Grid.Column="1" Text="Input and insertion" Style="{StaticResource SettingsCardMetaStyle}" />
+                    </Grid>
                 <Border Style="{StaticResource SettingsCardStyle}">
-                    <StackPanel Spacing="{StaticResource CardGap}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="Dictation" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                            <TextBlock Grid.Column="1" Text="Input and insertion" Style="{StaticResource CaptionSecondaryStyle}" />
-                        </Grid>
+                    <StackPanel>
+                        <!-- Rows slide when an insertion row or the comparison appears. -->
+                        <StackPanel.ChildrenTransitions>
+                            <TransitionCollection>
+                                <RepositionThemeTransition IsStaggeringEnabled="False" />
+                            </TransitionCollection>
+                        </StackPanel.ChildrenTransitions>
 
                         <local:SettingsRow Title="Activation mode"
                                             Description="Hold the shortcut while you speak, or press once to start and again to stop."
@@ -60,6 +105,8 @@
                                 <!-- Read-only keycap. Focus or click records a new shortcut; Esc cancels. -->
                                 <!-- Shown only when the shortcut differs from the default. -->
                                 <HyperlinkButton x:Name="ResetShortcutButton" Content="Reset" VerticalAlignment="Center"
+                                                 Foreground="{ThemeResource AccentForegroundBrush}"
+                                                 FontSize="{StaticResource SettingsLinkFontSize}" FontWeight="Medium"
                                                  AutomationProperties.AutomationId="ResetShortcutButton"
                                                  AutomationProperties.Name="Reset shortcut"
                                                  Visibility="Collapsed" Click="ResetShortcutClicked" />
@@ -108,6 +155,8 @@
                             </Border>
                         </local:SettingsRow>
 
+                        <Border Height="1" Background="{ThemeResource AppBorderBrush}" />
+
                         <local:SettingsRow x:Name="PasteShortcutRow"
                                             Title="Destination paste shortcut"
                                             Description="Choose the shortcut accepted by the focused editor or terminal. This applies to all paste dictation; it is not detected automatically."
@@ -136,17 +185,25 @@
                         </local:SettingsRow>
                     </StackPanel>
                 </Border>
+                </StackPanel>
 
+                <StackPanel Spacing="{StaticResource SectionHeaderGap}" Margin="0,8,0,0">
+                    <Grid Style="{StaticResource SettingsCardHeaderStyle}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Audio and recognition" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <TextBlock Grid.Column="1" Text="Applies to the next dictation" Style="{StaticResource SettingsCardMetaStyle}" />
+                    </Grid>
                 <Border Style="{StaticResource SettingsCardStyle}">
-                    <StackPanel Spacing="{StaticResource CardGap}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="Audio and recognition" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                            <TextBlock Grid.Column="1" Text="Applies to the next dictation" Style="{StaticResource CaptionSecondaryStyle}" />
-                        </Grid>
+                    <StackPanel>
+                        <!-- Rows slide when an insertion row or the comparison appears. -->
+                        <StackPanel.ChildrenTransitions>
+                            <TransitionCollection>
+                                <RepositionThemeTransition IsStaggeringEnabled="False" />
+                            </TransitionCollection>
+                        </StackPanel.ChildrenTransitions>
 
                         <local:SettingsRow Title="Microphone boost (dB)"
                                             Description="For quiet speech or whispering. 0 is off; try 6 or 12 dB first. Higher boost also raises background noise and can distort louder speech."
@@ -185,77 +242,75 @@
                                          AutomationProperties.Name="Recognition processor"
                                          AutomationProperties.AutomationId="BackendChoice"
                                          SelectionChanged="BackendChanged">
-                                    <x:String>Auto</x:String>
+                                    <x:String>Auto (recommended)</x:String>
                                     <x:String>CPU</x:String>
                                     <x:String>Vulkan</x:String>
                                 </ListBox>
                             </Border>
                         </local:SettingsRow>
 
-                        <local:DeviceComparisonView x:Name="DeviceComparison" />
+                        <local:DeviceComparisonView x:Name="DeviceComparison" Margin="{StaticResource SettingsBenchmarkMargin}" />
                     </StackPanel>
                 </Border>
+                </StackPanel>
 
-                <Border Style="{StaticResource SettingsCardStyle}">
-                    <StackPanel Spacing="{StaticResource CardGap}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="Privacy" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                            <TextBlock Grid.Column="1" Text="Capture, meetings, telemetry" Style="{StaticResource CaptionSecondaryStyle}" />
-                        </Grid>
+                <StackPanel Spacing="{StaticResource SectionHeaderGap}" Margin="0,8,0,0">
+                    <Grid Style="{StaticResource SettingsCardHeaderStyle}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Privacy" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <TextBlock Grid.Column="1" Text="Capture, meetings, telemetry" Style="{StaticResource SettingsCardMetaStyle}" />
+                    </Grid>
+                <Border Style="{StaticResource SettingsCardStyle}" Padding="{StaticResource SettingsPrivacyCardPadding}">
+                    <StackPanel>
+                        <!-- Rows slide when an insertion row or the comparison appears. -->
+                        <StackPanel.ChildrenTransitions>
+                            <TransitionCollection>
+                                <RepositionThemeTransition IsStaggeringEnabled="False" />
+                            </TransitionCollection>
+                        </StackPanel.ChildrenTransitions>
 
-                        <StackPanel Spacing="10">
-                            <TextBlock Text="Screen capture privacy" Style="{StaticResource BodyTextBlockStyle}" />
+                        <StackPanel Style="{StaticResource SettingsOptionStyle}">
+                            <TextBlock Text="Screen capture privacy" Style="{StaticResource SettingsLabelStyle}" />
                             <CheckBox x:Name="HideFromCaptureChoice"
                                       CornerRadius="{StaticResource SettingsCheckBoxCornerRadius}"
                                       AutomationProperties.AutomationId="HideFromCaptureChoice"
                                       Checked="HideFromCaptureChanged" Unchecked="HideFromCaptureChanged">
-                                <TextBlock Text="Hide dictation overlay and meeting windows from capture" TextWrapping="Wrap" />
+                                <TextBlock Text="Hide dictation overlay and meeting windows from capture" Style="{StaticResource SettingsOptionTextStyle}" />
                             </CheckBox>
                             <TextBlock Text="Applies to supported Windows screenshots and screen sharing. The main window remains visible. Some recorders can still capture protected windows."
-                                       TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}" MaxWidth="620"
-                                       HorizontalAlignment="Left" />
+                                       Style="{StaticResource SettingsDescriptionStyle}" />
                         </StackPanel>
 
-                        <Border Height="1" Background="{ThemeResource AppBorderBrush}" />
-
-                        <StackPanel Spacing="10">
-                            <TextBlock Text="Meeting suggestions" Style="{StaticResource BodyTextBlockStyle}" />
+                        <StackPanel Style="{StaticResource SettingsOptionStyle}">
+                            <TextBlock Text="Meeting suggestions" Style="{StaticResource SettingsLabelStyle}" />
                             <CheckBox x:Name="AutoDetectMeetingsChoice"
                                       CornerRadius="{StaticResource SettingsCheckBoxCornerRadius}"
                                       AutomationProperties.AutomationId="AutoDetectMeetingsChoice"
                                       Checked="AutoDetectMeetingsChanged" Unchecked="AutoDetectMeetingsChanged">
-                                <TextBlock Text="Suggest notetaking when Teams uses the microphone" TextWrapping="Wrap" />
+                                <TextBlock Text="Suggest notetaking when Teams uses the microphone" Style="{StaticResource SettingsOptionTextStyle}" />
                             </CheckBox>
                             <TextBlock Text="Detection checks app activity without recording audio. Suggestions open the notetaker; you must click Start to capture your meeting. Calendar access is not used."
-                                       TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}" MaxWidth="620"
-                                       HorizontalAlignment="Left" />
+                                       Style="{StaticResource SettingsDescriptionStyle}" />
                         </StackPanel>
 
-                        <Border Height="1" Background="{ThemeResource AppBorderBrush}" />
-
-                        <StackPanel Spacing="10">
-                            <TextBlock Text="Usage statistics" Style="{StaticResource BodyTextBlockStyle}" />
-                            <Grid x:Name="UsageRow" ColumnSpacing="12" Background="Transparent">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="Session counts only. Never audio or text." TextWrapping="Wrap"
-                                           Style="{StaticResource CaptionSecondaryStyle}" MaxWidth="620"
-                                           HorizontalAlignment="Left" />
-                                <!-- The template keeps a fixed 12 DIP column for the empty On/Off content; the negative margin aligns the switch with the other row controls. -->
-                                <ToggleSwitch x:Name="UsageToggle" Grid.Column="1" VerticalAlignment="Center" Margin="0,0,-12,0"
-                                              AutomationProperties.AutomationId="UsageToggle"
-                                              AutomationProperties.Name="Usage statistics"
-                                              OnContent="" OffContent="" MinWidth="0" Toggled="UsageToggled" />
-                            </Grid>
+                        <StackPanel x:Name="UsageRow" Spacing="{StaticResource SettingsOptionGap}"
+                                    Padding="{StaticResource SettingsLastOptionPadding}" Background="Transparent">
+                            <TextBlock Text="Usage statistics" Style="{StaticResource SettingsLabelStyle}" />
+                            <!-- The switch content is its visible label; the automation name stays "Usage statistics". -->
+                            <ToggleSwitch x:Name="UsageToggle" HorizontalAlignment="Left"
+                                          AutomationProperties.AutomationId="UsageToggle"
+                                          AutomationProperties.Name="Usage statistics"
+                                          OnContent="Record session counts" OffContent="Record session counts"
+                                          MinWidth="0" Toggled="UsageToggled" />
+                            <TextBlock Text="Session counts only. Never audio or text."
+                                       Style="{StaticResource SettingsDescriptionStyle}" />
                         </StackPanel>
                     </StackPanel>
                 </Border>
+                </StackPanel>
             </StackPanel>
     </local:PageCanvas>
 </Page>

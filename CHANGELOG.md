@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Remove the bordered page canvas. Pages sit on the Mica window base with section
+  titles above borderless tonal cards; the dictate control is inline in the Home
+  header. High Contrast keeps card outlines. Page switches and model cards no
+  longer animate in.
+- Home history rows highlight on hover and offer Copy and Remove from history.
+  A shortcut dictation row shows its real insertion outcome, such as Inserted or
+  Not verified; in-app dictations show none. Removing the current dictation's
+  row also hides its transcript card instead of bringing the text back.
+  Activity marks four or more sessions in a day with a stronger peak shade.
 - Shrink the dictation overlay to a 128 by 32 DIP pill and drive every bar from
   the current microphone level through a fixed centre-weighted shape, with a
   bounded release, instead of scrolling energy history across the pill.

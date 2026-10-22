@@ -5,19 +5,34 @@
     <local:PageCanvas Scrollable="False">
         <Grid>
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-        <StackPanel Spacing="12" Margin="{StaticResource PageSectionBottomMargin}">
-            <TextBlock Text="Meetings" Style="{StaticResource PageTitleStyle}"/>
-            <TextBlock Text="Your conversations, transcribed on this device." Style="{StaticResource PageSubtitleStyle}"/>
-            <Button x:Name="NewMeetingButton" Content="Start meeting" Style="{StaticResource AppPrimaryButtonStyle}" Click="NewMeetingClicked" AutomationProperties.AutomationId="StartMeeting"/>
-            <TextBlock Text="Transcripts save automatically. Audio is never saved." Style="{StaticResource CaptionSecondaryStyle}"/>
-        </StackPanel>
+        <Grid x:Name="MeetingsHeader" ColumnSpacing="{StaticResource CardGap}" Margin="{StaticResource PageSectionBottomMargin}"
+              SizeChanged="MeetingsHeaderSizeChanged">
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <StackPanel x:Name="MeetingsHeading" Spacing="6" VerticalAlignment="Center">
+                <TextBlock Text="Meetings" Style="{StaticResource PageTitleStyle}" Margin="0" AutomationProperties.HeadingLevel="Level1"/>
+                <TextBlock Text="Your conversations, transcribed on this device." Style="{StaticResource PageSubtitleStyle}"/>
+                <TextBlock Text="Transcripts save automatically. Audio is never saved." Style="{StaticResource CaptionSecondaryStyle}"/>
+            </StackPanel>
+            <Button x:Name="NewMeetingButton" Grid.Column="1" Content="Start meeting" MinHeight="40" Padding="20,8" VerticalAlignment="Center"
+                    HorizontalAlignment="Right" Style="{StaticResource AppPrimaryButtonStyle}" Click="NewMeetingClicked"
+                    AutomationProperties.AutomationId="StartMeeting"/>
+        </Grid>
         <InfoBar x:Name="ErrorBar" Grid.Row="1" Margin="{StaticResource PageSectionBottomMargin}" Severity="Error" IsOpen="False" IsClosable="True"
                  Visibility="Collapsed" Closing="ErrorBarClosing"/>
-        <Grid Grid.Row="2">
-            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <StackPanel Spacing="16">
+        <Border Grid.Row="2" Style="{StaticResource CardStyle}" Padding="0">
+        <Grid>
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Spacing="16" Padding="{StaticResource HistoryListPadding}">
                     <StackPanel x:Name="UnreadableMeetings" Spacing="12" Visibility="Collapsed"/>
-                    <ListView x:Name="MeetingList" SelectionMode="None" IsItemClickEnabled="True" ItemClick="MeetingClicked" Visibility="Collapsed" HorizontalContentAlignment="Stretch" AutomationProperties.Name="Saved meetings"/>
+                    <ListView x:Name="MeetingList" SelectionMode="None" IsItemClickEnabled="True" ItemClick="MeetingClicked" Visibility="Collapsed" HorizontalContentAlignment="Stretch" AutomationProperties.Name="Saved meetings">
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                <Setter Property="CornerRadius" Value="{StaticResource HistoryRowCornerRadius}"/>
+                            </Style>
+                        </ListView.ItemContainerStyle>
+                    </ListView>
                 </StackPanel>
             </ScrollViewer>
             <StackPanel x:Name="EmptyState" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12" MaxWidth="380">
@@ -26,6 +41,7 @@
                 <TextBlock Text="Start a meeting to capture your microphone and meeting audio. Saved transcripts appear here." TextAlignment="Center" Style="{StaticResource PageSubtitleStyle}"/>
             </StackPanel>
         </Grid>
+        </Border>
         </Grid>
     </local:PageCanvas>
 </Page>

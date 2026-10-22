@@ -31,6 +31,17 @@ public sealed partial class PageCanvas : UserControl
     public double ContentWidth => Math.Max(0, ContentHost.ActualWidth - ContentPadding.Left - ContentPadding.Right);
     public double ViewportHeight => Viewport.ActualHeight;
 
+    // Gives a control's hover and pressed lightweight-styling keys the brand surfaces instead of the Fluent greys.
+    // Brushes resolved from code follow the application theme, not a window with a forced RequestedTheme, and do
+    // not follow theme changes, so callers reapply this on ActualThemeChanged. Fills set directly on an element
+    // belong in XAML (a visual state or a ThemeResource anchor) so they follow the element's own theme.
+    internal static void ApplyBrandInteractionBrushes(FrameworkElement element, string pointerOverKey, string pressedKey)
+    {
+        var resources = Application.Current.Resources;
+        element.Resources[pointerOverKey] = resources["AppHoverBrush"];
+        element.Resources[pressedKey] = resources["AppActiveBrush"];
+    }
+
     private void ViewportSizeChanged(object sender, SizeChangedEventArgs args) => UpdateLayoutBounds();
 
     private void UpdateLayoutBounds()

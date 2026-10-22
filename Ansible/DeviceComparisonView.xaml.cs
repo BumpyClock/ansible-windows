@@ -9,6 +9,8 @@ public sealed partial class DeviceComparisonView : UserControl
 {
     private DeviceComparisonSnapshot? _comparison;
     private string _summary = "";
+    private bool _compact;
+    private bool _hasMeasurements;
 
     public DeviceComparisonSnapshot? Comparison
     {
@@ -37,15 +39,20 @@ public sealed partial class DeviceComparisonView : UserControl
         var gpu = comparison?.GpuMilliseconds;
         var cpuValid = comparison?.CpuError is null && cpu is > 0 && double.IsFinite(cpu.Value);
         var gpuValid = comparison?.GpuError is null && gpu is > 0 && double.IsFinite(gpu.Value);
-        var hasMeasurements = cpuValid || gpuValid;
+        _hasMeasurements = cpuValid || gpuValid;
 
-        ComparisonMetrics.Visibility = hasMeasurements ? Visibility.Visible : Visibility.Collapsed;
-        ComparisonDetails.Visibility = hasMeasurements ? Visibility.Visible : Visibility.Collapsed;
-        SummaryOnlyText.Visibility = hasMeasurements ? Visibility.Collapsed : Visibility.Visible;
+        ComparisonMetrics.Visibility = _hasMeasurements ? Visibility.Visible : Visibility.Collapsed;
+        ComparisonDetails.Visibility = _hasMeasurements ? Visibility.Visible : Visibility.Collapsed;
+        SummaryOnlyText.Visibility = _hasMeasurements ? Visibility.Collapsed : Visibility.Visible;
         SummaryOnlyText.Text = string.IsNullOrWhiteSpace(_summary)
             ? "No device comparison has run yet."
             : _summary;
-        if (!hasMeasurements) return;
+        ApplyLayout();
+        if (!_hasMeasurements)
+        {
+            VisualStateManager.GoToState(this, "NoLeader", false);
+            return;
+        }
 
         var maximum = Math.Max(cpuValid ? cpu!.Value : 0, gpuValid ? gpu!.Value : 0);
         CpuComparisonBar.Maximum = maximum;
@@ -55,6 +62,12 @@ public sealed partial class DeviceComparisonView : UserControl
         CpuComparisonValue.Text = cpuValid ? FormatMilliseconds(cpu!.Value) : comparison?.CpuError ?? "Unavailable";
         GpuComparisonValue.Text = gpuValid ? FormatMilliseconds(gpu!.Value) : comparison?.GpuError ?? "Unavailable";
 
+        // Lower elapsed time leads. A tie or a single valid measurement has no slower device to contrast.
+        var leader = cpuValid && gpuValid
+            ? cpu!.Value < gpu!.Value ? "CpuLeads" : gpu.Value < cpu.Value ? "GpuLeads" : "NoLeader"
+            : cpuValid ? "CpuLeads" : "GpuLeads";
+        VisualStateManager.GoToState(this, leader, false);
+
         var recommended = comparison!.RecommendedBackend;
         RecommendationText.Text = $"Auto chose {(recommended == NativeBackend.Cpu ? "CPU" : "Vulkan")}";
         ComparisonDetailsText.Text = $"Public sample measured {comparison.MeasuredAt.ToUniversalTime():yyyy-MM-dd HH:mm:ss'Z'}. " +
@@ -62,14 +75,27 @@ public sealed partial class DeviceComparisonView : UserControl
     }
 
     private static string FormatMilliseconds(double milliseconds) =>
-        $"{milliseconds.ToString("F1", CultureInfo.InvariantCulture)} ms";
+        $"{milliseconds.ToString("N1", CultureInfo.InvariantCulture)} ms";
 
     private void ComparisonLayoutSizeChanged(object sender, SizeChangedEventArgs args)
     {
         var compact = args.NewSize.Width < (double)Application.Current.Resources["CompactPageThreshold"];
-        Grid.SetColumn(ComparisonDetails, compact ? 0 : 1);
-        Grid.SetRow(ComparisonDetails, compact ? 1 : 0);
-        Grid.SetColumnSpan(ComparisonDetails, compact ? 2 : 1);
-        ComparisonDetails.HorizontalAlignment = compact ? HorizontalAlignment.Stretch : HorizontalAlignment.Left;
+        if (compact == _compact) return;
+        _compact = compact;
+        ApplyLayout();
+    }
+
+    // Wide: bars | divider | result. Compact: result stacks under the bars and the divider is dropped.
+    private void ApplyLayout()
+    {
+        var gap = (double)Application.Current.Resources["BenchmarkColumnGap"];
+        ComparisonDivider.Visibility = _hasMeasurements && !_compact ? Visibility.Visible : Visibility.Collapsed;
+        ComparisonLayout.ColumnSpacing = _compact || !_hasMeasurements ? 0 : gap;
+        ComparisonLayout.RowSpacing = _compact && _hasMeasurements ? gap : 0;
+        Grid.SetColumn(ComparisonDetails, _compact ? 0 : 2);
+        Grid.SetRow(ComparisonDetails, _compact ? 1 : 0);
+        Grid.SetColumnSpan(ComparisonDetails, _compact ? 3 : 1);
+        ComparisonDetails.Width = _compact ? double.NaN : (double)Application.Current.Resources["BenchmarkResultWidth"];
+        ComparisonDetails.HorizontalAlignment = _compact ? HorizontalAlignment.Stretch : HorizontalAlignment.Left;
     }
 }

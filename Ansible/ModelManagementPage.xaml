@@ -4,10 +4,8 @@
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:local="using:Ansible">
     <local:PageCanvas>
-        <StackPanel Spacing="16">
-            <!-- The title line (TitleTextBlockStyle, 36 px line height) sets this row's height. The 32 px button
-                 centres inside it, so the first card starts at the same y as on the other pages. -->
-            <Grid x:Name="ModelHeader" ColumnSpacing="16" SizeChanged="ModelHeaderSizeChanged">
+        <StackPanel Spacing="{StaticResource PageSectionSpacing}">
+            <Grid x:Name="ModelHeader" ColumnSpacing="{StaticResource CardGap}" SizeChanged="ModelHeaderSizeChanged">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
@@ -16,7 +14,12 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock x:Name="ModelPageTitle" Text="Speech models" Style="{StaticResource PageTitleStyle}" VerticalAlignment="Center" />
+                <StackPanel x:Name="ModelHeading" Spacing="6" VerticalAlignment="Center">
+                    <TextBlock x:Name="ModelPageTitle" Text="Speech models" Style="{StaticResource PageTitleStyle}" Margin="0"
+                               AutomationProperties.HeadingLevel="Level1" />
+                    <TextBlock Text="Download and choose the local speech models used for dictation and meetings."
+                               Style="{StaticResource PageSubtitleStyle}" />
+                </StackPanel>
                 <StackPanel x:Name="ModelHeaderActions" Grid.Column="1" Orientation="Horizontal"
                             Spacing="8" VerticalAlignment="Center">
                     <Button x:Name="TranscribeFileButton" MinHeight="32" Click="TranscribeFileClicked"
@@ -57,7 +60,15 @@
             <InfoBar x:Name="StatusInfo" IsOpen="False" IsClosable="False" Visibility="Collapsed" />
 
             <local:StaggeredPanel x:Name="ModelsGrid" ColumnSpacing="16" RowSpacing="16"
-                  SizeChanged="OnModelsGridSizeChanged" />
+                  SizeChanged="OnModelsGridSizeChanged">
+                <!-- No entrance: the page is cached and an entrance would replay on every visit. Reorders and column
+                     changes slide cards to their new slots so the user can follow a card that moved. -->
+                <local:StaggeredPanel.ChildrenTransitions>
+                    <TransitionCollection>
+                        <RepositionThemeTransition />
+                    </TransitionCollection>
+                </local:StaggeredPanel.ChildrenTransitions>
+            </local:StaggeredPanel>
 
         </StackPanel>
     </local:PageCanvas>

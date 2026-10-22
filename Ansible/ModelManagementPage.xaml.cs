@@ -121,7 +121,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
     private void ModelHeaderSizeChanged(object sender, SizeChangedEventArgs args)
     {
         var compact = args.NewSize.Width < (double)Application.Current.Resources["CompactPageThreshold"];
-        Grid.SetColumnSpan(ModelPageTitle, compact ? 2 : 1);
+        Grid.SetColumnSpan(ModelHeading, compact ? 2 : 1);
         Grid.SetRow(ModelHeaderActions, compact ? 1 : 0);
         Grid.SetColumn(ModelHeaderActions, compact ? 0 : 1);
         Grid.SetColumnSpan(ModelHeaderActions, compact ? 2 : 1);
@@ -131,8 +131,9 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         ModelHeaderActions.Margin = compact ? new Thickness(0, 8, 0, 0) : new Thickness(0);
     }
 
-    // Children are re-added in display order so keyboard navigation follows the visual order; the
-    // StaggeredPanel packs cards of different heights into the shortest column.
+    // Children follow display order so keyboard navigation follows the visual order; the StaggeredPanel packs
+    // cards of different heights into the shortest column. Reorders move cards in place rather than re-adding
+    // them, so the reposition transition slides them instead of popping them.
     private void LayoutCards(IReadOnlyList<ModelCard> cards, int columns)
     {
         if (columns < 1) { columns = 1; }
@@ -140,8 +141,15 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         if (_columns == columns && _laidOut.SequenceEqual(cards)) { return; }
         _columns = columns;
         _laidOut = cards.ToArray();
-        ModelsGrid.Children.Clear();
-        foreach (var card in cards) { ModelsGrid.Children.Add(card); }
+        var children = ModelsGrid.Children;
+        for (var index = 0; index < cards.Count; index++)
+        {
+            var current = children.IndexOf(cards[index]);
+            if (current == index) { continue; }
+            if (current < 0) { children.Insert(index, cards[index]); }
+            else { children.Move((uint)current, (uint)index); }
+        }
+        while (children.Count > cards.Count) { children.RemoveAt(children.Count - 1); }
     }
 
     private void Render()

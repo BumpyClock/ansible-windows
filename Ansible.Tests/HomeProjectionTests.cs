@@ -97,6 +97,33 @@ public sealed class HomeProjectionTests
         Assert.Equal(3, model.Activity![new DateOnly(2026, 10, 20)]);
     }
 
+    [Theory]
+    [InlineData(TextDeliveryStatus.Verified, "Inserted", true)]
+    [InlineData(TextDeliveryStatus.CleanupFailed, "Inserted", false)]
+    [InlineData(TextDeliveryStatus.Sent, "Not verified", false)]
+    [InlineData(TextDeliveryStatus.Partial, "Partially inserted", false)]
+    [InlineData(TextDeliveryStatus.Rejected, "Not inserted", false)]
+    public void HistoryTagNamesTheReportedInsertionOutcome(TextDeliveryStatus status, string label, bool inserted)
+    {
+        var item = History(DateTimeOffset.Now, "speech") with { Delivery = status };
+
+        var tag = new HomeHistoryEntry(item, null).Tag;
+
+        Assert.NotNull(tag);
+        Assert.Equal(label, tag.Label);
+        Assert.Equal(inserted, tag.Inserted);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(TextDeliveryStatus.Deferred)]
+    public void HistoryTagIsAbsentWithoutAReportedInsertion(TextDeliveryStatus? status)
+    {
+        var item = History(DateTimeOffset.Now, "speech") with { Delivery = status };
+
+        Assert.Null(new HomeHistoryEntry(item, null).Tag);
+    }
+
     private static HomeHistoryItem History(DateTimeOffset time, string text) =>
         new(Guid.NewGuid(), time, text, "model", null, TimeSpan.FromSeconds(5));
 }

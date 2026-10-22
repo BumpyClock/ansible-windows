@@ -69,6 +69,63 @@ public sealed class HomeDictationHistoryTests : IDisposable
         Assert.False(_history.Contains(item.OperationId));
     }
 
+    [Fact]
+    public void RemoveDropsTheItemOnceAndNotifies()
+    {
+        var first = Completion(1, "first");
+        var second = Completion(2, "second");
+        _history.Add(first);
+        _history.Add(second);
+        var changes = 0;
+        _history.Changed += () => changes++;
+
+        Assert.True(_history.Remove(first.OperationId));
+        Assert.False(_history.Remove(first.OperationId));
+
+        Assert.Equal(1, changes);
+        Assert.Equal(second.OperationId, Assert.Single(_history.Snapshot()).OperationId);
+        Assert.False(_history.Contains(first.OperationId));
+    }
+
+    [Fact]
+    public void RecordDeliveryUpdatesTheRetainedItemAndNotifiesOnlyOnChange()
+    {
+        var item = Completion(4, "delivered");
+        _history.Add(item);
+        var changes = 0;
+        _history.Changed += () => changes++;
+
+        Assert.True(_history.RecordDelivery(item.OperationId, TextDeliveryStatus.Sent));
+        Assert.False(_history.RecordDelivery(item.OperationId, TextDeliveryStatus.Sent));
+        Assert.True(_history.RecordDelivery(item.OperationId, TextDeliveryStatus.Verified));
+
+        Assert.Equal(2, changes);
+        Assert.Equal(TextDeliveryStatus.Verified, Assert.Single(_history.Snapshot()).Delivery);
+    }
+
+    [Fact]
+    public void RecordDeliveryIgnoresDictationsThatHistoryDoesNotHold()
+    {
+        var oversized = Completion(5, new string('x', HomeDictationHistory.MaximumCharacters + 1));
+        _history.Add(oversized);
+        var changes = 0;
+        _history.Changed += () => changes++;
+
+        Assert.False(_history.RecordDelivery(oversized.OperationId, TextDeliveryStatus.Verified));
+        Assert.False(_history.RecordDelivery(GuidFrom(6), TextDeliveryStatus.Verified));
+
+        Assert.Equal(0, changes);
+        Assert.Empty(_history.Snapshot());
+    }
+
+    [Fact]
+    public void NewItemsHaveNoDeliveryUntilOneIsRecorded()
+    {
+        Assert.True(_history.Add(Completion(8, "in app")));
+
+        Assert.Null(Assert.Single(_history.Snapshot()).Delivery);
+    }
+
     private static DictationCompletion Completion(int seed, string text) => new(
         GuidFrom(seed), "model", new RecognitionResult(text, text), DateTimeOffset.UtcNow.AddSeconds(seed), TimeSpan.FromSeconds(seed));
 
