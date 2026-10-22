@@ -253,10 +253,12 @@ public static class NemotronSpeakerAttribution
                 ?? (start > 0 ? TryGetMajority(Math.Max(0, start - EmissionLagSamples), start) : null)
                 ?? UnknownSpeaker,
             // A word span opens up to one start lag into the word and can run through the following
-            // pause into the next speaker's onset, so the speech around its opening decides. A span that
-            // opened in silence (the previous word closed on a pause) holds its own word as the first run
-            // of speech inside it; later runs belong to the next word.
-            TokenTimingModel.WordSpan => TryGetMajority(Math.Max(0, start - WordSpanStartLagSamples), Math.Min(end, start + EmissionLagSamples))
+            // pause into the next speaker's onset, so the speech around its opening decides. When the
+            // emission allowance around the opening is silent, the rest of the start lag before it is the
+            // word's own trailing speech. A span that opened in silence (the previous word closed on a
+            // pause) holds its own word as the first run of speech inside it; later runs belong to the next word.
+            TokenTimingModel.WordSpan => TryGetMajority(Math.Max(0, start - EmissionLagSamples), Math.Min(end, start + EmissionLagSamples))
+                ?? (start > EmissionLagSamples ? TryGetMajority(Math.Max(0, start - WordSpanStartLagSamples), start - EmissionLagSamples) : null)
                 ?? TryGetFirstRunMajority(start, end)
                 ?? UnknownSpeaker,
             _ => throw new ArgumentOutOfRangeException(nameof(timing))
