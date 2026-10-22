@@ -33,6 +33,9 @@ internal partial class DeviceBenchmarkJson : JsonSerializerContext;
 internal static class DeviceBenchmark
 {
     internal const string ResultPrefix = "ANSIBLE_DEVICE_RESULT:";
+    // Live meetings run for up to two hours behind a 30-second backlog; half real time leaves room for
+    // capture, the first uncached update and slower passages. Paired Nemotron measured 0.31x on a 4-thread CPU.
+    internal const double MaximumMeetingRealTimeFactor = 0.5;
     internal static readonly TimeSpan DeviceDeadline = TimeSpan.FromMinutes(5);
     private const int OutputLimit = 65536;
 
@@ -48,6 +51,19 @@ internal static class DeviceBenchmark
             : await probe(NativeBackend.Vulkan).ConfigureAwait(false);
         token.ThrowIfCancellationRequested();
         return Select(key, cpu, gpu);
+    }
+
+    internal static double RequireMeetingRealTime(DeviceBenchmarkSelection selection, double audioMilliseconds, string modelId)
+    {
+        if (!double.IsFinite(audioMilliseconds) || audioMilliseconds <= 0)
+            throw new InvalidDataException("Real-time qualification requires a public sample with a positive duration.");
+        var measured = selection.Backend == NativeBackend.Vulkan ? selection.Gpu : selection.Cpu;
+        if (!measured.Working)
+            throw new InvalidDataException("Real-time qualification requires a working measurement for the selected device.");
+        var factor = measured.Milliseconds!.Value / audioMilliseconds;
+        if (factor > MaximumMeetingRealTimeFactor)
+            throw new MeetingRealTimeException(modelId, selection.Backend, factor, MaximumMeetingRealTimeFactor);
+        return factor;
     }
 
     internal static DeviceBenchmarkSelection CpuFallback(DeviceBenchmarkSelection prior, NativeExecutionException error)

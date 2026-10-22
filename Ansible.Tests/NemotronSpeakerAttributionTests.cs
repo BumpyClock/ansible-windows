@@ -16,7 +16,8 @@ public sealed class NemotronSpeakerAttributionTests
         Assert.Equal(update.Text, update.SpeechText);
         Assert.True(update.IsFinal);
         Assert.Equal(16000L, update.ProcessedSamples);
-        Assert.Equal([Turn("Speaker 0", 0, .5, "Hello"), Turn("Speaker 1", .5, 1, "world!")], update.SpeakerTurns);
+        // The separate "!" token joins the word but, as punctuation, does not extend its timing.
+        Assert.Equal([Turn("Speaker 0", 0, .5, "Hello"), Turn("Speaker 1", .5, .875, "world!")], update.SpeakerTurns);
     }
 
     [Fact]
@@ -46,15 +47,147 @@ public sealed class NemotronSpeakerAttributionTests
     }
 
     [Theory]
-    [InlineData(0, 8000, "Unknown speaker")]
-    [InlineData(4000, 12000, "Unknown speaker")]
+    [InlineData(0, 8000, "Speaker 0")]
+    [InlineData(4000, 12000, "Speaker 0")]
     [InlineData(0, 12000, "Speaker 0")]
+    [InlineData(15000, 16000, "Speaker 0")]
     [InlineData(16000, 32000, "Unknown speaker")]
-    public void UncoveredSamplesCountAgainstTheMajority(long start, long end, string expected)
+    public void SilenceInsideTheWordDoesNotVote(long start, long end, string expected)
     {
         var update = NemotronSpeakerAttribution.Create([new("word", 0, 16000)],
             [new("speaker_0", start, end)], 32000, true);
         Assert.Equal([Turn(expected, 0, 1, "word")], update.SpeakerTurns);
+    }
+
+    [Fact]
+    public void SilenceDoesNotRescueATieOrAMinorityOfDiarizedSpeech()
+    {
+        var tie = NemotronSpeakerAttribution.Create([new("word", 0, 16000)],
+            [new("speaker_0", 0, 2000), new("speaker_1", 10000, 12000)], 16000, true);
+        Assert.Equal([Turn("Unknown speaker", 0, 1, "word")], tie.SpeakerTurns);
+        var minority = NemotronSpeakerAttribution.Create([new("word", 0, 16000)],
+            [new("speaker_0", 0, 2000), new("speaker_1", 10000, 13000)], 16000, true);
+        Assert.Equal([Turn("Speaker 1", 0, 1, "word")], minority.SpeakerTurns);
+    }
+
+    [Theory]
+    [InlineData(112160, "Speaker 0")]  // Nemotron closed "for" 30 ms after its speaker's activity ended (2026-10-22).
+    [InlineData(107521, "Speaker 0")]  // One sample inside the 320 ms emission allowance.
+    [InlineData(107520, "Unknown speaker")]
+    public void WordEmittedJustAfterItsSpeakerStoppedUsesTheEmissionAllowance(long activityEnd, string expected)
+    {
+        var update = NemotronSpeakerAttribution.Create([new(" for", 112640, 113920)],
+            [new("speaker_0", 94400, activityEnd)], 120000, true);
+        Assert.Equal([Turn(expected, 7.04, 7.12, "for")], update.SpeakerTurns);
+    }
+
+    [Fact]
+    public void EmissionAllowanceStillAbstainsOnOverlapAndNeverLooksBeforeZero()
+    {
+        var overlap = NemotronSpeakerAttribution.Create([new(" for", 112640, 113920)],
+            [new("speaker_0", 94400, 112160), new("speaker_1", 111000, 112000)], 120000, true);
+        Assert.Equal([Turn("Unknown speaker", 7.04, 7.12, "for")], overlap.SpeakerTurns);
+        var first = NemotronSpeakerAttribution.Create([new("Hi", 0, 1280)], [new("speaker_0", 2000, 3000)], 16000, true);
+        Assert.Equal([Turn("Unknown speaker", 0, .08, "Hi")], first.SpeakerTurns);
+    }
+
+    [Fact]
+    public void PunctuationEmittedAtThePauseDoesNotHandTheWordToTheNextSpeaker()
+    {
+        // Nemotron emitted "." one second after "nature", once speaker 1 had already started (2026-10-22 timing).
+        var update = NemotronSpeakerAttribution.Create(
+            [new(" na", 78080, 79360), new("ture", 80640, 81920), new(".", 97280, 98560), new(" Yes", 98560, 99840)],
+            [new("speaker_0", 46720, 80800), new("speaker_1", 94400, 112160)], 112160, true);
+        Assert.Equal([Turn("Speaker 0", 4.88, 5.12, "nature."), Turn("Speaker 1", 6.16, 6.24, "Yes")], update.SpeakerTurns);
+        var punctuationOnly = NemotronSpeakerAttribution.Create(
+            [new("Hi", 0, 8000), new(" -", 8000, 12000), new(" there", 12000, 16000)], [new("speaker_0", 0, 16000)], 16000, true);
+        Assert.Equal([Turn("Speaker 0", 0, 1, "Hi - there")], punctuationOnly.SpeakerTurns);
+    }
+
+    [Fact]
+    public void RealNemotronTimingOfThePublicSampleKeepsEveryPhraseWithItsSpeaker()
+    {
+        // Native Nemotron tokens (80 ms emission frames) and diarizer activity for the public sample with a
+        // two-second pause inserted after "for" and at the end, captured on 2026-10-22.
+        (int Frame, string Text)[] frames = [(12, "So"), (12, "me"), (18, " call"), (22, " "), (22, "me"), (25, " na"), (26, "ture"),
+            (41, " other"), (43, "s"), (48, " call"), (51, " "), (51, "me"), (58, " "), (58, "m"), (58, "other"), (61, " na"), (63, "ture"),
+            (76, "."), (76, " "), (78, " "), (78, "I"), (80, "'"), (80, "ve"), (82, " be"), (82, "en"), (84, " her"), (84, "e"), (88, " for"),
+            (117, " over"), (122, " four"), (125, " po"), (127, "in"), (127, "t"), (129, " five"), (136, " "), (136, "bil"), (137, "li"),
+            (137, "on"), (141, " year"), (142, "s"), (165, " twenty"), (167, " two"), (170, " t"), (170, "ho"), (170, "us"), (172, "and"),
+            (177, " five"), (180, " hundred"), (184, " time"), (186, "s"), (188, " "), (188, "lo"), (190, "ng"), (190, "er"), (194, " t"),
+            (194, "h"), (194, "an"), (197, " you")];
+        var tokens = frames.Select(token => new MeetingTimedToken(token.Text, token.Frame * 1280L, (token.Frame + 1) * 1280L)).ToArray();
+        SpeakerActivity[] activities = [new("speaker_0", 6400, 32800), new("speaker_0", 46720, 80800),
+            new("speaker_0", 94400, 112160), new("speaker_0", 144480, 186720), new("speaker_0", 202560, 253440)];
+        var update = NemotronSpeakerAttribution.Create(tokens, activities, 289151, true);
+        Assert.Equal([
+            Turn("Speaker 0", 0.96, 2.16, "Some call me nature"),
+            Turn("Speaker 0", 3.28, 5.12, "others call me mother nature."),
+            Turn("Speaker 0", 6.24, 7.12, "I've been here for"),
+            Turn("Speaker 0", 9.36, 11.44, "over four point five billion years"),
+            Turn("Speaker 0", 13.2, 15.84, "twenty two thousand five hundred times longer than you")], update.SpeakerTurns);
+    }
+
+    // Native Kroko word spans for the public sample with a two-second pause inserted after "for" and at
+    // the end (2026-10-22). Words open where the previous word closed, so pauses sit inside spans.
+    private static MeetingTimedToken[] KrokoTokens()
+    {
+        (int Start, int End, string Text)[] words = [(840, 1400, "Some"), (1400, 1640, " call"), (1640, 1920, " me"), (1920, 3160, " nature,"),
+            (3160, 3920, " others"), (3920, 4160, " call"), (4160, 4440, " me"), (4440, 4840, " Mother"), (4840, 6160, " Nature."),
+            (6160, 6600, " I've"), (6600, 6880, " been"), (6880, 7160, " here"), (7160, 7680, " for"), (7680, 9680, " over"),
+            (9680, 10040, " four"), (10040, 10440, " point"), (10440, 10840, " five"), (10840, 11440, " billion"), (11440, 12960, " years,"),
+            (12960, 13360, " twenty"), (13360, 13560, " two"), (13560, 14160, " thousand"), (14160, 14440, " five"), (14440, 14800, " hundred"),
+            (14800, 15200, " times"), (15200, 15680, " longer"), (15680, 15920, " than")];
+        return words.Select(word => new MeetingTimedToken(word.Text, word.Start * 16L, word.End * 16L))
+            .Append(new(" you", 15920 * 16L, 289151)).ToArray();
+    }
+
+    [Fact]
+    public void RealKrokoTimingOfThePublicSampleKeepsEveryPhraseWithItsSpeaker()
+    {
+        SpeakerActivity[] activities = [new("speaker_0", 6400, 32800), new("speaker_0", 46720, 80800),
+            new("speaker_0", 94400, 112160), new("speaker_0", 144480, 186720), new("speaker_0", 202560, 253440)];
+        var update = NemotronSpeakerAttribution.Create(KrokoTokens(), activities, 289151, true, TokenTimingModel.WordSpan);
+        Assert.Equal([
+            Turn("Speaker 0", 0.84, 10.84, "Some call me nature, others call me Mother Nature. I've been here for over four point five"),
+            Turn("Speaker 0", 10.84, 289151 / 16000d, "billion years, twenty two thousand five hundred times longer than you")],
+            update.SpeakerTurns);
+    }
+
+    [Fact]
+    public void RealKrokoTimingWithAlternatingSpeakersKeepsEachPhraseFinalWordWithItsOwnSpeaker()
+    {
+        // The same spans with every other phrase given to a second speaker: "nature,", "Nature." and "years,"
+        // run through the pause into the next speaker's onset and must not follow it.
+        SpeakerActivity[] activities = [new("speaker_0", 6400, 32800), new("speaker_1", 46720, 80800),
+            new("speaker_0", 94400, 112160), new("speaker_1", 144480, 186720), new("speaker_0", 202560, 253440)];
+        var update = NemotronSpeakerAttribution.Create(KrokoTokens(), activities, 289151, true, TokenTimingModel.WordSpan);
+        Assert.Equal([
+            Turn("Speaker 0", 0.84, 3.16, "Some call me nature,"),
+            Turn("Speaker 1", 3.16, 6.16, "others call me Mother Nature."),
+            Turn("Speaker 0", 6.16, 7.68, "I've been here for"),
+            Turn("Speaker 1", 7.68, 12.96, "over four point five billion years,"),
+            Turn("Speaker 0", 12.96, 289151 / 16000d, "twenty two thousand five hundred times longer than you")],
+            update.SpeakerTurns);
+    }
+
+    [Fact]
+    public void WordSpanOpeningDecidesAndASpanOpenedInSilenceUsesItsFirstRunOfSpeech()
+    {
+        // Speaker 1 starts 300 ms before the span closes; the opening still belongs to speaker 0.
+        var opening = NemotronSpeakerAttribution.Create([new("word", 16000, 32000)],
+            [new("speaker_0", 10000, 20000), new("speaker_1", 27200, 40000)], 40000, true, TokenTimingModel.WordSpan);
+        Assert.Equal([Turn("Speaker 0", 1, 2, "word")], opening.SpeakerTurns);
+        // No speech within 320 ms of the opening: the first run inside the span is this word, the run after
+        // a gap longer than two frames is the next word.
+        var silentOpening = NemotronSpeakerAttribution.Create([new("word", 16000, 48000)],
+            [new("speaker_0", 24000, 26000), new("speaker_0", 27000, 30000), new("speaker_1", 36000, 48000)], 48000, true, TokenTimingModel.WordSpan);
+        Assert.Equal([Turn("Speaker 0", 1, 3, "word")], silentOpening.SpeakerTurns);
+        var overlapAtOpening = NemotronSpeakerAttribution.Create([new("word", 16000, 32000)],
+            [new("speaker_0", 10000, 20000), new("speaker_1", 15000, 17000)], 32000, true, TokenTimingModel.WordSpan);
+        Assert.Equal([Turn("Unknown speaker", 1, 2, "word")], overlapAtOpening.SpeakerTurns);
+        var nothing = NemotronSpeakerAttribution.Create([new("word", 16000, 32000)], [new("speaker_0", 40000, 48000)], 48000, true, TokenTimingModel.WordSpan);
+        Assert.Equal([Turn("Unknown speaker", 1, 2, "word")], nothing.SpeakerTurns);
     }
 
     [Fact]
@@ -260,17 +393,17 @@ public sealed class NemotronSpeakerAttributionTests
     {
         using var canceled = new CancellationTokenSource();
         canceled.Cancel();
-        Assert.Throws<OperationCanceledException>(() => NemotronSpeakerAttribution.Create([], [], 0, true, canceled.Token));
+        Assert.Throws<OperationCanceledException>(() => NemotronSpeakerAttribution.Create([], [], 0, true, cancellationToken: canceled.Token));
         using var tokenCancellation = new CancellationTokenSource();
         var tokens = new CancelingList<MeetingTimedToken>(
             Enumerable.Repeat(new MeetingTimedToken(" x", 0, 1), 1024).ToArray(), tokenCancellation);
         Assert.Throws<OperationCanceledException>(() =>
-            NemotronSpeakerAttribution.Create(tokens, [], 16000, true, tokenCancellation.Token));
+            NemotronSpeakerAttribution.Create(tokens, [], 16000, true, cancellationToken: tokenCancellation.Token));
         using var activityCancellation = new CancellationTokenSource();
         var activities = new CancelingList<SpeakerActivity>(
             Enumerable.Repeat(new SpeakerActivity("speaker_0", 0, 1), 1024).ToArray(), activityCancellation);
         Assert.Throws<OperationCanceledException>(() =>
-            NemotronSpeakerAttribution.Create([], activities, 16000, true, activityCancellation.Token));
+            NemotronSpeakerAttribution.Create([], activities, 16000, true, cancellationToken: activityCancellation.Token));
     }
 
     [Fact]
@@ -293,8 +426,9 @@ public sealed class NemotronSpeakerAttributionTests
                 }
             }
             activities.Reverse();
-            var expected = simultaneous ? "Unknown speaker" : coverage[0] >= 3 ? "Speaker 0"
-                : coverage[1] >= 3 ? "Speaker 1" : "Unknown speaker";
+            // Only diarized samples vote; the word starts at zero, so nothing precedes it to look back into.
+            var expected = simultaneous ? "Unknown speaker" : coverage[0] > coverage[1] ? "Speaker 0"
+                : coverage[1] > coverage[0] ? "Speaker 1" : "Unknown speaker";
             var update = NemotronSpeakerAttribution.Create([new("word", 0, 5)], activities, 5, true);
             Assert.Equal([Turn(expected, 0, 5 / 16000d, "word")], update.SpeakerTurns);
         }

@@ -100,7 +100,7 @@ public sealed partial class NativeAudioEngine
                 channel.Writer.TryWrite(pcm);
                 channel.Writer.TryComplete();
                 var result = StreamCore(model, channel.Reader, options, null, CancellationToken.None, null,
-                    history == 0 ? NativeMemory.MaximumStreamFrames : 16000L * 120 * 60, history);
+                    history == 0 ? NativeMemory.MaximumStreamFrames : 16000L * 120 * 60, history).Result;
                 if (history > 0 && UsesDiarization(model) && _diarization?.HasSpeakerActivity != true)
                     throw new InvalidDataException("The public sample produced no speaker activity during paired qualification.");
                 return result;

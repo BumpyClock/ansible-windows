@@ -334,11 +334,22 @@ vocabulary snapshotted at Start. Custom vocabulary applies only when the meeting
 ASR supports it. Later setting changes do not affect an active meeting.
 Dictation and model changes are unavailable while a meeting owns the recognition
 resources. Auto qualification for a paired meeting admits both weights together
-and requires speaker activity on the public sample.
+and requires speaker activity on the public sample. It also compares the
+selected device's measurement with the sample's duration: a candidate slower
+than 0.50x real time cannot keep up with a live meeting, so an unconfigured
+meeting moves on to the next candidate (paired Kroko, then VibeVoice) and the
+Meetings window shows a **Speaker model changed** notice naming the skipped
+model, its measured pace, and the model in use. A manual processor choice
+skips that check. The caption shows the measured pace of the chosen model.
 
 Text appears throughout the meeting as native chunks finish. Paired Nemotron or
 Kroko meetings publish cumulative timed anonymous speaker turns (`Speaker 0`
-through `Speaker 7`). Overlap and uncovered speech stay **Unknown speaker**.
+through `Speaker 7`). The diarizer works in four-second chunks, so the newest
+words can show **Unknown speaker** for up to about five seconds before their
+label arrives. Overlapping speech and words with no speaker activity near them
+stay **Unknown speaker**. Kroko words that run through a pause are judged by
+the speech where they begin, so the last word before a pause stays with its
+speaker when someone else speaks next.
 VibeVoice meetings keep that model's speaker labels. Rename a speaker by
 selecting its heading. When Teams is selected,
 the app reads visible speaking markers through Windows accessibility. Names require
