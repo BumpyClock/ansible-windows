@@ -188,6 +188,15 @@ public sealed class NemotronSpeakerAttributionTests
         Assert.Equal([Turn("Unknown speaker", 1, 2, "word")], overlapAtOpening.SpeakerTurns);
         var nothing = NemotronSpeakerAttribution.Create([new("word", 16000, 32000)], [new("speaker_0", 40000, 48000)], 48000, true, TokenTimingModel.WordSpan);
         Assert.Equal([Turn("Unknown speaker", 1, 2, "word")], nothing.SpeakerTurns);
+        // Real shape: a short last word whose span opened 357 ms after its speaker stopped, with the next
+        // speaker starting 455 ms into the span. The 450 ms start lag keeps it with its own speaker; a stop
+        // 460 ms before the opening is beyond any measured lag, so the first run inside the span decides.
+        var lateOpening = NemotronSpeakerAttribution.Create([new(" you", 254720, 289151)],
+            [new("speaker_0", 230000, 249000), new("speaker_1", 262000, 289151)], 289151, true, TokenTimingModel.WordSpan);
+        Assert.Equal([Turn("Speaker 0", 15.92, 289151 / 16000d, "you")], lateOpening.SpeakerTurns);
+        var laterOpening = NemotronSpeakerAttribution.Create([new(" you", 254720, 289151)],
+            [new("speaker_0", 230000, 247360), new("speaker_1", 262000, 289151)], 289151, true, TokenTimingModel.WordSpan);
+        Assert.Equal([Turn("Speaker 1", 15.92, 289151 / 16000d, "you")], laterOpening.SpeakerTurns);
     }
 
     [Fact]
