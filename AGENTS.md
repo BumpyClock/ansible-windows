@@ -30,7 +30,8 @@ The code map below describes the current layout, not required module boundaries.
 - Recognition runs in-process through the audio.cpp C ABI, using `audiocpp.dll`.
 - The native build pins audio.cpp v0.9.0. It applies tracked patches, including the Nemotron cumulative streaming timestamp patch, and compiles `nemotron_3_diar`. Upstream support does not imply support in this compiled backend.
 - Catalog entries carry an `asr` or `diar` task. Omitted task means ASR. Only family `nemotron_3_diar` may be `diar`.
-- Diarization companions cannot be selected for dictation and are not meeting integration. Unconfigured dictation prefers installed `nemotron-asr-0.6b-q8` and keeps a saved model ID. Default setup installs that ASR and `nemotron-3-diarization-q8`.
+- Diarization companions cannot be selected for dictation. Dictation, replay, and WAV remain plain ASR. Unconfigured dictation prefers installed `nemotron-asr-0.6b-q8` and keeps a saved model ID. Default setup installs that ASR and `nemotron-3-diarization-q8`.
+- Unconfigured meetings use installed Nemotron ASR with the Nemotron 3 diarization companion. If that ASR is missing, they use installed Kroko with the same companion. If no paired Nemotron or Kroko ASR is available, meetings keep VibeVoice streaming, even when the companion is present. Auto qualification rejects a meeting candidate above 0.50x real time on the selected device (`MeetingRealTimeException`); unconfigured meetings then continue down that order and record `SelectionNotice`, while an explicit choice fails Start. The diarizer streams in four-second chunks. There is no meeting model picker.
 - The UI includes Dictation, Settings, Insights, Speech models, and a floating waveform pill.
 - Automatic Teams detection reads active Windows capture-session metadata and offers a notetaker prompt; only an explicit Start captures meeting audio.
 - Launch checks microphone permission before session initialization; capture factories recheck access without prompting and never open devices just to request consent.
@@ -90,6 +91,7 @@ The default publish requires a Vulkan runtime record. Pass `-Backend cpu` for an
 Use the packaged Visual Studio launch profile for development. Package signing, certificate trust, and installation are separate operations.
 
 Use `docs/native-validation.md` when changing model integration or streaming behavior. Native integration tests require the native runtime, public sample, and specific weights; see `docs/development.md` before running them.
+Paired meeting speaker checks use `.\tools\Test-SpeakerModels.ps1 -Model nemotron|kroko|both`.
 Run model probes sequentially and wait for each process to exit.
 Documentation-only edits do not require model downloads or a native rebuild.
 

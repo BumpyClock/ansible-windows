@@ -24,8 +24,9 @@ public sealed class NativeMeetingPipelineTests(ITestOutputHelper output)
         var timer = Stopwatch.StartNew();
         var session = new MeetingSession(
             () => new NativeAudioEngine(library, catalog, models, threads: 4), capture,
-            new MeetingStore(storeDirectory), new RecognitionOptions(Backend: NativeBackend.Cpu),
-            alignerFactory: () => new NativeMeetingWordAligner(library, catalog, models, threads: 4));
+            new MeetingStore(storeDirectory), () => new RecognitionOptions(Backend: NativeBackend.Cpu),
+            alignerFactory: () => new NativeMeetingWordAligner(library, catalog, models, threads: 4),
+            getModelId: () => "vibevoice-streaming-1.5b-q4");
         session.StateChanged += state =>
         {
             if (state.Document?.Turns.Any(turn => !string.IsNullOrWhiteSpace(turn.Text)) == true)

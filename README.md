@@ -36,9 +36,12 @@ Run these commands in PowerShell from the repository root. You need:
 Setup downloads and verifies `nemotron-asr-0.6b-q8` and
 `nemotron-3-diarization-q8` into `.runtime\models`. After that install, an
 unconfigured dictation session uses Nemotron ASR. A saved model choice is kept.
-The diarization companion is catalogued and compiled; it cannot be selected for
-dictation and is not used by meetings. Meetings still use VibeVoice ASR
-Streaming 1.5B.
+The diarization companion cannot be selected for dictation, replay, or WAV
+transcription. Unconfigured meetings use Nemotron ASR with that companion when
+both are installed. If Nemotron ASR is missing, installed Kroko uses the same
+companion. If no paired Nemotron or Kroko ASR is available, meetings keep
+VibeVoice ASR Streaming 1.5B, even when the companion is present. There is no
+meeting model picker.
 
 The native build produces the DLL, dependencies, notices, and public validation
 sample. It compiles `nemotron_asr` and `nemotron_3_diar` and applies the tracked
@@ -76,7 +79,14 @@ options and checks.
 
 ## Current limits
 
-- Meetings start manually from **Meetings** and use VibeVoice ASR Streaming 1.5B.
+- Meetings start manually from **Meetings**. Installed Nemotron ASR plus Nemotron 3
+  Diarization is the default pair. If Nemotron ASR is missing, installed Kroko uses
+  that companion. If no paired Nemotron or Kroko ASR is available, meetings keep
+  VibeVoice ASR Streaming 1.5B, even when the companion is present. Auto skips a
+  candidate that measured slower than 0.50x real time on the selected device
+  and says so in the Meetings window; speaker labels trail speech by up to
+  about five seconds.
+  There is no meeting model picker. Ordinary dictation stays plain ASR.
   Automatic Teams detection offers a notetaker prompt when Teams holds an active
   microphone session; it never starts recording. Disable it in Settings.
   Capture includes the default microphone and either a selected application

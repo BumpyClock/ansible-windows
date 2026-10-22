@@ -6,14 +6,15 @@ PowerShell. Probes use local model weights and a public sample, not the micropho
 
 Default setup installs `nemotron-asr-0.6b-q8` and `nemotron-3-diarization-q8`.
 Moonshine examples below need `moonshine-tiny` installed. The diarization
-companion is catalogued and compiled; it is not a probe ASR model and is not
-meeting integration.
+companion is not a probe ASR model. Unconfigured meetings use it with
+installed Nemotron ASR, or installed Kroko if that ASR is missing. Dictation,
+replay, and WAV stay plain ASR. There is no meeting model picker.
 
 The native build pins audio.cpp v0.9.0, applies tracked patches including
 `tools/patches/audio-nemotron-stream-timestamps.patch`, and supports CPU and
 optional Vulkan. Compiled families include `nemotron_3_diar`. The patch publishes
-cumulative Nemotron token timestamps on stream updates; it does not by itself
-enable meeting diarization in the app.
+cumulative Nemotron token timestamps on stream updates. Paired meetings combine
+those timestamps with the Nemotron 3 diarizer on the same captured stream.
 
 The [catalog](../tools/audio-models.json) pins each model's revision, file length,
 SHA-256, license, task, and capabilities. Use those capabilities rather than assuming
@@ -154,6 +155,45 @@ qualify other models, long live dictation, or meeting history.
 
 ## Meeting qualification
 
+Paired Nemotron or Kroko speaker checks use the native DLL, the public sample,
+and the selected ASR plus `nemotron-3-diarization-q8`:
+
+```powershell
+.\tools\Test-SpeakerModels.ps1 -Model nemotron
+.\tools\Test-SpeakerModels.ps1 -Model kroko
+.\tools\Test-SpeakerModels.ps1 -Model both
+```
+
+The suite requires exactly one passing native test per selected model. Missing
+weights, DLL, or sample fail the run; tests are not skipped. On 2026-10-20,
+`.\tools\Test-SpeakerModels.ps1 -Model nemotron` parsed and then rejected a
+skipped test because local native assets were missing.
+
+On 2026-10-22, unpaced CPU runs of the 14.07-second public sample through
+`NativeAudioEngine.StreamMeetingAsync` (4 threads, AMD Radeon 8060S host)
+measured plain Nemotron ASR at 1.95 s and paired Nemotron at 13.36 s (0.95x
+real time) with the diarizer's stock `low` profile (9-frame chunks). One
+diarizer step cost about 0.65 s whatever the chunk length: 25-frame chunks
+measured 6.64 s (0.47x), 50-frame chunks 4.33 s (0.31x), and the batch-style
+`very_high` profile 2.78 s (0.20x) but with 27-second label lag. Paired Kroko
+with 25-frame chunks measured 5.29 s. Two threads with 25-frame chunks measured
+11.23 s (0.80x). The engine now streams the diarizer in 50-frame (4 s) chunks
+with 4 frames of right context, and Auto rejects meeting candidates above 0.50x
+real time on the selected device. The same run showed native token timing:
+Nemotron stamps each token on its 80 ms emission frame and emits phrase
+punctuation at the end of the following pause; Kroko ends each word where the
+next word starts. Attribution therefore ignores silence inside a word and
+keeps punctuation out of word timing. A Nemotron word whose emission frames
+hold no speech is credited to the speaker active in the 320 ms before it. A
+Kroko span is credited by the speech within 320 ms of its opening, then by
+the speech in the rest of the 450 ms start lag before it (the largest
+measured), then by the first run of speech inside it, so a span that runs
+through a pause into the next speaker's onset stays with its own speaker
+(checked on the real spans with alternating speaker labels). Both paired
+functional tests passed on that date.
+With the shipped 50-frame chunks, the same path measured paired Nemotron at 4.38 s (0.31x) and paired Kroko at 3.06 s (0.22x). `NemotronPairedCpuKeepsPaceWithTwoMinutesOfLiveAudio` then paced the public sample nine times (126.6 s) in 80 ms packets through a 300-packet channel on CPU: the backlog peaked at 8 packets, no packet waited, the first speaker label arrived 5.0 s after start, the final arrived 0.7 s after input ended, and all nine Mother Nature anchors were recognized across 36 turns. That is one single-speaker run on one machine, not a multi-speaker or two-hour qualification.
+
+
 On 2026-10-09, live microphone plus system/application loopback tests captured an
 in-memory 440 Hz tone in both modes and released their native resources. Core
 tests cover incremental transcript saving, Pause/Resume, finalization, bounded
@@ -224,11 +264,20 @@ calls; a blocked Windows call can delay shutdown while its owned worker is joine
   workspace and reserve headroom; they do not bound every allocation or check a
   dedicated GPU-memory budget. Keep safeguards enabled. Do not close unrelated
   apps to force a model load.
-- The dedicated meeting path uses VibeVoice streaming with a 4096-step rolling
-  native history and a two-hour capture limit. It processes chunks throughout,
-  preserving one stream across Pause/Resume. This limit is not evidence of
-  two-hour speaker accuracy or latency. Validate CPU and Vulkan separately with
-  `NativeMeetingTests`, then qualify long meetings and multiple speakers.
+- Unconfigured meetings use Nemotron ASR with the Nemotron 3 companion when
+  both are installed. If Nemotron ASR is missing, installed Kroko uses that
+  companion. Recognition and the diarizer share the captured stream, joint
+  memory admission, and native reset or disposal. If no paired Nemotron or Kroko
+  ASR is available, meetings keep VibeVoice streaming with a 4096-step rolling
+  native history, even when the companion is present. Capture is limited to two hours and Pause/Resume keeps one stream.
+  Those limits are not evidence of two-hour speaker accuracy or latency.
+  `NativeMeetingTests` covers the retained VibeVoice path. Paired speaker
+  checks use `Test-SpeakerModels.ps1` when the native runtime and weights are
+  present; `NemotronPairedCpuKeepsPaceWithTwoMinutesOfLiveAudio` paces the
+  looped public sample through a meeting-sized channel on CPU. GPU pairs,
+  longer meetings, and multiple speakers remain unqualified. A GPU that
+  qualified may still fail in-process; the CPU fallback is held to the same
+  real-time limit and the meeting fails rather than falling behind silently.
 - Dictation/file recognition operations have a five-minute timeout; the probe uses three
   minutes. WAV input is limited to five minutes, 100 MiB on disk, and 64 MiB of
   decoded floats. Native calls can outlast these deadlines while cleanup waits.

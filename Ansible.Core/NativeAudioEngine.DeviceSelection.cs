@@ -11,6 +11,7 @@ public sealed partial class NativeAudioEngine
     private readonly Dictionary<(string Id, string Mode, int History), string> _selectionKeys = [];
     private bool _streamConsumed;
     private string? _deviceCacheWarning;
+    private double? _benchmarkSampleMilliseconds;
     public string DeviceSelectionSummary { get; private set; } = "";
     public DeviceComparisonSnapshot? DeviceComparison { get; private set; }
 
@@ -45,10 +46,20 @@ public sealed partial class NativeAudioEngine
         if (!_inventory.Models.Contains(model) || model.ModelPath is null || !_inventory.Entries.TryGetValue(model.Id, out var entry))
             throw new InvalidDataException("Device qualification requires an unchanged admitted model.");
         using var lease = _integrity.OpenVerified(model.ModelPath, entry, token);
+        var modelIdentity = entry.Sha256;
+        var modelBytes = entry.Bytes;
+        if (history > 0 && UsesDiarization(model))
+        {
+            var companion = FindDiarizationModel();
+            var companionEntry = _inventory.Entries[companion.Id];
+            using var companionLease = _integrity.OpenVerified(companion.ModelPath!, companionEntry, token);
+            modelIdentity += $"|{companionEntry.Sha256}|{NativeDiarizationSession.LatencyProfileIdentity}";
+            modelBytes = checked(modelBytes + companionEntry.Bytes);
+        }
         var request = new DeviceBenchmarkRequest(_libraryPath, _catalogPath, ModelsDirectory, _benchmarkSamplePath,
             model.Id, NativeBackend.Cpu, options.DeviceIndex, _threads, _headroom, mode, history,
             UseDictionary: model.Family == "kroko_asr" && options.CustomDictionary.Length > 0);
-        var key = DeviceBenchmark.Key(request, entry.Sha256, token);
+        var key = DeviceBenchmark.Key(request, modelIdentity, token);
         _selectionKeys[(model.Id, mode, history)] = key;
         if (!_deviceSelections.TryGetValue(key, out var selection))
         {
@@ -57,7 +68,7 @@ public sealed partial class NativeAudioEngine
             {
                 // No resident execution weights coexist with either owned subprocess.
                 ReleaseModel();
-                NativeMemory.CheckBudget(entry.Bytes, decodedBytes, _headroom);
+                NativeMemory.CheckBudget(modelBytes, decodedBytes, _headroom);
                 DeviceSelectionSummary = $"Qualifying {model.Id} {mode} on CPU and Vulkan with the public sample.";
                 selection = DeviceBenchmark.QualifyAsync(key, model.Family, mode,
                     backend => DeviceBenchmark.RunAsync(_deviceProbePath, request with { Backend = backend }, token), token)
@@ -71,7 +82,21 @@ public sealed partial class NativeAudioEngine
             (_deviceCacheWarning is null ? "" : " " + _deviceCacheWarning);
         DeviceComparison = ToDeviceComparison(selection);
         token.ThrowIfCancellationRequested();
+        if (history > 0)
+        {
+            var factor = DeviceBenchmark.RequireMeetingRealTime(selection, BenchmarkSampleMilliseconds(token), model.Id);
+            DeviceSelectionSummary += $" Meeting pace {factor:F2}x real time.";
+        }
         return options with { Backend = selection.Backend };
+    }
+
+    private double BenchmarkSampleMilliseconds(CancellationToken token)
+    {
+        if (_benchmarkSampleMilliseconds is { } cached) return cached;
+        var audio = new AudioInputReader().ReadRecordingAsync(_benchmarkSamplePath!, token).GetAwaiter().GetResult();
+        var milliseconds = audio.Samples.Length / (double)audio.Channels / audio.SampleRate * 1000;
+        _benchmarkSampleMilliseconds = milliseconds;
+        return milliseconds;
     }
 
     private void RejectSelectedGpu(AudioModel model, string mode, int history, NativeExecutionException error)
@@ -91,6 +116,8 @@ public sealed partial class NativeAudioEngine
         _deviceCacheWarning = DeviceBenchmark.TryUpdateCache(_benchmarkCachePath, key, selection);
         if (_deviceCacheWarning is not null) DeviceSelectionSummary += " " + _deviceCacheWarning;
         DeviceComparison = ToDeviceComparison(selection);
+        // A CPU that only qualified as the slower device may still be too slow for a live meeting.
+        if (history > 0) DeviceBenchmark.RequireMeetingRealTime(selection, BenchmarkSampleMilliseconds(CancellationToken.None), model.Id);
     }
 
     private static DeviceComparisonSnapshot ToDeviceComparison(DeviceBenchmarkSelection selection) => new(
@@ -101,7 +128,7 @@ public sealed partial class NativeAudioEngine
         selection.Cpu.Error,
         selection.Gpu.Error);
 
-    private RecognitionResult RunAutoStream(AudioModel model, ChannelReader<byte[]> audio, RecognitionOptions options,
+    private StreamOutcome RunAutoStream(AudioModel model, ChannelReader<byte[]> audio, RecognitionOptions options,
         IProgress<TranscriptUpdate>? progress, CancellationToken token, Action? onReady, int history = 0)
     {
         var selected = ResolveBackend(model, "streaming", history, NativeMemory.MaximumStreamFrames * sizeof(float), options, token);

@@ -65,10 +65,12 @@ another model.
 
 `nemotron-3-diarization-q8` is in the catalog and can be downloaded from
 **Speech models**. Installed diarization cards show **Meeting companion**. Use
-is hidden; the companion cannot be selected for dictation. Installing only that
-companion leaves dictation disconnected. The native backend compiles its family.
-Meetings still use VibeVoice ASR Streaming 1.5B; the companion is not meeting
-integration.
+is hidden; the companion cannot be selected for dictation, replay, or WAV
+transcription. Installing only that companion leaves dictation disconnected.
+Unconfigured meetings use it with installed Nemotron ASR. If Nemotron ASR is
+missing, installed Kroko uses the same companion. If no paired Nemotron or
+Kroko ASR is available, meetings keep VibeVoice ASR Streaming 1.5B, even when
+the companion is present. There is no meeting model picker.
 
 ### Model behavior
 
@@ -87,8 +89,8 @@ and in the [catalog](../tools/audio-models.json).
 | `nemotron-3-diarization-q8` | Not a dictation model | Speaker-turn companion; does not transcribe | No |
 
 Live previews can appear in the main transcript, but a short recording may end
-before any preview arrives. Nemotron ASR shortcut dictation, replay, and WAV
-stay plain speech. VibeVoice output can contain speaker labels. Shortcut
+before any preview arrives. Nemotron and Kroko shortcut dictation, replay, and
+WAV stay plain speech. VibeVoice output can contain speaker labels. Shortcut
 insertion uses speech metadata or parses the streaming model's speaker format to
 remove labels. Unrecognized output is not inserted. The offline 7B model keeps
 microphone audio in memory until Finish, then runs offline recognition; it has no
@@ -309,13 +311,36 @@ Application capture includes its child-process tree; a browser selection can
 include audio from other tabs. Windows build 20348 or later is required for
 application capture. Use headphones: echo cancellation is not implemented.
 
-Install **VibeVoice ASR Streaming 1.5B Q4_K** in **Speech models** first. Meetings
-use this model independently of the dictation selection, with the configured
-recognition processor (Auto, CPU, or GPU), language hint, and custom vocabulary.
-Dictation and model changes are unavailable while a meeting owns the recognition resources.
+Default setup installs Nemotron ASR and Nemotron 3 Diarization. An unconfigured
+meeting uses that pair when both are installed. If Nemotron ASR is missing,
+installed Kroko English uses the same companion. If no paired Nemotron or Kroko
+ASR is available, meetings keep VibeVoice ASR Streaming 1.5B, even when the
+companion is present. Meetings do not follow the dictation **Use** selection, and the Meetings
+window does not offer a model picker. Ordinary dictation, replay, and WAV stay
+plain ASR. The companion is never a dictation choice.
 
-Text appears throughout the meeting as native chunks finish. Speaker labels come
-from VibeVoice; rename a speaker by selecting its heading. When Teams is selected,
+Meetings use the configured recognition processor (Auto, CPU, or GPU) and
+language hint. Custom vocabulary applies only when the meeting ASR supports it.
+Dictation and model changes are unavailable while a meeting owns the recognition
+resources. Auto qualification for a paired meeting admits both weights together
+and requires speaker activity on the public sample. It also compares the
+selected device's measurement with the sample's duration: a candidate slower
+than 0.50x real time cannot keep up with a live meeting, so an unconfigured
+meeting moves on to the next candidate (paired Kroko, then VibeVoice) and the
+Meetings window shows a **Speaker model changed** notice naming the skipped
+model, its measured pace, and the model in use. A manual processor choice
+skips that check. The caption shows the measured pace of the chosen model.
+
+Text appears throughout the meeting as native chunks finish. Paired Nemotron or
+Kroko meetings publish cumulative timed anonymous speaker turns (`Speaker 0`
+through `Speaker 7`). The diarizer works in four-second chunks, so the newest
+words can show **Unknown speaker** for up to about five seconds before their
+label arrives. Overlapping speech and words with no speaker activity near them
+stay **Unknown speaker**. Kroko words that run through a pause are judged by
+the speech where they begin, so the last word before a pause stays with its
+speaker when someone else speaks next.
+VibeVoice meetings keep that model's speaker labels. Rename a speaker by
+selecting its heading. When Teams is selected,
 the app reads visible speaking markers through Windows accessibility. Names require
 two consistent, nonoverlapping final turns with an exclusive microphone/playback
 source and full observation coverage. Ambiguous evidence retains model labels;
@@ -323,7 +348,8 @@ manual names take precedence. Other meeting apps retain editable model labels.
 Hidden windows, unsupported layouts, and unsupported marker languages can prevent
 automatic names. No voiceprints or calendar-name guesses are used.
 
-Install **Nemotron ASR** weights to enable optional timing refinement on CPU.
+Install **Nemotron ASR** weights to enable optional timing refinement on CPU
+for meetings that still publish untimed VibeVoice turns.
 It compares recognized token anchors with finalized, unchanged VibeVoice turns in a rolling
 30-second audio buffer held only in memory. Confident matches show **ASR-aligned**;
 missing or repeated phrases retain **approximate chunk time**. English digits

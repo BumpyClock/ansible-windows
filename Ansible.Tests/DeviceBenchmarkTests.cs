@@ -38,6 +38,34 @@ public sealed class DeviceBenchmarkTests
         Assert.Contains(cpuFailed ? "CPU failed" : "GPU crashed", result.Summary);
     }
 
+    [Theory]
+    [InlineData(13360, -1, 14072, 0.95)]     // stock "low" diarizer profile on a 4-thread CPU, 2026-10-22; Vulkan skipped
+    [InlineData(4330, -1, 14072, 0.31)]      // four-second diarizer chunks on the same CPU
+    [InlineData(20000, 1800, 14072, 0.13)]   // Vulkan selected and fast enough
+    [InlineData(20000, 8000, 14072, 0.57)]   // Vulkan selected but too slow for a live meeting
+    public void MeetingRealTimeGateJudgesTheSelectedDevice(double cpu, double gpu, double audio, double expectedFactor)
+    {
+        var selection = DeviceBenchmark.Select("key", new(NativeBackend.Cpu, cpu, null),
+            gpu < 0 ? new(NativeBackend.Vulkan, null, "skipped") : new(NativeBackend.Vulkan, gpu, null));
+        if (expectedFactor > DeviceBenchmark.MaximumMeetingRealTimeFactor)
+        {
+            var error = Assert.Throws<MeetingRealTimeException>(() => DeviceBenchmark.RequireMeetingRealTime(selection, audio, "model"));
+            Assert.Equal(selection.Backend, error.Backend);
+            Assert.Equal(expectedFactor, error.RealTimeFactor, 2);
+            Assert.Contains($"{expectedFactor:F2}x real time on {selection.Backend}", error.Message);
+            Assert.Contains("at most 0.50x", error.Message);
+        }
+        else Assert.Equal(expectedFactor, DeviceBenchmark.RequireMeetingRealTime(selection, audio, "model"), 2);
+    }
+
+    [Fact]
+    public void MeetingRealTimeGateRejectsInvalidSampleDurations()
+    {
+        var selection = DeviceBenchmark.Select("key", new(NativeBackend.Cpu, 100, null), new(NativeBackend.Vulkan, null, "skipped"));
+        Assert.Throws<InvalidDataException>(() => DeviceBenchmark.RequireMeetingRealTime(selection, 0, "model"));
+        Assert.Throws<InvalidDataException>(() => DeviceBenchmark.RequireMeetingRealTime(selection, double.NaN, "model"));
+    }
+
     [Fact]
     public void BothFailedAndIntegrityFailureAreNotSuccessShapedDefaults()
     {
@@ -225,6 +253,8 @@ public sealed class DeviceBenchmarkTests
             Assert.NotEqual(original, Key(request with { Device = 1 }));
             Assert.NotEqual(original, Key(request with { Threads = 2 }));
             Assert.NotEqual(original, Key(request, "changed-model-sha"));
+            Assert.NotEqual(Key(request, "asr-sha|diar-one|low"), Key(request, "asr-sha|diar-two|low"));
+            Assert.NotEqual(Key(request, "asr-sha|diar-one|low"), Key(request, "asr-sha|diar-one|very_low"));
             Assert.Equal(original, Key(request with { Backend = NativeBackend.Vulkan }));
             File.WriteAllText(dll, "native two");
             Assert.NotEqual(original, Key(request));

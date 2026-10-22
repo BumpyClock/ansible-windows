@@ -10,6 +10,8 @@ public sealed record MeetingSessionSnapshot(long Version, MeetingSessionPhase Ph
     public string? NamingStatus { get; init; }
     public string? RefinementStatus { get; init; }
     public string DeviceSelectionSummary { get; init; } = "";
+    /// <summary>Why an unconfigured meeting skipped an installed pair, or null when the first candidate was used.</summary>
+    public string? SelectionNotice { get; init; }
 }
 
 public sealed class MeetingSession : IAsyncDisposable
@@ -24,7 +26,8 @@ public sealed class MeetingSession : IAsyncDisposable
     private readonly Func<IMeetingRecognitionEngine> _engineFactory;
     private readonly IMeetingCaptureFactory _captureFactory;
     private readonly MeetingStore _store;
-    private readonly RecognitionOptions _options;
+    private readonly Func<RecognitionOptions> _getOptions;
+    private readonly Func<string?>? _getModelId;
     private readonly Func<Task> _reserve;
     private readonly Func<Task> _release;
     private readonly Func<IMeetingSpeakerObserver>? _observerFactory;
@@ -54,13 +57,15 @@ public sealed class MeetingSession : IAsyncDisposable
     private bool _discarding;
 
     public MeetingSession(Func<IMeetingRecognitionEngine> engineFactory, IMeetingCaptureFactory captureFactory,
-        MeetingStore store, RecognitionOptions options, Func<Task>? reserve = null, Func<Task>? release = null,
-        Func<IMeetingSpeakerObserver>? observerFactory = null, Func<IMeetingWordAligner>? alignerFactory = null)
+        MeetingStore store, Func<RecognitionOptions> getOptions, Func<Task>? reserve = null, Func<Task>? release = null,
+        Func<IMeetingSpeakerObserver>? observerFactory = null, Func<IMeetingWordAligner>? alignerFactory = null,
+        Func<string?>? getModelId = null)
     {
         _engineFactory = engineFactory;
         _captureFactory = captureFactory;
         _store = store;
-        _options = options;
+        _getOptions = getOptions;
+        _getModelId = getModelId;
         _reserve = reserve ?? (() => Task.CompletedTask);
         _release = release ?? (() => Task.CompletedTask);
         _observerFactory = observerFactory;
@@ -110,11 +115,39 @@ public sealed class MeetingSession : IAsyncDisposable
             { SingleWriter = true, SingleReader = true, AllowSynchronousContinuations = false });
             _reader = new PausableReader(_audio.Reader, _timeline.Append);
             await SaveAsync();
+            var options = _getOptions() ?? throw new InvalidOperationException("Meeting recognition settings are unavailable.");
             _engine = _engineFactory();
             var models = await _engine.ConnectAsync(_cancellation.Token);
-            var model = models.FirstOrDefault(candidate => candidate.Family == "vibevoice_asr_streaming" && candidate.Mode == "streaming")
-                ?? throw new InvalidOperationException("Install VibeVoice ASR Streaming 1.5B in Speech models before starting a meeting.");
-            await _engine.PrepareMeetingAsync(model, _options, _cancellation.Token);
+            var selectedId = _getModelId?.Invoke();
+            var candidates = SelectCandidates(models, selectedId);
+            var requested = options;
+            var skipped = new List<string>();
+            AudioModel? model = null;
+            for (var index = 0; index < candidates.Count; index++)
+            {
+                model = candidates[index];
+                options = requested with { CustomDictionary = model.SupportsCustomDictionary ? requested.CustomDictionary : "" };
+                try
+                {
+                    await _engine.PrepareMeetingAsync(model, options, _cancellation.Token);
+                    break;
+                }
+                catch (MeetingRealTimeException error) when (index < candidates.Count - 1)
+                {
+                    // Unconfigured meetings continue down the documented order; an explicit choice is its only candidate.
+                    skipped.Add(error.Message);
+                }
+                catch (MeetingRealTimeException error) when (skipped.Count > 0)
+                {
+                    throw new MeetingRealTimeException(error.ModelId, error.Backend, error.RealTimeFactor, error.Maximum, string.Join(" ", skipped));
+                }
+            }
+            if (skipped.Count > 0)
+            {
+                lock (_gate) _state = _state with { Version = _state.Version + 1,
+                    SelectionNotice = $"{string.Join(" ", skipped)} Using {model!.Id} instead." };
+                Publish();
+            }
             _cancellation.Token.ThrowIfCancellationRequested();
             _capture = await _captureFactory.StartAsync(request, _cancellation.Token);
             _cancellation.Token.ThrowIfCancellationRequested();
@@ -122,7 +155,7 @@ public sealed class MeetingSession : IAsyncDisposable
             _pump = PumpAsync(_capture, _cancellation.Token);
             await StartObserverAsync();
             var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            _recognition = Task.Run(() => RecognizeAsync(model, ready));
+            _recognition = Task.Run(() => RecognizeAsync(model!, options, ready));
             if (await Task.WhenAny(ready.Task, _recognition) == _recognition)
             {
                 await _recognition;
@@ -164,6 +197,40 @@ public sealed class MeetingSession : IAsyncDisposable
     {
         lock (_gate) _preparation?.Cancel();
     }
+
+    private static bool UsesCompanion(AudioModel model) => model.Family is "nemotron_asr" or "kroko_asr";
+
+    private static bool IsCompanion(AudioModel model) => model.Id == AudioModelDefaults.DiarizationModelId &&
+        model.Family == "nemotron_3_diar" && model.Task == "diar" && model.Mode == "streaming";
+
+    // Explicit: that model alone. Unconfigured: paired Nemotron, paired Kroko, then VibeVoice, as documented.
+    private static IReadOnlyList<AudioModel> SelectCandidates(IReadOnlyList<AudioModel> models, string? selectedId)
+    {
+        var companionInstalled = models.Any(IsCompanion);
+        if (selectedId is not null)
+        {
+            var selected = models.FirstOrDefault(candidate => candidate.Id == selectedId && SupportsMeeting(candidate))
+                ?? throw new InvalidOperationException($"The selected meeting model '{selectedId}' is not installed or cannot stream meetings.");
+            if (UsesCompanion(selected) && !companionInstalled)
+                throw new InvalidOperationException($"Install Nemotron 3 Diarization Q8 before starting a meeting with '{selectedId}'.");
+            return [selected];
+        }
+        var candidates = new List<AudioModel>();
+        if (companionInstalled)
+        {
+            foreach (var id in new[] { AudioModelDefaults.RecognitionModelId, AudioModelDefaults.KrokoModelId })
+                if (models.FirstOrDefault(candidate => candidate.Id == id && UsesCompanion(candidate) && SupportsMeeting(candidate)) is { } paired)
+                    candidates.Add(paired);
+        }
+        if (models.FirstOrDefault(candidate => candidate.Family == "vibevoice_asr_streaming" && SupportsMeeting(candidate)) is { } vibeVoice)
+            candidates.Add(vibeVoice);
+        if (candidates.Count == 0)
+            throw new InvalidOperationException("Install Nemotron or Kroko ASR with Nemotron 3 Diarization, or VibeVoice ASR Streaming 1.5B before starting a meeting.");
+        return candidates;
+    }
+
+    public static bool SupportsMeeting(AudioModel model) => model.Task != "diar" && model.Mode == "streaming" &&
+        model.Family is "nemotron_asr" or "kroko_asr" or "vibevoice_asr_streaming";
 
     public async Task PauseAsync()
     {
@@ -269,11 +336,11 @@ public sealed class MeetingSession : IAsyncDisposable
         finally { _commands.Release(); }
     }
 
-    private async Task RecognizeAsync(AudioModel model, TaskCompletionSource ready)
+    private async Task RecognizeAsync(AudioModel model, RecognitionOptions options, TaskCompletionSource ready)
     {
         try
         {
-            await _engine!.StreamMeetingAsync(model, _reader!, _options, new InlineProgress(ReceiveUpdate),
+            await _engine!.StreamMeetingAsync(model, _reader!, options, new InlineProgress(ReceiveUpdate),
                 _cancellation!.Token, () => ready.TrySetResult());
             if (State.Phase is MeetingSessionPhase.Starting or MeetingSessionPhase.Recording or MeetingSessionPhase.Paused)
                 throw new InvalidOperationException("The recognition stream ended before the meeting was ended.");
@@ -366,19 +433,26 @@ public sealed class MeetingSession : IAsyncDisposable
         var processed = update.ProcessedSamples ?? _reader!.ReadSamples;
         if (processed < 0 || processed > _reader!.ReadSamples)
             throw new InvalidDataException("Recognition returned a timestamp outside the consumed audio.");
-        var turns = _transcript.Update(update.Text, processed / 16000.0, update.IsFinal).ToArray();
+        var turns = update.SpeakerTurns is { } timed
+            ? ValidateTimedTurns(timed, processed, update.IsFinal)
+            : _transcript.Update(update.Text, processed / 16000.0, update.IsFinal).ToArray();
         var previous = Document!.Turns;
-        for (var index = 0; index < turns.Length; index++)
+        for (var index = 0; update.SpeakerTurns is null && index < turns.Length; index++)
         {
             var old = index < previous.Count ? previous[index] : null;
             if (old?.SpeakerId == turns[index].SpeakerId && old.Text == turns[index].Text)
                 turns[index] = old with { IsProvisional = turns[index].IsProvisional };
         }
-        RefineTiming(turns, processed);
+        if (update.SpeakerTurns is null) RefineTiming(turns, processed);
         for (var index = 0; index < turns.Length; index++)
-            if (turns[index].TimingQuality == MeetingTimingQuality.Aligned &&
-                !(index < previous.Count && previous[index].Text == turns[index].Text && previous[index].TimingQuality == MeetingTimingQuality.Aligned))
-                turns[index] = turns[index] with { Source = _timeline.Source(turns[index].StartSeconds, turns[index].EndSeconds) };
+        {
+            var turn = turns[index];
+            if (turn.TimingQuality != MeetingTimingQuality.Aligned) continue;
+            var old = index < previous.Count ? previous[index] : null;
+            var unchangedBounds = old?.TimingQuality == MeetingTimingQuality.Aligned &&
+                old.StartSeconds == turn.StartSeconds && old.EndSeconds == turn.EndSeconds;
+            turns[index] = turn with { Source = unchangedBounds ? old!.Source : _timeline.Source(turn.StartSeconds, turn.EndSeconds) };
+        }
         lock (_gate)
         {
             if (_discarding) return;
@@ -387,6 +461,26 @@ public sealed class MeetingSession : IAsyncDisposable
             _state = _state with { Version = _state.Version + 1, Document = _speakerMatcher.Refine(document),
                 PendingSeconds = Math.Max(0, (_capturedSamples - _reader!.ReadSamples) / 16000.0) };
         }
+    }
+
+    private static MeetingTurn[] ValidateTimedTurns(IReadOnlyList<MeetingTurn> turns, long processed, bool final)
+    {
+        if (turns.Count > 262144) throw new InvalidDataException("Meeting recognition returned too many timed turns.");
+        var result = new MeetingTurn[turns.Count];
+        double previousStart = 0;
+        for (var index = 0; index < result.Length; index++)
+        {
+            var turn = turns[index];
+            if (turn is null || string.IsNullOrWhiteSpace(turn.SpeakerId) || string.IsNullOrWhiteSpace(turn.Text) ||
+                !double.IsFinite(turn.StartSeconds) || !double.IsFinite(turn.EndSeconds) ||
+                turn.StartSeconds < previousStart || turn.EndSeconds < turn.StartSeconds ||
+                turn.EndSeconds > processed / 16000.0 || !Enum.IsDefined(turn.TimingQuality) ||
+                !Enum.IsDefined(turn.Source) || final && turn.IsProvisional)
+                throw new InvalidDataException("Meeting recognition returned invalid timed speaker turns.");
+            previousStart = turn.StartSeconds;
+            result[index] = turn;
+        }
+        return result;
     }
 
     private void FlushPendingUpdate()
