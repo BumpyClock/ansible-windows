@@ -12,6 +12,9 @@ public static class NemotronSpeakerAttribution
     internal const int MaximumTokens = 262144;
     internal const int MaximumActivities = 100000;
     internal const int MaximumTextCharacters = 4 * 1024 * 1024;
+    // ASR tokens are stamped when the decoder emits them, after the audio they describe. Real timing on
+    // 2026-10-22: Nemotron closed a phrase 30 ms after the diarizer's activity ended, Kroko 150 ms after.
+    internal const long EmissionLagSamples = SampleRate * 32 / 100;
 
     public static TranscriptUpdate Create(IReadOnlyList<MeetingTimedToken> tokens,
         IReadOnlyList<SpeakerActivity> activities, long processedSamples, bool isFinal,
@@ -30,9 +33,9 @@ public static class NemotronSpeakerAttribution
         var words = new List<Word>();
         var speech = new StringBuilder();
         var wordText = new StringBuilder();
-        long previousStart = 0, wordStart = 0, wordEnd = 0;
-        var hasNativeTiming = true;
-        var hasWord = false;
+        long previousStart = 0;
+        var lexical = new WordSpan();
+        var every = new WordSpan();
         foreach (var token in tokens)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -54,15 +57,11 @@ public static class NemotronSpeakerAttribution
                 while (end < token.Text.Length && !char.IsWhiteSpace(token.Text[end])) end++;
                 if (end > contentStart)
                 {
-                    if (!hasWord)
-                    {
-                        wordStart = Math.Min(token.StartSample, processedSamples);
-                        wordEnd = wordStart;
-                        hasNativeTiming = true;
-                        hasWord = true;
-                    }
-                    wordEnd = Math.Max(wordEnd, Math.Min(token.EndSample, processedSamples));
-                    hasNativeTiming &= token.EndSample <= processedSamples;
+                    every.Extend(token, processedSamples);
+                    // Punctuation is emitted when the decoder closes a phrase, often a pause later; only
+                    // letters and digits say when the word itself was heard.
+                    if (HasLexicalContent(token.Text.AsSpan(contentStart, end - contentStart)))
+                        lexical.Extend(token, processedSamples);
                 }
                 // Do not invent sub-token timestamps when a decoded piece contains several words.
                 wordText.Append(token.Text, offset, end - offset);
@@ -113,9 +112,13 @@ public static class NemotronSpeakerAttribution
             if (wordText.Length == 0) return;
             var text = wordText.ToString();
             if (!string.IsNullOrWhiteSpace(text))
-                words.Add(new(text, wordStart, wordEnd, hasNativeTiming));
+            {
+                var span = lexical.HasContent ? lexical : every;
+                words.Add(new(text, span.Start, span.End, span.HasNativeTiming));
+            }
             wordText.Clear();
-            hasWord = false;
+            lexical.Reset();
+            every.Reset();
         }
 
         void FinishTurn()
@@ -138,7 +141,38 @@ public static class NemotronSpeakerAttribution
         return id[8] - '0';
     }
 
+    private static bool HasLexicalContent(ReadOnlySpan<char> text)
+    {
+        foreach (var character in text)
+            if (char.IsLetterOrDigit(character)) return true;
+        return false;
+    }
+
     private sealed record Word(string Text, long Start, long End, bool HasNativeTiming);
+
+    private sealed class WordSpan
+    {
+        public bool HasContent { get; private set; }
+        public long Start { get; private set; }
+        public long End { get; private set; }
+        public bool HasNativeTiming { get; private set; }
+
+        public void Extend(MeetingTimedToken token, long processedSamples)
+        {
+            if (!HasContent)
+            {
+                Start = Math.Min(token.StartSample, processedSamples);
+                End = Start;
+                HasNativeTiming = true;
+                HasContent = true;
+            }
+            End = Math.Max(End, Math.Min(token.EndSample, processedSamples));
+            HasNativeTiming &= token.EndSample <= processedSamples;
+        }
+
+        public void Reset() => HasContent = false;
+    }
+
     private readonly record struct ActivityEvent(long Sample, int Speaker, int Delta);
 
     // Prefix coverage of the activity union avoids rescanning activities for every word.
@@ -197,17 +231,35 @@ public static class NemotronSpeakerAttribution
             _count = point;
         }
 
-        public string GetSpeaker(long start, long end)
+        public string GetSpeaker(long start, long end) =>
+            // A word with no diarized speech inside its span was usually emitted just after its speaker
+            // stopped, so the emission allowance before it decides; beyond that nobody is credited.
+            TryGetMajority(start, end)
+                ?? (start > 0 ? TryGetMajority(Math.Max(0, start - EmissionLagSamples), start) : null)
+                ?? UnknownSpeaker;
+
+        // Null means the span holds no diarized speech at all; overlap and ties are Unknown.
+        private string? TryGetMajority(long start, long end)
         {
             var startPoint = FindPoint(start);
             var endPoint = FindPoint(end);
             if (CoverageAt(endPoint, end, 8) != CoverageAt(startPoint, start, 8))
                 return UnknownSpeaker;
-            // Require a strict majority of the entire word, not just its covered portion.
+            var best = -1;
+            long bestCoverage = 0, covered = 0;
             for (var speaker = 0; speaker < 8; speaker++)
-                if (CoverageAt(endPoint, end, speaker) - CoverageAt(startPoint, start, speaker) > (end - start) / 2)
-                    return $"Speaker {speaker}";
-            return UnknownSpeaker;
+            {
+                var coverage = CoverageAt(endPoint, end, speaker) - CoverageAt(startPoint, start, speaker);
+                covered += coverage;
+                if (coverage > bestCoverage)
+                {
+                    best = speaker;
+                    bestCoverage = coverage;
+                }
+            }
+            if (covered == 0) return null;
+            // Silence inside the span does not vote: a strict majority of the diarized speech decides.
+            return bestCoverage * 2 > covered ? $"Speaker {best}" : UnknownSpeaker;
         }
 
         private int FindPoint(long sample)

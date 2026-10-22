@@ -10,6 +10,8 @@ public sealed record MeetingSessionSnapshot(long Version, MeetingSessionPhase Ph
     public string? NamingStatus { get; init; }
     public string? RefinementStatus { get; init; }
     public string DeviceSelectionSummary { get; init; } = "";
+    /// <summary>Why an unconfigured meeting skipped an installed pair, or null when the first candidate was used.</summary>
+    public string? SelectionNotice { get; init; }
 }
 
 public sealed class MeetingSession : IAsyncDisposable
@@ -116,23 +118,36 @@ public sealed class MeetingSession : IAsyncDisposable
             var options = _getOptions() ?? throw new InvalidOperationException("Meeting recognition settings are unavailable.");
             _engine = _engineFactory();
             var models = await _engine.ConnectAsync(_cancellation.Token);
-            var companionInstalled = models.Any(candidate => candidate.Id == AudioModelDefaults.DiarizationModelId &&
-                candidate.Family == "nemotron_3_diar" && candidate.Task == "diar" && candidate.Mode == "streaming");
             var selectedId = _getModelId?.Invoke();
-            AudioModel? model = selectedId is not null
-                ? models.FirstOrDefault(candidate => candidate.Id == selectedId && SupportsMeeting(candidate))
-                : companionInstalled
-                    ? models.FirstOrDefault(candidate => candidate.Id == AudioModelDefaults.RecognitionModelId && SupportsMeeting(candidate))
-                        ?? models.FirstOrDefault(candidate => candidate.Id == AudioModelDefaults.KrokoModelId && SupportsMeeting(candidate))
-                    : null;
-            if (selectedId is null)
-                model ??= models.FirstOrDefault(candidate => candidate.Family == "vibevoice_asr_streaming" && SupportsMeeting(candidate));
-            if (model is null)
-                throw new InvalidOperationException(selectedId is not null
-                    ? $"The selected meeting model '{selectedId}' is not installed or cannot stream meetings."
-                    : "Install Nemotron or Kroko ASR with Nemotron 3 Diarization, or VibeVoice ASR Streaming 1.5B before starting a meeting.");
-            options = options with { CustomDictionary = model.SupportsCustomDictionary ? options.CustomDictionary : "" };
-            await _engine.PrepareMeetingAsync(model, options, _cancellation.Token);
+            var candidates = SelectCandidates(models, selectedId);
+            var requested = options;
+            var skipped = new List<string>();
+            AudioModel? model = null;
+            for (var index = 0; index < candidates.Count; index++)
+            {
+                model = candidates[index];
+                options = requested with { CustomDictionary = model.SupportsCustomDictionary ? requested.CustomDictionary : "" };
+                try
+                {
+                    await _engine.PrepareMeetingAsync(model, options, _cancellation.Token);
+                    break;
+                }
+                catch (MeetingRealTimeException error) when (index < candidates.Count - 1)
+                {
+                    // Unconfigured meetings continue down the documented order; an explicit choice is its only candidate.
+                    skipped.Add(error.Message);
+                }
+                catch (MeetingRealTimeException error) when (skipped.Count > 0)
+                {
+                    throw new MeetingRealTimeException(error.ModelId, error.Backend, error.RealTimeFactor, error.Maximum, string.Join(" ", skipped));
+                }
+            }
+            if (skipped.Count > 0)
+            {
+                lock (_gate) _state = _state with { Version = _state.Version + 1,
+                    SelectionNotice = $"{string.Join(" ", skipped)} Using {model!.Id} instead." };
+                Publish();
+            }
             _cancellation.Token.ThrowIfCancellationRequested();
             _capture = await _captureFactory.StartAsync(request, _cancellation.Token);
             _cancellation.Token.ThrowIfCancellationRequested();
@@ -140,7 +155,7 @@ public sealed class MeetingSession : IAsyncDisposable
             _pump = PumpAsync(_capture, _cancellation.Token);
             await StartObserverAsync();
             var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            _recognition = Task.Run(() => RecognizeAsync(model, options, ready));
+            _recognition = Task.Run(() => RecognizeAsync(model!, options, ready));
             if (await Task.WhenAny(ready.Task, _recognition) == _recognition)
             {
                 await _recognition;
@@ -181,6 +196,37 @@ public sealed class MeetingSession : IAsyncDisposable
     private void CancelPreparation()
     {
         lock (_gate) _preparation?.Cancel();
+    }
+
+    private static bool UsesCompanion(AudioModel model) => model.Family is "nemotron_asr" or "kroko_asr";
+
+    private static bool IsCompanion(AudioModel model) => model.Id == AudioModelDefaults.DiarizationModelId &&
+        model.Family == "nemotron_3_diar" && model.Task == "diar" && model.Mode == "streaming";
+
+    // Explicit: that model alone. Unconfigured: paired Nemotron, paired Kroko, then VibeVoice, as documented.
+    private static IReadOnlyList<AudioModel> SelectCandidates(IReadOnlyList<AudioModel> models, string? selectedId)
+    {
+        var companionInstalled = models.Any(IsCompanion);
+        if (selectedId is not null)
+        {
+            var selected = models.FirstOrDefault(candidate => candidate.Id == selectedId && SupportsMeeting(candidate))
+                ?? throw new InvalidOperationException($"The selected meeting model '{selectedId}' is not installed or cannot stream meetings.");
+            if (UsesCompanion(selected) && !companionInstalled)
+                throw new InvalidOperationException($"Install Nemotron 3 Diarization Q8 before starting a meeting with '{selectedId}'.");
+            return [selected];
+        }
+        var candidates = new List<AudioModel>();
+        if (companionInstalled)
+        {
+            foreach (var id in new[] { AudioModelDefaults.RecognitionModelId, AudioModelDefaults.KrokoModelId })
+                if (models.FirstOrDefault(candidate => candidate.Id == id && UsesCompanion(candidate) && SupportsMeeting(candidate)) is { } paired)
+                    candidates.Add(paired);
+        }
+        if (models.FirstOrDefault(candidate => candidate.Family == "vibevoice_asr_streaming" && SupportsMeeting(candidate)) is { } vibeVoice)
+            candidates.Add(vibeVoice);
+        if (candidates.Count == 0)
+            throw new InvalidOperationException("Install Nemotron or Kroko ASR with Nemotron 3 Diarization, or VibeVoice ASR Streaming 1.5B before starting a meeting.");
+        return candidates;
     }
 
     public static bool SupportsMeeting(AudioModel model) => model.Task != "diar" && model.Mode == "streaming" &&

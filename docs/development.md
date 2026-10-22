@@ -215,7 +215,9 @@ Paired meeting speaker checks need the native DLL, the public sample, and the
 selected ASR plus `nemotron-3-diarization-q8`. The suite requires exactly one
 passing native test per selected model. Missing weights, DLL, or sample fail
 the run; tests are not skipped. This does not qualify GPU, multi-speaker, or
-performance behavior:
+performance behavior. The paced two-minute CPU check runs separately through
+`dotnet test --filter "FullyQualifiedName~NemotronPairedCpuKeepsPace"` with
+the same native assets:
 
 ```powershell
 .\tools\Test-SpeakerModels.ps1 -Model nemotron

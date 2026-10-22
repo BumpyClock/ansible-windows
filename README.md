@@ -82,7 +82,10 @@ options and checks.
 - Meetings start manually from **Meetings**. Installed Nemotron ASR plus Nemotron 3
   Diarization is the default pair. If Nemotron ASR is missing, installed Kroko uses
   that companion. If no paired Nemotron or Kroko ASR is available, meetings keep
-  VibeVoice ASR Streaming 1.5B, even when the companion is present.
+  VibeVoice ASR Streaming 1.5B, even when the companion is present. Auto skips a
+  candidate that measured slower than 0.50x real time on the selected device
+  and says so in the Meetings window; speaker labels trail speech by up to
+  about five seconds.
   There is no meeting model picker. Ordinary dictation stays plain ASR.
   Automatic Teams detection offers a notetaker prompt when Teams holds an active
   microphone session; it never starts recording. Disable it in Settings.

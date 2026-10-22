@@ -167,9 +167,27 @@ and the selected ASR plus `nemotron-3-diarization-q8`:
 The suite requires exactly one passing native test per selected model. Missing
 weights, DLL, or sample fail the run; tests are not skipped. On 2026-10-20,
 `.\tools\Test-SpeakerModels.ps1 -Model nemotron` parsed and then rejected a
-skipped test because local native assets were missing. Paired native
-qualification is not recorded. That absence is not a GPU, multi-speaker, or
-performance result.
+skipped test because local native assets were missing.
+
+On 2026-10-22, unpaced CPU runs of the 14.07-second public sample through
+`NativeAudioEngine.StreamMeetingAsync` (4 threads, AMD Radeon 8060S host)
+measured plain Nemotron ASR at 1.95 s and paired Nemotron at 13.36 s (0.95x
+real time) with the diarizer's stock `low` profile (9-frame chunks). One
+diarizer step cost about 0.65 s whatever the chunk length: 25-frame chunks
+measured 6.64 s (0.47x), 50-frame chunks 4.33 s (0.31x), and the batch-style
+`very_high` profile 2.78 s (0.20x) but with 27-second label lag. Paired Kroko
+with 25-frame chunks measured 5.29 s. Two threads with 25-frame chunks measured
+11.23 s (0.80x). The engine now streams the diarizer in 50-frame (4 s) chunks
+with 4 frames of right context, and Auto rejects meeting candidates above 0.50x
+real time on the selected device. The same run showed native token timing:
+Nemotron stamps each token on its 80 ms emission frame and emits phrase
+punctuation at the end of the following pause; Kroko ends each word where the
+next word starts. Attribution therefore ignores silence inside a word, keeps
+punctuation out of word timing, and looks back 320 ms for a word that was
+emitted just after its speaker stopped. Both paired functional tests passed on
+that date.
+With the shipped 50-frame chunks, the same path measured paired Nemotron at 4.38 s (0.31x) and paired Kroko at 3.06 s (0.22x). `NemotronPairedCpuKeepsPaceWithTwoMinutesOfLiveAudio` then paced the public sample nine times (126.6 s) in 80 ms packets through a 300-packet channel on CPU: the backlog peaked at 8 packets, no packet waited, the first speaker label arrived 5.0 s after start, the final arrived 0.7 s after input ended, and all nine Mother Nature anchors were recognized across 36 turns. That is one single-speaker run on one machine, not a multi-speaker or two-hour qualification.
+
 
 On 2026-10-09, live microphone plus system/application loopback tests captured an
 in-memory 440 Hz tone in both modes and released their native resources. Core
@@ -250,7 +268,11 @@ calls; a blocked Windows call can delay shutdown while its owned worker is joine
   Those limits are not evidence of two-hour speaker accuracy or latency.
   `NativeMeetingTests` covers the retained VibeVoice path. Paired speaker
   checks use `Test-SpeakerModels.ps1` when the native runtime and weights are
-  present. GPU, long meetings, and multiple speakers remain unqualified.
+  present; `NemotronPairedCpuKeepsPaceWithTwoMinutesOfLiveAudio` paces the
+  looped public sample through a meeting-sized channel on CPU. GPU pairs,
+  longer meetings, and multiple speakers remain unqualified. A GPU that
+  qualified may still fail in-process; the CPU fallback is held to the same
+  real-time limit and the meeting fails rather than falling behind silently.
 - Dictation/file recognition operations have a five-minute timeout; the probe uses three
   minutes. WAV input is limited to five minutes, 100 MiB on disk, and 64 MiB of
   decoded floats. Native calls can outlast these deadlines while cleanup waits.

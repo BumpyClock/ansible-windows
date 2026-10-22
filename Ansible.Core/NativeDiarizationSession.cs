@@ -5,7 +5,17 @@ namespace Ansible.Core;
 
 internal sealed class NativeDiarizationSession : IDisposable
 {
-    internal const string LatencyProfile = "low";
+    // Measured on 2026-10-22 (CPU, 4 threads, 14.07 s public sample): one diarizer step costs about 0.65 s
+    // whatever the chunk length, so the stock "low" profile (9 frames, 0.72 s) ran paired Nemotron at 0.95x
+    // real time. Four-second chunks keep the cache and FIFO geometry of that profile and measured 0.31x.
+    // Speaker labels therefore trail speech by up to about five seconds.
+    internal const int SpeakerCacheFrames = 264;
+    internal const int FifoFrames = 264;
+    internal const int ChunkFrames = 50;
+    internal const int ChunkRightContextFrames = 4;
+    internal const int SpeakerCacheUpdatePeriod = 222;
+    internal static readonly string LatencyProfileIdentity =
+        $"custom:{SpeakerCacheFrames}/{FifoFrames}/{ChunkFrames}/{ChunkRightContextFrames}/{SpeakerCacheUpdatePeriod}";
     private NativeAudioHandle? _model;
     private NativeAudioHandle? _session;
     private FileStream? _lease;
@@ -47,8 +57,12 @@ internal sealed class NativeDiarizationSession : IDisposable
             token.ThrowIfCancellationRequested();
             if (NativeAudioApi.Supports(pointer, "diar", "streaming") == 0)
                 throw new NotSupportedException("The installed Nemotron diarizer does not support streaming.");
-            NativeAudioApi.Check(NativeAudioApi.OptionsSet(sessionOptions, "nemotron_3_diar.latency_profile", LatencyProfile),
-                "set the live speaker latency profile");
+            SetOption(sessionOptions, "latency_profile", "custom");
+            SetOption(sessionOptions, "spkcache_len", SpeakerCacheFrames);
+            SetOption(sessionOptions, "fifo_len", FifoFrames);
+            SetOption(sessionOptions, "chunk_len", ChunkFrames);
+            SetOption(sessionOptions, "chunk_right_context", ChunkRightContextFrames);
+            SetOption(sessionOptions, "spkcache_update_period", SpeakerCacheUpdatePeriod);
             var backend = new NativeAudioApi.BackendConfig { Backend = backendName, Device = options.DeviceIndex, Threads = threads };
             NativeMemory.CheckBudget(entry.Bytes, 0, headroom);
             token.ThrowIfCancellationRequested();
@@ -69,6 +83,10 @@ internal sealed class NativeDiarizationSession : IDisposable
             Marshal.FreeCoTaskMem(backendName);
         }
     }
+
+    private static void SetOption(nint options, string name, object value) =>
+        NativeAudioApi.Check(NativeAudioApi.OptionsSet(options, "nemotron_3_diar." + name,
+            Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture)!), "set the live speaker latency profile");
 
     public NativeBackend Backend { get; }
     public int DeviceIndex { get; }
@@ -208,7 +226,8 @@ internal sealed class NativeDiarizationSession : IDisposable
         AppendActivities(pointer, token);
     }
 
-    public void PublishFinal(nint result, string speech, long samples, IProgress<TranscriptUpdate>? progress, CancellationToken token)
+    // The caller publishes this only after the native reset succeeded, so a completed document never outlives a broken engine.
+    public TranscriptUpdate CreateFinal(nint result, string speech, long samples, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
         if (samples != _processedSamples)
@@ -219,7 +238,7 @@ internal sealed class NativeDiarizationSession : IDisposable
             throw new InvalidDataException("Speech and timestamp text disagree. The meeting cannot assign speakers safely.");
         token.ThrowIfCancellationRequested();
         // The ASR final is authoritative, including its original outer whitespace.
-        progress?.Report(update with { Text = speech, SpeechText = speech });
+        return update with { Text = speech, SpeechText = speech };
     }
 
     private void Publish(bool final, IProgress<TranscriptUpdate>? progress, CancellationToken token) =>

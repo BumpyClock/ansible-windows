@@ -59,6 +59,132 @@ public sealed class DiarizedMeetingSessionTests : IDisposable
     }
 
     [Fact]
+    public async Task UnconfiguredMeetingSkipsAPairThatCannotKeepRealTimeAndSaysSo()
+    {
+        var engine = new Engine([Nemotron, Kroko, Diarizer, VibeVoice])
+        {
+            PrepareFailure = model => model == Nemotron ? new MeetingRealTimeException(model.Id, NativeBackend.Cpu, 0.95, 0.5) : null
+        };
+        var capture = new CaptureFactory();
+        await using var session = Create(engine, capture);
+        await session.StartAsync(Request);
+        Assert.Equal([Nemotron, Kroko], engine.Prepared);
+        Assert.Equal(Kroko, engine.Model);
+        Assert.True(capture.Started);
+        Assert.Contains("0.95x real time on Cpu", session.State.SelectionNotice);
+        Assert.EndsWith("Using kroko-en-64l-q8 instead.", session.State.SelectionNotice);
+        Assert.Null(session.State.Error);
+        await session.EndAsync();
+    }
+
+    [Fact]
+    public async Task UnconfiguredMeetingFallsThroughToVibeVoiceWhenBothPairsAreTooSlow()
+    {
+        var engine = new Engine([Nemotron, Kroko, Diarizer, VibeVoice])
+        {
+            PrepareFailure = model => model != VibeVoice ? new MeetingRealTimeException(model.Id, NativeBackend.Cpu, 0.8, 0.5) : null
+        };
+        await using var session = Create(engine, new());
+        await session.StartAsync(Request);
+        Assert.Equal([Nemotron, Kroko, VibeVoice], engine.Prepared);
+        Assert.Equal(VibeVoice, engine.Model);
+        Assert.Contains("Using vibevoice-streaming-1.5b-q4 instead.", session.State.SelectionNotice);
+        await session.EndAsync();
+    }
+
+    [Fact]
+    public async Task UnconfiguredMeetingFailsWhenEveryCandidateIsTooSlow()
+    {
+        var engine = new Engine([Nemotron, Diarizer, VibeVoice])
+        {
+            PrepareFailure = model => new MeetingRealTimeException(model.Id, NativeBackend.Cpu, 0.8, 0.5)
+        };
+        var capture = new CaptureFactory();
+        await using var session = Create(engine, capture);
+        var error = await Assert.ThrowsAsync<MeetingRealTimeException>(() => session.StartAsync(Request));
+        Assert.Equal(VibeVoice.Id, error.ModelId);
+        Assert.Contains("Earlier candidates: nemotron-asr-0.6b-q8 measured 0.80x", error.Message);
+        Assert.Equal([Nemotron, VibeVoice], engine.Prepared);
+        Assert.False(capture.Started);
+        Assert.False(session.IsActive);
+        Assert.Equal(MeetingSessionPhase.Failed, session.State.Phase);
+        Assert.Equal(error.Message, session.State.Error);
+    }
+
+    [Fact]
+    public async Task ExplicitChoiceThatCannotKeepRealTimeFailsInsteadOfSwitching()
+    {
+        var engine = new Engine([Nemotron, Kroko, Diarizer, VibeVoice])
+        {
+            PrepareFailure = model => new MeetingRealTimeException(model.Id, NativeBackend.Cpu, 0.95, 0.5)
+        };
+        var capture = new CaptureFactory();
+        await using var session = Create(engine, capture, () => Nemotron.Id);
+        await Assert.ThrowsAsync<MeetingRealTimeException>(() => session.StartAsync(Request));
+        Assert.Equal([Nemotron], engine.Prepared);
+        Assert.False(capture.Started);
+        Assert.False(session.IsActive);
+        Assert.Null(session.State.SelectionNotice);
+    }
+
+    [Theory]
+    [InlineData("nemotron-asr-0.6b-q8")]
+    [InlineData("kroko-en-64l-q8")]
+    public async Task ExplicitPairedChoiceWithoutTheCompanionFailsStart(string id)
+    {
+        var engine = new Engine([Nemotron, Kroko, VibeVoice]);
+        var capture = new CaptureFactory();
+        await using var session = Create(engine, capture, () => id);
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => session.StartAsync(Request));
+        Assert.Contains("Nemotron 3 Diarization", error.Message);
+        Assert.Empty(engine.Prepared);
+        Assert.False(capture.Started);
+        Assert.False(session.IsActive);
+    }
+
+    [Fact]
+    public async Task CompanionWithoutAPairedAsrLeavesVibeVoiceForUnconfiguredMeetings()
+    {
+        var engine = new Engine([Diarizer, VibeVoice]);
+        await using var session = Create(engine, new());
+        await session.StartAsync(Request);
+        Assert.Equal(VibeVoice, engine.Model);
+        Assert.Null(session.State.SelectionNotice);
+        await session.EndAsync();
+    }
+
+    [Fact]
+    public async Task PairPreparationFailureOtherThanPaceFailsStartWithoutSwitching()
+    {
+        var engine = new Engine([Nemotron, Kroko, Diarizer, VibeVoice])
+        {
+            PrepareFailure = model => model == Nemotron ? new InvalidOperationException("Diarizer session failed after the ASR loaded.") : null
+        };
+        var capture = new CaptureFactory();
+        await using var session = Create(engine, capture);
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => session.StartAsync(Request));
+        Assert.Equal("Diarizer session failed after the ASR loaded.", error.Message);
+        Assert.Equal([Nemotron], engine.Prepared);
+        Assert.False(capture.Started);
+        Assert.False(session.IsActive);
+        Assert.Equal(MeetingSessionPhase.Failed, session.State.Phase);
+    }
+
+    [Fact]
+    public async Task RecognitionFailureBeforeReadyFailsStartAndReleasesCapture()
+    {
+        var engine = new Engine([Nemotron, Diarizer]) { StreamFailure = new InvalidDataException("The public sample produced no speaker activity.") };
+        var capture = new CaptureFactory();
+        await using var session = Create(engine, capture);
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => session.StartAsync(Request));
+        Assert.Equal("The public sample produced no speaker activity.", error.Message);
+        Assert.True(capture.Started);
+        Assert.True(capture.Released);
+        Assert.False(session.IsActive);
+        Assert.Equal(MeetingSessionPhase.Failed, session.State.Phase);
+    }
+
+    [Fact]
     public async Task MissingExplicitModelDoesNotOpenCaptureOrSilentlySwitch()
     {
         var capture = new CaptureFactory();
@@ -135,11 +261,16 @@ public sealed class DiarizedMeetingSessionTests : IDisposable
         private TranscriptUpdate _last = new("", false, "") { SpeakerTurns = [] };
         public AudioModel? Model { get; private set; }
         public RecognitionOptions? Options { get; private set; }
+        public List<AudioModel> Prepared { get; } = [];
+        public Func<AudioModel, Exception?>? PrepareFailure { get; init; }
+        public Exception? StreamFailure { get; init; }
         private long _readBytes;
         public long ReadBytes => Interlocked.Read(ref _readBytes);
         public Task<IReadOnlyList<AudioModel>> ConnectAsync(CancellationToken token) => Task.FromResult(models);
         public Task PrepareMeetingAsync(AudioModel model, RecognitionOptions options, CancellationToken token)
         {
+            Prepared.Add(model);
+            if (PrepareFailure?.Invoke(model) is { } failure) throw failure;
             Model = model;
             Options = options;
             return Task.CompletedTask;
@@ -148,6 +279,7 @@ public sealed class DiarizedMeetingSessionTests : IDisposable
             IProgress<TranscriptUpdate> progress, CancellationToken token, Action? onReady = null)
         {
             _progress = progress;
+            if (StreamFailure is not null) throw StreamFailure;
             onReady?.Invoke();
             await foreach (var packet in audio.ReadAllAsync(token)) Interlocked.Add(ref _readBytes, packet.Length);
             progress.Report(_last with
@@ -169,6 +301,7 @@ public sealed class DiarizedMeetingSessionTests : IDisposable
         private Capture? _capture;
         public Channel<byte[]> Input { get; } = Channel.CreateUnbounded<byte[]>();
         public bool Started { get; private set; }
+        public bool Released => _capture?.IsReleased == true;
         public void ReportActivity(MeetingAudioActivity activity) => _capture!.ReportActivity(activity);
         public Task<IAudioCapture> StartAsync(MeetingCaptureRequest request, CancellationToken token)
         {

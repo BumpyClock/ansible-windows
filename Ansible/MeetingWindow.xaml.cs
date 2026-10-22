@@ -16,6 +16,7 @@ public sealed partial class MeetingWindow : Window
     private readonly MeetingSession _session;
     private readonly MeetingStore _store;
     private MeetingDocument? _document;
+    private string? _shownNotice;
     private readonly bool _savedMeeting;
     private bool _closed;
     private bool _allowClose;
@@ -158,6 +159,12 @@ public sealed partial class MeetingWindow : Window
             : finishing ? "Captured speech is being finalized locally. Speaker corrections preserve the recognized wording."
             : active ? "Text appears as each chunk is recognized. Speaker labels may be revised."
             : "Choose your meeting app below. Speaker-labelled text will appear here as you talk.";
+        // The notice lives for the whole meeting; open it once per text so a dismissal sticks.
+        if (state.SelectionNotice != _shownNotice)
+        {
+            _shownNotice = state.SelectionNotice;
+            if (state.SelectionNotice is not null && state.Error is null) ShowNotice(state.SelectionNotice);
+        }
         if (state.Error is not null) ShowError(state.Error);
         RenderDocument();
     }
@@ -627,7 +634,8 @@ public sealed partial class MeetingWindow : Window
         if (_selectedDetectedMeeting != SelectedMeetingIdentity) _selectedDetectedMeeting = null;
         UpdateNamingHelp();
     }
-    private void ShowError(string message) { ErrorBar.Title = "Meeting needs attention"; ErrorBar.Message = message; ErrorBar.IsOpen = true; }
+    private void ShowError(string message) { ErrorBar.Severity = InfoBarSeverity.Error; ErrorBar.Title = "Meeting needs attention"; ErrorBar.Message = message; ErrorBar.IsOpen = true; }
+    private void ShowNotice(string message) { ErrorBar.Severity = InfoBarSeverity.Warning; ErrorBar.Title = "Speaker model changed"; ErrorBar.Message = message; ErrorBar.IsOpen = true; }
     private static string FormatTime(double seconds) => TimeSpan.FromSeconds(Math.Max(0, seconds)).ToString(seconds >= 3600 ? @"h\:mm\:ss" : @"m\:ss");
     private static string FormatTurnTime(MeetingTurn turn) => turn.TimingQuality switch
     {
