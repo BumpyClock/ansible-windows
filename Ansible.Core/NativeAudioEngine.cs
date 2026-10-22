@@ -158,7 +158,7 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
             var recording = await DictationAudioBuffer.ReadAsync(audio, cancellationToken);
             return await TranscribeAsync(model, recording, options, progress, cancellationToken);
         }
-        var result = await RunExclusiveAsync(() => RunAutoStream(model, audio, options, progress, cancellationToken, onReady), cancellationToken);
+        var result = (await RunExclusiveAsync(() => RunAutoStream(model, audio, options, progress, cancellationToken, onReady), cancellationToken)).Result;
         progress?.Report(new TranscriptUpdate(result.DisplayText, true, result.SpeechText));
         return result;
     }
@@ -200,7 +200,10 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
     public Task UnloadAsync(CancellationToken cancellationToken) =>
         RunExclusiveAsync(() => { ReleaseModel(); return true; }, cancellationToken);
 
-    private RecognitionResult StreamCore(
+    // A paired meeting's final is created inside the stream and published by the caller after cleanup.
+    internal sealed record StreamOutcome(RecognitionResult Result, TranscriptUpdate? MeetingFinal);
+
+    private StreamOutcome StreamCore(
         AudioModel model, ChannelReader<byte[]> audio, RecognitionOptions options,
         IProgress<TranscriptUpdate>? progress, CancellationToken token, Action? onReady,
         long maximumFrames = NativeMemory.MaximumStreamFrames, int historySteps = 0)
@@ -279,9 +282,9 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
         using var owned = new NativeAudioHandle(result, NativeHandleKind.Result);
         token.ThrowIfCancellationRequested();
         var recognized = ReadResult(result, model.Family!, token);
-        diarization?.PublishFinal(result, recognized.SpeechText
-            ?? throw new InvalidDataException("The ASR model returned no authoritative meeting speech."), receivedFrames, progress, token);
-        return recognized;
+        var meetingFinal = diarization?.CreateFinal(result, recognized.SpeechText
+            ?? throw new InvalidDataException("The ASR model returned no authoritative meeting speech."), receivedFrames, token);
+        return new(recognized, meetingFinal);
     }
 
     private static unsafe void Push(
@@ -637,9 +640,11 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
     {
         RequireMeetingModel(model);
         options = ValidateOptions(model, options);
-        var result = await RunExclusiveAsync(() => RunAutoStream(model, audio, options, progress, cancellationToken, onReady, 4096), cancellationToken);
-        if (!UsesDiarization(model))
-            progress.Report(new TranscriptUpdate(result.DisplayText, true, result.SpeechText));
+        var outcome = await RunExclusiveAsync(() => RunAutoStream(model, audio, options, progress, cancellationToken, onReady, 4096), cancellationToken);
+        // The final is published after the exclusive operation reset or released its native sessions.
+        progress.Report(UsesDiarization(model)
+            ? outcome.MeetingFinal ?? throw new InvalidOperationException("Paired recognition finished without a speaker-attributed final.")
+            : new TranscriptUpdate(outcome.Result.DisplayText, true, outcome.Result.SpeechText));
     }
 
     private static void RequireMeetingModel(AudioModel model)

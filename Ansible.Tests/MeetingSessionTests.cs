@@ -512,7 +512,7 @@ public sealed class MeetingSessionTests : IDisposable
     [Fact]
     public async Task ExplicitMeetingSelectionIsForwardedWithoutAStreamingFallback()
     {
-        var engine = new Engine { Models = [NemotronAsr(), VibeVoiceStreaming()] };
+        var engine = new Engine { Models = [NemotronAsr(), DiarCompanion(), VibeVoiceStreaming()] };
         await using var session = new MeetingSession(() => engine, new CaptureFactory(), new(_directory), () => new(),
             getModelId: () => AudioModelDefaults.RecognitionModelId);
 
@@ -529,7 +529,7 @@ public sealed class MeetingSessionTests : IDisposable
         var releaseReserve = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var options = new RecognitionOptions("fr", "", NativeBackend.Cpu);
         string? selected = AudioModelDefaults.RecognitionModelId;
-        var engine = new Engine { Models = [NemotronAsr(), VibeVoiceStreaming()] };
+        var engine = new Engine { Models = [NemotronAsr(), DiarCompanion(), VibeVoiceStreaming()] };
         await using var session = new MeetingSession(() => engine, new CaptureFactory(), new(_directory),
             () => options,
             reserve: async () => { enteredReserve.TrySetResult(); await releaseReserve.Task; },
@@ -600,7 +600,7 @@ public sealed class MeetingSessionTests : IDisposable
     public async Task SelectedMeetingModelIsCapturedAtStartAndIgnoresLaterGetModelIdChanges()
     {
         string? selected = AudioModelDefaults.RecognitionModelId;
-        var engine = new Engine { Models = [NemotronAsr(), VibeVoiceStreaming()] };
+        var engine = new Engine { Models = [NemotronAsr(), DiarCompanion(), VibeVoiceStreaming()] };
         await using var session = new MeetingSession(() => engine, new CaptureFactory(), new(_directory), () => new(),
             getModelId: () => selected);
 

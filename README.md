@@ -90,8 +90,10 @@ options and checks.
   Nemotron or Kroko without the diarization companion fails Start rather than
   switching models. Unconfigured meetings use installed Nemotron ASR plus
   Nemotron 3 Diarization, then installed Kroko with that companion, then
-  VibeVoice ASR Streaming 1.5B, including when the companion is absent.
-  Ordinary dictation stays plain ASR.
+  VibeVoice ASR Streaming 1.5B, including when the companion is absent. Auto
+  skips a candidate that measured slower than 0.50x real time on the selected
+  device and says so in the Meetings window; speaker labels trail speech by up
+  to about five seconds. Ordinary dictation stays plain ASR.
   Automatic Teams detection offers a notetaker prompt when Teams holds an active
   microphone session; it never starts recording. Disable it in Settings.
   Capture includes the default microphone and either a selected application
