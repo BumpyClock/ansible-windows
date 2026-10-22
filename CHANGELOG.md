@@ -37,6 +37,21 @@
   Native paired meetings publish cumulative timed anonymous speaker turns and
   abstain on unknown or overlapping speech. Dictation, replay, and WAV stay
   plain ASR. There is no meeting model picker.
+- Qualify meetings for live pace. Auto compares the selected device's
+  public-sample measurement with the sample's duration and rejects any meeting
+  model above 0.50x real time. Unconfigured meetings then continue to the next
+  documented candidate (paired Kroko, then VibeVoice) and the Meetings window
+  says which model was skipped and why; an explicit choice fails Start instead.
+  The Nemotron 3 diarizer now streams in four-second chunks, which measured
+  0.31x real time for paired Nemotron on a 4-thread CPU where the stock
+  low-latency profile measured 0.95x; speaker labels trail speech by up to
+  about five seconds. Speaker attribution no longer counts silence inside a
+  word and no longer lets a late punctuation token stretch a word into the
+  pause. Nemotron words emitted within 320 ms after their speaker stopped keep
+  that speaker. Kroko word spans, which run from the previous word's close to
+  the next word's open, are judged by the speech around their opening, so a
+  phrase-final word no longer follows the next speaker's onset. The paired
+  final is published only after the native reset succeeds.
 - Add Ansible.Probe `--stream-only` and `--repeat` for warm paced first-preview
   and input-end-to-final timings. Missing previews stay missing.
 - Reject stale or tampered `native-runtime.json` records whose patch names,

@@ -11,6 +11,7 @@ public sealed partial class NativeAudioEngine
     private readonly Dictionary<(string Id, string Mode, int History), string> _selectionKeys = [];
     private bool _streamConsumed;
     private string? _deviceCacheWarning;
+    private double? _benchmarkSampleMilliseconds;
     public string DeviceSelectionSummary { get; private set; } = "";
     public DeviceComparisonSnapshot? DeviceComparison { get; private set; }
 
@@ -52,7 +53,7 @@ public sealed partial class NativeAudioEngine
             var companion = FindDiarizationModel();
             var companionEntry = _inventory.Entries[companion.Id];
             using var companionLease = _integrity.OpenVerified(companion.ModelPath!, companionEntry, token);
-            modelIdentity += $"|{companionEntry.Sha256}|{NativeDiarizationSession.LatencyProfile}";
+            modelIdentity += $"|{companionEntry.Sha256}|{NativeDiarizationSession.LatencyProfileIdentity}";
             modelBytes = checked(modelBytes + companionEntry.Bytes);
         }
         var request = new DeviceBenchmarkRequest(_libraryPath, _catalogPath, ModelsDirectory, _benchmarkSamplePath,
@@ -81,7 +82,21 @@ public sealed partial class NativeAudioEngine
             (_deviceCacheWarning is null ? "" : " " + _deviceCacheWarning);
         DeviceComparison = ToDeviceComparison(selection);
         token.ThrowIfCancellationRequested();
+        if (history > 0)
+        {
+            var factor = DeviceBenchmark.RequireMeetingRealTime(selection, BenchmarkSampleMilliseconds(token), model.Id);
+            DeviceSelectionSummary += $" Meeting pace {factor:F2}x real time.";
+        }
         return options with { Backend = selection.Backend };
+    }
+
+    private double BenchmarkSampleMilliseconds(CancellationToken token)
+    {
+        if (_benchmarkSampleMilliseconds is { } cached) return cached;
+        var audio = new AudioInputReader().ReadRecordingAsync(_benchmarkSamplePath!, token).GetAwaiter().GetResult();
+        var milliseconds = audio.Samples.Length / (double)audio.Channels / audio.SampleRate * 1000;
+        _benchmarkSampleMilliseconds = milliseconds;
+        return milliseconds;
     }
 
     private void RejectSelectedGpu(AudioModel model, string mode, int history, NativeExecutionException error)
@@ -101,6 +116,8 @@ public sealed partial class NativeAudioEngine
         _deviceCacheWarning = DeviceBenchmark.TryUpdateCache(_benchmarkCachePath, key, selection);
         if (_deviceCacheWarning is not null) DeviceSelectionSummary += " " + _deviceCacheWarning;
         DeviceComparison = ToDeviceComparison(selection);
+        // A CPU that only qualified as the slower device may still be too slow for a live meeting.
+        if (history > 0) DeviceBenchmark.RequireMeetingRealTime(selection, BenchmarkSampleMilliseconds(CancellationToken.None), model.Id);
     }
 
     private static DeviceComparisonSnapshot ToDeviceComparison(DeviceBenchmarkSelection selection) => new(
@@ -111,7 +128,7 @@ public sealed partial class NativeAudioEngine
         selection.Cpu.Error,
         selection.Gpu.Error);
 
-    private RecognitionResult RunAutoStream(AudioModel model, ChannelReader<byte[]> audio, RecognitionOptions options,
+    private StreamOutcome RunAutoStream(AudioModel model, ChannelReader<byte[]> audio, RecognitionOptions options,
         IProgress<TranscriptUpdate>? progress, CancellationToken token, Action? onReady, int history = 0)
     {
         var selected = ResolveBackend(model, "streaming", history, NativeMemory.MaximumStreamFrames * sizeof(float), options, token);

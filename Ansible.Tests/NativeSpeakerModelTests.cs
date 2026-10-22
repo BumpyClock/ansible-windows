@@ -25,6 +25,71 @@ public sealed class NativeSpeakerModelTests(ITestOutputHelper output)
     public Task KrokoPairedCpuStreamProducesLiveSpeechAndFinalTimedSpeakers() =>
         QualifyAsync("kroko-en-64l-q8", "Mother Nature\nUnited States");
 
+    [SpeakerModelFact("nemotron-asr-0.6b-q8"), Trait("Category", "NativeIntegration")]
+    public async Task NemotronPairedCpuKeepsPaceWithTwoMinutesOfLiveAudio()
+    {
+        // The public sample looped nine times (about 2 min 7 s), written in 80 ms packets at wall-clock pace
+        // through a 300-packet channel like MeetingSession's. A pair that falls behind fills that backlog.
+        var paths = SpeakerModelFactAttribute.Paths();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(6));
+        await using var engine = new NativeAudioEngine(paths.Library, paths.Catalog, paths.Models, threads: 4);
+        var models = await engine.ConnectAsync(timeout.Token);
+        var model = Assert.Single(models, candidate => candidate.Id == "nemotron-asr-0.6b-q8");
+        var sample = await new AudioInputReader().ReadReplayAsync(paths.Sample, timeout.Token);
+        const int loops = 9;
+        const int packetBytes = 2560;
+        var audio = Channel.CreateBounded<byte[]>(300);
+        var clock = new Stopwatch();
+        var updates = new List<(TranscriptUpdate Update, TimeSpan At)>();
+        var progress = new InlineProgress(update => { lock (updates) updates.Add((update, clock.Elapsed)); });
+        var options = new RecognitionOptions(Backend: NativeBackend.Cpu);
+        await engine.PrepareMeetingAsync(model, options, timeout.Token);
+        clock.Start();
+        var recognition = engine.StreamMeetingAsync(model, audio.Reader, options, progress, timeout.Token);
+        long written = 0;
+        var maximumBacklog = 0;
+        var maximumWriteDelay = TimeSpan.Zero;
+        try
+        {
+            for (var loop = 0; loop < loops; loop++)
+            {
+                for (var offset = 0; offset < sample.Length; offset += packetBytes)
+                {
+                    var packet = sample[offset..Math.Min(sample.Length, offset + packetBytes)];
+                    var wait = TimeSpan.FromSeconds(written / 32000d) - clock.Elapsed;
+                    if (wait > TimeSpan.Zero) await Task.Delay(wait, timeout.Token);
+                    var before = clock.Elapsed;
+                    await audio.Writer.WriteAsync(packet, timeout.Token);
+                    maximumWriteDelay = TimeSpan.FromTicks(Math.Max(maximumWriteDelay.Ticks, (clock.Elapsed - before).Ticks));
+                    maximumBacklog = Math.Max(maximumBacklog, audio.Reader.Count);
+                    written += packet.Length;
+                    if (recognition.IsCompleted) await recognition;
+                }
+            }
+        }
+        finally
+        {
+            audio.Writer.TryComplete();
+        }
+        var inputEnd = clock.Elapsed;
+        await recognition;
+        var finalDelay = clock.Elapsed - inputEnd;
+        var final = Assert.Single(updates, entry => entry.Update.IsFinal).Update;
+        Assert.Equal(written / 2, final.ProcessedSamples);
+        var anchors = 0;
+        for (var index = 0; (index = final.SpeechText!.IndexOf("mother nature", index, StringComparison.OrdinalIgnoreCase)) >= 0; index++) anchors++;
+        var firstLabel = updates.FirstOrDefault(entry => entry.Update.SpeakerTurns?.Any(turn => turn.SpeakerId.StartsWith("Speaker ", StringComparison.Ordinal)) == true);
+        Assert.True(firstLabel.Update is not null && firstLabel.At < TimeSpan.FromSeconds(20),
+            $"No live speaker label within 20 s (first at {firstLabel.At.TotalSeconds:F1}s).");
+        Assert.True(maximumBacklog <= 60, $"Capture backlog reached {maximumBacklog} packets; the pair fell behind live audio.");
+        Assert.True(maximumWriteDelay < TimeSpan.FromSeconds(1), $"A capture packet waited {maximumWriteDelay.TotalMilliseconds:F0} ms for the pair.");
+        Assert.True(finalDelay < TimeSpan.FromSeconds(10), $"The final arrived {finalDelay.TotalSeconds:F1}s after input ended.");
+        Assert.True(anchors >= loops - 2, $"Expected the Mother Nature anchor in most of {loops} loops; found {anchors}.");
+        output.WriteLine($"Paced CPU pair: {written / 32000d:F1}s of audio, backlog peak {maximumBacklog} packets, " +
+            $"longest packet wait {maximumWriteDelay.TotalMilliseconds:F0} ms, first speaker label at {firstLabel.At.TotalSeconds:F1}s, " +
+            $"final {finalDelay.TotalSeconds:F1}s after input, {anchors}/{loops} anchors, {final.SpeakerTurns!.Count} turns.");
+    }
+
     private async Task QualifyAsync(string modelId, string dictionary)
     {
         var paths = SpeakerModelFactAttribute.Paths();
