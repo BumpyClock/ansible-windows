@@ -197,6 +197,12 @@ public sealed class NemotronSpeakerAttributionTests
         var laterOpening = NemotronSpeakerAttribution.Create([new(" you", 254720, 289151)],
             [new("speaker_0", 230000, 247360), new("speaker_1", 262000, 289151)], 289151, true, TokenTimingModel.WordSpan);
         Assert.Equal([Turn("Speaker 1", 15.92, 289151 / 16000d, "you")], laterOpening.SpeakerTurns);
+        // A 200 ms reply right after the other speaker stops, with the span opening 240 ms into it (the
+        // shortest measured lag): the emission allowance around the opening decides before the start lag
+        // can reach back into the first speaker.
+        var shortReply = NemotronSpeakerAttribution.Create([new(" yes.", 51840, 60000)],
+            [new("speaker_0", 0, 48000), new("speaker_1", 48000, 51200)], 60000, true, TokenTimingModel.WordSpan);
+        Assert.Equal([Turn("Speaker 1", 3.24, 3.75, "yes.")], shortReply.SpeakerTurns);
     }
 
     [Fact]
