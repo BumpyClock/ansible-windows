@@ -99,10 +99,12 @@ public sealed partial class NativeAudioEngine
                 }
                 channel.Writer.TryWrite(pcm);
                 channel.Writer.TryComplete();
-                var result = StreamCore(model, channel.Reader, options, null, CancellationToken.None, null,
+                var updates = new BenchmarkProgress();
+                var result = StreamCore(model, channel.Reader, options, updates, CancellationToken.None, null,
                     history == 0 ? NativeMemory.MaximumStreamFrames : 16000L * 120 * 60, history).Result;
-                if (history > 0 && UsesDiarization(model) && _diarization?.HasSpeakerActivity != true)
-                    throw new InvalidDataException("The public sample produced no speaker activity during paired qualification.");
+                if (history > 0 && UsesDiarization(model) &&
+                    (_diarization?.HasSpeakerActivity != true || updates.Count == 0))
+                    throw new InvalidDataException("The public sample produced no live speaker updates during paired qualification.");
                 return result;
             }
             static void Validate(RecognitionResult result)
@@ -117,14 +119,29 @@ public sealed partial class NativeAudioEngine
                 try { CleanupStream(true); }
                 catch (Exception error) { throw new AggregateException("Benchmark warmup reset failed.", error); }
             }
-            var stopwatch = Stopwatch.StartNew();
-            var measured = Recognize();
-            stopwatch.Stop();
-            Validate(measured);
-            return stopwatch.Elapsed.TotalMilliseconds;
+            var measurements = new double[3];
+            for (var trial = 0; trial < measurements.Length; trial++)
+            {
+                var stopwatch = Stopwatch.StartNew();
+                var measured = Recognize();
+                stopwatch.Stop();
+                Validate(measured);
+                measurements[trial] = stopwatch.Elapsed.TotalMilliseconds;
+                if (mode == "streaming" && trial + 1 < measurements.Length) CleanupStream(true);
+            }
+            Array.Sort(measurements);
+            return measurements[measurements.Length / 2];
         }, success =>
         {
             try { CleanupOperation(success); }
             catch (Exception error) { throw new AggregateException("Benchmark reset or teardown failed.", error); }
         }), CancellationToken.None);
+
+    // Synchronous consumption includes managed incremental attribution in the measured work.
+    // Qualification still excludes storage and UI, which require separate whole-app measurements.
+    private sealed class BenchmarkProgress : IProgress<TranscriptUpdate>
+    {
+        public int Count { get; private set; }
+        public void Report(TranscriptUpdate value) => Count++;
+    }
 }

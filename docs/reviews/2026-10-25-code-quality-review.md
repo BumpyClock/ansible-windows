@@ -1,5 +1,7 @@
 # Code quality review, 2026-10-25
 
+Implementation and verification of these findings are recorded in [Review fixes](2026-10-25-fixes.md). This review describes the original baseline.
+
 Review of commit `9e23ed01242a72376ef4213ca2a40564097b6f16`. Review only. No application, test, build, or deployment changes were made.
 
 The strongest findings are a misleading insertion outcome, a production callback pipeline whose only consumers are tests, and an operation owner that mixes model replacement with recognition. The source does not support a claim that large parts of the application are dead. Most native and capture abstractions protect real ownership or platform boundaries.

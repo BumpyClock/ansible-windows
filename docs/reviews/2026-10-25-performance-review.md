@@ -1,5 +1,7 @@
 # Performance evaluation, 2026-10-25
 
+Implementation follow-up is recorded in [Review fixes](2026-10-25-fixes.md), including paired measurements. This review describes the original baseline. The probe at `235affb` reproduces its original APIs; the working-tree probe has been updated for the fixes.
+
 The strongest opportunities are repeated device-identity hashing, full meeting transcript redraws, synchronous transcript persistence, and loading entire meeting histories. These are source-confirmed repeated work. Their effect on packaged-app latency still needs measurement. No production code was changed for this review.
 
 Review baseline is `9e23ed01242a72376ef4213ca2a40564097b6f16`. The initial working tree was clean. Review covered startup, dictation preparation and delivery, native streaming and qualification, meeting capture and attribution, persistence, UI observers and rendering, model management, and build configuration. Generated files, downloaded dependencies, and personal app data were excluded.

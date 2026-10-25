@@ -4,7 +4,6 @@ namespace Ansible.Core;
 
 public interface IMeetingRecognitionEngine : IAsyncDisposable
 {
-    string DeviceSelectionSummary => "";
     Task PrepareMeetingAsync(AudioModel model, RecognitionOptions options, CancellationToken token) => Task.CompletedTask;
     Task<IReadOnlyList<AudioModel>> ConnectAsync(CancellationToken cancellationToken);
     Task StreamMeetingAsync(AudioModel model, ChannelReader<byte[]> audio, RecognitionOptions options,

@@ -18,7 +18,7 @@ public sealed class MeetingSession : IAsyncDisposable
     private readonly object _gate = new();
     private readonly object _updates = new();
     private readonly SemaphoreSlim _commands = new(1, 1);
-    private readonly SemaphoreSlim _saving = new(1, 1);
+    private readonly MeetingPersistence _persistence;
     private readonly SemaphoreSlim _resources = new(1, 1);
     private readonly Func<IMeetingRecognitionEngine> _engineFactory;
     private readonly IMeetingCaptureFactory _captureFactory;
@@ -56,7 +56,7 @@ public sealed class MeetingSession : IAsyncDisposable
     public MeetingSession(Func<IMeetingRecognitionEngine> engineFactory, IMeetingCaptureFactory captureFactory,
         MeetingStore store, Func<RecognitionOptions> getOptions, Func<Task>? reserve = null, Func<Task>? release = null,
         Func<IMeetingSpeakerObserver>? observerFactory = null, Func<IMeetingWordAligner>? alignerFactory = null,
-        Func<string?>? getModelId = null)
+        Func<string?>? getModelId = null, Func<MeetingDocument, Task>? writeMeeting = null)
     {
         _engineFactory = engineFactory;
         _captureFactory = captureFactory;
@@ -67,6 +67,7 @@ public sealed class MeetingSession : IAsyncDisposable
         _release = release ?? (() => Task.CompletedTask);
         _observerFactory = observerFactory;
         _alignerFactory = alignerFactory;
+        _persistence = new(writeMeeting ?? (document => _store.SaveAsync(document)), StorageFailed);
     }
 
     public event Action<MeetingSessionSnapshot>? StateChanged;
@@ -83,6 +84,7 @@ public sealed class MeetingSession : IAsyncDisposable
         {
             ObjectDisposedException.ThrowIf(_disposed || Volatile.Read(ref _disposing) != 0, this);
             if (IsActive) throw new InvalidOperationException("End the current meeting before starting another.");
+            await SaveAsync();
             lock (_gate)
             {
                 ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposing) != 0, this);
@@ -295,7 +297,7 @@ public sealed class MeetingSession : IAsyncDisposable
         await _commands.WaitAsync();
         try
         {
-            if (!IsActive) return;
+            if (!IsActive) { await SaveAsync(); return; }
             SetPhase(MeetingSessionPhase.Finishing, MeetingStatus.Finishing);
             if (discard)
             {
@@ -422,7 +424,7 @@ public sealed class MeetingSession : IAsyncDisposable
             ApplyUpdate(update);
         }
         Publish();
-        SaveAsync().GetAwaiter().GetResult();
+        QueueSave();
     }
 
     private void ApplyUpdate(TranscriptUpdate update)
@@ -528,16 +530,15 @@ public sealed class MeetingSession : IAsyncDisposable
                     { OriginalText = turn.OriginalText ?? turn.Text, Text = texts[index] }).ToArray();
                 updated = document with { Turns = turns, UpdatedAt = DateTimeOffset.UtcNow };
             }
-            await _saving.WaitAsync();
-            try
+            long revision;
+            lock (_gate)
             {
-                await _store.SaveAsync(updated);
-                lock (_gate)
-                {
-                    _state = _state with { Version = _state.Version + 1, Document = updated };
-                }
+                revision = _state.Version + 1;
+                _state = _state with { Version = revision };
+                _persistence.Queue(revision, updated);
             }
-            finally { _saving.Release(); }
+            await _persistence.FlushAsync(revision);
+            lock (_gate) _state = _state with { Version = _state.Version + 1, Document = updated };
             Publish();
         }
         finally { _commands.Release(); }
@@ -621,11 +622,25 @@ public sealed class MeetingSession : IAsyncDisposable
         finally { _commands.Release(); }
     }
 
-    private async Task SaveAsync()
+    private long QueueSave()
     {
-        await _saving.WaitAsync();
-        try { if (Document is { } document) await _store.SaveAsync(document); }
-        finally { _saving.Release(); }
+        lock (_gate)
+        {
+            if (_state.Document is { } document) _persistence.Queue(_state.Version, document);
+            return _state.Version;
+        }
+    }
+
+    private Task SaveAsync() => Document is null ? Task.CompletedTask : _persistence.FlushAsync(QueueSave());
+
+    private void StorageFailed(Exception error)
+    {
+        // Inactive edits report failure to their awaiting caller and retain their committed transcript.
+        if (!IsActive) return;
+        SetPhase(MeetingSessionPhase.Failed, MeetingStatus.Failed, $"Meeting transcript save failed. {error.Message}");
+        _cancellation?.Cancel();
+        _reader?.Resume();
+        _audio?.Writer.TryComplete(error);
     }
 
     private async Task StopCaptureAsync()
@@ -691,10 +706,13 @@ public sealed class MeetingSession : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        if (_disposed) return;
         Interlocked.Exchange(ref _disposing, 1);
         CancelPreparation();
         await EndAsync();
         await _recognition;
+        await SaveAsync();
+        await _persistence.DisposeAsync();
         _disposed = true;
         _cancellation?.Dispose();
     }

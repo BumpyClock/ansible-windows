@@ -10,7 +10,10 @@ history**. Removing the current dictation's row also hides its transcript
 card; the text is gone from Home until you dictate again. Shortcut dictations
 carry an insertion tag: **Inserted** when the target field confirmed the text,
 **Not verified** when the app accepted it without confirmation, **Partially
-inserted**, or **Not inserted**. In-app dictations have no tag. History stays in
+inserted**, or **Not inserted**. Failed injected-key release also shows **Not
+verified**. Check the keyboard and destination field; some or none of the text
+may have arrived. The app never retries that uncertain input automatically.
+In-app dictations have no tag. History stays in
 memory for this app session. Closing Ansible clears it. The history keeps at
 most 100 entries within a bounded text budget. Search can hide entries until
 you clear its filter. WAV results and dictations too large for history remain
@@ -284,7 +287,7 @@ Auto. An explicit saved CPU or GPU choice is kept until you change it. Auto
 runs CPU, then GPU, sequentially in an isolated `Ansible.DeviceProbe` process
 against the bundled public speech sample. It does not use microphone, meeting,
 or other user audio, and it does not save that audio. Compared times exclude
-loading and warmup. Each device has a five-minute deadline that includes load,
+loading and warmup and use the median of three runs. Each device has a five-minute deadline that includes load,
 warmup, recognition, and teardown. Cancelling stops the worker, then joins and
 drains it. Auto measures the mode required for the next work: offline WAV, live
 dictation, or meeting history. The first preparation for a model and mode takes
@@ -410,7 +413,13 @@ also cancels preparation and waits for that cleanup. If shutdown fails, the app
 waits for owned shortcut and delivery work to stop before allowing another
 recording; the shutdown error remains visible.
 
-Transcripts and title/speaker edits save automatically. The Meetings list supports
+Transcripts and title/speaker edits save automatically. Live updates save in the
+background, keeping only the newest pending snapshot when a write is already
+running. There is no intentional save delay. Pause, End meeting and Close wait
+for the required save to finish. A crash can lose updates still awaiting disk;
+slow storage can delay those actions. Save failures remain visible and closing
+can be retried. Failed wording cleanup keeps the completed original for retry.
+The Meetings list supports
 reopening saved text; each transcript window offers Copy, text export, and Delete.
 If a meeting fails before any speech is transcribed, its window restores the
 audio-source controls and offers **Try again** after resources are released.

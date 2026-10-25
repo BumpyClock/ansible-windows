@@ -13,7 +13,7 @@ internal sealed record HomeHistoryEntry(HomeHistoryItem Item, string? ModelName)
     {
         TextDeliveryStatus.Verified => new("Inserted", "\uE73E", true, "Inserted and confirmed in the target field."),
         TextDeliveryStatus.Sent => new("Not verified", "\uE946", false, "Sent to the active app, but the field could not confirm the text arrived."),
-        TextDeliveryStatus.CleanupFailed => new("Inserted", "\uE7BA", false, "Inserted, but the clipboard could not be cleaned up afterward."),
+        TextDeliveryStatus.CleanupFailed => new("Not verified", "\uE7BA", false, "Windows could not release all injected keys. Check the keyboard and target field; some or none of the text may have arrived."),
         TextDeliveryStatus.Rejected => new("Not inserted", "\uE711", false, "Insertion was stopped. Copy the transcript to paste it yourself."),
         TextDeliveryStatus.Partial => new("Partially inserted", "\uE7BA", false, "Only part of the text reached the target field. Copy the transcript to paste it yourself."),
         _ => null

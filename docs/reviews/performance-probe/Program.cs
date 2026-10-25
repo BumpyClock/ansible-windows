@@ -16,7 +16,8 @@ foreach (var minutes in new[] { 5, 30, 120 })
         new MeetingTimedToken(i == 0 ? "word" : " word", i * 6400L, i * 6400L + 3200)).ToArray();
     var activities = Enumerable.Range(0, minutes * 15).Select(i =>
         new SpeakerActivity("speaker_" + (i % 2), i * 64000L, (i + 1) * 64000L)).ToArray();
-    TranscriptUpdate Create() => NemotronSpeakerAttribution.Create(tokens, activities, frames, false);
+    var attribution = new NemotronSpeakerAttribution();
+    TranscriptUpdate Create() => attribution.Create(tokens, activities, frames, false);
     var expected = string.Join(' ', Enumerable.Repeat("word", tokens.Length));
     var update = Create();
     if (update.SpeechText != expected || update.SpeakerTurns?.Count != activities.Length)
@@ -64,8 +65,9 @@ foreach (var count in new[] { 10, 100, 300 })
     cases.Add(("list-history", count, async () =>
     {
         var listed = await store.ListAsync();
-        if (listed.Documents.Count != count || listed.Failures.Count != 0 || listed.Documents.Sum(d => d.Turns.Count) != count * 180)
-            throw new Exception("History list lost documents or turns.");
+        if (listed.Summaries.Count != count || listed.Failures.Count != 0 ||
+            listed.Summaries.Any(summary => summary.Status != MeetingStatus.Completed))
+            throw new Exception("History list lost meeting metadata.");
     }));
     Console.WriteLine($"fixture history documents={count} bytes={Directory.GetFiles(store.DirectoryPath).Sum(p => new FileInfo(p).Length)}");
 }
@@ -85,10 +87,11 @@ foreach (var mainMiB in new[] { 4, 32 })
     Fixture("sample.wav", 450000);
     var request = new DeviceBenchmarkRequest(Path.Combine(directory, "audiocpp.dll"), "unused", "unused",
         Path.Combine(directory, "sample.wav"), "synthetic", NativeBackend.Cpu, 0, 4, 512, "streaming", 0);
-    var expected = DeviceBenchmark.Key(request, "synthetic-model-hash", CancellationToken.None);
+    var identity = new DeviceBenchmarkIdentity();
+    var expected = DeviceBenchmark.Key(request, "synthetic-model-hash", CancellationToken.None, identity);
     cases.Add(("auto-identity-synthetic", mainMiB, () =>
     {
-        if (DeviceBenchmark.Key(request, "synthetic-model-hash", CancellationToken.None) != expected)
+        if (DeviceBenchmark.Key(request, "synthetic-model-hash", CancellationToken.None, identity) != expected)
             throw new Exception("Identity changed for unchanged files.");
         return Task.CompletedTask;
     }));

@@ -302,7 +302,7 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
             }
             fixed (float* pointer = samples)
             {
-                diarization?.Push(pointer, frames, offset, progress, token);
+                diarization?.Push(pointer, frames, offset, token);
                 NativeAudioApi.Check(NativeAudioApi.StreamPush(session, pointer, (nuint)frames, 16000, 1, offset, out var streamEvent),
                     "process a dictation audio chunk");
                 AppendEvent(streamEvent, family, transcript, progress, token, offset + frames, diarization);
@@ -318,6 +318,7 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
                 }
                 AppendEvent(streamEvent, family, transcript, progress, token, offset + frames, diarization);
             }
+            diarization?.PublishPending(progress, token);
         }
         finally
         {
@@ -336,7 +337,7 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
         var resultPointer = NativeAudioApi.EventResult(pointer);
         if (diarization is not null)
         {
-            diarization.ReadAsr(resultPointer, processedSamples, progress, token);
+            diarization.ReadAsr(resultPointer, processedSamples, token);
             return;
         }
         var result = ReadResult(resultPointer, family, token, optionalText: true);

@@ -40,6 +40,9 @@ public sealed class MeetingSpeakerMatcher
         document.Validate();
         MeetingSpeakerObservation[] observations;
         lock (_gate) observations = _overflowed ? [] : _observations.Values.ToArray();
+        if (observations.Length == 0)
+            return document.AutoSpeakerNames.Count == 0 ? document
+                : document with { AutoSpeakerNames = new Dictionary<string, string>() };
         var evidence = new Dictionary<string, SpeakerEvidence>(StringComparer.Ordinal);
         var sortedTurns = document.Turns.OrderBy(turn => turn.StartSeconds).ThenBy(turn => turn.EndSeconds).ToArray();
         var overlapping = new bool[sortedTurns.Length];
