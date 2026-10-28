@@ -14,7 +14,7 @@ namespace Ansible.Core;
 /// All members are safe to call from the owning UI thread; the lock guards against the inspection continuation
 /// observing a torn state.
 /// </summary>
-public sealed class ShortcutCaptureCoordinator
+internal sealed class ShortcutCaptureCoordinator
 {
     public static readonly TimeSpan ReleaseTail = TimeSpan.FromMilliseconds(500);
     private readonly object _sync = new();

@@ -4,8 +4,12 @@ Ansible is a local Windows dictation and WAV transcription prototype. It uses
 WinUI 3, .NET 10, and [audio.cpp](https://github.com/0xShug0/audio.cpp) through an
 in-process native DLL. Release MSIX packages use .NET NativeAOT.
 
-Focus a text field, hold F9, speak, and release the key. Ansible inserts the final
-speech after recognition succeeds. The app also provides manual transcription, meeting transcripts,
+Focus a text field, hold F9, speak, and release the key. Ansible opens the
+microphone as soon as that shortcut is accepted and keeps early audio in a
+bounded memory buffer while it checks the destination field. It inserts the
+final speech after recognition succeeds. Speech before the shortcut, and the
+time the hardware microphone needs to start, can still miss the first word.
+The app also provides manual transcription, meeting transcripts,
 model downloads, custom vocabulary for supported models, and local usage insights.
 
 Microphone permission is checked at launch. Ansible requests missing consent

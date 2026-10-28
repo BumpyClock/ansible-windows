@@ -20,12 +20,13 @@ public sealed partial class MainWindow : Window
     private readonly CustomWordsPage _customWords;
     private readonly MeetingsPage _meetings;
     private readonly MeetingStore _meetingStore;
+    private readonly LocalDiagnosticLog _meetingDiagnostics;
     private readonly AppPaths _paths;
     private readonly List<(MeetingSession session, MeetingWindow window, Guid? savedId)> _meetingWindows = [];
     private readonly UiSessionObserver _observer;
     private GlobalDictationHotkey? _hotkey;
     private DictationShortcut _configuredHotkey = DictationShortcut.Default;
-    private volatile bool _shortcutHeld;
+    private readonly ShortcutDictation _shortcut;
     private FloatingDictationWindow? _floating;
     private bool _initialized;
     private bool _compactNavigation;
@@ -39,15 +40,6 @@ public sealed partial class MainWindow : Window
     // Caret of the shortcut destination, read once at press time. Null for in-app dictation or an unknown caret.
     private CaretBounds? _overlayAnchor;
     private bool? _capturePrivacy;
-    private readonly ShortcutCaptureCoordinator _captureCoordinator = new();
-    private CancellationTokenSource _deliveryCancellation = new();
-    private Task<(bool available, CapturedTextTarget? target, string reason)>? _captureTask;
-    private Task? _deliveryTask;
-    private Task? _releaseTailTask;
-    private Task? _pressTask;
-    private FinalTextDelivery? _delivery;
-    private Task<SessionOutcome>? _deliveryOperation;
-    private Guid? _deliveryOperationId;
     private readonly IMeetingDetector _meetingDetector = new Ansible.Core.Windows.TeamsMeetingDetector();
     private readonly MeetingDetectionTracker _meetingDetection = new();
     private readonly Stopwatch _detectionClock = Stopwatch.StartNew();
@@ -70,15 +62,23 @@ public sealed partial class MainWindow : Window
     private bool _permissionCheckComplete;
     private MicrophonePermissionStatus? _dismissedMicrophonePermissionStatus;
 
-    internal MainWindow(DictationSession session, AppPaths paths, HttpClient modelDownloads, MicrophonePermissionPreflight microphonePermission)
+    internal MainWindow(DictationSession session, AppPaths paths, HttpClient modelDownloads, MicrophonePermissionPreflight microphonePermission,
+        LocalDiagnosticLog diagnostics)
     {
         InitializeComponent();
         _session = session;
         _microphonePermission = microphonePermission;
         _paths = paths;
         _meetingStore = new MeetingStore(Path.Combine(Path.GetDirectoryName(paths.Settings)!, "meetings"));
+        _meetingDiagnostics = diagnostics;
         _meetings = new MeetingsPage(session, _meetingStore, OpenMeetingAsync, () => WinRT.Interop.WindowNative.GetWindowHandle(this));
         _history = new HomeDictationHistory(session);
+        _shortcut = new ShortcutDictation(session, new WindowsShortcutTargetInspector(WinRT.Interop.WindowNative.GetWindowHandle(this)),
+            diagnostics, (operationId, status) => _history.RecordDelivery(operationId, status), anchor =>
+            {
+                _overlayAnchor = anchor;
+                if (FloatingPreviewPresentation.ShouldShowWaveform(_session.State)) { _floating?.ShowPreview(_overlayAnchor); }
+            });
         _dictation = new DictationPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this), _history);
         _settings = new MainPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this),
             ChangeHotkey, ChangeDictationMode, CaptureShortcut);
@@ -385,7 +385,7 @@ public sealed partial class MainWindow : Window
             {
                 if (!_launchReady || !_meetingRecoveryComplete)
                     throw new InvalidOperationException("Meeting storage must initialize successfully before starting a meeting.");
-                if (_closing || _captureCoordinator.HasPendingCapture || _deliveryTask is { IsCompleted: false })
+                if (_closing || _shortcut.IsBusy)
                     throw new InvalidOperationException("Finish dictation before starting a meeting.");
                 await _session.ReserveMeetingAsync();
             },
@@ -422,7 +422,7 @@ public sealed partial class MainWindow : Window
     }
 
     private bool MeetingDetectionBusy => _closed || _closing || !_launchReady || !_meetingRecoveryComplete || !_session.State.IsIdle ||
-        _captureCoordinator.HasPendingCapture || _deliveryTask is { IsCompleted: false } ||
+        _shortcut.IsBusy ||
         _meetingWindows.Any(meeting => meeting.session.IsActive);
 
     private void StartMeetingDetection()
@@ -559,7 +559,7 @@ public sealed partial class MainWindow : Window
 
     private void ChangeHotkey(DictationShortcut choice)
     {
-        if (!_session.State.IsIdle || _captureCoordinator.HasPendingCapture || _deliveryTask is { IsCompleted: false })
+        if (!_session.State.IsIdle || _shortcut.IsBusy)
             throw new InvalidOperationException("Finish dictation before changing its shortcut.");
         var replacement = new GlobalDictationHotkey(WinRT.Interop.WindowNative.GetWindowHandle(this),
             choice, HotkeyChanged);
@@ -571,7 +571,7 @@ public sealed partial class MainWindow : Window
 
     private void ChangeDictationMode(bool pushToTalk)
     {
-        if (!_session.State.IsIdle || _captureCoordinator.HasPendingCapture || _deliveryTask is { IsCompleted: false })
+        if (!_session.State.IsIdle || _shortcut.IsBusy)
             throw new InvalidOperationException("Finish dictation before changing its activation mode.");
         _session.SetPushToTalk(pushToTalk);
     }
@@ -580,7 +580,7 @@ public sealed partial class MainWindow : Window
     {
         if (capturing)
         {
-            if (!_session.State.IsIdle || _captureCoordinator.HasPendingCapture || _deliveryTask is { IsCompleted: false })
+            if (!_session.State.IsIdle || _shortcut.IsBusy)
                 throw new InvalidOperationException("Finish dictation before recording a shortcut.");
             _hotkey?.Suspend();
         }
@@ -633,188 +633,12 @@ public sealed partial class MainWindow : Window
 
     private async void HotkeyChanged(bool pressed)
     {
-        _shortcutHeld = pressed;
-        if (_closed || _closing) { return; }
-        if (pressed) { _captureCoordinator.NotePressed(); }
         try
         {
-            if (!pressed) { await HandleReleaseAsync(); }
-            else
-            {
-                var task = HandlePressAsync();
-                _pressTask = _pressTask is { IsCompleted: false } previous ? Task.WhenAll(previous, task) : task;
-                await task;
-            }
+            if (pressed) { await _shortcut.PressedAsync(_configuredHotkey); }
+            else { await _shortcut.ReleasedAsync(); }
         }
         catch (Exception error) { _session.ReportUiError(error); }
-    }
-
-    // Shortcut release. Marks a pending push-to-talk capture stale so its inspection cannot start a late
-    // recording. Once admitted, capture retains a short tail owned by this release and delivery operation.
-    private async Task HandleReleaseAsync()
-    {
-        var state = _session.State;
-        var release = _captureCoordinator.NoteReleased();
-        if (state.Settings.PushToTalk && _delivery is not null)
-        {
-            var task = FinishReleasedDictationAsync(release, _delivery, state.OperationId);
-            _releaseTailTask = _releaseTailTask is { IsCompleted: false } previous
-                ? Task.WhenAll(previous, task) : task;
-            await task;
-        }
-    }
-
-    private async Task FinishReleasedDictationAsync(
-        ShortcutCaptureCoordinator.Release release, FinalTextDelivery delivery, Guid? operationId)
-    {
-        var token = _deliveryCancellation.Token;
-        try
-        {
-            if (!await _captureCoordinator.WaitForReleaseTailAsync(release, token)) { return; }
-            if (_closing || _closed || _shortcutHeld || !ReferenceEquals(_delivery, delivery)) { return; }
-            var state = _session.State;
-            if (state.OperationId != operationId || !state.Settings.PushToTalk) { return; }
-            if (state.CanFinish) { await _session.FinishAsync(); }
-            else if (state.Phase == DictationPhase.Preparing) { await _session.CancelAsync(); }
-        }
-        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
-        catch (Exception error) { _session.ReportUiError(error); }
-    }
-
-    // Shortcut press. Admits at most one interaction to own the target inspection; a press arriving while an
-    // inspection is pending or a delivery is active is ignored. After the inspection completes it rechecks
-    // ownership and idle admission before starting delivery, so a stale or superseded press cannot start or
-    // overwrite another interaction's recording.
-    private async Task HandlePressAsync()
-    {
-        var token = _deliveryCancellation.Token;
-        if (_captureCoordinator.HasPendingCapture) { return; }
-        var state = _session.State;
-        if (state.CanFinish)
-        {
-            if (!state.Settings.PushToTalk) { await _session.FinishAsync(); }
-            return;
-        }
-        if (_deliveryTask is { IsCompleted: false }) { return; }
-        if (!state.CanStart)
-        {
-            if (state.IsIdle)
-                _session.Notify(NoticeKind.Warning, "Dictation unavailable", "Choose a speech model that supports microphone dictation before using the shortcut.");
-            return;
-        }
-        if (state.SelectedModel?.CanInsertDictation != true)
-        {
-            _session.Notify(NoticeKind.Warning, "Speech text required",
-                "This model does not support speech text extraction for shortcut insertion. Choose another speech model. Manual transcription remains available.");
-            return;
-        }
-        var capture = _captureCoordinator.TryBeginCapture(state.Settings.PushToTalk, _deliveryTask is { IsCompleted: false });
-        if (capture is null) { return; }
-        var windowHandle = WinRT.Interop.WindowNative.GetWindowHandle(this);
-        var locateCaret = state.Settings.OverlayFollowsCaret;
-        var inspection = Task.Run(() =>
-        {
-            var available = WindowsTextTarget.TryCapture(windowHandle, locateCaret, out var target, out var reason);
-            return (available, target, reason);
-        });
-        _captureTask = inspection;
-        try
-        {
-            // Let the hotkey adapter report an already-released chord before admitting recording.
-            await Task.Yield();
-            var inspected = await inspection;
-            if (token.IsCancellationRequested || _closing || _closed) { return; }
-            if (!_captureCoordinator.IsCurrent(capture)) { return; }
-            if (!inspected.available)
-            {
-                _session.Notify(NoticeKind.Warning, "No insertion target", inspected.reason);
-                return;
-            }
-            var current = _session.State;
-            if (!current.CanStart || current.SelectedModel?.CanInsertDictation != true) { return; }
-            if (!_captureCoordinator.TryStartDelivery(capture)) { return; }
-            StartDelivery(inspected.target!);
-        }
-        finally
-        {
-            _captureCoordinator.Abandon(capture);
-            if (ReferenceEquals(_captureTask, inspection)) { _captureTask = null; }
-        }
-    }
-
-    private void StartDelivery(CapturedTextTarget target)
-    {
-        var modifiers = _configuredHotkey.Modifiers;
-        var settings = _session.State.Settings;
-        var method = settings.InsertionMethod;
-        var typingGap = settings.TypingGapMilliseconds;
-        var pasteShortcut = settings.PasteShortcut;
-        var delivery = new FinalTextDelivery(
-            insert: (pending, token) => Task.Run(() =>
-                WindowsTextTarget.Insert(target, pending, method, typingGap, pasteShortcut, token, IsDeliveryCurrent), token),
-            isCurrent: IsDeliveryCurrent,
-            typingDeferred: () => _shortcutHeld && modifiers != 0);
-        _delivery = delivery;
-        _overlayAnchor = target.Caret;
-        try
-        {
-            var operation = _session.StartDictationAsync();
-            _deliveryOperation = operation;
-            _deliveryOperationId = _session.State.OperationId;
-            _deliveryTask = DeliverAsync(operation, delivery);
-        }
-        catch
-        {
-            _delivery = null;
-            _overlayAnchor = null;
-            _deliveryOperation = null;
-            _deliveryOperationId = null;
-            throw;
-        }
-    }
-
-    // The completed operation must still own the session before any target insertion.
-    private bool IsDeliveryCurrent()
-    {
-        var operation = _deliveryOperation;
-        var operationId = _deliveryOperationId;
-        if (operation is null || operationId is null || _closing || _closed) { return false; }
-        var state = _session.State;
-        return state.OperationId == operationId && state.IsIdle && operation.IsCompletedSuccessfully
-            && operation.Result.Kind == SessionOutcomeKind.Completed;
-    }
-
-    private async Task DeliverAsync(Task<SessionOutcome> operation, FinalTextDelivery delivery)
-    {
-        var token = _deliveryCancellation.Token;
-        var operationId = _deliveryOperationId;
-        try
-        {
-            var outcome = await delivery.RunAsync(operation, token);
-            if (!IsDeliveryCurrent() || outcome.Kind != SessionOutcomeKind.Completed) { return; }
-            // Real insertion outcome for the Home timeline tag. Deferred-only deliveries report nothing.
-            if (operationId is { } completedId && delivery.Delivery is { } reported)
-            {
-                _history.RecordDelivery(completedId, reported.Status);
-            }
-            if (delivery.Error is not null)
-                _session.Notify(NoticeKind.Warning, "Insertion stopped",
-                    $"{delivery.Error} Check the destination before using Copy transcript; do not repeat text that already appeared.");
-            else if (delivery.Sent && delivery.Delivery?.Status != TextDeliveryStatus.Verified)
-                _session.Notify(NoticeKind.Warning, "Text sent; unverified",
-                    delivery.Delivery?.Message ?? "The insertion input was sent. Check the destination.");
-        }
-        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
-        catch (Exception error) { _session.ReportUiError(error); }
-        finally
-        {
-            if (ReferenceEquals(_delivery, delivery))
-            {
-                _delivery = null;
-                _deliveryOperation = null;
-                _deliveryOperationId = null;
-            }
-        }
     }
 
     private async void CloseRequested(AppWindow sender, AppWindowClosingEventArgs args)
@@ -826,7 +650,7 @@ public sealed partial class MainWindow : Window
         MainContent.IsEnabled = false;
         ShutdownError.IsOpen = false;
         ShutdownError.Visibility = Visibility.Collapsed;
-        _deliveryCancellation.Cancel();
+        _shortcut.BeginShutdown();
         _startupCancellation.Cancel();
         try
         {
@@ -845,19 +669,9 @@ public sealed partial class MainWindow : Window
             foreach (var meeting in _meetingWindows.ToArray()) meeting.window.Close();
             await Task.WhenAll(_session.CloseAsync(), _models.DisposeAsync().AsTask(), _dictation.FinishBackgroundWorkAsync());
             _history.Dispose();
-            if (_captureTask is { } capture)
-            {
-                try { await capture; }
-                catch (Exception error) { Debug.WriteLine($"Ansible: target inspection failed during close: {error.Message}"); }
-            }
-            if (_pressTask is not null)
-            {
-                try { await _pressTask; }
-                catch (Exception pressError) { Debug.WriteLine($"Ansible: shortcut press failed during close: {pressError.Message}"); }
-            }
-            if (_deliveryTask is not null) { await _deliveryTask; }
-            if (_releaseTailTask is not null) { await _releaseTailTask; }
+            await _shortcut.JoinAsync();
             if (_floating is not null) { await _floating.ClosePreviewAsync(); }
+            await _meetingDiagnostics.DisposeAsync();
             _allowClose = true;
             Close();
         }
@@ -874,16 +688,14 @@ public sealed partial class MainWindow : Window
             var joined = Task.WhenAll(new[]
             {
                 _startupTask, _meetingRecoveryTask, _permissionRetryTask, _microphoneSettingsTask,
-                _detectionTask, _detectionActionTask, _captureTask, _pressTask, _deliveryTask, _releaseTailTask
+                _detectionTask, _detectionActionTask, _shortcut.JoinAsync()
             }.OfType<Task>());
             try { await joined; }
             catch (Exception)
             {
                 if (joined.Exception is { } joinError) failures.AddRange(joinError.Flatten().InnerExceptions);
             }
-            _pressTask = null;
-            _deliveryCancellation.Dispose();
-            _deliveryCancellation = new CancellationTokenSource();
+            _shortcut.ResumeAfterFailedShutdown();
             _startupCancellation.Dispose();
             _startupCancellation = new CancellationTokenSource();
             var failure = failures.Count == 1 ? error : new AggregateException("Shutdown and recovery reported failures.", failures);
@@ -905,7 +717,7 @@ public sealed partial class MainWindow : Window
         _dictation.Dispose();
         _history.Dispose();
         _hotkey?.Dispose();
-        _deliveryCancellation.Dispose();
+        _shortcut.Dispose();
         _startupCancellation.Dispose();
         _detectionCancellation?.Dispose();
         _observer.Dispose();
