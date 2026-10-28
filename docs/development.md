@@ -355,6 +355,7 @@ qualification.
 | --- | --- |
 | `Ansible` | WinUI pages, floating waveform, shortcuts, text insertion, composition and UI dispatch |
 | `Ansible.Core\DictationSession.cs` | Operation lifecycle, settings, cancellation, preloading and shutdown |
+| `Ansible.Core\ModelSelectionPolicy.cs` | Dictation and meeting model eligibility, default preference, meeting candidate order and companion requirement |
 | `Ansible.Core\RecognitionContracts.cs`, `SessionState.cs` | Testable boundaries and immutable UI snapshots |
 | `Ansible.Core\NativeAudioEngine.cs`, `NativeAudioApi.cs` | Native model/session ownership and C ABI |
 | `Ansible.Core\Windows` | Microphone capture and retained-resource teardown |

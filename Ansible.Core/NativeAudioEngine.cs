@@ -181,7 +181,7 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
             var selected = ResolveBackend(model, mode, history, NativeMemory.MaximumStreamFrames * sizeof(float), options, cancellationToken);
             bool Prepare() => NativeOperation.Run(() =>
             {
-                if (history > 0 && UsesDiarization(model))
+                if (history > 0 && ModelSelectionPolicy.RequiresCompanion(model))
                     EnsurePairedSession(model, selected, cancellationToken);
                 else EnsureSession(model, mode, NativeMemory.MaximumStreamFrames * sizeof(float), selected, cancellationToken, history);
                 return true;
@@ -208,10 +208,10 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
         IProgress<TranscriptUpdate>? progress, CancellationToken token, Action? onReady,
         long maximumFrames = NativeMemory.MaximumStreamFrames, int historySteps = 0)
     {
-        if (historySteps > 0 && UsesDiarization(model))
+        if (historySteps > 0 && ModelSelectionPolicy.RequiresCompanion(model))
             EnsurePairedSession(model, options, token);
         else EnsureSession(model, "streaming", NativeMemory.MaximumStreamFrames * sizeof(float), options, token, historySteps);
-        var diarization = historySteps > 0 && UsesDiarization(model) ? _diarization : null;
+        var diarization = historySteps > 0 && ModelSelectionPolicy.RequiresCompanion(model) ? _diarization : null;
         token.ThrowIfCancellationRequested();
         using var request = CreateRequest(options, token);
         token.ThrowIfCancellationRequested();
@@ -643,18 +643,16 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
         options = ValidateOptions(model, options);
         var outcome = await RunExclusiveAsync(() => RunAutoStream(model, audio, options, progress, cancellationToken, onReady, 4096), cancellationToken);
         // The final is published after the exclusive operation reset or released its native sessions.
-        progress.Report(UsesDiarization(model)
+        progress.Report(ModelSelectionPolicy.RequiresCompanion(model)
             ? outcome.MeetingFinal ?? throw new InvalidOperationException("Paired recognition finished without a speaker-attributed final.")
             : new TranscriptUpdate(outcome.Result.DisplayText, true, outcome.Result.SpeechText));
     }
 
     private static void RequireMeetingModel(AudioModel model)
     {
-        if (!MeetingSession.SupportsMeeting(model))
+        if (!ModelSelectionPolicy.SupportsMeeting(model))
             throw new NotSupportedException("Meetings require streaming Nemotron or Kroko ASR with its diarization companion, or VibeVoice streaming.");
     }
-
-    private static bool UsesDiarization(AudioModel model) => model.Family is "nemotron_asr" or "kroko_asr";
 
     private void EnsurePairedSession(AudioModel model, RecognitionOptions options, CancellationToken token)
     {
@@ -677,8 +675,7 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
     }
 
     private AudioModel FindDiarizationModel() =>
-        _inventory?.Models.FirstOrDefault(candidate => candidate.Id == AudioModelDefaults.DiarizationModelId &&
-            candidate.Family == "nemotron_3_diar" && candidate.Task == "diar" && candidate.Mode == "streaming")
+        (_inventory is null ? null : ModelSelectionPolicy.FindCompanion(_inventory.Models))
             ?? throw new InvalidOperationException("Install Nemotron 3 Diarization Q8 before starting a Nemotron or Kroko meeting.");
 
     private sealed record SessionKey(string ModelId, string Mode, NativeBackend Backend, int DeviceIndex, int HistorySteps = 0);
