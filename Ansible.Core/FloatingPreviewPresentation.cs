@@ -15,12 +15,16 @@ public sealed record FloatingPreviewPresentation(
     // decays visibly instead of snapping to silence between audio packets.
     public const double ReleasePerSecond = 4;
 
+    public static bool ShouldShowWaveform(SessionSnapshot state) =>
+        state.IsCaptureOpen || state.Phase == DictationPhase.Recording;
+
     public static FloatingPreviewPresentation From(SessionSnapshot state)
     {
         var error = state.Notice.Kind == NoticeKind.Error || state.Phase == DictationPhase.RecoveryRequired;
         var status = state.Phase switch
         {
-            DictationPhase.Preparing => "Preparing",
+            DictationPhase.Preparing => state.IsReplay ? "Preparing"
+                : state.IsCaptureOpen ? "Listening" : "Starting microphone",
             DictationPhase.Recording => state.IsReplay ? "Replaying WAV" : "Listening",
             DictationPhase.Finishing => "Finishing",
             DictationPhase.Cancelling => "Cancelling",
@@ -33,7 +37,10 @@ public sealed record FloatingPreviewPresentation(
             DictationPhase.Cancelling => "Waiting for the native step to release resources.",
             DictationPhase.Closing => "Joining owned work before closing.",
             _ when error => state.Notice.Message,
-            DictationPhase.Preparing => "Loading the model before audio starts.",
+            DictationPhase.Preparing => state.IsReplay
+                ? "Loading the model before WAV replay."
+                : state.IsCaptureOpen ? "Audio is buffered while dictation prepares."
+                : "Opening the microphone. Speech is not being captured yet.",
             DictationPhase.Finishing => "Recognizing audio. Waiting for final text.",
             DictationPhase.Recording when state.SelectedModel?.Preview is "final-only" or "buffered" =>
                 state.IsReplay ? "Text appears after the WAV replay." : "Text appears after Finish.",

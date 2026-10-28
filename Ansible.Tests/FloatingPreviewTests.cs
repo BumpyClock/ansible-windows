@@ -5,7 +5,7 @@ namespace Ansible.Tests;
 public sealed class FloatingPreviewTests
 {
     [Theory]
-    [InlineData(DictationPhase.Preparing, "Preparing")]
+    [InlineData(DictationPhase.Preparing, "Starting microphone")]
     [InlineData(DictationPhase.Recording, "Listening")]
     [InlineData(DictationPhase.Finishing, "Finishing")]
     [InlineData(DictationPhase.Cancelling, "Cancelling")]
@@ -25,6 +25,36 @@ public sealed class FloatingPreviewTests
         });
         Assert.Equal("Replaying WAV", presentation.Status);
         Assert.Equal("Text appears after the WAV replay.", presentation.Hint);
+    }
+
+    [Fact]
+    public void PreparingDistinguishesMicrophoneStartupFromReplayModelLoading()
+    {
+        var microphone = FloatingPreviewPresentation.From(State(DictationPhase.Preparing));
+        Assert.Equal("Starting microphone", microphone.Status);
+        Assert.Equal("Opening the microphone. Speech is not being captured yet.", microphone.Hint);
+        var replay = FloatingPreviewPresentation.From(State(DictationPhase.Preparing) with { Activity = SessionActivity.Replay });
+        Assert.Equal("Preparing", replay.Status);
+        Assert.Equal("Loading the model before WAV replay.", replay.Hint);
+    }
+
+    [Theory]
+    [InlineData(DictationPhase.Preparing, false, false)]
+    [InlineData(DictationPhase.Preparing, true, true)]
+    [InlineData(DictationPhase.Recording, false, true)]
+    [InlineData(DictationPhase.Recording, true, true)]
+    [InlineData(DictationPhase.Finishing, true, true)]
+    [InlineData(DictationPhase.Ready, false, false)]
+    public void WaveformDoesNotImplyCaptureBeforeTheMicrophoneOpens(
+        DictationPhase phase, bool captureOpen, bool expected) =>
+        Assert.Equal(expected, FloatingPreviewPresentation.ShouldShowWaveform(State(phase) with { IsCaptureOpen = captureOpen }));
+
+    [Fact]
+    public void OpenCaptureIsAlreadyListeningWhileRecognitionPrepares()
+    {
+        var presentation = FloatingPreviewPresentation.From(State(DictationPhase.Preparing) with { IsCaptureOpen = true });
+        Assert.Equal("Listening", presentation.Status);
+        Assert.Equal("Audio is buffered while dictation prepares.", presentation.Hint);
     }
 
     [Fact]
