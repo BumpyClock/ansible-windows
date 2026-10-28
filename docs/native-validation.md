@@ -144,8 +144,7 @@ test and the paced 126.6-second public-sample test. The paced test used four
 threads on an AMD Ryzen AI 7 PRO 350. Peak backlog was 14 packets, first speaker
 label was at 5.5 seconds, final delay was 1.0 second, and all nine speech anchors
 were recognized. These tests include incremental attribution, excluding meeting
-storage and WinUI. See [review-fix evidence](reviews/2026-10-25-fixes.md) for
-artifacts and limits. No Vulkan or multi-hour qualification was performed.
+storage and WinUI. No Vulkan or multi-hour qualification was performed.
 
 Current qualification warms up once, then validates three measured runs and
 uses their median. Streaming measurements include generation of incremental
