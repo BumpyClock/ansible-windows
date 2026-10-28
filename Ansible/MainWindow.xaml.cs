@@ -606,8 +606,12 @@ public sealed partial class MainWindow : Window
             if (failures.Count > 0)
                 _session.Notify(NoticeKind.Warning, "Screen capture privacy unavailable", string.Join(" ", failures.Distinct()), NoticeArea.Application);
         }
-        var showWaveform = state.IsCaptureOpen || state.Phase is DictationPhase.Preparing or DictationPhase.Recording;
-        if (!showWaveform) { _popupFailed = false; _overlayAnchor = null; }
+        var showWaveform = FloatingPreviewPresentation.ShouldShowWaveform(state);
+        if (!showWaveform)
+        {
+            _popupFailed = false;
+            if (!state.IsLiveOperation) { _overlayAnchor = null; }
+        }
         if (showWaveform && _floating is null && !_popupFailed && !_creatingFloating)
         {
             _creatingFloating = true;
