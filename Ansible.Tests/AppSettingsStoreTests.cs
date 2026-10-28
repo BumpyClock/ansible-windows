@@ -19,6 +19,8 @@ public sealed class AppSettingsStoreTests : IDisposable
         Assert.Equal(NativeBackend.Auto, store.Load().Backend);
         Assert.Equal(0, store.Load().MicrophoneBoostDecibels);
         Assert.False(store.Load().HideFromCapture);
+        Assert.False(store.Load().LocalDiagnostics);
+        Assert.True(store.Load().CollectUsage);
         Assert.True(store.Load().AutoDetectMeetings);
         Assert.True(store.Load().OverlayFollowsCaret);
         Assert.Equal(PasteShortcut.ControlV, store.Load().PasteShortcut);
@@ -71,6 +73,7 @@ public sealed class AppSettingsStoreTests : IDisposable
             Shortcut = new DictationShortcut(2, 0x44),
             PushToTalk = false,
             CollectUsage = false,
+            LocalDiagnostics = true,
             CustomDictionary = "NativeAOT\nWinUI",
             InsertionMethod = TextInsertionMethod.Type,
             PasteShortcut = PasteShortcut.ShiftInsert,
@@ -95,6 +98,18 @@ public sealed class AppSettingsStoreTests : IDisposable
         Assert.True(document.RootElement.GetProperty("HideFromCapture").GetBoolean());
         Assert.False(document.RootElement.GetProperty("AutoDetectMeetings").GetBoolean());
         Assert.False(document.RootElement.GetProperty("OverlayFollowsCaret").GetBoolean());
+    }
+
+    [Fact]
+    public void MissingDiagnosticPreferenceRemainsOffIndependentlyOfUsage()
+    {
+        var store = CreateStore();
+        store.Save(new AppSettings { LocalDiagnostics = true, CollectUsage = true });
+        var document = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(store.Path))!.AsObject();
+        Assert.True(document.Remove(nameof(AppSettings.LocalDiagnostics)));
+        File.WriteAllText(store.Path, document.ToJsonString());
+        Assert.False(store.Load().LocalDiagnostics);
+        Assert.True(store.Load().CollectUsage);
     }
 
     [Fact]
