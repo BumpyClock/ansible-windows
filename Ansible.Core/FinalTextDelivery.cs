@@ -34,12 +34,12 @@ public readonly record struct TextDeliveryOutcome(TextDeliveryStatus Status, str
     public static TextDeliveryOutcome CleanupFailed(string message, TextDeliveryReason? reason = null) => new(TextDeliveryStatus.CleanupFailed, message) { Reason = reason };
 }
 
-public readonly record struct DeliveryTrace(DeliveryDiagnosticOutcome Outcome,
+internal readonly record struct DeliveryTrace(DeliveryDiagnosticOutcome Outcome,
     double? ResultToDeliveryMilliseconds, double DeferredMilliseconds, int? ErrorHResult,
     TextDeliveryReason? Reason, double? ResultToSendMilliseconds, double? VerificationMilliseconds);
 
 /// <summary>Inserts authoritative speech once, only after successful recognition completes.</summary>
-public sealed class FinalTextDelivery(
+internal sealed class FinalTextDelivery(
     Func<string, CancellationToken, Task<TextDeliveryOutcome>> insert,
     Func<bool> isCurrent,
     Func<bool> typingDeferred,
