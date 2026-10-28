@@ -2,6 +2,14 @@ using System.Runtime.InteropServices;
 
 namespace Ansible.Core;
 
+internal sealed class NativeMemoryAdmissionException(string message, long requiredBytes,
+    ulong availablePhysicalBytes, ulong availableCommitBytes) : InvalidOperationException(message)
+{
+    public long RequiredBytes { get; } = requiredBytes;
+    public ulong AvailablePhysicalBytes { get; } = availablePhysicalBytes;
+    public ulong AvailableCommitBytes { get; } = availableCommitBytes;
+}
+
 internal static partial class NativeMemory
 {
     internal const long MaximumDecodedBytes = 64L * 1024 * 1024;
@@ -60,11 +68,12 @@ internal static partial class NativeMemory
         var required = EstimateRequired(modelBytes, decodedBytes, headroomMegabytes);
         if (availablePhysical < (ulong)required || availableCommit < (ulong)required)
         {
-            throw new InvalidOperationException(
+            throw new NativeMemoryAdmissionException(
                 $"This operation needs an estimated {required / (1024.0 * 1024 * 1024):F1} GiB of available memory, including audio, workspace and headroom. " +
                 $"Windows reports {availablePhysical / (1024.0 * 1024 * 1024):F1} GiB physical and " +
                 $"{availableCommit / (1024.0 * 1024 * 1024):F1} GiB commit capacity available. " +
-                "Free memory or choose a smaller model; the app does not force a load or silently change models.");
+                "Free memory or choose a smaller model; the app does not force a load or silently change models.",
+                required, availablePhysical, availableCommit);
         }
     }
 

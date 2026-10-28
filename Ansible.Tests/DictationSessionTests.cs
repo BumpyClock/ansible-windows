@@ -1706,8 +1706,9 @@ public sealed partial class DictationSessionTests : IDisposable
     {
         public AppSettings Settings { get; set; } = new();
         public bool FailSaving { get; init; }
+        public bool FailLoading { get; init; }
         public int Saves { get; private set; }
-        public AppSettings Load() => Settings;
+        public AppSettings Load() => FailLoading ? throw new IOException("unreadable settings") : Settings;
         public void Save(AppSettings settings)
         {
             Saves++;
