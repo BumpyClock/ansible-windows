@@ -259,6 +259,7 @@ internal sealed class HomeDictationHistory : IDisposable, IAsyncDisposable
             {
                 await JsonSerializer.SerializeAsync(file, document, HomeHistoryJson.Default.HomeHistoryDocument);
                 await file.FlushAsync();
+                file.Flush(flushToDisk: true);
             }
             File.Move(temporary, _path!, true);
         }
