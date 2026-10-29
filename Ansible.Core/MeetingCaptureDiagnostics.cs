@@ -423,7 +423,8 @@ public sealed class LocalDiagnosticLog : IAsyncDisposable
                 lock (_consent)
                     if (_enabled && entry.Generation == _generation) Volatile.Write(ref _error, null);
             }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            // Any per-entry failure drops that entry. A faulted writer would make DisposeAsync throw at shutdown.
+            catch (Exception error) when (error is not OutOfMemoryException)
             {
                 var current = false;
                 lock (_consent)
