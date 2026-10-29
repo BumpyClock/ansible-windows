@@ -49,7 +49,7 @@ public sealed partial class NativeAudioEngine
         using var lease = _integrity.OpenVerified(model.ModelPath, entry, token);
         var modelIdentity = entry.Sha256;
         var modelBytes = entry.Bytes;
-        if (history > 0 && UsesDiarization(model))
+        if (history > 0 && ModelSelectionPolicy.RequiresCompanion(model))
         {
             var companion = FindDiarizationModel();
             var companionEntry = _inventory.Entries[companion.Id];

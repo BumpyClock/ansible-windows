@@ -395,10 +395,7 @@ public sealed partial class MainWindow : Window
             getModelId: () =>
             {
                 var current = _session.State;
-                return current.SelectedModel is { } selected
-                    && current.Settings.ModelId == selected.Id
-                    && MeetingSession.SupportsMeeting(selected)
-                    ? selected.Id : null;
+                return ModelSelectionPolicy.ExplicitMeetingModelId(current.SelectedModel, current.Settings.ModelId);
             });
         var window = new MeetingWindow(meeting, _meetingStore, document, ShellRoot.RequestedTheme);
         try { window.ApplyCapturePrivacy(_session.State.Settings.HideFromCapture); }
