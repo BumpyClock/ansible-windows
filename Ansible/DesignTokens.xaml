@@ -675,7 +675,6 @@
         <Setter Property="MinHeight" Value="{StaticResource SearchKeycapMinHeight}" />
     </Style>
     <Style x:Key="SectionBadgeStyle" TargetType="Border">
-        <Setter Property="Background" Value="{ThemeResource AppControlBrush}" />
         <Setter Property="CornerRadius" Value="{StaticResource SectionBadgeCornerRadius}" />
         <Setter Property="Padding" Value="{StaticResource SectionBadgePadding}" />
         <Setter Property="MinHeight" Value="{StaticResource SectionBadgeMinHeight}" />
