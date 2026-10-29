@@ -86,11 +86,35 @@ $typedDimensions = @{
     'SettingsRowRowSpacing' = 'Double'
     'SettingsRowDescriptionSpacing' = 'Double'
     'SettingsRowDescriptionMaxWidth' = 'Double'
+    'SectionBadgePadding' = 'Thickness'
+    'SectionBadgeCornerRadius' = 'CornerRadius'
+    'SectionBadgeMinHeight' = 'Double'
+    'SectionBadgeMaxWidth' = 'Double'
 }
 foreach ($entry in $typedDimensions.GetEnumerator()) {
     $node = $tokenDocument.SelectSingleNode("//*[@x:Key='$($entry.Key)']", $namespaceManager)
     Assert-Condition ($null -ne $node -and $node.LocalName -eq $entry.Value) "$($entry.Key) must use the $($entry.Value) XAML resource type."
 }
+
+$badgeHeight = $tokenDocument.SelectSingleNode("//*[@x:Key='SectionBadgeMinHeight']", $namespaceManager)
+$badgeRadius = $tokenDocument.SelectSingleNode("//*[@x:Key='SectionBadgeCornerRadius']", $namespaceManager)
+Assert-Condition ([double]$badgeHeight.InnerText -ge 28) 'Section badges need at least 28 effective pixels of height for caption padding.'
+Assert-Condition ([double]$badgeRadius.InnerText -le [double]$badgeHeight.InnerText / 2) `
+    'Section badge corner radii must fit their height without flattening the rounded ends.'
+foreach ($view in @('HomeHistoryView.xaml', 'HomeInsightsView.xaml')) {
+    [xml]$viewDocument = Get-Content -LiteralPath (Join-Path $RepoRoot "Ansible\$view") -Raw
+    $badge = $viewDocument.SelectSingleNode("//*[local-name()='Badge' and (@x:Name='HistoryCountPill' or @x:Name='HomeStreakPill')]", $namespaceManager)
+    Assert-Condition ($null -ne $badge) "$view must use the shared Badge component."
+}
+[xml]$badgeDocument = Get-Content -LiteralPath (Join-Path $RepoRoot 'Ansible\Badge.xaml') -Raw
+$badgeRoot = $badgeDocument.DocumentElement
+Assert-Condition ($badgeRoot.GetAttribute('HorizontalAlignment') -eq 'Left' -and -not $badgeRoot.HasAttribute('Width')) `
+    'Badges must size to content rather than stretch or use a fixed width.'
+Assert-Condition ($badgeRoot.GetAttribute('MaxWidth') -eq '{StaticResource SectionBadgeMaxWidth}') `
+    'Badges must cap their content width.'
+$badgeLabel = $badgeRoot.SelectSingleNode(".//*[local-name()='TextBlock']")
+Assert-Condition ($badgeLabel.GetAttribute('TextTrimming') -eq 'CharacterEllipsis' -and
+    $badgeLabel.GetAttribute('TextWrapping') -eq 'NoWrap') 'Long badge labels must trim to one line.'
 
 $xamlFiles = @(Get-ChildItem -LiteralPath (Join-Path $RepoRoot 'Ansible') -Recurse -Filter '*.xaml' -File |
     Where-Object { $_.FullName -ne $tokenPath -and $_.FullName -notmatch '\\(?:bin|obj)\\' })
