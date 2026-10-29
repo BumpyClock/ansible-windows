@@ -14,17 +14,20 @@ public sealed partial class MainWindow : Window
 {
     private readonly DictationSession _session;
     private readonly DictationPage _dictation;
+    private readonly WelcomePage _welcome;
     private readonly HomeDictationHistory _history;
     private readonly MainPage _settings;
     private readonly ModelManagementPage _models;
     private readonly CustomWordsPage _customWords;
     private readonly MeetingsPage _meetings;
     private readonly MeetingStore _meetingStore;
+    private readonly MeetingCleanupService _meetingCleanup;
     private readonly LocalDiagnosticLog _meetingDiagnostics;
     private readonly AppPaths _paths;
     private readonly List<(MeetingSession session, MeetingWindow window, Guid? savedId)> _meetingWindows = [];
     private readonly UiSessionObserver _observer;
     private GlobalDictationHotkey? _hotkey;
+    private SystemTrayIcon? _tray;
     private DictationShortcut _configuredHotkey = DictationShortcut.Default;
     private readonly ShortcutDictation _shortcut;
     private FloatingDictationWindow? _floating;
@@ -40,18 +43,7 @@ public sealed partial class MainWindow : Window
     // Caret of the shortcut destination, read once at press time. Null for in-app dictation or an unknown caret.
     private CaretBounds? _overlayAnchor;
     private bool? _capturePrivacy;
-    private readonly IMeetingDetector _meetingDetector = new Ansible.Core.Windows.TeamsMeetingDetector();
-    private readonly MeetingDetectionTracker _meetingDetection = new();
-    private readonly Stopwatch _detectionClock = Stopwatch.StartNew();
-    private CancellationTokenSource? _detectionCancellation;
-    private Task? _detectionTask;
-    private MeetingDetectionCandidate? _detectedMeeting;
-    private MeetingDetectionCandidate? _offeredMeeting;
-    private bool _detectionUnavailableReported;
-    private bool _openingSuggestedMeeting;
-    private Task? _detectionActionTask;
-    private bool _hasDetectionObservation;
-    private bool? _detectionEnabled;
+    private readonly MeetingSuggestions _suggestions;
     private readonly MicrophonePermissionPreflight _microphonePermission;
     private CancellationTokenSource _startupCancellation = new();
     private Task? _startupTask;
@@ -71,19 +63,29 @@ public sealed partial class MainWindow : Window
         _paths = paths;
         _meetingStore = new MeetingStore(Path.Combine(Path.GetDirectoryName(paths.Settings)!, "meetings"));
         _meetingDiagnostics = diagnostics;
+        _meetingCleanup = new(diagnostics);
         _meetings = new MeetingsPage(session, _meetingStore, OpenMeetingAsync, () => WinRT.Interop.WindowNative.GetWindowHandle(this), diagnostics);
         _history = new HomeDictationHistory(session, Path.Combine(Path.GetDirectoryName(paths.Settings)!, "dictation-history.json"), diagnostics);
-        _shortcut = new ShortcutDictation(session, new WindowsShortcutTargetInspector(WinRT.Interop.WindowNative.GetWindowHandle(this)),
+        _shortcut = new ShortcutDictation(session,
+            new WelcomeShortcutTargetInspector(DispatcherQueue, CurrentWelcome,
+                new WindowsShortcutTargetInspector(WinRT.Interop.WindowNative.GetWindowHandle(this))),
             diagnostics, (operationId, status) => _history.RecordDelivery(operationId, status), anchor =>
             {
                 _overlayAnchor = anchor;
                 if (FloatingPreviewPresentation.ShouldShowWaveform(_session.State)) { _floating?.ShowPreview(_overlayAnchor); }
             });
+        _suggestions = new MeetingSuggestions(new Ansible.Core.Windows.TeamsMeetingDetector(),
+            () => _session.State.Settings.AutoDetectMeetings, () => MeetingSuggestionsBlocked,
+            candidate => _meetingWindows.Any(meeting => meeting.session.IsActive && meeting.window.SelectedMeetingIdentity == candidate),
+            (title, message) => _session.Notify(NoticeKind.Warning, title, message, NoticeArea.Meetings));
+        _suggestions.Changed += RenderMeetingSuggestion;
+        _welcome = new WelcomePage(session, CompleteWelcome, () => Navigate("models"), () => _shortcut.IsBusy);
         _dictation = new DictationPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this), _history);
+        _dictation.ShortcutLessonRequested += OpenShortcutLesson;
         _settings = new MainPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this),
-            ChangeHotkey, ChangeDictationMode, CaptureShortcut);
+            ChangeHotkey, ChangeDictationMode, CaptureShortcut, diagnostics);
         _models = new ModelManagementPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this), modelDownloads,
-            () => { Navigate("dictation"); return _dictation.TranscribeFileAsync(); });
+            () => { Navigate("dictation"); return _dictation.TranscribeFileAsync(); }, diagnostics);
         _customWords = new CustomWordsPage(session, () => Navigate("models"));
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
@@ -113,6 +115,8 @@ public sealed partial class MainWindow : Window
         AddNoticeShowAnimations();
         Navigate("dictation");
         _observer = new UiSessionObserver(session, DispatcherQueue, SessionChanged);
+        try { EnsureTrayIcon(); }
+        catch (Exception error) { TrayFailed(error); }
     }
 
     private async void Initialize(object sender, RoutedEventArgs args)
@@ -126,39 +130,80 @@ public sealed partial class MainWindow : Window
 
     private async Task InitializeAsync(CancellationToken token)
     {
+        var startupGeneration = _meetingDiagnostics.CurrentGeneration;
+        var startupStarted = startupGeneration is null ? 0 : Stopwatch.GetTimestamp();
         try
         {
             // Let the initial Window.Activate finish before Windows can display consent.
             await Task.Yield();
             token.ThrowIfCancellationRequested();
+            var permissionStarted = startupGeneration is null ? 0 : Stopwatch.GetTimestamp();
+            Exception? permissionFailure = null;
             try { await _microphonePermission.InitializeAsync(token); }
             catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
             catch (Exception error)
             {
+                permissionFailure = error;
                 // The preflight retains Unavailable and blocks capture. File/model workflows still initialize.
                 Debug.WriteLine($"Ansible: microphone permission preflight failed, HRESULT 0x{error.HResult:X8}.");
+            }
+            finally
+            {
+                if (startupGeneration is { } permissionGeneration)
+                    _meetingDiagnostics.Write(new ApplicationDiagnostic(DateTimeOffset.UtcNow, ApplicationDiagnosticStage.MicrophonePermission,
+                        token.IsCancellationRequested ? DiagnosticOutcome.Cancelled :
+                        permissionFailure is null ? DiagnosticOutcome.Completed : DiagnosticOutcome.Failed,
+                        Stopwatch.GetElapsedTime(permissionStarted).TotalMilliseconds, permissionFailure?.HResult,
+                        _microphonePermission.Status), permissionGeneration);
             }
             token.ThrowIfCancellationRequested();
             _permissionCheckComplete = true;
             RenderMicrophonePermission();
             await _history.InitializeAsync();
             await _session.InitializeAsync();
+            var diagnosticsGeneration = _meetingDiagnostics.CurrentGeneration;
             token.ThrowIfCancellationRequested();
-            if (_closed || _closing) { return; }
+            if (_closed || _closing)
+            {
+                LogApplication(ApplicationDiagnosticStage.Startup, DiagnosticOutcome.Cancelled, startupGeneration, startupStarted);
+                return;
+            }
             _launchReady = true;
-            if (_session.State.Phase == DictationPhase.Disconnected && _session.State.Models.Count == 0)
-                Navigate("models");
+            var hotkeyStarted = diagnosticsGeneration is not null ? Stopwatch.GetTimestamp() : 0;
             try
             {
                 _configuredHotkey = _session.State.Settings.Shortcut;
                 _hotkey = new GlobalDictationHotkey(WinRT.Interop.WindowNative.GetWindowHandle(this),
                     _configuredHotkey, HotkeyChanged);
+                LogApplication(ApplicationDiagnosticStage.Hotkey, DiagnosticOutcome.Completed, diagnosticsGeneration, hotkeyStarted);
             }
-            catch (Exception error) { _session.Notify(NoticeKind.Error, "Shortcut unavailable", error.Message, NoticeArea.Settings | NoticeArea.Dictation); }
-            StartMeetingDetection();
+            catch (Exception error)
+            {
+                LogApplication(ApplicationDiagnosticStage.Hotkey, DiagnosticOutcome.Failed, diagnosticsGeneration, hotkeyStarted, error);
+                _session.Notify(NoticeKind.Error, "Shortcut unavailable", error.Message, NoticeArea.Settings | NoticeArea.Dictation);
+            }
+            if (!_session.State.Settings.WelcomeCompleted) Navigate("welcome");
+            else if (_session.State.Phase == DictationPhase.Disconnected && _session.State.Models.Count == 0) Navigate("models");
+            _suggestions.Start();
+            LogApplication(ApplicationDiagnosticStage.Startup, DiagnosticOutcome.Completed, startupGeneration, startupStarted);
         }
-        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
-        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Application); }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            LogApplication(ApplicationDiagnosticStage.Startup, DiagnosticOutcome.Cancelled, startupGeneration, startupStarted);
+        }
+        catch (Exception error)
+        {
+            LogApplication(ApplicationDiagnosticStage.Startup, DiagnosticOutcome.Failed, startupGeneration, startupStarted, error);
+            _session.ReportUiError(error, NoticeArea.Application);
+        }
+    }
+
+    private void LogApplication(ApplicationDiagnosticStage stage, DiagnosticOutcome outcome,
+        long? generation, long startedAt, Exception? error = null)
+    {
+        if (generation is { } value)
+            _meetingDiagnostics.Write(new ApplicationDiagnostic(DateTimeOffset.UtcNow, stage, outcome,
+                Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds, error?.HResult), value);
     }
 
     private async Task RecoverMeetingsAsync(CancellationToken token)
@@ -322,7 +367,8 @@ public sealed partial class MainWindow : Window
             _dismissedMicrophonePermissionStatus = null;
             RenderMicrophonePermission();
         }
-        Page target = page switch { "settings" => _settings, "dictation" => _dictation, "models" => _models,
+        if (page == "dictation" && _launchReady && !_session.State.Settings.WelcomeCompleted) page = "welcome";
+        Page target = page switch { "welcome" => _welcome, "settings" => _settings, "dictation" => _dictation, "models" => _models,
             "custom-words" => _customWords, "meetings" => _meetings, _ => _dictation };
         // Reselecting the current page keeps its state and scroll position.
         if (ReferenceEquals(MainContent.Content, target)) return;
@@ -335,7 +381,7 @@ public sealed partial class MainWindow : Window
             (SettingsNav, SettingsIndicator),
         })
         {
-            var selected = (string)button.Tag == page;
+            var selected = (string)button.Tag == (page == "welcome" ? "dictation" : page);
             button.Style = (Style)Application.Current.Resources[
                 selected ? "SelectedNavigationButtonStyle" : "NavigationButtonStyle"];
             indicator.Style = (Style)Application.Current.Resources[
@@ -343,6 +389,31 @@ public sealed partial class MainWindow : Window
             AutomationProperties.SetHelpText(button, selected ? "Current page" : "");
             AutomationProperties.SetItemStatus(button, selected ? "Current page" : "");
         }
+    }
+
+    private WelcomePage? CurrentWelcome() => ReferenceEquals(MainContent.Content, _welcome) ? _welcome : null;
+
+    private void OpenShortcutLesson()
+    {
+        if (!_session.State.IsIdle || _shortcut.IsBusy)
+        {
+            _session.Notify(NoticeKind.Warning, "Finish dictation first",
+                "Wait for the current dictation and insertion to finish before opening the shortcut lesson.");
+            return;
+        }
+        _welcome.RestartLesson();
+        Navigate("welcome");
+    }
+
+    private void CompleteWelcome()
+    {
+        try
+        {
+            if (!_session.State.IsIdle || _shortcut.IsBusy) return;
+            _session.CompleteWelcome();
+            Navigate("dictation");
+        }
+        catch (Exception error) { _session.ReportUiError(error); }
     }
 
     private void ShellThemeChanged(FrameworkElement sender, object args) => RefreshTitleBarColors();
@@ -376,7 +447,7 @@ public sealed partial class MainWindow : Window
             () => new NativeAudioEngine(_paths.NativeLibrary, _paths.ModelCatalog, _session.State.ModelsDirectory,
                 deviceProbePath: _paths.DeviceProbe, benchmarkSamplePath: _paths.PublicSample,
                 benchmarkCachePath: _paths.DeviceBenchmarks),
-            new PermissionCheckedMeetingCaptureFactory(new Ansible.Core.Windows.MeetingCaptureFactory(), _microphonePermission), _meetingStore,
+            new PermissionCheckedMeetingCaptureFactory(new Ansible.Core.Windows.MeetingCaptureFactory(_meetingDiagnostics), _microphonePermission), _meetingStore,
             () =>
             {
                 var current = _session.State;
@@ -393,21 +464,21 @@ public sealed partial class MainWindow : Window
             release: _session.ReleaseMeetingAsync,
             observerFactory: () => new Ansible.Core.Windows.TeamsSpeakerObserver(),
             alignerFactory: () => new NativeMeetingWordAligner(_paths.NativeLibrary, _paths.ModelCatalog, _session.State.ModelsDirectory),
-            getModelId: () =>
+            diagnostics: _meetingDiagnostics, textCleanup: _meetingCleanup,
+            getCleanupSettings: () => _session.State.Settings.MeetingCleanup, getModelId: () =>
             {
                 var current = _session.State;
                 return ModelSelectionPolicy.ExplicitMeetingModelId(current.SelectedModel, current.Settings.ModelId);
             });
-        var window = new MeetingWindow(meeting, _meetingStore, document, ShellRoot.RequestedTheme);
+        var window = new MeetingWindow(meeting, _meetingStore, document, ShellRoot.RequestedTheme, _meetingDiagnostics.DirectoryPath,
+            _meetingCleanup, () => _session.State.Settings.MeetingCleanup);
         try { window.ApplyCapturePrivacy(_session.State.Settings.HideFromCapture); }
         catch (Exception error) { _session.Notify(NoticeKind.Warning, "Screen capture privacy unavailable", error.Message, NoticeArea.Application); }
         _meetingWindows.Add((meeting, window, document?.Id));
         meeting.StateChanged += state => DispatcherQueue.TryEnqueue(() =>
         {
             if (_closed || _closing) return;
-            if (meeting.IsActive && _detectedMeeting is { } detected && window.SelectedMeetingIdentity == detected)
-                _meetingDetection.Dismiss(detected);
-            RefreshMeetingSuggestion();
+            _suggestions.Refresh();
         });
         window.Closed += async (_, _) =>
         {
@@ -422,140 +493,31 @@ public sealed partial class MainWindow : Window
         return window;
     }
 
-    private bool MeetingDetectionBusy => _closed || _closing || !_launchReady || !_meetingRecoveryComplete || !_session.State.IsIdle ||
+    private bool MeetingSuggestionsBlocked => !_launchReady || !_meetingRecoveryComplete || !_session.State.IsIdle ||
         _shortcut.IsBusy ||
         _meetingWindows.Any(meeting => meeting.session.IsActive);
 
-    private void StartMeetingDetection()
+    private void RenderMeetingSuggestion()
     {
-        if (!_launchReady || _closing || _closed || _detectionTask is { IsCompleted: false }) return;
-        _detectionCancellation?.Dispose();
-        _detectionCancellation = new CancellationTokenSource();
-        var token = _detectionCancellation.Token;
-        _detectionTask = Task.Run(() => MonitorMeetingsAsync(token));
-    }
-
-    private async Task MonitorMeetingsAsync(CancellationToken token)
-    {
-        try
-        {
-            while (!token.IsCancellationRequested)
-            {
-                if (_session.State.Settings.AutoDetectMeetings)
-                {
-                    try
-                    {
-                        var candidate = await _meetingDetector.ReadAsync(token);
-                        DispatcherQueue.TryEnqueue(() =>
-                        {
-                            if (_closed || _closing || token.IsCancellationRequested) return;
-                            _detectionUnavailableReported = false;
-                            _hasDetectionObservation = true;
-                            _detectedMeeting = candidate;
-                            if (candidate is not null && _meetingWindows.Any(meeting => meeting.session.IsActive && meeting.window.SelectedMeetingIdentity == candidate))
-                                _meetingDetection.Dismiss(candidate);
-                            _meetingDetection.Update(candidate, _detectionClock.Elapsed,
-                                _session.State.Settings.AutoDetectMeetings, MeetingDetectionBusy);
-                            RefreshMeetingSuggestion();
-                        });
-                    }
-                    catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
-                    catch (Exception error)
-                    {
-                        DispatcherQueue.TryEnqueue(() =>
-                        {
-                            if (_closed || _closing || token.IsCancellationRequested) return;
-                            _hasDetectionObservation = false;
-                            _meetingDetection.InvalidateObservation();
-                            HideMeetingSuggestion(); // A failed scan does not end or reset the detected episode.
-                            if (_detectionUnavailableReported) return;
-                            _detectionUnavailableReported = true;
-                            _session.Notify(NoticeKind.Warning, "Meeting detection unavailable",
-                                $"{error.Message} You can start notetaking from Meetings. Detection will retry.", NoticeArea.Meetings);
-                        });
-                    }
-                }
-                await Task.Delay(TimeSpan.FromSeconds(2), token);
-            }
-        }
-        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
-    }
-
-    private void RefreshMeetingSuggestion()
-    {
-        if (_closed || _closing) { HideMeetingSuggestion(); return; }
-        var enabled = _session.State.Settings.AutoDetectMeetings;
-        if (_detectionEnabled != enabled)
-        {
-            _detectionEnabled = enabled;
-            _hasDetectionObservation = false;
-            _meetingDetection.InvalidateObservation();
-        }
-        if (!enabled || MeetingDetectionBusy || !_hasDetectionObservation)
-        {
-            _meetingDetection.InvalidateObservation();
-            HideMeetingSuggestion();
-            return;
-        }
-        var offer = _meetingDetection.CurrentOffer;
-        _offeredMeeting = offer;
+        var offer = _suggestions.Offer;
         MeetingSuggestion.IsOpen = offer is not null;
         MeetingSuggestion.Visibility = offer is null ? Visibility.Collapsed : Visibility.Visible;
-        OpenSuggestedMeetingButton.IsEnabled = !_openingSuggestedMeeting && offer is not null;
+        OpenSuggestedMeetingButton.IsEnabled = !_suggestions.IsConfirming && offer is not null;
     }
 
-    private void HideMeetingSuggestion()
-    {
-        _offeredMeeting = null;
-        MeetingSuggestion.IsOpen = false;
-        MeetingSuggestion.Visibility = Visibility.Collapsed;
-    }
-
-    private void MeetingSuggestionDismissed(InfoBar sender, object args)
-    {
-        if (_offeredMeeting is { } candidate) _meetingDetection.Dismiss(candidate);
-        HideMeetingSuggestion();
-    }
+    private void MeetingSuggestionDismissed(InfoBar sender, object args) => _suggestions.Dismiss();
 
     private async void OpenSuggestedMeetingClicked(object sender, RoutedEventArgs args)
     {
-        if (_detectionActionTask is { IsCompleted: false }) return;
-        _detectionActionTask = OpenSuggestedMeetingAsync();
-        await _detectionActionTask;
-    }
-
-    private async Task OpenSuggestedMeetingAsync()
-    {
-        if (_openingSuggestedMeeting || MeetingDetectionBusy || !_session.State.Settings.AutoDetectMeetings ||
-            _offeredMeeting is not { } expected || _detectionCancellation is null) return;
-        _openingSuggestedMeeting = true;
-        OpenSuggestedMeetingButton.IsEnabled = false;
-        try
+        var outcome = await _suggestions.ConfirmAsync(candidate =>
         {
-            var current = await Task.Run(() => _meetingDetector.ReadAsync(_detectionCancellation.Token));
-            if (current != expected || MeetingDetectionBusy || !_session.State.Settings.AutoDetectMeetings || _offeredMeeting != expected)
-            { HideMeetingSuggestion(); return; }
             var window = OpenMeeting(null);
-            if (!window.SelectDetectedMeeting(expected))
-            {
-                HideMeetingSuggestion();
-                _session.Notify(NoticeKind.Warning, "Meeting changed",
-                    "The detected Teams app is no longer available. Select your meeting app from Meetings.", NoticeArea.Meetings);
-                Navigate("meetings");
-                return;
-            }
-            _meetingDetection.Dismiss(expected);
-            HideMeetingSuggestion();
-            window.Activate(); // Only the explicit action activates the notetaker; it never starts capture.
-        }
-        catch (OperationCanceledException) when (_closing || _closed) { }
-        catch (Exception error)
-        {
-            HideMeetingSuggestion();
-            _session.Notify(NoticeKind.Warning, "Could not open notetaker", error.Message, NoticeArea.Meetings);
+            if (!window.SelectDetectedMeeting(candidate)) return false;
+            window.Activate(); // Opening the notetaker does not start capture.
+            return true;
+        });
+        if (!_closing && !_closed && outcome is MeetingSuggestionOutcome.Rejected or MeetingSuggestionOutcome.Failed)
             Navigate("meetings");
-        }
-        finally { _openingSuggestedMeeting = false; }
     }
 
     private void ChangeHotkey(DictationShortcut choice)
@@ -592,7 +554,7 @@ public sealed partial class MainWindow : Window
     {
         if (_closed) { return; }
         RenderMicrophonePermission();
-        RefreshMeetingSuggestion();
+        _suggestions.Refresh();
         if (_capturePrivacy != state.Settings.HideFromCapture)
         {
             _capturePrivacy = state.Settings.HideFromCapture;
@@ -636,23 +598,68 @@ public sealed partial class MainWindow : Window
     {
         try
         {
+            if (pressed && CurrentWelcome() is { AcceptsShortcut: false }) return;
             if (pressed) { await _shortcut.PressedAsync(_configuredHotkey); }
             else { await _shortcut.ReleasedAsync(); }
         }
         catch (Exception error) { _session.ReportUiError(error); }
+        finally { CurrentWelcome()?.RefreshAfterShortcut(); }
     }
 
-    private async void CloseRequested(AppWindow sender, AppWindowClosingEventArgs args)
+    private void CloseRequested(AppWindow sender, AppWindowClosingEventArgs args)
     {
         if (_allowClose) { return; }
         args.Cancel = true;
+        if (_closing) { return; }
+        try
+        {
+            EnsureTrayIcon();
+            AppWindow.Hide();
+        }
+        catch (Exception error) { TrayFailed(error); }
+    }
+
+    private void EnsureTrayIcon()
+    {
+        _tray ??= new SystemTrayIcon(WinRT.Interop.WindowNative.GetWindowHandle(this),
+            Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"), ShowFromTray, ExitRequested, TrayFailed);
+        _tray.EnsureVisible();
+        TrayError.IsOpen = false;
+        TrayError.Visibility = Visibility.Collapsed;
+    }
+
+    private void ShowFromTray()
+    {
+        if (_closed) return;
+        AppWindow.Show();
+        if (AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized } presenter)
+            presenter.Restore();
+        Activate();
+    }
+
+    private void TrayFailed(Exception error)
+    {
+        Debug.WriteLine($"Ansible: tray unavailable: {error}");
+        ShowFromTray();
+        TrayError.Message = $"{error.Message} Try closing the window again, or choose Exit Ansible to stop the app.";
+        TrayError.Visibility = Visibility.Visible;
+        TrayError.IsOpen = true;
+    }
+
+    private void ExitClicked(object sender, RoutedEventArgs args) => ExitRequested();
+
+    private async void ExitRequested()
+    {
         if (_closing) { return; }
         _closing = true;
         MainContent.IsEnabled = false;
         ShutdownError.IsOpen = false;
         ShutdownError.Visibility = Visibility.Collapsed;
         _shortcut.BeginShutdown();
+        _suggestions.BeginShutdown();
         _startupCancellation.Cancel();
+        var diagnosticGeneration = _meetingDiagnostics.CurrentGeneration;
+        var diagnosticStartedAt = diagnosticGeneration is not null ? Stopwatch.GetTimestamp() : 0;
         try
         {
             if (_startupTask is not null) await _startupTask;
@@ -660,10 +667,7 @@ public sealed partial class MainWindow : Window
             if (_permissionRetryTask is not null) await _permissionRetryTask;
             if (_microphoneSettingsTask is not null) await _microphoneSettingsTask;
             await _meetings.BeginShutdownAsync();
-            HideMeetingSuggestion();
-            _detectionCancellation?.Cancel();
-            if (_detectionTask is not null) await _detectionTask;
-            if (_detectionActionTask is not null) await _detectionActionTask;
+            await _suggestions.JoinAsync();
             var meetings = _meetingWindows.ToArray();
             await Task.WhenAll(meetings.Select(meeting => meeting.window.BeginShutdownAsync()));
             foreach (var meeting in meetings) await meeting.session.DisposeAsync();
@@ -672,24 +676,27 @@ public sealed partial class MainWindow : Window
             await _shortcut.JoinAsync();
             if (_floating is not null) { await _floating.ClosePreviewAsync(); }
             await _history.DisposeAsync();
+            LogApplication(ApplicationDiagnosticStage.Shutdown, DiagnosticOutcome.Completed, diagnosticGeneration, diagnosticStartedAt);
             await _meetingDiagnostics.DisposeAsync();
             _allowClose = true;
             Close();
         }
         catch (Exception error)
         {
+            ShowFromTray();
+            LogApplication(ApplicationDiagnosticStage.Shutdown, DiagnosticOutcome.Failed, diagnosticGeneration, diagnosticStartedAt, error);
             Debug.WriteLine($"Ansible: native shutdown needs recovery: {error.Message}");
             ShutdownError.Message = $"{error.Message} Waiting for owned work to stop.";
             ShutdownError.Visibility = Visibility.Visible;
             ShutdownError.IsOpen = true;
             var failures = new List<Exception> { error };
-            _detectionCancellation?.Cancel();
+            _suggestions.BeginShutdown();
             try { await _session.CancelAsync(); }
             catch (Exception stopError) { failures.Add(stopError); }
             var joined = Task.WhenAll(new[]
             {
                 _startupTask, _meetingRecoveryTask, _permissionRetryTask, _microphoneSettingsTask,
-                _detectionTask, _detectionActionTask, _shortcut.JoinAsync()
+                _suggestions.JoinAsync(), _shortcut.JoinAsync()
             }.OfType<Task>());
             try { await joined; }
             catch (Exception)
@@ -700,13 +707,13 @@ public sealed partial class MainWindow : Window
             _startupCancellation.Dispose();
             _startupCancellation = new CancellationTokenSource();
             var failure = failures.Count == 1 ? error : new AggregateException("Shutdown and recovery reported failures.", failures);
-            ShutdownError.Message = $"{failure.Message} Try closing the window again.";
+            ShutdownError.Message = $"{failure.Message} Try Exit from the tray menu again.";
             _closing = false;
             MainContent.IsEnabled = true;
             _meetings.ResumeAfterFailedShutdown();
             _permissionCheckComplete = true;
             RenderMicrophonePermission();
-            StartMeetingDetection();
+            _suggestions.ResumeAfterFailedShutdown();
         }
     }
 
@@ -715,12 +722,13 @@ public sealed partial class MainWindow : Window
         _closed = true;
         if (_themeSettings is not null) _themeSettings.Changed -= ContrastThemeChanged;
         _themeSettings = null;
+        _tray?.Dispose();
         _dictation.Dispose();
         _history.Dispose();
         _hotkey?.Dispose();
         _shortcut.Dispose();
         _startupCancellation.Dispose();
-        _detectionCancellation?.Dispose();
+        _suggestions.Dispose();
         _observer.Dispose();
         AppWindow.Closing -= CloseRequested;
     }
