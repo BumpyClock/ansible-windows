@@ -117,7 +117,17 @@ public sealed partial class FloatingDictationWindow : Window
     /// </summary>
     internal void ShowPreview(CaretBounds? anchor = null)
     {
-        if (_closed || _visible || !_session.State.IsLiveOperation) { return; }
+        if (_closed || !_session.State.IsLiveOperation ||
+            !FloatingPreviewPresentation.ShouldShowWaveform(_session.State)) { return; }
+        if (_visible)
+        {
+            if (_anchor != anchor)
+            {
+                _anchor = anchor;
+                QueueLayout();
+            }
+            return;
+        }
         _state = _session.State;
         _anchor = anchor;
         Render();

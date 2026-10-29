@@ -21,7 +21,10 @@ public sealed record SessionNotice(
     public bool ShouldDisplay => !IsDismissed && Kind is NoticeKind.Warning or NoticeKind.Error;
     public bool ShouldDisplayOn(NoticeArea area) => ShouldDisplay && (Area & area) != 0;
 }
-public sealed record SessionOutcome(SessionOutcomeKind Kind, RecognitionResult? Result = null, Exception? Error = null);
+public sealed record SessionOutcome(SessionOutcomeKind Kind, RecognitionResult? Result = null, Exception? Error = null)
+{
+    internal long? DiagnosticResultTimestamp { get; init; }
+}
 
 /// <summary>
 /// The single successful microphone-dictation signal consumed by session history and other app-owned projections.

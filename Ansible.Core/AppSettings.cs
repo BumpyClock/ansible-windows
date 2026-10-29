@@ -29,6 +29,7 @@ public sealed record AppSettings
     public DictationShortcut Shortcut { get; init; } = DictationShortcut.Default;
     public bool PushToTalk { get; init; } = true;
     public bool CollectUsage { get; init; } = true;
+    public bool LocalDiagnostics { get; init; }
     public bool HideFromCapture { get; init; }
     public bool AutoDetectMeetings { get; init; } = true;
     /// <summary>Show the dictation overlay under the destination caret when Windows reports its position; otherwise at the bottom of the screen.</summary>

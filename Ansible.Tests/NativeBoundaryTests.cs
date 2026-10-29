@@ -282,7 +282,7 @@ public sealed class NativeBoundaryTests
         Assert.Equal(0, invalidations);
         available = weightFreeBudget;
 
-        var error = Assert.Throws<InvalidOperationException>(() => NativeOperation.Run(CreateSession, Cleanup));
+        var error = Assert.Throws<NativeMemoryAdmissionException>(() => NativeOperation.Run(CreateSession, Cleanup));
         Assert.Contains("available memory", error.Message);
         Assert.Equal(1, created);
         Assert.False(active);
@@ -294,7 +294,7 @@ public sealed class NativeBoundaryTests
     [InlineData(1_171_544_895UL, 1_171_544_896UL)]
     [InlineData(1_171_544_896UL, 1_171_544_895UL)]
     public void SessionAdmissionRequiresBothPhysicalMemoryAndCommitCapacity(ulong physical, ulong commit) =>
-        Assert.Throws<InvalidOperationException>(() => NativeMemory.CheckBudget(60_000_000, 1024, 512, physical, commit));
+        Assert.Throws<NativeMemoryAdmissionException>(() => NativeMemory.CheckBudget(60_000_000, 1024, 512, physical, commit));
 
     private sealed class ModuleLoader : INativeModuleLoader
     {
