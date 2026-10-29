@@ -128,7 +128,7 @@ public sealed class MicrophonePermissionPreflightTests
         var inner = new FakeCaptureFactory();
         var audio = new PermissionCheckedAudioCaptureFactory(inner, preflight);
         var meeting = new PermissionCheckedMeetingCaptureFactory(inner, preflight);
-        var request = new MeetingCaptureRequest(MeetingPlaybackSource.SystemAudio);
+        var request = new MeetingCaptureRequest();
         await Assert.ThrowsAsync<InvalidOperationException>(() => audio.StartAsync(default));
         await Assert.ThrowsAsync<InvalidOperationException>(() => meeting.StartAsync(request, default));
         await preflight.InitializeAsync();
@@ -185,23 +185,13 @@ public sealed class MicrophonePermissionPreflightTests
 
     private sealed class FakeCaptureFactory : IAudioCaptureFactory, IMeetingCaptureFactory
     {
-        public IAudioCapture Capture { get; } = new FakeCapture();
+        public FakeMeetingCapture Capture { get; } = new();
         public int Starts { get; private set; }
         public int Boost { get; private set; }
         public MeetingCaptureRequest? Request { get; private set; }
         public Task<IAudioCapture> StartAsync(CancellationToken cancellationToken, int microphoneBoostDecibels = 0)
-        { Starts++; Boost = microphoneBoostDecibels; return Task.FromResult(Capture); }
-        public Task<IAudioCapture> StartAsync(MeetingCaptureRequest request, CancellationToken cancellationToken)
-        { Starts++; Request = request; return Task.FromResult(Capture); }
-    }
-
-    private sealed class FakeCapture : IAudioCapture
-    {
-        public System.Threading.Channels.ChannelReader<byte[]> Audio { get; } = System.Threading.Channels.Channel.CreateUnbounded<byte[]>().Reader;
-        public double CapturedSeconds => 0;
-        public bool IsReleased => true;
-        public event Action<double>? LevelChanged { add { } remove { } }
-        public Task StopAsync() => Task.CompletedTask;
-        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        { Starts++; Boost = microphoneBoostDecibels; return Task.FromResult<IAudioCapture>(Capture); }
+        public Task<IMeetingCapture> StartAsync(MeetingCaptureRequest request, CancellationToken cancellationToken)
+        { Starts++; Request = request; return Task.FromResult<IMeetingCapture>(Capture); }
     }
 }

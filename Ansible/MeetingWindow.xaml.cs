@@ -56,7 +56,6 @@ public sealed partial class MeetingWindow : Window
                 !(process.ProcessName.Equals("ms-teams", StringComparison.OrdinalIgnoreCase) ||
                   process.ProcessName.Equals("msteams", StringComparison.OrdinalIgnoreCase) ||
                   process.ProcessName.Equals("Teams", StringComparison.OrdinalIgnoreCase))) return false;
-            AudioSourceChoice.SelectedIndex = 0;
             RefreshProcesses();
             var item = ProcessChoice.Items.OfType<ComboBoxItem>().FirstOrDefault(item =>
                 item.Tag is MeetingProcessChoice choice && choice.Id == candidate.ProcessId);
@@ -94,7 +93,6 @@ public sealed partial class MeetingWindow : Window
         RefreshTitleBarColors();
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
         AppWindow.Resize(new Windows.Graphics.SizeInt32(640, 900));
-        AudioSourceChoice.SelectedIndex = 0;
         RefreshProcesses();
         AppWindow.Closing += ClosingRequested;
         Closed += (_, _) =>
@@ -180,7 +178,7 @@ public sealed partial class MeetingWindow : Window
             MeetingSessionPhase.Paused => ("Meeting paused", "Capture is paused. Resume to continue this meeting."),
             MeetingSessionPhase.Recording => ("Listening for your conversation", "Text appears as each chunk is recognized. Speaker labels may be revised."),
             MeetingSessionPhase.Finishing or MeetingSessionPhase.Refining => ("Finishing your meeting", "Captured speech is being finalized locally. Speaker corrections preserve the recognized wording."),
-            MeetingSessionPhase.Failed when retryStart => ("Meeting needs attention", "Resolve the error above, check your audio source, then try again."),
+            MeetingSessionPhase.Failed when retryStart => ("Meeting needs attention", "Resolve the error above, check your microphone and speakers, then try again."),
             MeetingSessionPhase.Failed => ("Meeting stopped", "Review the error above. Text already transcribed stays saved on this device."),
             MeetingSessionPhase.Completed => ("No speech transcribed", "This meeting has no recognized speech. Saved text stays on this device."),
             _ => ("Ready when you are", "Start the meeting to see speaker-labelled text here.")
@@ -255,9 +253,7 @@ public sealed partial class MeetingWindow : Window
 
     private async Task StartMeetingAsync()
     {
-        var system = AudioSourceChoice.SelectedIndex == 1;
         var process = (ProcessChoice.SelectedItem as ComboBoxItem)?.Tag as MeetingProcessChoice;
-        if (!system && process is null) throw new InvalidOperationException("Select a meeting app, or explicitly choose all system audio.");
         if (_selectedDetectedMeeting is { } detected)
         {
             var valid = false;
@@ -274,12 +270,11 @@ public sealed partial class MeetingWindow : Window
             {
                 _selectedDetectedMeeting = null;
                 ProcessChoice.SelectedIndex = 0;
-                throw new InvalidOperationException("The detected Teams process changed or closed. Select your meeting app again before starting.");
+                throw new InvalidOperationException("The detected Teams process changed or closed. Refresh the Teams selection before starting.");
             }
         }
         var title = MeetingTitle.Text;
-        await _session.StartAsync(new MeetingCaptureRequest(system ? MeetingPlaybackSource.SystemAudio : MeetingPlaybackSource.MeetingApp,
-            system ? process is { IsTeams: true } ? process.Id : null : process?.Id));
+        await _session.StartAsync(new MeetingCaptureRequest(process is { IsTeams: true } ? process.Id : null));
         if (!string.IsNullOrWhiteSpace(title) && title != "New meeting") await _session.RenameAsync(title);
     }
 
@@ -620,14 +615,6 @@ public sealed partial class MeetingWindow : Window
         finally { DeleteMenuItem.IsEnabled = !_session.IsActive && _document is not null; }
     }
 
-    private void AudioSourceChanged(object sender, SelectionChangedEventArgs args)
-    {
-        if (ProcessChoice is null) return;
-        var system = AudioSourceChoice.SelectedIndex == 1;
-        ProcessChoice.Header = system ? "Teams app for speaker names (optional)" : "Meeting app";
-        if (system && ProcessChoice.Items.Count > 0) ProcessChoice.SelectedIndex = 0;
-        RefreshProcesses();
-    }
     private void MeetingProcessChanged(object sender, SelectionChangedEventArgs args)
     {
         if (!_refreshingProcesses && _selectedDetectedMeeting != SelectedMeetingIdentity) _selectedDetectedMeeting = null;
@@ -664,16 +651,15 @@ public sealed partial class MeetingWindow : Window
         }
         _refreshingProcesses = true;
         ProcessChoice.Items.Clear();
-        var system = AudioSourceChoice.SelectedIndex == 1;
-        ProcessChoice.Items.Add(new ComboBoxItem { Content = system ? "None — use model speaker labels" : "Select a meeting app" });
-        foreach (var choice in choices.Where(p => !system || p.IsTeams).OrderByDescending(p => p.IsTeams).ThenBy(p => p.DisplayName))
+        ProcessChoice.Items.Add(new ComboBoxItem { Content = "None, use model speaker labels" });
+        foreach (var choice in choices.Where(p => p.IsTeams).OrderBy(p => p.DisplayName))
         {
             var item = new ComboBoxItem { Content = choice.DisplayName, Tag = choice };
             ProcessChoice.Items.Add(item);
             if (selected is not null && choice.Id == selected.Id && choice.StartedUtc == selected.StartedUtc) ProcessChoice.SelectedItem = item;
         }
         if (ProcessChoice.SelectedItem is null)
-            ProcessChoice.SelectedIndex = AudioSourceChoice.SelectedIndex == 0 && choices.Any(p => p.IsTeams) ? 1 : 0;
+            ProcessChoice.SelectedIndex = choices.Any(p => p.IsTeams) ? 1 : 0;
         _refreshingProcesses = false;
         if (_selectedDetectedMeeting != SelectedMeetingIdentity) _selectedDetectedMeeting = null;
         UpdateNamingHelp();

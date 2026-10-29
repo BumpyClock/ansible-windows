@@ -80,17 +80,13 @@
         <Border Grid.Row="4" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" BorderThickness="0,1,0,0" Padding="32,20,32,24">
             <StackPanel Spacing="12">
                 <StackPanel x:Name="CaptureSetup" Spacing="12">
-                    <ComboBox x:Name="AudioSourceChoice" Header="Meeting audio" HorizontalAlignment="Stretch" SelectionChanged="AudioSourceChanged">
-                        <ComboBoxItem Content="Selected meeting app"/>
-                        <ComboBoxItem Content="All system audio (includes notifications and other apps)"/>
-                    </ComboBox>
+                    <TextBlock Text="Records your default microphone and everything playing on your speakers and headphones, including notifications and other apps." Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap"/>
                     <Grid x:Name="ProcessSelector" ColumnSpacing="8">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                        <ComboBox x:Name="ProcessChoice" Header="Meeting app" HorizontalAlignment="Stretch" SelectionChanged="MeetingProcessChanged"/>
+                        <ComboBox x:Name="ProcessChoice" Header="Teams app for speaker names (optional)" HorizontalAlignment="Stretch" SelectionChanged="MeetingProcessChanged"/>
                         <Button Grid.Column="1" Content="Refresh" Click="RefreshProcessesClicked" VerticalAlignment="Bottom"/>
                     </Grid>
-                    <TextBlock x:Name="NamingHelpText" Text="Automatic speaker names are available for selected Teams meetings. Other speakers keep editable model labels." Style="{StaticResource CaptionSecondaryStyle}"/>
-                    <TextBlock Text="Microphone: Windows default input" Style="{StaticResource CaptionSecondaryStyle}"/>
+                    <TextBlock x:Name="NamingHelpText" Text="Automatic speaker names are available for Teams meetings. Other speakers keep editable model labels." Style="{StaticResource CaptionSecondaryStyle}"/>
                 </StackPanel>
                 <TextBlock x:Name="PrivacyText" Text="Get consent before transcribing others. Audio stays in memory; only text is saved." Style="{StaticResource CaptionSecondaryStyle}"/>
                 <Grid ColumnSpacing="12">

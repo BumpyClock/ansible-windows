@@ -8,6 +8,30 @@ namespace Ansible.Tests;
 
 public sealed class WaveInCaptureTests
 {
+    [Fact]
+    public async Task OptedInCaptureSummarizesPacketsBacklogAndRelease()
+    {
+        var api = new FakeWaveInApi();
+        await using var capture = await new WaveInCaptureFactory(api, () => true).StartAsync(CancellationToken.None);
+        for (var index = 0; index < 3; index++)
+        {
+            api.Return(api.Headers[0], [0, 0, 1, 0]);
+            await api.WaitForRequeueAsync();
+        }
+        await capture.StopAsync();
+        var operationId = Guid.NewGuid();
+        var summary = Assert.IsAssignableFrom<IMicrophoneCaptureDiagnostics>(capture).Snapshot(operationId);
+        Assert.Equal(operationId, summary.OperationId);
+        Assert.Equal(3, summary.Packets);
+        Assert.Equal(6, summary.Samples);
+        Assert.Equal(3, summary.BacklogHighWaterPackets);
+        Assert.True(summary.MaximumCallbackGapMilliseconds >= 0);
+        Assert.False(summary.Overflowed);
+        Assert.False(summary.StopFailed);
+        Assert.True(summary.Released);
+        Assert.Equal(0, api.DriverCallsDuringCallback);
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(20)]

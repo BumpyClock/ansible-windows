@@ -1,12 +1,13 @@
 using System.Threading.Channels;
 using Ansible.Core;
+using CaptureFactory = Ansible.Tests.FakeMeetingCaptureFactory;
 
 namespace Ansible.Tests;
 
 public sealed class DiarizedMeetingSessionTests : IDisposable
 {
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "Ansible-diarized-" + Guid.NewGuid().ToString("N"));
-    private static readonly MeetingCaptureRequest Request = new(MeetingPlaybackSource.SystemAudio);
+    private static readonly MeetingCaptureRequest Request = new();
     private static readonly AudioModel Nemotron = new()
     {
         Id = AudioModelDefaults.RecognitionModelId, Family = "nemotron_asr", Mode = "streaming"
@@ -70,7 +71,7 @@ public sealed class DiarizedMeetingSessionTests : IDisposable
         await session.StartAsync(Request);
         Assert.Equal([Nemotron, Kroko], engine.Prepared);
         Assert.Equal(Kroko, engine.Model);
-        Assert.True(capture.Started);
+        Assert.Single(capture.Captures);
         Assert.Contains("0.95x real time on Cpu", session.State.SelectionNotice);
         Assert.EndsWith("Using kroko-en-64l-q8 instead.", session.State.SelectionNotice);
         Assert.Null(session.State.Error);
@@ -105,7 +106,7 @@ public sealed class DiarizedMeetingSessionTests : IDisposable
         Assert.Equal(VibeVoice.Id, error.ModelId);
         Assert.Contains("Earlier candidates: nemotron-asr-0.6b-q8 measured 0.80x", error.Message);
         Assert.Equal([Nemotron, VibeVoice], engine.Prepared);
-        Assert.False(capture.Started);
+        Assert.Empty(capture.Captures);
         Assert.False(session.IsActive);
         Assert.Equal(MeetingSessionPhase.Failed, session.State.Phase);
         Assert.Equal(error.Message, session.State.Error);
@@ -122,7 +123,7 @@ public sealed class DiarizedMeetingSessionTests : IDisposable
         await using var session = Create(engine, capture, () => Nemotron.Id);
         await Assert.ThrowsAsync<MeetingRealTimeException>(() => session.StartAsync(Request));
         Assert.Equal([Nemotron], engine.Prepared);
-        Assert.False(capture.Started);
+        Assert.Empty(capture.Captures);
         Assert.False(session.IsActive);
         Assert.Null(session.State.SelectionNotice);
     }
@@ -138,7 +139,7 @@ public sealed class DiarizedMeetingSessionTests : IDisposable
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => session.StartAsync(Request));
         Assert.Contains("Nemotron 3 Diarization", error.Message);
         Assert.Empty(engine.Prepared);
-        Assert.False(capture.Started);
+        Assert.Empty(capture.Captures);
         Assert.False(session.IsActive);
     }
 
@@ -165,7 +166,7 @@ public sealed class DiarizedMeetingSessionTests : IDisposable
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => session.StartAsync(Request));
         Assert.Equal("Diarizer session failed after the ASR loaded.", error.Message);
         Assert.Equal([Nemotron], engine.Prepared);
-        Assert.False(capture.Started);
+        Assert.Empty(capture.Captures);
         Assert.False(session.IsActive);
         Assert.Equal(MeetingSessionPhase.Failed, session.State.Phase);
     }
@@ -178,8 +179,7 @@ public sealed class DiarizedMeetingSessionTests : IDisposable
         await using var session = Create(engine, capture);
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => session.StartAsync(Request));
         Assert.Equal("The public sample produced no speaker activity.", error.Message);
-        Assert.True(capture.Started);
-        Assert.True(capture.Released);
+        Assert.True(Assert.Single(capture.Captures).IsReleased);
         Assert.False(session.IsActive);
         Assert.Equal(MeetingSessionPhase.Failed, session.State.Phase);
     }
@@ -190,7 +190,7 @@ public sealed class DiarizedMeetingSessionTests : IDisposable
         var capture = new CaptureFactory();
         await using var session = Create(new([Nemotron, Diarizer]), capture, () => Kroko.Id);
         await Assert.ThrowsAsync<InvalidOperationException>(() => session.StartAsync(Request));
-        Assert.False(capture.Started);
+        Assert.Empty(capture.Captures);
         Assert.False(session.IsActive);
     }
 
@@ -198,12 +198,13 @@ public sealed class DiarizedMeetingSessionTests : IDisposable
     public async Task NativeSpeakerCorrectionsKeepTimesAndUpdateAudioSource()
     {
         var engine = new Engine([Nemotron, Diarizer]);
-        var capture = new CaptureFactory();
+        var input = Channel.CreateUnbounded<byte[]>();
+        var capture = new CaptureFactory { Create = () => new(input) };
         var store = new MeetingStore(_directory);
         await using var session = Create(engine, capture);
         await session.StartAsync(Request);
-        capture.ReportActivity(new(0, 16000, 0, 0.2));
-        await capture.Input.Writer.WriteAsync(new byte[32000]);
+        Assert.Single(capture.Captures).ReportActivity(new(0, 16000, 0, 0.2));
+        await input.Writer.WriteAsync(new byte[32000]);
         using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
             while (engine.ReadBytes < 32000) await Task.Delay(5, timeout.Token);
         engine.Report(new("Display text is not a speaker protocol.", false, "Hello")
@@ -294,33 +295,5 @@ public sealed class DiarizedMeetingSessionTests : IDisposable
             _last = update;
         }
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
-    }
-
-    private sealed class CaptureFactory : IMeetingCaptureFactory
-    {
-        private Capture? _capture;
-        public Channel<byte[]> Input { get; } = Channel.CreateUnbounded<byte[]>();
-        public bool Started { get; private set; }
-        public bool Released => _capture?.IsReleased == true;
-        public void ReportActivity(MeetingAudioActivity activity) => _capture!.ReportActivity(activity);
-        public Task<IAudioCapture> StartAsync(MeetingCaptureRequest request, CancellationToken token)
-        {
-            Started = true;
-            _capture = new(Input);
-            return Task.FromResult<IAudioCapture>(_capture);
-        }
-    }
-
-    private sealed class Capture(Channel<byte[]> input) : IAudioCapture, IMeetingAudioSourceMetadata
-    {
-        public ChannelReader<byte[]> Audio => input.Reader;
-        public long ClockSamplePosition => 0;
-        public double CapturedSeconds => 0;
-        public bool IsReleased { get; private set; }
-        public event Action<MeetingAudioActivity>? Activity;
-        public void ReportActivity(MeetingAudioActivity activity) => Activity?.Invoke(activity);
-        public event Action<double>? LevelChanged { add { } remove { } }
-        public Task StopAsync() { input.Writer.TryComplete(); IsReleased = true; return Task.CompletedTask; }
-        public ValueTask DisposeAsync() { IsReleased = true; return ValueTask.CompletedTask; }
     }
 }

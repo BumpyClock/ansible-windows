@@ -2,13 +2,19 @@ using System.Diagnostics;
 
 namespace Ansible.Core.Windows;
 
-internal sealed record MeetingCapturePacket(byte[] Pcm, ulong QpcPosition100Nanoseconds, ulong DevicePosition);
+internal sealed record MeetingCapturePacket(byte[] Pcm, ulong QpcPosition100Nanoseconds, ulong DevicePosition, uint Flags = 0)
+{
+    internal const uint Discontinuity = 1, Silent = 2, TimestampError = 4;
+}
 
 internal sealed class MeetingPacketClock
 {
     private long _nextSample = -1;
     private ulong _lastDevicePosition;
+    private int _lastSamples;
     private bool _hasPacket;
+    internal long? ExpectedSample => _hasPacket ? _nextSample : null;
+    internal ulong? PreviousDevicePosition => _hasPacket ? _lastDevicePosition : null;
     internal long Map(long timestampSample, ulong devicePosition, int samples)
     {
         var start = timestampSample;
@@ -16,13 +22,15 @@ internal sealed class MeetingPacketClock
         {
             if (devicePosition != 0 && _lastDevicePosition != 0 && devicePosition < _lastDevicePosition)
                 throw new IOException("Meeting capture returned a regressing device position.");
-            var difference = timestampSample - _nextSample;
-            // QPC correlation is not sample-exact after shared-mode conversion. Keep small jitter contiguous.
-            var tolerance = 80;
-            if (Math.Abs(difference) <= tolerance) start = _nextSample;
+            // Some devices report native-rate positions. Use the counter only when it advances by the PCM packet length.
+            if (devicePosition > _lastDevicePosition && devicePosition - _lastDevicePosition == (ulong)_lastSamples)
+                start = _nextSample;
+            else if (Math.Abs(timestampSample - _nextSample) <= 80)
+                start = _nextSample;
         }
         _nextSample = checked(start + samples);
         _lastDevicePosition = devicePosition;
+        _lastSamples = samples;
         _hasPacket = true;
         return start;
     }
@@ -45,7 +53,12 @@ internal sealed class MeetingPacketTimeline
     private long _cursor;
     private long _lastEnd = -1;
 
-    internal MeetingPacketTimeline() => Array.Fill(_positions, -1);
+    internal MeetingPacketTimeline(long cursor = 0)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(cursor);
+        _cursor = cursor;
+        Array.Fill(_positions, -1);
+    }
     internal long Cursor => _cursor;
 
     internal void Add(long start, ReadOnlySpan<byte> pcm, long clockPosition)
@@ -62,11 +75,13 @@ internal sealed class MeetingPacketTimeline
             if (Math.Abs(start - _lastEnd) <= 1) start = _lastEnd;
         }
         var end = checked(start + count);
-        if (end <= 0) return;
-        if (start < 0)
+        // A source that joins mid-meeting may deliver its first packet slightly before audio already emitted.
+        var floor = _lastEnd < 0 ? _cursor : 0;
+        if (end <= floor) return;
+        if (start < floor)
         {
-            pcm = pcm[checked((int)-start * 2)..];
-            start = 0;
+            pcm = pcm[checked((int)(floor - start) * 2)..];
+            start = floor;
             count = pcm.Length / 2;
         }
         if (start < _cursor) throw new IOException("Meeting capture delivered audio after its timestamp had already been emitted.");
@@ -82,15 +97,19 @@ internal sealed class MeetingPacketTimeline
         _lastEnd = end;
     }
 
-    internal byte[] Read(int count)
+    internal byte[] Read(int count) => Read(count, out _);
+
+    internal byte[] Read(int count, out int capturedSamples)
     {
         if (count is < 1 or > CapacitySamples) throw new ArgumentOutOfRangeException(nameof(count));
+        capturedSamples = 0;
         var pcm = new byte[count * 2];
         for (var index = 0; index < count; index++)
         {
             var position = _cursor + index;
             var slot = (int)(position % CapacitySamples);
             if (_positions[slot] != position) continue;
+            capturedSamples++;
             var sample = _samples[slot];
             pcm[index * 2] = (byte)sample;
             pcm[index * 2 + 1] = (byte)(sample >> 8);
