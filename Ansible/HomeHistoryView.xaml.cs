@@ -46,11 +46,15 @@ public sealed partial class HomeHistoryView : UserControl
     /// </summary>
     internal void Render(HomeHistoryViewModel model, bool animate)
     {
-        HistoryCount.Text = $"{model.TodayCount:N0} {(model.TodayCount == 1 ? "dictation" : "dictations")} today";
-        OversizedNotice.Text = $"A transcript over {HomeDictationHistory.MaximumCharacters:N0} characters stays in the current result and is not added to session history.";
+        var count = model.AllOperationIds.Count;
+        HistoryCountPill.Text = $"{count:N0} {(count == 1 ? "transcription" : "transcriptions")}";
+        HistoryStorageWarning.Message = model.StorageError ?? "";
+        HistoryStorageWarning.IsOpen = model.StorageError is not null;
+        HistoryStorageWarning.Visibility = model.StorageError is null ? Visibility.Collapsed : Visibility.Visible;
+        OversizedNotice.Text = $"A transcript over {HomeDictationHistory.MaximumCharacters:N0} characters stays in the current result and is not added to saved history.";
         OversizedNotice.Visibility = model.OversizedCurrentResult ? Visibility.Visible : Visibility.Collapsed;
         EmptyState.Visibility = model.HasMatches ? Visibility.Collapsed : Visibility.Visible;
-        EmptyTitle.Text = model.HasHistory ? "No matching transcripts." : "No completed dictations in this app session.";
+        EmptyTitle.Text = model.HasHistory ? "No matching transcripts." : "No saved transcriptions yet.";
         EmptyDetail.Text = model.HasHistory ? "Try a different search." : "Choose Dictate to start your history.";
         HistoryContent.VerticalAlignment = model.HasMatches ? VerticalAlignment.Stretch : VerticalAlignment.Center;
         animate &= HistoryRows.Children.Count > 0;
