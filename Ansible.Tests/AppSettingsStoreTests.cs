@@ -11,6 +11,67 @@ public sealed class AppSettingsStoreTests : IDisposable
     private AppSettingsStore CreateStore() => new(Path.Combine(_directory, "settings.json"));
 
     [Fact]
+    public void FreshInstallShowsWelcomeAndCompletionSurvivesRestart()
+    {
+        var store = CreateStore();
+        Assert.False(store.Load().WelcomeCompleted);
+        store.Save(new AppSettings { WelcomeCompleted = true, CollectUsage = false });
+        Assert.True(CreateStore().Load().WelcomeCompleted);
+        Assert.False(CreateStore().Load().CollectUsage);
+    }
+
+    [Fact]
+    public void ExistingInstallKeepsItsShortcutAndDoesNotForceWelcome()
+    {
+        var store = CreateStore();
+        store.Save(new AppSettings { Shortcut = new(0, 0x78), CollectUsage = false });
+        var document = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(store.Path))!.AsObject();
+        Assert.True(document.Remove("WelcomeCompleted"));
+        File.WriteAllText(store.Path, document.ToJsonString());
+
+        var settings = store.Load();
+        Assert.True(settings.WelcomeCompleted);
+        Assert.Equal(new DictationShortcut(0, 0x78), settings.Shortcut);
+        Assert.False(settings.CollectUsage);
+    }
+
+    [Fact]
+    public void CleanupPreferencesRoundTripWithoutCredentialsOrDerivedOptions()
+    {
+        var cleanup = new MeetingCleanupSettings { Automatic = true, Provider = MeetingCleanupProvider.OpenAI,
+            CopilotModel = "copilot-model", CopilotReasoningEffort = "low",
+            OpenAIModel = "api-model", OpenAIReasoningEffort = "medium" };
+        var store = CreateStore();
+        store.Save(new() { MeetingCleanup = cleanup });
+        Assert.Equal(cleanup, store.Load().MeetingCleanup);
+        var json = File.ReadAllText(store.Path);
+        Assert.DoesNotContain("ApiKey", json);
+        Assert.DoesNotContain("Options", json);
+        Assert.Contains("\"OpenAI\"", json);
+    }
+
+    [Fact]
+    public void OlderSettingsDoNotOptIntoAutomaticUploads()
+    {
+        var store = CreateStore();
+        store.Save(new());
+        var document = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(store.Path))!.AsObject();
+        Assert.True(document.Remove("MeetingCleanup"));
+        File.WriteAllText(store.Path, document.ToJsonString());
+        Assert.False(store.Load().MeetingCleanup.Automatic);
+        Assert.Equal("gpt-6-luna", store.Load().MeetingCleanup.CopilotModel);
+    }
+
+    [Fact]
+    public void AutomaticOpenAIRequiresModelAndInvalidProvidersAreRejected()
+    {
+        Assert.Throws<ArgumentException>(() => CreateStore().Save(new() { MeetingCleanup = new()
+            { Automatic = true, Provider = MeetingCleanupProvider.OpenAI } }));
+        Assert.Throws<InvalidDataException>(() => CreateStore().Save(new() { MeetingCleanup = new()
+            { Provider = (MeetingCleanupProvider)99 } }));
+    }
+
+    [Fact]
     public void MissingSettingsUseDefaultsWithoutCreatingAFile()
     {
         var store = CreateStore();
