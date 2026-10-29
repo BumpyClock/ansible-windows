@@ -237,9 +237,7 @@ public sealed partial class HomeHistoryView : UserControl
 
     private Button CreateIconButton(FontIcon icon)
     {
-        var button = new Button { Style = AppStyle("IconButtonStyle"), Content = icon };
-        PageCanvas.ApplyBrandInteractionBrushes(button, "ButtonBackgroundPointerOver", "ButtonBackgroundPressed");
-        return button;
+        return new Button { Style = AppStyle("IconButtonStyle"), Content = icon };
     }
 
     private void UpdateRowState(HistoryRowView row)

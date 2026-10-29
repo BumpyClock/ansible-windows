@@ -26,7 +26,6 @@ public sealed partial class ModelCard : UserControl
     public ModelCard()
     {
         InitializeComponent();
-        ApplyIconButtonBrushes();
         Loaded += OnLoaded;
         ActualThemeChanged += OnThemeChanged;
     }
@@ -195,17 +194,7 @@ public sealed partial class ModelCard : UserControl
 
     private void OnLoaded(object sender, RoutedEventArgs e) => ApplyIcon();
 
-    private void OnThemeChanged(FrameworkElement sender, object args)
-    {
-        ApplyIcon();
-        ApplyIconButtonBrushes();
-    }
-
-    private void ApplyIconButtonBrushes()
-    {
-        foreach (var button in new[] { RemoveButton, DetailsButton })
-            PageCanvas.ApplyBrandInteractionBrushes(button, "ButtonBackgroundPointerOver", "ButtonBackgroundPressed");
-    }
+    private void OnThemeChanged(FrameworkElement sender, object args) => ApplyIcon();
 
     // Cards are borderless tonal layers: hover and keyboard focus lift the fill, and the in-use card keeps its accent outline.
     // High Contrast has no tonal fill to lift, so it strengthens the outline instead. The border is always 1.5 px so

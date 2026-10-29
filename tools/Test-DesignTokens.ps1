@@ -154,6 +154,8 @@ $highContrastBrushAliases = @{
     'AppSegmentSelectedBrush' = 'SystemColorHighlightColor'
     'AppSelectedTextBrush' = 'SystemColorHighlightTextColor'
     'AppSelectedIconBrush' = 'SystemColorHighlightTextColor'
+    'ButtonBackgroundPointerOver' = 'SystemColorHighlightTextColor'
+    'ButtonBackgroundPressed' = 'SystemColorHighlightTextColor'
 }
 $highContrastNode = $tokenDocument.SelectSingleNode("//*[local-name()='ResourceDictionary' and @x:Key='HighContrast']", $namespaceManager)
 foreach ($alias in $highContrastBrushAliases.GetEnumerator()) {
@@ -187,6 +189,15 @@ foreach ($themeName in @('Light', 'Dark')) {
 }
 
 $appContent = Get-Content -LiteralPath $appPath -Raw
+foreach ($file in @((Get-Item -LiteralPath $tokenPath)) + $xamlFiles) {
+    $content = Get-Content -LiteralPath $file.FullName -Raw
+    foreach ($reference in [regex]::Matches($content, '\{StaticResource\s+([A-Za-z_][A-Za-z0-9_]*)\}')) {
+        $key = $reference.Groups[1].Value
+        if ($key -match '(CornerRadius|Padding|Margin|Spacing|Threshold|Width|Height|Gap|Size|Thickness|FontSize|LineHeight)$') {
+            Assert-Condition ($tokenKeySet.Contains($key)) "$($file.FullName): layout token '$key' is missing from DesignTokens.xaml."
+        }
+    }
+}
 foreach ($key in @('LayerFillColorDefaultBrush', 'LayerFillColorAltBrush', 'LayerFillColorDisabledBrush',
     'CardBackgroundFillColorDefaultBrush', 'CardBackgroundFillColorSecondaryBrush',
     'CardBackgroundFillColorTertiaryBrush', 'CardStrokeColorDefaultBrush', 'AcrylicInAppFillColorDefaultBrush')) {

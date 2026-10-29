@@ -6,16 +6,6 @@
              PointerEntered="CardPointerEntered" PointerExited="CardPointerExited" PointerCanceled="CardPointerExited"
              GotFocus="CardGotFocus" LostFocus="CardLostFocus">
     <UserControl.Resources>
-        <!-- Transparent at rest; the default Button template supplies the hover and pressed fills. -->
-        <Style x:Key="IconButtonStyle" TargetType="Button">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Padding" Value="0" />
-            <Setter Property="Width" Value="32" />
-            <Setter Property="Height" Value="32" />
-            <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
-        </Style>
         <Style x:Key="DetailLabelStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
             <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
         </Style>

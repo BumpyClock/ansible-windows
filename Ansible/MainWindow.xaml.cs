@@ -104,7 +104,6 @@ public sealed partial class MainWindow : Window
         };
         AppWindow.Closing += CloseRequested;
         Closed += WindowClosed;
-        ApplyNavigationInteractionBrushes();
         AddNoticeShowAnimations();
         Navigate("dictation");
         _observer = new UiSessionObserver(session, DispatcherQueue, SessionChanged);
@@ -253,21 +252,6 @@ public sealed partial class MainWindow : Window
 
     private Button[] NavigationButtons => [DictationNav, MeetingsNav, ModelsNav, CustomWordsNav, SettingsNav];
 
-    // NavigationButtonStyle is transparent at rest; per-instance keys give hover and press the brand surfaces.
-    // The current page keeps its active surface under the pointer: dropping to the lighter hover tint reads as
-    // deselection in the light theme.
-    private void ApplyNavigationInteractionBrushes()
-    {
-        var resources = Application.Current.Resources;
-        var selectedStyle = (Style)resources["SelectedNavigationButtonStyle"];
-        foreach (var button in NavigationButtons)
-        {
-            var selected = ReferenceEquals(button.Style, selectedStyle);
-            button.Resources["ButtonBackgroundPointerOver"] = resources[selected ? "AppActiveBrush" : "AppHoverBrush"];
-            button.Resources["ButtonBackgroundPressed"] = resources["AppActiveBrush"];
-        }
-    }
-
     // Notices toggle Visibility rather than joining the panel, so an implicit show animation lets them rise into
     // place instead of popping. Skipped when Windows animations are off.
     private void AddNoticeShowAnimations()
@@ -347,7 +331,6 @@ public sealed partial class MainWindow : Window
             AutomationProperties.SetHelpText(button, selected ? "Current page" : "");
             AutomationProperties.SetItemStatus(button, selected ? "Current page" : "");
         }
-        ApplyNavigationInteractionBrushes();
     }
 
     private void ShellThemeChanged(FrameworkElement sender, object args)
@@ -355,7 +338,6 @@ public sealed partial class MainWindow : Window
         DispatcherQueue.TryEnqueue(() =>
         {
             if (_closed || AppTitleBar is null) return;
-            ApplyNavigationInteractionBrushes();
             AppWindow.TitleBar.ButtonForegroundColor = ((SolidColorBrush)AppTitleBar.Foreground).Color;
             AppWindow.TitleBar.ButtonInactiveForegroundColor = ((SolidColorBrush)ShellRoot.BorderBrush).Color;
         });

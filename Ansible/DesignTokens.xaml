@@ -80,7 +80,11 @@
             <SolidColorBrush x:Key="AppControlBrush" Color="{StaticResource AppControlColor}" />
             <SolidColorBrush x:Key="AppBorderBrush" Color="{StaticResource AppBorderColor}" />
             <SolidColorBrush x:Key="AppHoverBrush" Color="{StaticResource AppHoverColor}" />
+            <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="{StaticResource AppHoverColor}" />
+            <SolidColorBrush x:Key="ListViewItemBackgroundPointerOver" Color="{StaticResource AppHoverColor}" />
             <SolidColorBrush x:Key="AppActiveBrush" Color="{StaticResource AppActiveColor}" />
+            <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="{StaticResource AppActiveColor}" />
+            <SolidColorBrush x:Key="ListViewItemBackgroundPressed" Color="{StaticResource AppActiveColor}" />
             <SolidColorBrush x:Key="AppSearchBrush" Color="{StaticResource AppSearchColor}" />
             <SolidColorBrush x:Key="AppTextBrush" Color="{StaticResource AppTextColor}" />
             <SolidColorBrush x:Key="AppSecondaryTextBrush" Color="{StaticResource AppSecondaryTextColor}" />
@@ -223,7 +227,11 @@
             <SolidColorBrush x:Key="AppControlBrush" Color="{StaticResource AppControlColor}" />
             <SolidColorBrush x:Key="AppBorderBrush" Color="{StaticResource AppBorderColor}" />
             <SolidColorBrush x:Key="AppHoverBrush" Color="{StaticResource AppHoverColor}" />
+            <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="{StaticResource AppHoverColor}" />
+            <SolidColorBrush x:Key="ListViewItemBackgroundPointerOver" Color="{StaticResource AppHoverColor}" />
             <SolidColorBrush x:Key="AppActiveBrush" Color="{StaticResource AppActiveColor}" />
+            <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="{StaticResource AppActiveColor}" />
+            <SolidColorBrush x:Key="ListViewItemBackgroundPressed" Color="{StaticResource AppActiveColor}" />
             <SolidColorBrush x:Key="AppSearchBrush" Color="{StaticResource AppSearchColor}" />
             <SolidColorBrush x:Key="AppTextBrush" Color="{StaticResource AppTextColor}" />
             <SolidColorBrush x:Key="AppSecondaryTextBrush" Color="{StaticResource AppSecondaryTextColor}" />
@@ -299,7 +307,9 @@
             <SolidColorBrush x:Key="AppControlBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
             <SolidColorBrush x:Key="AppBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="AppHoverBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="{ThemeResource SystemColorHighlightTextColor}" />
             <SolidColorBrush x:Key="AppActiveBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="{ThemeResource SystemColorHighlightTextColor}" />
             <SolidColorBrush x:Key="AppSearchBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
             <SolidColorBrush x:Key="AppTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="AppSecondaryTextBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
@@ -651,22 +661,6 @@
         <Setter Property="Foreground" Value="{ThemeResource AppSecondaryTextBrush}" />
         <Setter Property="TextAlignment" Value="Center" />
     </Style>
-    <Style x:Key="NavigationButtonStyle" TargetType="Button">
-        <Setter Property="HorizontalAlignment" Value="Stretch" />
-        <Setter Property="HorizontalContentAlignment" Value="Left" />
-        <Setter Property="Background" Value="Transparent" />
-        <Setter Property="Foreground" Value="{ThemeResource AppSecondaryTextBrush}" />
-        <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
-        <Setter Property="Padding" Value="12,0" />
-        <Setter Property="MinHeight" Value="{StaticResource NavHeight}" />
-        <Setter Property="FontSize" Value="{StaticResource BodyFontSize}" />
-        <Setter Property="UseSystemFocusVisuals" Value="True" />
-    </Style>
-    <Style x:Key="SelectedNavigationButtonStyle" TargetType="Button" BasedOn="{StaticResource NavigationButtonStyle}">
-        <Setter Property="Background" Value="{ThemeResource AppActiveBrush}" />
-        <Setter Property="Foreground" Value="{ThemeResource AppSelectedTextBrush}" />
-    </Style>
     <Style x:Key="KeycapStyle" TargetType="Border">
         <Setter Property="Background" Value="{ThemeResource AppControlBrush}" />
         <Setter Property="BorderBrush" Value="{ThemeResource AppKeyBorderBrush}" />
@@ -706,7 +700,7 @@
         <Setter Property="Background" Value="{ThemeResource LayerFillColorDefaultBrush}" />
         <Setter Property="BorderBrush" Value="{ThemeResource AppCardStrokeBrush}" />
         <Setter Property="BorderThickness" Value="{StaticResource CardBorderThickness}" />
-        <Setter Property="CornerRadius" Value="{StaticResource PanelCornerRadius}" />
+        <Setter Property="CornerRadius" Value="{StaticResource CardCornerRadius}" />
     </Style>
     <Style x:Key="CardStyle" TargetType="Border">
         <Setter Property="Background" Value="{ThemeResource LayerFillColorDefaultBrush}" />
@@ -752,15 +746,6 @@
         <Setter Property="Width" Value="{StaticResource IconSize}" />
         <Setter Property="Height" Value="{StaticResource IconSize}" />
         <Setter Property="Foreground" Value="{ThemeResource AppSecondaryTextBrush}" />
-    </Style>
-    <Style x:Key="NavigationIconStyle" TargetType="Path">
-        <Setter Property="Width" Value="{StaticResource IconSize}" />
-        <Setter Property="Height" Value="{StaticResource IconSize}" />
-        <Setter Property="Stretch" Value="Uniform" />
-        <Setter Property="Fill" Value="{ThemeResource AppSecondaryTextBrush}" />
-    </Style>
-    <Style x:Key="SelectedNavigationIconStyle" TargetType="Path" BasedOn="{StaticResource NavigationIconStyle}">
-        <Setter Property="Fill" Value="{ThemeResource AppSelectedIconBrush}" />
     </Style>
 
     <Style x:Key="SegmentedListBoxStyle" TargetType="ListBox">
@@ -938,9 +923,8 @@
         <Setter Property="Foreground" Value="{ThemeResource AppTagBrush}" />
         <Setter Property="TextWrapping" Value="NoWrap" />
     </Style>
-    <!-- Transparent at rest. Hover and pressed fills come from the default Button template; give each
-         instance ButtonBackgroundPointerOver = AppHoverBrush and ButtonBackgroundPressed = AppActiveBrush
-         in its Resources (code or XAML) to use the brand surfaces instead of the Fluent greys. -->
+    <!-- Transparent at rest. The default Button template resolves hover and pressed fills
+         from the theme dictionaries above, including the platform High Contrast pairing. -->
     <Style x:Key="IconButtonStyle" TargetType="Button">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Foreground" Value="{ThemeResource AppSecondaryTextBrush}" />

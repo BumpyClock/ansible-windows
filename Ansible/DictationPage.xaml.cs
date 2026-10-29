@@ -227,17 +227,14 @@ public sealed partial class DictationPage : Page
         return (Style)resource;
     }
 
-    private void CompactDictateCardSizeChanged(object sender, SizeChangedEventArgs args)
+    private void DictateControlSizeChanged(object sender, SizeChangedEventArgs args)
     {
         UpdateShortcutLayout();
-        RequestHomeColumnsHeight();
     }
 
     private void UpdateShortcutLayout()
     {
-        var padding = HomeViewport.ContentPadding;
-        var width = HomeViewport.ActualWidth - padding.Left - padding.Right;
-        var stackedHelper = width < (double)Application.Current.Resources["ShortcutStackThreshold"];
+        var stackedHelper = HomeViewport.ContentWidth < (double)Application.Current.Resources["ShortcutStackThreshold"];
         Grid.SetRow(ShortcutButtons, stackedHelper ? 1 : 0);
         Grid.SetColumn(ShortcutButtons, stackedHelper ? 0 : 1);
         Grid.SetColumnSpan(ShortcutButtons, stackedHelper ? 2 : 1);
@@ -250,8 +247,6 @@ public sealed partial class DictationPage : Page
         HomeColumns.RowDefinitions.Clear();
         if (narrow)
         {
-            HomeColumns.ClearValue(FrameworkElement.HeightProperty);
-            HomeColumns.ClearValue(FrameworkElement.MinHeightProperty);
             HomeColumns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             HomeColumns.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             HomeColumns.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -265,41 +260,10 @@ public sealed partial class DictationPage : Page
             HomeColumns.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
             Grid.SetColumn(HomeInsightsColumn, 1);
             Grid.SetRow(HomeInsightsColumn, 0);
-            RequestHomeColumnsHeight();
         }
     }
 
-    private void HomeViewportSizeChanged(object sender, SizeChangedEventArgs args)
-    {
-        UpdateShortcutLayout();
-        UpdateHomeColumnsHeight(HomeViewport.ViewportHeight);
-    }
-
-    private void StatusInfoSizeChanged(object sender, SizeChangedEventArgs args) => RequestHomeColumnsHeight();
-
-    private void RequestHomeColumnsHeight()
-    {
-        if (!IsLoaded) { return; }
-        DispatcherQueue.TryEnqueue(() => UpdateHomeColumnsHeight(HomeViewport.ViewportHeight));
-    }
-
-    private void UpdateHomeColumnsHeight(double viewportHeight)
-    {
-        if (viewportHeight <= 0 || HomeColumns.ActualWidth < (double)Application.Current.Resources["HomeColumnsStackThreshold"]) { return; }
-        var padding = HomeViewport.ContentPadding;
-        var effectiveViewportHeight = HomeViewport.ViewportHeight > 0 ? HomeViewport.ViewportHeight : viewportHeight;
-        var spacing = (double)Application.Current.Resources["PageSectionSpacing"];
-        var statusVisible = StatusInfo.Visibility == Visibility.Visible;
-        var precedingSpacing = spacing * (statusVisible ? 1 : 0);
-        var available = effectiveViewportHeight - padding.Top - padding.Bottom - HomeViewport.HeaderHeight - precedingSpacing -
-            (statusVisible ? StatusInfo.ActualHeight : 0);
-        if (available > 0 && (double.IsNaN(HomeColumns.MinHeight) || Math.Abs(HomeColumns.MinHeight - available) > 0.5))
-        {
-            HomeColumns.ClearValue(FrameworkElement.HeightProperty);
-            if (double.IsNaN(HomeColumns.MinHeight) || Math.Abs(HomeColumns.MinHeight - available) > 0.5)
-                HomeColumns.MinHeight = available;
-        }
-    }
+    private void HomeViewportSizeChanged(object sender, SizeChangedEventArgs args) => UpdateShortcutLayout();
 
     private void RenderRecordControl()
     {

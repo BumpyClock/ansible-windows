@@ -4,6 +4,8 @@
 
 - Share page titles, subtitles, responsive action placement, and content bounds
   through `PageCanvas`. Remove page-specific header grids and breakpoint logic.
+- Resolve hover and pressed colors through themed XAML resources so controls
+  follow their window's appearance, including the light-theme preview.
 - Use Mica beneath the shell and meeting content, native translucent content
   and card layers, and native Acrylic flyouts. Preserve platform material and
   accessibility fallbacks instead of replacing them with opaque palette copies.

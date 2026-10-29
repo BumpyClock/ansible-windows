@@ -127,6 +127,10 @@ semantic resources rather than palette literals. Brand roles are separate from
 light/dark surface roles. A future color scheme can replace those brand roles
 without rewriting page layouts. High Contrast uses Windows system colors.
 The existing Windows font is retained.
+`NavigationStyles.xaml` owns shared sidebar button and icon styles. Its selected
+button template keeps the current page visible during hover and press. Control
+interaction colors resolve through themed XAML resources, not copied brushes
+from the application's current theme.
 
 Every page renders into `PageCanvas`. This component owns the shared title,
 subtitle, responsive header actions, content width, padding, scroll bounds, and

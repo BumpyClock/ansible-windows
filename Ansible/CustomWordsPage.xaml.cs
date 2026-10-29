@@ -30,8 +30,6 @@ public sealed partial class CustomWordsPage : Page
         _state = session.State;
         InitializeComponent();
         WordsList.ItemsSource = _words;
-        ApplyRowBrushes();
-        ActualThemeChanged += (_, _) => ApplyRowBrushes();
         Loaded += (_, _) => _observer = new UiSessionObserver(session, DispatcherQueue, state =>
         {
             _state = state;
@@ -255,9 +253,6 @@ public sealed partial class CustomWordsPage : Page
     }
 
     private void ModelsClicked(object sender, RoutedEventArgs args) => _openModels();
-
-    private void ApplyRowBrushes() =>
-        PageCanvas.ApplyBrandInteractionBrushes(WordsList, "ListViewItemBackgroundPointerOver", "ListViewItemBackgroundPressed");
 
     // Like the Home history header, narrow pages move search under the title and count.
     private void DictionarySearchSizeChanged(object sender, SizeChangedEventArgs args)

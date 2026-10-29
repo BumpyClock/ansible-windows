@@ -42,7 +42,7 @@
             </ScrollViewer>
             <StackPanel x:Name="EmptyState" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="10" MaxWidth="400">
                 <TextBlock x:Name="EmptyTitle" Text="Ready when you are" Style="{StaticResource SubtitleTextBlockStyle}" TextAlignment="Center"/>
-                <TextBlock x:Name="EmptyDescription" Text="Choose your meeting app below. Speaker-labelled text will appear here as you talk." Style="{StaticResource PageSubtitleStyle}" TextAlignment="Center"/>
+                <TextBlock x:Name="EmptyDescription" Text="Start the meeting to see speaker-labelled text here." Style="{StaticResource PageSubtitleStyle}" TextAlignment="Center"/>
             </StackPanel>
         </Grid>
         <Border Grid.Row="4" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" BorderThickness="0,1,0,0" Padding="32,20,32,24">

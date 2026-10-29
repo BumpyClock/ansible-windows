@@ -22,7 +22,6 @@ public sealed partial class PageCanvas : UserControl
     public string Title { get => (string)GetValue(TitleProperty); set => SetValue(TitleProperty, value); }
     public string Subtitle { get => (string)GetValue(SubtitleProperty); set => SetValue(SubtitleProperty, value); }
     public UIElementCollection HeaderActions => HeaderActionsPanel.Children;
-    public double HeaderHeight => HeaderLayout.ActualHeight + HeaderLayout.Margin.Top + HeaderLayout.Margin.Bottom;
 
     public UIElement? PageContent
     {
@@ -36,17 +35,7 @@ public sealed partial class PageCanvas : UserControl
         set { _scrollable = value; UpdateLayoutBounds(); }
     }
 
-    public Thickness ContentPadding => ContentHost.Padding;
-    public double ContentWidth => Math.Max(0, ContentHost.ActualWidth - ContentPadding.Left - ContentPadding.Right);
-    public double ViewportHeight => Viewport.ActualHeight;
-
-    // Control-template interaction brushes must be reapplied when the element's theme changes.
-    internal static void ApplyBrandInteractionBrushes(FrameworkElement element, string pointerOverKey, string pressedKey)
-    {
-        var resources = Application.Current.Resources;
-        element.Resources[pointerOverKey] = resources["AppHoverBrush"];
-        element.Resources[pressedKey] = resources["AppActiveBrush"];
-    }
+    public double ContentWidth => Math.Max(0, ContentHost.ActualWidth - ContentHost.Padding.Left - ContentHost.Padding.Right);
 
     private void ViewportSizeChanged(object sender, SizeChangedEventArgs args)
     {
@@ -91,12 +80,12 @@ public sealed partial class PageCanvas : UserControl
         var width = Math.Min(Viewport.ActualWidth, (double)resources["PageContentMaxWidth"]);
         ContentHost.Padding = (Thickness)resources[width < (double)resources["CompactPageThreshold"]
             ? "CompactPagePadding" : "PagePadding"];
-        var boundedPageHeight = Math.Max(ViewportHeight, (double)resources["BoundedPageMinHeight"]);
-        var canScroll = _scrollable || boundedPageHeight > ViewportHeight;
+        var boundedPageHeight = Math.Max(Viewport.ActualHeight, (double)resources["BoundedPageMinHeight"]);
+        var canScroll = _scrollable || boundedPageHeight > Viewport.ActualHeight;
         Viewport.VerticalScrollBarVisibility = canScroll ? ScrollBarVisibility.Auto : ScrollBarVisibility.Disabled;
         Viewport.VerticalScrollMode = canScroll ? ScrollMode.Auto : ScrollMode.Disabled;
         // Full-page flows retain bottom padding. Bounded lists receive a finite viewport and own their scrolling.
         ContentHost.Height = _scrollable ? double.NaN : boundedPageHeight;
-        ContentHost.MinHeight = _scrollable ? ViewportHeight : 0;
+        ContentHost.MinHeight = _scrollable ? Viewport.ActualHeight : 0;
     }
 }

@@ -160,14 +160,17 @@ public sealed partial class MeetingWindow : Window
         DelayText.Visibility = state.PendingSeconds >= 10 ? Visibility.Visible : Visibility.Collapsed;
         DelayText.Text = $"{FormatTime(state.PendingSeconds)} of captured audio awaiting transcription";
         SaveText.Text = "Text saves automatically";
-        EmptyTitle.Text = retryStart ? "Meeting could not start" : preparing ? "Preparing local transcription" : finishing ? "Finishing your meeting" : active ? "Listening for your conversation" : _document is not null ? "No speech transcribed" : "Ready when you are";
-        EmptyDescription.Text = state.Phase == MeetingSessionPhase.Paused
-            ? "Capture is paused. Resume to continue this meeting."
-            : finishing ? "Captured speech is being finalized locally. Speaker corrections preserve the recognized wording."
-            : active ? "Text appears as each chunk is recognized. Speaker labels may be revised."
-            : retryStart ? "Resolve the error above, check your audio source, then try again."
-            : _document is not null ? "This meeting has no recognized speech. Saved text stays on this device."
-            : "Choose your meeting app below. Speaker-labelled text will appear here as you talk.";
+        (EmptyTitle.Text, EmptyDescription.Text) = state.Phase switch
+        {
+            MeetingSessionPhase.Starting => ("Preparing local transcription", "The meeting will begin when local transcription is ready."),
+            MeetingSessionPhase.Paused => ("Meeting paused", "Capture is paused. Resume to continue this meeting."),
+            MeetingSessionPhase.Recording => ("Listening for your conversation", "Text appears as each chunk is recognized. Speaker labels may be revised."),
+            MeetingSessionPhase.Finishing or MeetingSessionPhase.Refining => ("Finishing your meeting", "Captured speech is being finalized locally. Speaker corrections preserve the recognized wording."),
+            MeetingSessionPhase.Failed when retryStart => ("Meeting could not start", "Resolve the error above, check your audio source, then try again."),
+            MeetingSessionPhase.Failed => ("Meeting stopped", "Review the error above. Text already transcribed stays saved on this device."),
+            MeetingSessionPhase.Completed => ("No speech transcribed", "This meeting has no recognized speech. Saved text stays on this device."),
+            _ => ("Ready when you are", "Start the meeting to see speaker-labelled text here.")
+        };
         // The notice lives for the whole meeting; open it once per text so a dismissal sticks.
         if (state.SelectionNotice != _shownNotice)
         {

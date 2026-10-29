@@ -14,11 +14,8 @@
                       Subtitle="Your dictations, kept in memory on this device for this session."
                       SizeChanged="HomeViewportSizeChanged">
         <local:PageCanvas.HeaderActions>
-            <Border x:Name="CompactDictateCard" Style="{StaticResource CardStyle}"
-                    SizeChanged="CompactDictateCardSizeChanged"
-                    HorizontalAlignment="Stretch" VerticalAlignment="Center"
-                    Padding="16,6,6,6" CornerRadius="{StaticResource PanelCornerRadius}">
-                <StackPanel Spacing="8">
+            <StackPanel x:Name="DictateControl" Spacing="8" VerticalAlignment="Center"
+                        SizeChanged="DictateControlSizeChanged">
                     <Grid x:Name="ShortcutControlGrid" ColumnSpacing="14" RowSpacing="8" VerticalAlignment="Center">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
@@ -59,15 +56,15 @@
                         </Grid>
                         <TextBlock x:Name="CompactStatusDetail" Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap" />
                     </StackPanel>
-                </StackPanel>
-            </Border>
+            </StackPanel>
         </local:PageCanvas.HeaderActions>
-        <StackPanel Spacing="{StaticResource PageSectionSpacing}">
+        <Grid>
+            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
             <InfoBar x:Name="StatusInfo" IsOpen="False" IsClosable="True" Visibility="Collapsed"
-                     SizeChanged="StatusInfoSizeChanged"
+                     Margin="{StaticResource PageSectionBottomMargin}"
                      Closing="StatusInfoClosing" Closed="StatusInfoClosed" />
 
-            <Grid x:Name="HomeColumns" ColumnSpacing="{StaticResource HomeCardGap}" RowSpacing="{StaticResource HomeSectionGap}" SizeChanged="HomeColumnsSizeChanged">
+            <Grid x:Name="HomeColumns" Grid.Row="1" ColumnSpacing="{StaticResource HomeCardGap}" RowSpacing="{StaticResource HomeSectionGap}" SizeChanged="HomeColumnsSizeChanged">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="2*" />
                     <ColumnDefinition Width="1*" />
@@ -76,7 +73,7 @@
                 <local:HomeHistoryView x:Name="HistoryView" Grid.Column="0" />
                 <local:HomeInsightsView x:Name="HomeInsightsColumn" Grid.Column="1" />
             </Grid>
-            <Border x:Name="TranscriptCard" Style="{StaticResource CardStyle}" MinHeight="160" Visibility="Collapsed">
+            <Border x:Name="TranscriptCard" Grid.Row="2" Margin="{StaticResource PageFooterTopMargin}" Style="{StaticResource CardStyle}" MinHeight="160" Visibility="Collapsed">
                 <Grid RowSpacing="8">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -113,6 +110,6 @@
                     </Grid>
                 </Grid>
             </Border>
-        </StackPanel>
+        </Grid>
     </local:PageCanvas>
 </Page>
