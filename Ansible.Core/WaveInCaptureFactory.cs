@@ -12,14 +12,21 @@ namespace Ansible.Core;
 public sealed class WaveInCaptureFactory : IAudioCaptureFactory
 {
     private readonly IWaveInApi _api;
+    private readonly Func<bool>? _diagnosticsEnabled;
 
     public WaveInCaptureFactory() : this(new WaveInApi()) { }
 
-    internal WaveInCaptureFactory(IWaveInApi api) => _api = api;
+    public WaveInCaptureFactory(LocalDiagnosticLog diagnostics) : this(new WaveInApi(), () => diagnostics.Enabled) { }
+
+    internal WaveInCaptureFactory(IWaveInApi api, Func<bool>? diagnosticsEnabled = null)
+    {
+        _api = api;
+        _diagnosticsEnabled = diagnosticsEnabled;
+    }
 
     public async Task<IAudioCapture> StartAsync(CancellationToken cancellationToken, int microphoneBoostDecibels = 0)
     {
-        var capture = new WaveInCapture(_api, new MicrophoneBoost(microphoneBoostDecibels));
+        var capture = new WaveInCapture(_api, new MicrophoneBoost(microphoneBoostDecibels), _diagnosticsEnabled?.Invoke() == true);
         try
         {
             await Task.Run(() => capture.Initialize(cancellationToken)).ConfigureAwait(false);
