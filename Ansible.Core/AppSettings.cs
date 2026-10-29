@@ -28,10 +28,12 @@ public sealed record AppSettings
     public string? ModelsDirectory { get; init; }
     public DictationShortcut Shortcut { get; init; } = DictationShortcut.Default;
     public bool PushToTalk { get; init; } = true;
+    public bool WelcomeCompleted { get; init; }
     public bool CollectUsage { get; init; } = true;
     public bool LocalDiagnostics { get; init; }
     public bool HideFromCapture { get; init; }
     public bool AutoDetectMeetings { get; init; } = true;
+    public MeetingCleanupSettings MeetingCleanup { get; init; } = new();
     /// <summary>Show the dictation overlay under the destination caret when Windows reports its position; otherwise at the bottom of the screen.</summary>
     public bool OverlayFollowsCaret { get; init; } = true;
     public string CustomDictionary { get; init; } = "";
@@ -45,6 +47,8 @@ public sealed record AppSettings
 
     public void Validate()
     {
+        if (MeetingCleanup is null) throw new InvalidDataException("Transcript cleanup settings are missing.");
+        MeetingCleanup.Validate();
         if (Language is null || CustomDictionary is null || ModelId is not null && string.IsNullOrWhiteSpace(ModelId) ||
             ModelsDirectory is not null && !Path.IsPathFullyQualified(ModelsDirectory) ||
             !Shortcut.IsValid || Backend is not NativeBackend.Auto and not NativeBackend.Cpu and not NativeBackend.Vulkan ||
