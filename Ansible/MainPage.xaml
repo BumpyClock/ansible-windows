@@ -35,7 +35,9 @@
         </Style>
     </Page.Resources>
 
-    <local:PageCanvas x:Name="SettingsCanvas">
+    <local:PageCanvas x:Name="SettingsCanvas"
+                      Title="Settings"
+                      Subtitle="Control how Ansible listens, recognizes speech, and protects your data.">
             <StackPanel Spacing="{StaticResource PageSectionSpacing}">
                 <!-- Groups slide when the InfoBar appears; theme transitions follow the Windows animation setting. -->
                 <StackPanel.ChildrenTransitions>
@@ -43,12 +45,6 @@
                         <RepositionThemeTransition IsStaggeringEnabled="False" />
                     </TransitionCollection>
                 </StackPanel.ChildrenTransitions>
-                <StackPanel Spacing="6">
-                    <TextBlock Text="Settings" Margin="0" Style="{StaticResource PageTitleStyle}" />
-                    <TextBlock Text="Control how Ansible listens, recognizes speech, and protects your data."
-                               Style="{StaticResource PageSubtitleStyle}" />
-                </StackPanel>
-
                 <!-- A closed InfoBar stays Visible and still takes stack spacing, so RenderNotice collapses it too. -->
                 <InfoBar x:Name="StatusInfo" IsOpen="False" IsClosable="True" Visibility="Collapsed" Closing="StatusInfoClosing" />
 

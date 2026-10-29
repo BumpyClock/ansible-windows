@@ -7,7 +7,24 @@
                       AutomationProperties.AutomationId="PageViewport" SizeChanged="ViewportSizeChanged">
             <Grid x:Name="ContentHost" MaxWidth="{StaticResource PageContentMaxWidth}"
                   Padding="{StaticResource PagePadding}">
-                <ContentControl x:Name="BodyHost" HorizontalContentAlignment="Stretch"
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <Grid x:Name="HeaderLayout" Margin="{StaticResource PageSectionBottomMargin}"
+                      SizeChanged="HeaderSizeChanged">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="0" /></Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <StackPanel x:Name="HeadingPanel" Spacing="6" VerticalAlignment="Center">
+                        <TextBlock x:Name="TitleText" Text="{x:Bind Title, Mode=OneWay}" Margin="0"
+                                   Style="{StaticResource PageTitleStyle}" AutomationProperties.HeadingLevel="Level1" />
+                        <TextBlock x:Name="SubtitleText" Text="{x:Bind Subtitle, Mode=OneWay}"
+                                   Style="{StaticResource PageSubtitleStyle}" />
+                    </StackPanel>
+                    <StackPanel x:Name="HeaderActionsPanel" Grid.Column="1" Orientation="Horizontal"
+                                Spacing="8" VerticalAlignment="Center" />
+                </Grid>
+                <ContentControl x:Name="BodyHost" Grid.Row="1" HorizontalContentAlignment="Stretch"
                                 VerticalContentAlignment="Stretch" IsTabStop="False" />
             </Grid>
         </ScrollViewer>

@@ -3,72 +3,46 @@
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:local="using:Ansible">
-    <local:PageCanvas>
+    <local:PageCanvas Title="Speech models">
+        <local:PageCanvas.HeaderActions>
+            <Button x:Name="TranscribeFileButton" MinHeight="32" Click="TranscribeFileClicked"
+                        AutomationProperties.AutomationId="TranscribeModelWavButton"
+                        AutomationProperties.Name="Transcribe a WAV file">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon Glyph="&#xE8E5;" FontSize="14" />
+                    <TextBlock Text="Transcribe WAV file…" />
+                </StackPanel>
+            </Button>
+            <Button x:Name="FolderMenuButton" MinHeight="32" VerticalAlignment="Center"
+                        AutomationProperties.AutomationId="ModelFolderButton"
+                        AutomationProperties.Name="Model folder and verification">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon Glyph="&#xE8B7;" FontSize="16" />
+                    <TextBlock Text="Model folder" />
+                </StackPanel>
+                <Button.Flyout>
+                    <Flyout>
+                        <StackPanel Spacing="12" MaxWidth="380">
+                            <TextBlock x:Name="FolderText" TextWrapping="Wrap" IsTextSelectionEnabled="True"
+                                       Style="{StaticResource SecondaryTextStyle}" />
+                            <StackPanel Spacing="12">
+                                <Button x:Name="FolderButton" Content="Choose folder" Click="ChooseFolderClicked"
+                                        MinHeight="40" AutomationProperties.AutomationId="ChooseModelFolder"
+                                        ToolTipService.ToolTip="Changing folders does not move or delete model files." />
+                                <Button x:Name="RefreshButton" Content="Verify installed files" Click="RefreshClicked"
+                                        IsEnabled="False" MinHeight="40" AutomationProperties.AutomationId="VerifyModelFiles" />
+                            </StackPanel>
+                            <TextBlock x:Name="BackendText" Style="{StaticResource CaptionSecondaryStyle}" />
+                        </StackPanel>
+                    </Flyout>
+                </Button.Flyout>
+            </Button>
+        </local:PageCanvas.HeaderActions>
         <StackPanel Spacing="{StaticResource PageSectionSpacing}">
-            <Grid x:Name="ModelHeader" ColumnSpacing="{StaticResource CardGap}" SizeChanged="ModelHeaderSizeChanged">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <StackPanel x:Name="ModelHeading" Spacing="6" VerticalAlignment="Center">
-                    <TextBlock x:Name="ModelPageTitle" Text="Speech models" Style="{StaticResource PageTitleStyle}" Margin="0"
-                               AutomationProperties.HeadingLevel="Level1" />
-                    <TextBlock Text="Download and choose the local speech models used for dictation and meetings."
-                               Style="{StaticResource PageSubtitleStyle}" />
-                </StackPanel>
-                <StackPanel x:Name="ModelHeaderActions" Grid.Column="1" Orientation="Horizontal"
-                            Spacing="8" VerticalAlignment="Center">
-                    <Button x:Name="TranscribeFileButton" MinHeight="32" Click="TranscribeFileClicked"
-                            AutomationProperties.AutomationId="TranscribeModelWavButton"
-                            AutomationProperties.Name="Transcribe a WAV file">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon Glyph="&#xE8E5;" FontSize="14" />
-                            <TextBlock Text="Transcribe WAV file…" />
-                        </StackPanel>
-                    </Button>
-                    <Button x:Name="FolderMenuButton" MinHeight="32" VerticalAlignment="Center"
-                            AutomationProperties.AutomationId="ModelFolderButton"
-                            AutomationProperties.Name="Model folder and verification">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon Glyph="&#xE8B7;" FontSize="16" />
-                            <TextBlock Text="Model folder" />
-                        </StackPanel>
-                        <Button.Flyout>
-                            <Flyout>
-                                <StackPanel Spacing="12" MaxWidth="380">
-                                    <TextBlock x:Name="FolderText" TextWrapping="Wrap" IsTextSelectionEnabled="True"
-                                               Style="{StaticResource SecondaryTextStyle}" />
-                                    <StackPanel Spacing="12">
-                                        <Button x:Name="FolderButton" Content="Choose folder" Click="ChooseFolderClicked"
-                                                MinHeight="40" AutomationProperties.AutomationId="ChooseModelFolder"
-                                                ToolTipService.ToolTip="Changing folders does not move or delete model files." />
-                                        <Button x:Name="RefreshButton" Content="Verify installed files" Click="RefreshClicked"
-                                                IsEnabled="False" MinHeight="40" AutomationProperties.AutomationId="VerifyModelFiles" />
-                                    </StackPanel>
-                                    <TextBlock x:Name="BackendText" Style="{StaticResource CaptionSecondaryStyle}" />
-                                </StackPanel>
-                            </Flyout>
-                        </Button.Flyout>
-                    </Button>
-                </StackPanel>
-            </Grid>
-
             <InfoBar x:Name="StatusInfo" IsOpen="False" IsClosable="False" Visibility="Collapsed" />
 
-            <local:StaggeredPanel x:Name="ModelsGrid" ColumnSpacing="16" RowSpacing="16"
-                  SizeChanged="OnModelsGridSizeChanged">
-                <!-- No entrance: the page is cached and an entrance would replay on every visit. Reorders and column
-                     changes slide cards to their new slots so the user can follow a card that moved. -->
-                <local:StaggeredPanel.ChildrenTransitions>
-                    <TransitionCollection>
-                        <RepositionThemeTransition />
-                    </TransitionCollection>
-                </local:StaggeredPanel.ChildrenTransitions>
-            </local:StaggeredPanel>
+            <Grid x:Name="ModelsGrid" ColumnSpacing="16" RowSpacing="16"
+                  SizeChanged="OnModelsGridSizeChanged" />
 
         </StackPanel>
     </local:PageCanvas>

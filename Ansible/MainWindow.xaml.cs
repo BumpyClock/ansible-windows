@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Ansible.Core;
 using Microsoft.UI;
+using Microsoft.UI.System;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -30,6 +31,7 @@ public sealed partial class MainWindow : Window
     private bool _compactNavigation;
     private bool _meetingRecoveryComplete;
     private bool _closed;
+    private ThemeSettings? _themeSettings;
     private bool _allowClose;
     private bool _closing;
     private bool _popupFailed;
@@ -87,6 +89,9 @@ public sealed partial class MainWindow : Window
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
         AppWindow.TitleBar.ButtonBackgroundColor = Colors.Transparent;
         AppWindow.TitleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
+        _themeSettings = ThemeSettings.CreateForWindowId(AppWindow.Id);
+        _themeSettings.Changed += ContrastThemeChanged;
+        RefreshTitleBarColors();
         var area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Nearest).WorkArea;
         var size = new Windows.Graphics.SizeInt32(Math.Min(1700, area.Width - 60), Math.Min(1100, area.Height - 60));
         AppWindow.Resize(size);
@@ -104,7 +109,6 @@ public sealed partial class MainWindow : Window
         };
         AppWindow.Closing += CloseRequested;
         Closed += WindowClosed;
-        ApplyNavigationInteractionBrushes();
         AddNoticeShowAnimations();
         Navigate("dictation");
         _observer = new UiSessionObserver(session, DispatcherQueue, SessionChanged);
@@ -253,21 +257,6 @@ public sealed partial class MainWindow : Window
 
     private Button[] NavigationButtons => [DictationNav, MeetingsNav, ModelsNav, CustomWordsNav, SettingsNav];
 
-    // NavigationButtonStyle is transparent at rest; per-instance keys give hover and press the brand surfaces.
-    // The current page keeps its active surface under the pointer: dropping to the lighter hover tint reads as
-    // deselection in the light theme.
-    private void ApplyNavigationInteractionBrushes()
-    {
-        var resources = Application.Current.Resources;
-        var selectedStyle = (Style)resources["SelectedNavigationButtonStyle"];
-        foreach (var button in NavigationButtons)
-        {
-            var selected = ReferenceEquals(button.Style, selectedStyle);
-            button.Resources["ButtonBackgroundPointerOver"] = resources[selected ? "AppActiveBrush" : "AppHoverBrush"];
-            button.Resources["ButtonBackgroundPressed"] = resources["AppActiveBrush"];
-        }
-    }
-
     // Notices toggle Visibility rather than joining the panel, so an implicit show animation lets them rise into
     // place instead of popping. Skipped when Windows animations are off.
     private void AddNoticeShowAnimations()
@@ -347,15 +336,16 @@ public sealed partial class MainWindow : Window
             AutomationProperties.SetHelpText(button, selected ? "Current page" : "");
             AutomationProperties.SetItemStatus(button, selected ? "Current page" : "");
         }
-        ApplyNavigationInteractionBrushes();
     }
 
-    private void ShellThemeChanged(FrameworkElement sender, object args)
+    private void ShellThemeChanged(FrameworkElement sender, object args) => RefreshTitleBarColors();
+    private void ContrastThemeChanged(ThemeSettings sender, object args) => RefreshTitleBarColors();
+
+    private void RefreshTitleBarColors()
     {
         DispatcherQueue.TryEnqueue(() =>
         {
             if (_closed || AppTitleBar is null) return;
-            ApplyNavigationInteractionBrushes();
             AppWindow.TitleBar.ButtonForegroundColor = ((SolidColorBrush)AppTitleBar.Foreground).Color;
             AppWindow.TitleBar.ButtonInactiveForegroundColor = ((SolidColorBrush)ShellRoot.BorderBrush).Color;
         });
@@ -402,7 +392,7 @@ public sealed partial class MainWindow : Window
                     && MeetingSession.SupportsMeeting(selected)
                     ? selected.Id : null;
             });
-        var window = new MeetingWindow(meeting, _meetingStore, document);
+        var window = new MeetingWindow(meeting, _meetingStore, document, ShellRoot.RequestedTheme);
         try { window.ApplyCapturePrivacy(_session.State.Settings.HideFromCapture); }
         catch (Exception error) { _session.Notify(NoticeKind.Warning, "Screen capture privacy unavailable", error.Message, NoticeArea.Application); }
         _meetingWindows.Add((meeting, window, document?.Id));
@@ -896,6 +886,8 @@ public sealed partial class MainWindow : Window
     private void WindowClosed(object sender, WindowEventArgs args)
     {
         _closed = true;
+        if (_themeSettings is not null) _themeSettings.Changed -= ContrastThemeChanged;
+        _themeSettings = null;
         _dictation.Dispose();
         _history.Dispose();
         _hotkey?.Dispose();

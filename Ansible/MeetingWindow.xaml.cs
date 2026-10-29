@@ -1,10 +1,12 @@
 using System.Diagnostics;
 using Ansible.Core;
 using Microsoft.UI;
+using Microsoft.UI.System;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
 using Windows.Storage.Pickers;
@@ -36,6 +38,7 @@ public sealed partial class MeetingWindow : Window
     private bool? _capturePrivacy;
     private MeetingDetectionCandidate? _selectedDetectedMeeting;
     private bool _refreshingProcesses;
+    private ThemeSettings? _themeSettings;
     internal MeetingDetectionCandidate? SelectedMeetingIdentity =>
         (ProcessChoice.SelectedItem as ComboBoxItem)?.Tag is MeetingProcessChoice { IsTeams: true } choice
             ? new MeetingDetectionCandidate(choice.Id, choice.StartedUtc) : null;
@@ -68,9 +71,11 @@ public sealed partial class MeetingWindow : Window
         catch (Exception error) when (error is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception) { return false; }
     }
 
-    internal MeetingWindow(MeetingSession session, MeetingStore store, MeetingDocument? document = null)
+    internal MeetingWindow(MeetingSession session, MeetingStore store, MeetingDocument? document = null,
+        ElementTheme theme = ElementTheme.Default)
     {
         InitializeComponent();
+        Root.RequestedTheme = theme;
         _session = session;
         _store = store;
         _document = document;
@@ -80,6 +85,9 @@ public sealed partial class MeetingWindow : Window
         SetTitleBar(TitleBar);
         AppWindow.TitleBar.ButtonBackgroundColor = Colors.Transparent;
         AppWindow.TitleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
+        _themeSettings = ThemeSettings.CreateForWindowId(AppWindow.Id);
+        _themeSettings.Changed += ContrastThemeChanged;
+        RefreshTitleBarColors();
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
         AppWindow.Resize(new Windows.Graphics.SizeInt32(640, 900));
         AudioSourceChoice.SelectedIndex = 0;
@@ -88,6 +96,8 @@ public sealed partial class MeetingWindow : Window
         Closed += (_, _) =>
         {
             _closed = true;
+            if (_themeSettings is not null) _themeSettings.Changed -= ContrastThemeChanged;
+            _themeSettings = null;
             _session.StateChanged -= SessionChanged;
             _cleanupCancellation?.Dispose();
             _cleanupCancellation = null;
@@ -103,6 +113,16 @@ public sealed partial class MeetingWindow : Window
         StartButton.Visibility = _savedMeeting ? Visibility.Collapsed : Visibility.Visible;
         if (_savedMeeting) PrivacyText.Text = "Saved on this device. No audio recording is stored.";
     }
+
+    private void RootThemeChanged(FrameworkElement sender, object args) => RefreshTitleBarColors();
+    private void ContrastThemeChanged(ThemeSettings sender, object args) => RefreshTitleBarColors();
+
+    private void RefreshTitleBarColors() => DispatcherQueue.TryEnqueue(() =>
+    {
+        if (_closed) return;
+        AppWindow.TitleBar.ButtonForegroundColor = ((SolidColorBrush)MeetingTitle.Foreground).Color;
+        AppWindow.TitleBar.ButtonInactiveForegroundColor = ((SolidColorBrush)TitleBarCaption.Foreground).Color;
+    });
 
     private void SessionChanged(MeetingSessionSnapshot state) => DispatcherQueue.TryEnqueue(() =>
     {
@@ -124,8 +144,11 @@ public sealed partial class MeetingWindow : Window
         var active = _session.IsActive || state.Phase is MeetingSessionPhase.Starting or MeetingSessionPhase.Recording or MeetingSessionPhase.Paused or MeetingSessionPhase.Finishing or MeetingSessionPhase.Refining;
         var preparing = state.Phase == MeetingSessionPhase.Starting;
         var finishing = state.Phase is MeetingSessionPhase.Finishing or MeetingSessionPhase.Refining;
-        CaptureSetup.Visibility = active || _document is not null ? Visibility.Collapsed : Visibility.Visible;
-        StartButton.Visibility = active || _document is not null ? Visibility.Collapsed : Visibility.Visible;
+        var retryStart = state.Phase == MeetingSessionPhase.Failed && !active && _document?.Turns.Count == 0;
+        var canStart = !active && (_document is null || retryStart);
+        CaptureSetup.Visibility = canStart ? Visibility.Visible : Visibility.Collapsed;
+        StartButton.Visibility = canStart ? Visibility.Visible : Visibility.Collapsed;
+        StartButton.Content = retryStart ? "Try again" : "Start meeting";
         PauseButton.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
         PauseButton.Content = state.Phase == MeetingSessionPhase.Paused ? "Resume" : "Pause";
         PauseButton.IsEnabled = !_busy && state.Phase is MeetingSessionPhase.Recording or MeetingSessionPhase.Paused;
@@ -147,12 +170,17 @@ public sealed partial class MeetingWindow : Window
         DelayText.Visibility = state.PendingSeconds >= 10 ? Visibility.Visible : Visibility.Collapsed;
         DelayText.Text = $"{FormatTime(state.PendingSeconds)} of captured audio awaiting transcription";
         SaveText.Text = "Text saves automatically";
-        EmptyTitle.Text = preparing ? "Preparing local transcription" : finishing ? "Finishing your meeting" : active ? "Listening for your conversation" : "Ready when you are";
-        EmptyDescription.Text = state.Phase == MeetingSessionPhase.Paused
-            ? "Capture is paused. Resume to continue this meeting."
-            : finishing ? "Captured speech is being finalized locally. Speaker corrections preserve the recognized wording."
-            : active ? "Text appears as each chunk is recognized. Speaker labels may be revised."
-            : "Choose your meeting app below. Speaker-labelled text will appear here as you talk.";
+        (EmptyTitle.Text, EmptyDescription.Text) = state.Phase switch
+        {
+            MeetingSessionPhase.Starting => ("Preparing local transcription", "The meeting will begin when local transcription is ready."),
+            MeetingSessionPhase.Paused => ("Meeting paused", "Capture is paused. Resume to continue this meeting."),
+            MeetingSessionPhase.Recording => ("Listening for your conversation", "Text appears as each chunk is recognized. Speaker labels may be revised."),
+            MeetingSessionPhase.Finishing or MeetingSessionPhase.Refining => ("Finishing your meeting", "Captured speech is being finalized locally. Speaker corrections preserve the recognized wording."),
+            MeetingSessionPhase.Failed when retryStart => ("Meeting needs attention", "Resolve the error above, check your audio source, then try again."),
+            MeetingSessionPhase.Failed => ("Meeting stopped", "Review the error above. Text already transcribed stays saved on this device."),
+            MeetingSessionPhase.Completed => ("No speech transcribed", "This meeting has no recognized speech. Saved text stays on this device."),
+            _ => ("Ready when you are", "Start the meeting to see speaker-labelled text here.")
+        };
         // The notice lives for the whole meeting; open it once per text so a dismissal sticks.
         if (state.SelectionNotice != _shownNotice)
         {
@@ -271,18 +299,20 @@ public sealed partial class MeetingWindow : Window
     {
         if (_busy) return;
         _busy = true;
+        string? actionError = null;
         ErrorBar.IsOpen = false;
         ErrorBar.Visibility = Visibility.Collapsed;
         StartButton.IsEnabled = PauseButton.IsEnabled = EndButton.IsEnabled = false;
         try { await action(); }
         catch (OperationCanceledException) when (_closing) { }
-        catch (Exception error) { if (!_closed) ShowError(error.Message); }
+        catch (Exception error) { actionError = error.Message; }
         finally
         {
             _busy = false;
             if (!_closed)
             {
                 if (!_savedMeeting) Render(_session.State);
+                if (actionError is not null) ShowError(actionError);
                 StartButton.IsEnabled = true;
             }
         }

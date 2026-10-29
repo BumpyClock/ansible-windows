@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- Share page titles, subtitles, responsive action placement, and content bounds
+  through `PageCanvas`. Remove page-specific header grids and breakpoint logic.
+- Resolve hover and pressed colors through themed XAML resources so controls
+  follow their window's appearance, including the light-theme preview.
+- Use Mica beneath the shell and meeting content, native translucent content
+  and card layers, and native Acrylic flyouts. Preserve platform material and
+  accessibility fallbacks instead of replacing them with opaque palette copies.
+- Keep compact Speech models layouts in one column until two 400 DIP cards fit.
+  Constrain model details to the window so descriptions, source revisions, and
+  file paths wrap within a scrollable flyout.
+- Keep speech model cards in catalog order with fixed row and column positions.
+  Startup verification, downloads, and model selection no longer reshuffle them.
+- Match meeting windows to the shell theme and shared title typography. Restore
+  audio-source controls and **Try again** after a failed empty meeting releases
+  its resources, with instructions that match the available controls.
+- Preserve the current meeting retry error and avoid inferring startup failure
+  from an empty transcript. Refresh shell and meeting title-bar colors when the
+  Windows High Contrast scheme changes.
 - Remove the bordered page canvas. Pages sit on the Mica window base with section
   titles above borderless tonal cards; the dictate control is inline in the Home
   header. High Contrast keeps card outlines. Page switches and model cards no

@@ -9,21 +9,13 @@
         <StaticResource x:Key="ProgressBarTrackCornerRadius" ResourceKey="HomeModelTrackCornerRadius" />
         <StaticResource x:Key="ProgressBarCornerRadius" ResourceKey="HomeModelTrackCornerRadius" />
     </Page.Resources>
-    <local:PageCanvas x:Name="HomeViewport" SizeChanged="HomeViewportSizeChanged">
-        <StackPanel Spacing="{StaticResource PageSectionSpacing}">
-            <Grid x:Name="HomeHeader" ColumnSpacing="{StaticResource CardGap}" RowSpacing="12"
-                  SizeChanged="HomeHeaderSizeChanged">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <StackPanel x:Name="HomeHeading" Grid.Row="0" Grid.Column="0" Spacing="6" VerticalAlignment="Center">
-                    <TextBlock x:Name="GreetingText" Text="Good afternoon" Style="{StaticResource PageTitleStyle}"
-                               Margin="0" />
-                    <TextBlock Text="Your dictations, kept in memory on this device for this session."
-                               Style="{StaticResource PageSubtitleStyle}" />
-                </StackPanel>
-                <StackPanel x:Name="DictateControl" Grid.Row="0" Grid.Column="1" Spacing="8" VerticalAlignment="Center">
+    <local:PageCanvas x:Name="HomeViewport"
+                      Title="Good afternoon"
+                      Subtitle="Your dictations, kept in memory on this device for this session."
+                      SizeChanged="HomeViewportSizeChanged">
+        <local:PageCanvas.HeaderActions>
+            <StackPanel x:Name="DictateControl" Spacing="8" VerticalAlignment="Center"
+                        SizeChanged="DictateControlSizeChanged">
                     <Grid x:Name="ShortcutControlGrid" ColumnSpacing="14" RowSpacing="8" VerticalAlignment="Center">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
@@ -64,14 +56,15 @@
                         </Grid>
                         <TextBlock x:Name="CompactStatusDetail" Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap" />
                     </StackPanel>
-                </StackPanel>
-            </Grid>
-
+            </StackPanel>
+        </local:PageCanvas.HeaderActions>
+        <Grid>
+            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
             <InfoBar x:Name="StatusInfo" IsOpen="False" IsClosable="True" Visibility="Collapsed"
-                     SizeChanged="StatusInfoSizeChanged"
+                     Margin="{StaticResource PageSectionBottomMargin}"
                      Closing="StatusInfoClosing" Closed="StatusInfoClosed" />
 
-            <Grid x:Name="HomeColumns" ColumnSpacing="{StaticResource HomeCardGap}" RowSpacing="{StaticResource HomeSectionGap}" SizeChanged="HomeColumnsSizeChanged">
+            <Grid x:Name="HomeColumns" Grid.Row="1" ColumnSpacing="{StaticResource HomeCardGap}" RowSpacing="{StaticResource HomeSectionGap}" SizeChanged="HomeColumnsSizeChanged">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="2*" />
                     <ColumnDefinition Width="1*" />
@@ -80,7 +73,7 @@
                 <local:HomeHistoryView x:Name="HistoryView" Grid.Column="0" />
                 <local:HomeInsightsView x:Name="HomeInsightsColumn" Grid.Column="1" />
             </Grid>
-            <Border x:Name="TranscriptCard" Style="{StaticResource CardStyle}" MinHeight="160" Visibility="Collapsed">
+            <Border x:Name="TranscriptCard" Grid.Row="2" Margin="{StaticResource PageFooterTopMargin}" Style="{StaticResource CardStyle}" MinHeight="160" Visibility="Collapsed">
                 <Grid RowSpacing="8">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -117,6 +110,6 @@
                     </Grid>
                 </Grid>
             </Border>
-        </StackPanel>
+        </Grid>
     </local:PageCanvas>
 </Page>

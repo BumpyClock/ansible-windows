@@ -142,7 +142,7 @@ public sealed partial class DictationPage : Page
         if (hour != _homeGreetingHour)
         {
             _homeGreetingHour = hour;
-            GreetingText.Text = hour switch
+            HomeViewport.Title = hour switch
             {
                 < 12 => "Good morning",
                 < 18 => "Good afternoon",
@@ -227,25 +227,18 @@ public sealed partial class DictationPage : Page
         return (Style)resource;
     }
 
-    private void HomeHeaderSizeChanged(object sender, SizeChangedEventArgs args)
+    private void DictateControlSizeChanged(object sender, SizeChangedEventArgs args)
     {
-        var narrow = args.NewSize.Width < (double)Application.Current.Resources["HomeHeaderStackThreshold"];
-        HomeHeader.ColumnDefinitions.Clear();
-        HomeHeader.RowDefinitions.Clear();
-        HomeHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        HomeHeader.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        if (narrow) HomeHeader.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        else HomeHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        // The dictate row has no container; below the threshold it reads as a line under the greeting.
-        Grid.SetColumn(DictateControl, narrow ? 0 : 1);
-        Grid.SetRow(DictateControl, narrow ? 1 : 0);
-        DictateControl.HorizontalAlignment = narrow ? HorizontalAlignment.Left : HorizontalAlignment.Right;
-        var stackedHelper = args.NewSize.Width < (double)Application.Current.Resources["ShortcutStackThreshold"];
+        UpdateShortcutLayout();
+    }
+
+    private void UpdateShortcutLayout()
+    {
+        var stackedHelper = HomeViewport.ContentWidth < (double)Application.Current.Resources["ShortcutStackThreshold"];
         Grid.SetRow(ShortcutButtons, stackedHelper ? 1 : 0);
         Grid.SetColumn(ShortcutButtons, stackedHelper ? 0 : 1);
         Grid.SetColumnSpan(ShortcutButtons, stackedHelper ? 2 : 1);
         ShortcutButtons.HorizontalAlignment = stackedHelper ? HorizontalAlignment.Right : HorizontalAlignment.Left;
-        RequestHomeColumnsHeight();
     }
     private void HomeColumnsSizeChanged(object sender, SizeChangedEventArgs args)
     {
@@ -254,8 +247,6 @@ public sealed partial class DictationPage : Page
         HomeColumns.RowDefinitions.Clear();
         if (narrow)
         {
-            HomeColumns.ClearValue(FrameworkElement.HeightProperty);
-            HomeColumns.ClearValue(FrameworkElement.MinHeightProperty);
             HomeColumns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             HomeColumns.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             HomeColumns.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -269,37 +260,10 @@ public sealed partial class DictationPage : Page
             HomeColumns.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
             Grid.SetColumn(HomeInsightsColumn, 1);
             Grid.SetRow(HomeInsightsColumn, 0);
-            RequestHomeColumnsHeight();
         }
     }
 
-    private void HomeViewportSizeChanged(object sender, SizeChangedEventArgs args) => UpdateHomeColumnsHeight(HomeViewport.ViewportHeight);
-
-    private void StatusInfoSizeChanged(object sender, SizeChangedEventArgs args) => RequestHomeColumnsHeight();
-
-    private void RequestHomeColumnsHeight()
-    {
-        if (!IsLoaded) { return; }
-        DispatcherQueue.TryEnqueue(() => UpdateHomeColumnsHeight(HomeViewport.ViewportHeight));
-    }
-
-    private void UpdateHomeColumnsHeight(double viewportHeight)
-    {
-        if (viewportHeight <= 0 || HomeColumns.ActualWidth < (double)Application.Current.Resources["HomeColumnsStackThreshold"]) { return; }
-        var padding = HomeViewport.ContentPadding;
-        var effectiveViewportHeight = HomeViewport.ViewportHeight > 0 ? HomeViewport.ViewportHeight : viewportHeight;
-        var spacing = (double)Application.Current.Resources["PageSectionSpacing"];
-        var statusVisible = StatusInfo.Visibility == Visibility.Visible;
-        var precedingSpacing = spacing * (statusVisible ? 2 : 1);
-        var available = effectiveViewportHeight - padding.Top - padding.Bottom - HomeHeader.ActualHeight - precedingSpacing -
-            (statusVisible ? StatusInfo.ActualHeight : 0);
-        if (available > 0 && (double.IsNaN(HomeColumns.MinHeight) || Math.Abs(HomeColumns.MinHeight - available) > 0.5))
-        {
-            HomeColumns.ClearValue(FrameworkElement.HeightProperty);
-            if (double.IsNaN(HomeColumns.MinHeight) || Math.Abs(HomeColumns.MinHeight - available) > 0.5)
-                HomeColumns.MinHeight = available;
-        }
-    }
+    private void HomeViewportSizeChanged(object sender, SizeChangedEventArgs args) => UpdateShortcutLayout();
 
     private void RenderRecordControl()
     {

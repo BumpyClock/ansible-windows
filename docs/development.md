@@ -127,12 +127,29 @@ semantic resources rather than palette literals. Brand roles are separate from
 light/dark surface roles. A future color scheme can replace those brand roles
 without rewriting page layouts. High Contrast uses Windows system colors.
 The existing Windows font is retained.
+`NavigationStyles.xaml` owns shared sidebar button and icon styles. Its selected
+button template keeps the current page visible during hover and press. Control
+interaction colors resolve through themed XAML resources, not copied brushes
+from the application's current theme.
 
-Every page renders into `PageCanvas`. This component owns content width,
-responsive padding, scroll bounds, and bottom space. Pages with virtualized
+Every page renders into `PageCanvas`. This component owns the shared title,
+subtitle, responsive header actions, content width, padding, scroll bounds, and
+bottom space. Pages supply `Title`, `Subtitle`, `HeaderActions`, and body content;
+they do not implement their own header grids or heading breakpoints. Pages with virtualized
 lists use its bounded mode and let the list own scrolling. The design check
 rejects page roots that bypass the shared canvas. `DeviceComparisonView` renders
 structured benchmark snapshots without parsing presentation text.
+
+The shell and meeting window use one Mica backdrop per window with transparent
+chrome. Main pages use Microsoft's card pattern through the shared `CardStyle`;
+the transcript window uses a contiguous `PageSurfaceStyle`. Both use WinUI's
+translucent `LayerFillColorDefaultBrush` above Mica. Keep
+these platform resources and Acrylic flyout resources unmodified so their
+theme, High Contrast, inactive-window, transparency, and power fallbacks remain
+available. Acrylic belongs to transient flyouts and menus, not the main page.
+This follows Microsoft Learn's [Mica layering](https://learn.microsoft.com/windows/apps/design/style/mica#app-layering-with-mica),
+[layering and elevation](https://learn.microsoft.com/windows/apps/design/signature-experiences/layering),
+and [Acrylic guidance](https://learn.microsoft.com/windows/apps/design/style/acrylic).
 
 Debug builds accept `--design-theme=light` and `--design-theme=dark` as launch
 arguments for screenshot qualification. This scopes appearance to the app

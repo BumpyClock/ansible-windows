@@ -2,9 +2,14 @@
 <UserControl x:Class="Ansible.ModelCard"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             HorizontalAlignment="Stretch" VerticalAlignment="Top"
+             HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
              PointerEntered="CardPointerEntered" PointerExited="CardPointerExited" PointerCanceled="CardPointerExited"
              GotFocus="CardGotFocus" LostFocus="CardLostFocus">
+    <UserControl.Resources>
+        <Style x:Key="DetailLabelStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+        </Style>
+    </UserControl.Resources>
     <Border x:Name="CardBorder" Style="{StaticResource CardStyle}" BorderThickness="1.5">
         <!-- Interaction and state colours are visual states with ThemeResource setters, so they follow this
              element's theme and High Contrast without resolving brushes from code. -->
@@ -98,15 +103,17 @@
                             ToolTipService.ToolTip="Details">
                         <FontIcon Glyph="&#xE946;" FontSize="14" />
                         <Button.Flyout>
-                            <Flyout Placement="BottomEdgeAlignedRight">
+                            <Flyout Placement="BottomEdgeAlignedRight" Opening="DetailsOpening">
                                 <Flyout.FlyoutPresenterStyle>
                                     <Style TargetType="FlyoutPresenter">
                                         <Setter Property="MaxWidth" Value="400" />
+                                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                                         <Setter Property="Padding" Value="16" />
                                     </Style>
                                 </Flyout.FlyoutPresenterStyle>
-                                <ScrollViewer MaxHeight="420" VerticalScrollBarVisibility="Auto"
-                                              HorizontalScrollBarVisibility="Disabled">
+                                <ScrollViewer x:Name="DetailsViewport" MaxHeight="420" VerticalScrollBarVisibility="Auto"
+                                              HorizontalScrollBarVisibility="Disabled" HorizontalScrollMode="Disabled"
+                                              HorizontalContentAlignment="Stretch">
                                   <StackPanel Spacing="12">
                                     <StackPanel x:Name="AboutSection" Spacing="12">
                                         <TextBlock x:Name="DescriptionText" TextWrapping="Wrap" Style="{StaticResource BodyTextBlockStyle}" />

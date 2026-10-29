@@ -51,6 +51,9 @@ are not requested because these features do not use them.
 
 ## Choose a model
 
+Speech model cards keep their catalog order while files are verified and when
+you select or download a model. Compact windows show one column.
+
 Open **Speech models**. Select **Download** on a model card, or open **Model folder**
 and use **Choose folder** to select a folder containing catalog weights. Select
 **Use** on an installed model to make it active.
@@ -409,6 +412,9 @@ recording; the shutdown error remains visible.
 
 Transcripts and title/speaker edits save automatically. The Meetings list supports
 reopening saved text; each transcript window offers Copy, text export, and Delete.
+If a meeting fails before any speech is transcribed, its window restores the
+audio-source controls and offers **Try again** after resources are released.
+Resolve the displayed error before retrying. The failed attempt stays saved.
 Capture is limited to two hours. A full 30-second recognition queue or capture
 failure stops the meeting with an error and keeps text already produced. Native
 steps must finish before resources can be released. After a crash, previous

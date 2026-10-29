@@ -30,8 +30,6 @@ public sealed partial class CustomWordsPage : Page
         _state = session.State;
         InitializeComponent();
         WordsList.ItemsSource = _words;
-        ApplyRowBrushes();
-        ActualThemeChanged += (_, _) => ApplyRowBrushes();
         Loaded += (_, _) => _observer = new UiSessionObserver(session, DispatcherQueue, state =>
         {
             _state = state;
@@ -255,20 +253,6 @@ public sealed partial class CustomWordsPage : Page
     }
 
     private void ModelsClicked(object sender, RoutedEventArgs args) => _openModels();
-
-    private void DictionaryHeaderSizeChanged(object sender, SizeChangedEventArgs args)
-    {
-        var compact = args.NewSize.Width < (double)Application.Current.Resources["CompactPageThreshold"];
-        Grid.SetColumnSpan(DictionaryHeading, compact ? 2 : 1);
-        Grid.SetRow(DictionaryHeaderActions, compact ? 1 : 0);
-        Grid.SetColumn(DictionaryHeaderActions, compact ? 0 : 1);
-        Grid.SetColumnSpan(DictionaryHeaderActions, compact ? 2 : 1);
-        DictionaryHeaderActions.HorizontalAlignment = compact ? HorizontalAlignment.Left : HorizontalAlignment.Right;
-        DictionaryHeaderActions.Margin = compact ? new Thickness(0, 8, 0, 0) : new Thickness(0);
-    }
-
-    private void ApplyRowBrushes() =>
-        PageCanvas.ApplyBrandInteractionBrushes(WordsList, "ListViewItemBackgroundPointerOver", "ListViewItemBackgroundPressed");
 
     // Like the Home history header, narrow pages move search under the title and count.
     private void DictionarySearchSizeChanged(object sender, SizeChangedEventArgs args)
