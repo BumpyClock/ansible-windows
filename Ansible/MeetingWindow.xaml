@@ -17,6 +17,7 @@
                     <Button.Flyout><MenuFlyout>
                         <MenuFlyoutItem Text="Copy transcript" Click="CopyClicked"/>
                         <MenuFlyoutItem Text="Export as text" Click="ExportClicked"/>
+                        <MenuFlyoutItem x:Name="AudioDiagnosticsMenuItem" Text="Open audio diagnostics folder" Click="AudioDiagnosticsClicked"/>
                         <MenuFlyoutSeparator/>
                         <MenuFlyoutItem x:Name="DeleteMenuItem" Text="Delete meeting" Click="DeleteClicked"/>
                     </MenuFlyout></Button.Flyout>
@@ -33,6 +34,15 @@
                 </Grid>
             </Border>
             <TextBlock x:Name="DelayText" Visibility="Collapsed" Style="{StaticResource CaptionSecondaryStyle}"/>
+            <StackPanel x:Name="AudioHealthPanel" Visibility="Collapsed" Spacing="6">
+                <Grid ColumnSpacing="16">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <TextBlock x:Name="MicrophoneHealthText" Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap"/>
+                    <TextBlock x:Name="PlaybackHealthText" Grid.Column="1" Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap"/>
+                </Grid>
+                <TextBlock x:Name="PlaybackHintText" Visibility="Collapsed" Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap"/>
+            </StackPanel>
+            <TextBlock x:Name="DiagnosticsErrorText" Visibility="Collapsed" Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap"/>
             <TextBlock x:Name="CleanupStatusText" Visibility="Collapsed" Style="{StaticResource CaptionSecondaryStyle}" AutomationProperties.LiveSetting="Polite"/>
             <InfoBar x:Name="ErrorBar" Severity="Error" IsOpen="False" IsClosable="True"
                      Visibility="Collapsed" Closed="ErrorBarClosed"/>
@@ -56,7 +66,6 @@
                     <DataTemplate x:DataType="local:MeetingTranscriptRow">
                         <StackPanel Spacing="6">
                             <Button Content="{x:Bind SpeakerName, Mode=OneWay}" Tag="{x:Bind SpeakerId, Mode=OneWay}"
-                                    Visibility="{x:Bind local:MeetingWindow.ToVisibility(ShowSpeaker), Mode=OneWay}"
                                     AutomationProperties.Name="{x:Bind RenameSpeakerName, Mode=OneWay}" Click="SpeakerClicked"
                                     Background="{x:Null}" BorderThickness="0" Padding="0,4,0,4" HorizontalAlignment="Left"/>
                             <TextBlock Text="{x:Bind TimingText, Mode=OneWay}" Style="{StaticResource CaptionSecondaryStyle}"/>

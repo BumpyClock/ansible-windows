@@ -16,6 +16,7 @@ public sealed partial class MeetingWindow : Window
 {
     private readonly MeetingSession _session;
     private readonly MeetingStore _store;
+    private readonly string? _diagnosticsDirectory;
     private MeetingDocument? _document;
     private string? _shownNotice;
     private readonly bool _savedMeeting;
@@ -36,8 +37,9 @@ public sealed partial class MeetingWindow : Window
     private CancellationTokenSource? _cleanupCancellation;
     private Task? _cleanupTask;
     private ContentDialog? _cleanupDialog;
-    private string _cleanupModel = "gpt-6-luna";
-    private string _cleanupEffort = "high";
+    private readonly IMeetingTextCleanup _textCleanup;
+    private readonly Func<MeetingCleanupSettings> _getCleanupSettings;
+    private string? _shownCleanupError;
     private bool? _capturePrivacy;
     private MeetingDetectionCandidate? _selectedDetectedMeeting;
     private bool _refreshingProcesses;
@@ -74,13 +76,18 @@ public sealed partial class MeetingWindow : Window
     }
 
     internal MeetingWindow(MeetingSession session, MeetingStore store, MeetingDocument? document = null,
-        ElementTheme theme = ElementTheme.Default)
+        ElementTheme theme = ElementTheme.Default, string? diagnosticsDirectory = null,
+        IMeetingTextCleanup? textCleanup = null, Func<MeetingCleanupSettings>? getCleanupSettings = null)
     {
         InitializeComponent();
         Root.RequestedTheme = theme;
         TranscriptRows.ItemsSource = _transcript.Rows;
         _session = session;
         _store = store;
+        _textCleanup = textCleanup ?? new MeetingCleanupService();
+        _getCleanupSettings = getCleanupSettings ?? (() => new());
+        _diagnosticsDirectory = diagnosticsDirectory;
+        AudioDiagnosticsMenuItem.IsEnabled = diagnosticsDirectory is not null;
         _document = document;
         _savedMeeting = document is not null;
         Title = document?.Title ?? "New meeting";
@@ -171,6 +178,25 @@ public sealed partial class MeetingWindow : Window
         };
         DelayText.Visibility = state.PendingSeconds >= 10 ? Visibility.Visible : Visibility.Collapsed;
         DelayText.Text = $"{FormatTime(state.PendingSeconds)} of captured audio awaiting transcription";
+        var health = state.CaptureHealth;
+        AudioHealthPanel.Visibility = state.Phase == MeetingSessionPhase.Recording && health is not null
+            ? Visibility.Visible : Visibility.Collapsed;
+        if (health is not null)
+        {
+            MicrophoneHealthText.Text = $"Microphone: {health.Microphone.SignalStatus}";
+            var devices = health.OutputDevices == 1 ? "1 device" : $"{health.OutputDevices} devices";
+            PlaybackHealthText.Text = health.OutputDevices == 0
+                ? "Speakers and headphones: No output device available"
+                : $"Speakers and headphones ({devices}): {health.Playback.SignalStatus}";
+            PlaybackHintText.Visibility = health.OutputDevices == 0 || health.PlaybackIsQuiet ? Visibility.Visible : Visibility.Collapsed;
+            PlaybackHintText.Text = health.OutputDevices == 0
+                ? "No active speakers or headphones can be recorded, so only your microphone is transcribed. Capture resumes when an output device becomes available."
+                : health.SkippedOutputDevices > 0
+                    ? "No playback detected for 15 seconds. Some output devices are in exclusive use by another app and cannot be recorded. Audio diagnostics can help identify the cause."
+                    : "No playback detected for 15 seconds. Silence is normal when others are quiet. If you can hear them, audio diagnostics can help identify the cause.";
+            DiagnosticsErrorText.Text = health.DiagnosticsError ?? "";
+            DiagnosticsErrorText.Visibility = health.DiagnosticsError is null ? Visibility.Collapsed : Visibility.Visible;
+        }
         SaveText.Text = "Text saves automatically";
         (EmptyTitle.Text, EmptyDescription.Text) = state.Phase switch
         {
@@ -190,7 +216,42 @@ public sealed partial class MeetingWindow : Window
             if (state.SelectionNotice is not null && state.Error is null) ShowNotice(state.SelectionNotice);
         }
         if (state.Error is not null) ShowError(state.Error);
+        if (state.TextCleanup != MeetingTextCleanupState.None)
+        {
+            CleanupStatusText.Visibility = Visibility.Visible;
+            CleanupStatusText.Text = state.TextCleanup switch
+            {
+                MeetingTextCleanupState.Running => "Cleaning up wording automatically. Original text is saved.",
+                MeetingTextCleanupState.Completed => "Wording cleaned up. Original text remains available.",
+                MeetingTextCleanupState.Cancelled => "Cleanup cancelled. Original wording remains available.",
+                MeetingTextCleanupState.Failed => "Cleanup failed. Original wording is saved. Check Settings or retry cleanup.",
+                _ => ""
+            };
+            if (state.TextCleanupError is { } cleanupError && cleanupError != _shownCleanupError)
+            {
+                _shownCleanupError = cleanupError;
+                ShowError(cleanupError);
+            }
+        }
         RenderDocument();
+    }
+
+    private void AudioDiagnosticsClicked(object sender, RoutedEventArgs args)
+    {
+        if (_diagnosticsDirectory is null) return;
+        try
+        {
+            if (!Directory.Exists(_diagnosticsDirectory))
+            {
+                ShowError("No local diagnostics have been saved. Enable Local diagnostics in Settings to collect them.");
+                return;
+            }
+            Process.Start(new ProcessStartInfo(_diagnosticsDirectory) { UseShellExecute = true });
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+        {
+            ShowError($"Audio diagnostics could not be opened. {error.Message}");
+        }
     }
 
     private void RenderDocument()
@@ -395,7 +456,7 @@ public sealed partial class MeetingWindow : Window
     private async void ClosingRequested(AppWindow sender, AppWindowClosingEventArgs args)
     {
         _cleanupDialog?.Hide();
-        if (!_allowClose && _cleanupTask is { IsCompleted: false })
+        if (!_allowClose && (_cleanupTask is { IsCompleted: false } || _session.State.TextCleanup == MeetingTextCleanupState.Running))
         {
             args.Cancel = true;
             if (_closing) return;
@@ -467,12 +528,12 @@ public sealed partial class MeetingWindow : Window
     }
 
     private bool CanCleanup => !_shutdownPending && _document is { Status: MeetingStatus.Completed, Turns.Count: > 0 } document &&
-        !_session.IsActive && !document.Turns.Any(turn => turn.IsProvisional);
+        !_session.IsActive && _session.State.TextCleanup != MeetingTextCleanupState.Running && !document.Turns.Any(turn => turn.IsProvisional);
     private static bool HasCleanup(MeetingTurn turn) => turn.OriginalText is not null && turn.OriginalText != turn.Text;
 
     private void RefreshCleanupControls()
     {
-        var running = _cleanupTask is { IsCompleted: false };
+        var running = _cleanupTask is { IsCompleted: false } || _session.State.TextCleanup == MeetingTextCleanupState.Running;
         CleanupButton.Visibility = CanCleanup && !running ? Visibility.Visible : Visibility.Collapsed;
         CleanupButton.IsEnabled = !_busy && !_closing;
         CancelCleanupButton.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
@@ -484,18 +545,16 @@ public sealed partial class MeetingWindow : Window
     private async void CleanupClicked(object sender, RoutedEventArgs args)
     {
         if (!CanCleanup || _busy || _closing || _cleanupTask is { IsCompleted: false }) return;
-        var model = new TextBox { Header = "Copilot model", Text = _cleanupModel, MaxLength = 100 };
-        var effort = new ComboBox { Header = "Reasoning effort", HorizontalAlignment = HorizontalAlignment.Stretch };
-        foreach (var value in new[] { "none", "minimal", "low", "medium", "high", "xhigh", "max" }) effort.Items.Add(value);
-        effort.SelectedItem = _cleanupEffort;
+        MeetingCleanupOptions options;
+        try { options = _getCleanupSettings().Options; options.Validate(); }
+        catch (Exception error) { ShowError($"Check Transcript cleanup in Settings. {error.Message}"); return; }
+        var provider = options.Provider == MeetingCleanupProvider.CopilotCli ? "GitHub Copilot CLI using your signed-in account" : "the OpenAI API using your saved API key";
         var content = new StackPanel { Spacing = 16 };
         content.Children.Add(new TextBlock
         {
-            Text = "Transcript text is sent to GitHub Copilot using your signed-in account. Audio stays on this device. Speaker labels and timestamps are preserved. Original wording remains available.",
+            Text = $"Transcript text will be sent to {provider}. Model: {options.Model}. Reasoning effort: {options.ReasoningEffort}. Change the connection in Settings. Audio stays on this device. Speaker labels, timestamps, and original wording are preserved.",
             TextWrapping = TextWrapping.Wrap
         });
-        content.Children.Add(model);
-        content.Children.Add(effort);
         var dialog = new ContentDialog
         {
             Title = "Clean up transcript wording", Content = content,
@@ -506,10 +565,6 @@ public sealed partial class MeetingWindow : Window
         {
             _cleanupDialog = dialog;
             if (await dialog.ShowAsync() != ContentDialogResult.Primary || !CanCleanup || _busy || _closed || _closing) return;
-            var options = new MeetingCleanupOptions(model.Text.Trim(), (string)effort.SelectedItem);
-            options.Validate();
-            _cleanupModel = options.Model;
-            _cleanupEffort = options.ReasoningEffort;
             _cleanupCancellation?.Dispose();
             _cleanupCancellation = new CancellationTokenSource();
             _cleanupTask = CleanWordingAsync(_document!, options, _cleanupCancellation.Token);
@@ -523,12 +578,12 @@ public sealed partial class MeetingWindow : Window
     private async Task CleanWordingAsync(MeetingDocument document, MeetingCleanupOptions options, CancellationToken token)
     {
         CleanupStatusText.Visibility = Visibility.Visible;
-        CleanupStatusText.Text = "Cleaning up wording with Copilot. Original text is kept until the complete result is ready.";
+        CleanupStatusText.Text = "Cleaning up wording. Original text is kept until the complete result is ready.";
         ErrorBar.IsOpen = false;
         ErrorBar.Visibility = Visibility.Collapsed;
         try
         {
-            var texts = await new CopilotMeetingTextCleanup().CleanAsync(document, options, token);
+            var texts = await _textCleanup.CleanAsync(document, options, token);
             token.ThrowIfCancellationRequested();
             if (_savedMeeting) _document = await _store.ApplyCleanupAsync(document.Id, texts, token);
             else
@@ -565,6 +620,8 @@ public sealed partial class MeetingWindow : Window
     {
         _cleanupDialog?.Hide();
         _cleanupCancellation?.Cancel();
+        _session.CancelTextCleanup();
+        if (_session.State.TextCleanup == MeetingTextCleanupState.Running) await _session.EndAsync();
         if (_cleanupTask is not null) await _cleanupTask;
     }
 

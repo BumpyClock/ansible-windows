@@ -71,7 +71,7 @@ public sealed partial class MainWindow : Window
         _paths = paths;
         _meetingStore = new MeetingStore(Path.Combine(Path.GetDirectoryName(paths.Settings)!, "meetings"));
         _meetingDiagnostics = diagnostics;
-        _meetings = new MeetingsPage(session, _meetingStore, OpenMeetingAsync, () => WinRT.Interop.WindowNative.GetWindowHandle(this));
+        _meetings = new MeetingsPage(session, _meetingStore, OpenMeetingAsync, () => WinRT.Interop.WindowNative.GetWindowHandle(this), diagnostics);
         _history = new HomeDictationHistory(session, Path.Combine(Path.GetDirectoryName(paths.Settings)!, "dictation-history.json"), diagnostics);
         _shortcut = new ShortcutDictation(session, new WindowsShortcutTargetInspector(WinRT.Interop.WindowNative.GetWindowHandle(this)),
             diagnostics, (operationId, status) => _history.RecordDelivery(operationId, status), anchor =>
