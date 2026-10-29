@@ -129,6 +129,45 @@ public sealed class MeetingSessionTests : IDisposable
         Assert.Equal("raw words", Assert.Single((await store.LoadAsync(session.Document!.Id)).Turns).Text);
     }
 
+    [Fact]
+    public async Task DisposalBeginningBeforeCleanupStartsNeverInvokesTheProvider()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var completedWrites = 0;
+        var providerCalls = 0;
+        var engine = new Engine();
+        var store = new MeetingStore(_directory);
+        await using var session = new MeetingSession(() => engine, new CaptureFactory(), store, () => new(),
+            textCleanup: new Cleanup((_, _, _) =>
+            {
+                Interlocked.Increment(ref providerCalls);
+                throw new InvalidOperationException("Must not invoke");
+            }),
+            getCleanupSettings: () => new() { Automatic = true },
+            writeMeeting: async document =>
+            {
+                if (document.Status == MeetingStatus.Completed && Interlocked.Increment(ref completedWrites) == 1)
+                {
+                    entered.SetResult();
+                    await release.Task;
+                }
+                await store.SaveAsync(document);
+            });
+        await session.StartAsync(Request);
+        engine.Report("Speaker 0: raw words");
+        var finish = session.EndAsync();
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var dispose = session.DisposeAsync().AsTask();
+        release.SetResult();
+        await Task.WhenAll(finish, dispose).WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(0, providerCalls);
+        Assert.Equal(MeetingTextCleanupState.None, session.State.TextCleanup);
+        var saved = await store.LoadAsync(session.Document!.Id);
+        Assert.Equal("raw words", Assert.Single(saved.Turns).Text);
+        Assert.Null(saved.Turns[0].OriginalText);
+    }
+
     private sealed class Cleanup(Func<MeetingDocument, MeetingCleanupOptions, CancellationToken, Task<IReadOnlyList<string>>> clean)
         : IMeetingTextCleanup
     {
