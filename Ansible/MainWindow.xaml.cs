@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Ansible.Core;
 using Microsoft.UI;
+using Microsoft.UI.System;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -30,6 +31,7 @@ public sealed partial class MainWindow : Window
     private bool _compactNavigation;
     private bool _meetingRecoveryComplete;
     private bool _closed;
+    private ThemeSettings? _themeSettings;
     private bool _allowClose;
     private bool _closing;
     private bool _popupFailed;
@@ -87,6 +89,9 @@ public sealed partial class MainWindow : Window
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
         AppWindow.TitleBar.ButtonBackgroundColor = Colors.Transparent;
         AppWindow.TitleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
+        _themeSettings = ThemeSettings.CreateForWindowId(AppWindow.Id);
+        _themeSettings.Changed += ContrastThemeChanged;
+        RefreshTitleBarColors();
         var area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Nearest).WorkArea;
         var size = new Windows.Graphics.SizeInt32(Math.Min(1700, area.Width - 60), Math.Min(1100, area.Height - 60));
         AppWindow.Resize(size);
@@ -333,7 +338,10 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void ShellThemeChanged(FrameworkElement sender, object args)
+    private void ShellThemeChanged(FrameworkElement sender, object args) => RefreshTitleBarColors();
+    private void ContrastThemeChanged(ThemeSettings sender, object args) => RefreshTitleBarColors();
+
+    private void RefreshTitleBarColors()
     {
         DispatcherQueue.TryEnqueue(() =>
         {
@@ -878,6 +886,8 @@ public sealed partial class MainWindow : Window
     private void WindowClosed(object sender, WindowEventArgs args)
     {
         _closed = true;
+        if (_themeSettings is not null) _themeSettings.Changed -= ContrastThemeChanged;
+        _themeSettings = null;
         _dictation.Dispose();
         _history.Dispose();
         _hotkey?.Dispose();

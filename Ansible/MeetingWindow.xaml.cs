@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Ansible.Core;
 using Microsoft.UI;
+using Microsoft.UI.System;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -37,6 +38,7 @@ public sealed partial class MeetingWindow : Window
     private bool? _capturePrivacy;
     private MeetingDetectionCandidate? _selectedDetectedMeeting;
     private bool _refreshingProcesses;
+    private ThemeSettings? _themeSettings;
     internal MeetingDetectionCandidate? SelectedMeetingIdentity =>
         (ProcessChoice.SelectedItem as ComboBoxItem)?.Tag is MeetingProcessChoice { IsTeams: true } choice
             ? new MeetingDetectionCandidate(choice.Id, choice.StartedUtc) : null;
@@ -83,6 +85,9 @@ public sealed partial class MeetingWindow : Window
         SetTitleBar(TitleBar);
         AppWindow.TitleBar.ButtonBackgroundColor = Colors.Transparent;
         AppWindow.TitleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
+        _themeSettings = ThemeSettings.CreateForWindowId(AppWindow.Id);
+        _themeSettings.Changed += ContrastThemeChanged;
+        RefreshTitleBarColors();
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
         AppWindow.Resize(new Windows.Graphics.SizeInt32(640, 900));
         AudioSourceChoice.SelectedIndex = 0;
@@ -91,6 +96,8 @@ public sealed partial class MeetingWindow : Window
         Closed += (_, _) =>
         {
             _closed = true;
+            if (_themeSettings is not null) _themeSettings.Changed -= ContrastThemeChanged;
+            _themeSettings = null;
             _session.StateChanged -= SessionChanged;
             _cleanupCancellation?.Dispose();
             _cleanupCancellation = null;
@@ -107,7 +114,10 @@ public sealed partial class MeetingWindow : Window
         if (_savedMeeting) PrivacyText.Text = "Saved on this device. No audio recording is stored.";
     }
 
-    private void RootThemeChanged(FrameworkElement sender, object args) => DispatcherQueue.TryEnqueue(() =>
+    private void RootThemeChanged(FrameworkElement sender, object args) => RefreshTitleBarColors();
+    private void ContrastThemeChanged(ThemeSettings sender, object args) => RefreshTitleBarColors();
+
+    private void RefreshTitleBarColors() => DispatcherQueue.TryEnqueue(() =>
     {
         if (_closed) return;
         AppWindow.TitleBar.ButtonForegroundColor = ((SolidColorBrush)MeetingTitle.Foreground).Color;
@@ -166,7 +176,7 @@ public sealed partial class MeetingWindow : Window
             MeetingSessionPhase.Paused => ("Meeting paused", "Capture is paused. Resume to continue this meeting."),
             MeetingSessionPhase.Recording => ("Listening for your conversation", "Text appears as each chunk is recognized. Speaker labels may be revised."),
             MeetingSessionPhase.Finishing or MeetingSessionPhase.Refining => ("Finishing your meeting", "Captured speech is being finalized locally. Speaker corrections preserve the recognized wording."),
-            MeetingSessionPhase.Failed when retryStart => ("Meeting could not start", "Resolve the error above, check your audio source, then try again."),
+            MeetingSessionPhase.Failed when retryStart => ("Meeting needs attention", "Resolve the error above, check your audio source, then try again."),
             MeetingSessionPhase.Failed => ("Meeting stopped", "Review the error above. Text already transcribed stays saved on this device."),
             MeetingSessionPhase.Completed => ("No speech transcribed", "This meeting has no recognized speech. Saved text stays on this device."),
             _ => ("Ready when you are", "Start the meeting to see speaker-labelled text here.")
@@ -289,18 +299,20 @@ public sealed partial class MeetingWindow : Window
     {
         if (_busy) return;
         _busy = true;
+        string? actionError = null;
         ErrorBar.IsOpen = false;
         ErrorBar.Visibility = Visibility.Collapsed;
         StartButton.IsEnabled = PauseButton.IsEnabled = EndButton.IsEnabled = false;
         try { await action(); }
         catch (OperationCanceledException) when (_closing) { }
-        catch (Exception error) { if (!_closed) ShowError(error.Message); }
+        catch (Exception error) { actionError = error.Message; }
         finally
         {
             _busy = false;
             if (!_closed)
             {
                 if (!_savedMeeting) Render(_session.State);
+                if (actionError is not null) ShowError(actionError);
                 StartButton.IsEnabled = true;
             }
         }

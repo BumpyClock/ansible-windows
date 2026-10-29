@@ -17,6 +17,9 @@
 - Match meeting windows to the shell theme and shared title typography. Restore
   audio-source controls and **Try again** after a failed empty meeting releases
   its resources, with instructions that match the available controls.
+- Preserve the current meeting retry error and avoid inferring startup failure
+  from an empty transcript. Refresh shell and meeting title-bar colors when the
+  Windows High Contrast scheme changes.
 - Remove the bordered page canvas. Pages sit on the Mica window base with section
   titles above borderless tonal cards; the dictate control is inline in the Home
   header. High Contrast keeps card outlines. Page switches and model cards no
