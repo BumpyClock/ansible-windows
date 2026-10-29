@@ -566,6 +566,49 @@ public sealed class MeetingSessionTests : IDisposable
         Assert.False(session.IsActive);
     }
 
+    [Fact]
+    public async Task ConcurrentDisposalWaitsForTheFirstTeardownInsteadOfReachingTheClosedWriter()
+    {
+        for (var round = 0; round < 30; round++)
+        {
+            var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var session = new MeetingSession(() => new Engine(), new CaptureFactory(), new(_directory), () => new(),
+                writeMeeting: async document =>
+                {
+                    if (document.Status != MeetingStatus.Completed) return;
+                    entered.TrySetResult();
+                    await release.Task;
+                });
+            await session.StartAsync(Request);
+
+            var first = session.DisposeAsync().AsTask();
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            var second = session.DisposeAsync().AsTask();
+            release.SetResult();
+
+            var failure = await Record.ExceptionAsync(() => Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(5)));
+            Assert.True(failure is null, $"Round {round}: {failure}");
+            Assert.False(session.IsActive);
+        }
+    }
+
+    [Fact]
+    public async Task DisposalThatFailedToSaveIsRetriedByTheNextCallInsteadOfRepeatingTheFailure()
+    {
+        var completedWrites = 0;
+        await using var session = new MeetingSession(() => new Engine(), new CaptureFactory(), new(_directory), () => new(),
+            writeMeeting: document => document.Status == MeetingStatus.Completed && Interlocked.Increment(ref completedWrites) == 1
+                ? Task.FromException(new IOException("Disk unavailable"))
+                : Task.CompletedTask);
+        await session.StartAsync(Request);
+
+        await Assert.ThrowsAsync<IOException>(() => session.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5)));
+        await session.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.False(session.IsActive);
+    }
+
     private static async Task WaitUntilAsync(Func<bool> condition)
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));

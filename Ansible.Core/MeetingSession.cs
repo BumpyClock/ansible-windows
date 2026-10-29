@@ -20,6 +20,7 @@ public sealed class MeetingSession : IAsyncDisposable
     private readonly SemaphoreSlim _commands = new(1, 1);
     private readonly MeetingPersistence _persistence;
     private readonly SemaphoreSlim _resources = new(1, 1);
+    private readonly SemaphoreSlim _disposal = new(1, 1);
     private readonly Func<IMeetingRecognitionEngine> _engineFactory;
     private readonly IMeetingCaptureFactory _captureFactory;
     private readonly MeetingStore _store;
@@ -704,7 +705,15 @@ public sealed class MeetingSession : IAsyncDisposable
 
     private void Publish() => StateChanged?.Invoke(State);
 
+    // Concurrent callers queue behind one teardown. A failed teardown leaves _disposed false, so the next caller retries it.
     public async ValueTask DisposeAsync()
+    {
+        await _disposal.WaitAsync();
+        try { await DisposeCoreAsync(); }
+        finally { _disposal.Release(); }
+    }
+
+    private async Task DisposeCoreAsync()
     {
         if (_disposed) return;
         Interlocked.Exchange(ref _disposing, 1);
