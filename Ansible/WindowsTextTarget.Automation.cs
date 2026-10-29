@@ -105,10 +105,11 @@ internal static unsafe partial class WindowsTextTarget
         TextSnapshot? before, CancellationToken cancellationToken, Func<bool> stillCurrent)
     {
         var clock = Stopwatch.StartNew();
-        return ObserveDelivery(before, text,
+        var outcome = ObserveDelivery(before, text,
             () => TryReadTextSnapshot(target, cancellationToken, stillCurrent, clock),
             () => !cancellationToken.IsCancellationRequested && stillCurrent(),
             Thread.Sleep, () => clock.ElapsedMilliseconds);
+        return outcome with { VerificationMilliseconds = clock.Elapsed.TotalMilliseconds };
     }
 
     internal static TextDeliveryOutcome ObserveDelivery(TextSnapshot? before, string text,
@@ -121,11 +122,11 @@ internal static unsafe partial class WindowsTextTarget
                 var after = observe();
                 if (after is null) { break; }
                 if (ExactInsertion(before, after, text) && elapsedMilliseconds() < 600 && active())
-                    return TextDeliveryOutcome.Verified("Exact text insertion was observed in the original field.");
+                    return TextDeliveryOutcome.Verified("Exact text insertion was observed in the original field.", TextDeliveryReason.Verified);
                 wait(25);
             }
         }
-        return TextDeliveryOutcome.Sent("Input was queued, but insertion could not be verified within the bounded accessibility observation. Check the field; no text will be replayed.");
+        return TextDeliveryOutcome.Sent("Input was queued, but insertion could not be verified within the bounded accessibility observation. Check the field; no text will be replayed.", TextDeliveryReason.SentUnverified);
     }
 
     private sealed class AutomationRead : IDisposable

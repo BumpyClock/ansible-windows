@@ -5,7 +5,7 @@ namespace Ansible.Core;
 
 /// <summary>
 /// A global activation chord: RegisterHotKey modifier bits (<see cref="Modifiers"/>: Alt=1, Ctrl=2,
-/// Shift=4, Win=8) plus a primary virtual-key (<see cref="Key"/>).
+/// Shift=4, Win=8) plus a primary virtual-key (<see cref="Key"/>). Ctrl+Win alone uses Key=0.
 /// </summary>
 public readonly record struct DictationShortcut(uint Modifiers, uint Key)
 {
@@ -21,9 +21,10 @@ public readonly record struct DictationShortcut(uint Modifiers, uint Key)
     private const uint VkA = 0x41, VkZ = 0x5A;
     private const uint VkL = 0x4C;
     private const uint VkF1 = 0x70, VkF11 = 0x7A;   // F12 (0x7B) is intentionally excluded.
-    private const uint VkF9 = 0x78;
+    public static DictationShortcut Default => new(ModControl | ModWin, 0);
 
-    public static DictationShortcut Default => new(0, VkF9);
+    [JsonIgnore]
+    public bool IsModifierOnly => Modifiers == (ModControl | ModWin) && Key == 0;
 
     /// <summary>
     /// Validates chord structure and known exclusions, not whether RegisterHotKey succeeds.
@@ -32,11 +33,11 @@ public readonly record struct DictationShortcut(uint Modifiers, uint Key)
     /// Other Windows-key chords remain subject to operating-system registration restrictions.
     /// </summary>
     [JsonIgnore]
-    public bool IsValid =>
+    public bool IsValid => IsModifierOnly || (
         (Modifiers & ~ValidModifierMask) == 0 &&
         IsSupportedPrimaryKey(Key) &&
         !(Modifiers == ModWin && Key == VkL) &&
-        (!IsPrintableKey(Key) || (Modifiers & NonShiftModifierMask) != 0);
+        (!IsPrintableKey(Key) || (Modifiers & NonShiftModifierMask) != 0));
 
     /// <summary>Stable label with a fixed modifier order (Ctrl, Win, Shift, Alt), e.g. "Ctrl + Alt + D" or "F9".</summary>
     [JsonIgnore]
@@ -49,7 +50,7 @@ public readonly record struct DictationShortcut(uint Modifiers, uint Key)
             if ((Modifiers & ModWin) != 0) { parts.Add("Win"); }
             if ((Modifiers & ModShift) != 0) { parts.Add("Shift"); }
             if ((Modifiers & ModAlt) != 0) { parts.Add("Alt"); }
-            parts.Add(KeyName(Key));
+            if (!IsModifierOnly) { parts.Add(KeyName(Key)); }
             return string.Join(" + ", parts);
         }
     }
@@ -67,4 +68,70 @@ public readonly record struct DictationShortcut(uint Modifiers, uint Key)
         if (vk == VkSpace) { return "Space"; }
         return "0x" + vk.ToString("X2", CultureInfo.InvariantCulture);
     }
+}
+
+/// <summary>
+/// Qualifies the modifier-only chord before starting, so ordinary Ctrl+Win+key shortcuts pass through.
+/// A third key arriving after qualification ends the hold; future input cannot be predicted.
+/// </summary>
+public sealed class CtrlWinShortcutState
+{
+    public const int QualificationMilliseconds = 200;
+    private readonly HashSet<uint> _down = [];
+    private long? _candidateAt;
+    private bool _blocked;
+
+    public bool IsPressed { get; private set; }
+    public bool IsPending => _candidateAt is not null;
+
+    public void Reset(IEnumerable<uint>? heldKeys = null)
+    {
+        _down.Clear();
+        if (heldKeys is not null) _down.UnionWith(heldKeys);
+        _blocked = _down.Count != 0;
+        _candidateAt = null;
+        IsPressed = false;
+    }
+
+    /// <returns>Always false. Every observed physical keydown and keyup must reach Windows.</returns>
+    public bool Process(uint key, bool down, bool injected, long milliseconds)
+    {
+        if (injected) return false;
+        if (down ? !_down.Add(key) : !_down.Remove(key)) return false;
+
+        if (down && !IsChordKey(key))
+        {
+            _blocked = true;
+        }
+
+        var held = _down.Any(IsControl) && _down.Any(IsWindows);
+        if (!held || _blocked)
+        {
+            _candidateAt = null;
+            IsPressed = false;
+        }
+        else if (!IsPressed && _candidateAt is null)
+        {
+            _candidateAt = milliseconds;
+        }
+
+        if (_down.Count == 0)
+        {
+            _blocked = false;
+        }
+        return false;
+    }
+
+    public bool Advance(long milliseconds)
+    {
+        if (_candidateAt is not { } start || milliseconds - start < QualificationMilliseconds)
+            return false;
+        _candidateAt = null;
+        IsPressed = true;
+        return true;
+    }
+
+    public static bool IsControl(uint key) => key is 0x11 or 0xA2 or 0xA3;
+    public static bool IsWindows(uint key) => key is 0x5B or 0x5C;
+    private static bool IsChordKey(uint key) => IsControl(key) || IsWindows(key);
 }
