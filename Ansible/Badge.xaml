@@ -5,7 +5,6 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              HorizontalAlignment="Left" VerticalAlignment="Center"
              MaxWidth="{StaticResource SectionBadgeMaxWidth}"
-             ToolTipService.ToolTip="{x:Bind Text, Mode=OneWay}"
              Background="{ThemeResource AppCardBrush}">
     <!-- Default fill is the card brush: AppControlBrush is nearly the light page background. -->
     <Border Style="{StaticResource SectionBadgeStyle}" HorizontalAlignment="Stretch"
