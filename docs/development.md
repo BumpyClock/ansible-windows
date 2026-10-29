@@ -449,8 +449,10 @@ device starts at the shared timeline cursor. Health adds `OutputDevices`,
 fields (`TimestampSample`, `ExpectedSample`, packet `Samples`, current and
 previous device position, native `Flags`). Records
 never include audio, transcript content, participant names, window titles,
-device names, model names, paths, or raw exception messages. Transcripts use
-atomic source-generated JSON saves; audio never reaches disk. Startup marks unfinished readable documents Interrupted.
+device names, paths, or raw exception messages. The `ModelId` field carries only
+an ID from the fixed catalog allow-list, and is null for any other model.
+Transcripts use atomic source-generated JSON saves; audio never reaches disk.
+Startup marks unfinished readable documents Interrupted.
 Listing isolates unreadable files and returns their identifiers separately, so
 they do not block healthy history or capture. The Meetings recovery action
 exports the original bytes, flushes and completes the destination file, then
