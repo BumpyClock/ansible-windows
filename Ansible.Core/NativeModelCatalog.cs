@@ -54,7 +54,8 @@ public sealed record NativeModelCatalog
                 entry.Sha256 is null || entry.Sha256.Length != 64 || !entry.Sha256.All(char.IsAsciiHexDigit) ||
                 string.Equals(entry.Filename, ".localvoice-models.lock", StringComparison.OrdinalIgnoreCase) ||
                 !entries.TryAdd(entry.Id, entry) || !filenames.Add(entry.Filename) ||
-                !filenames.Add(entry.Filename + ".partial") || !filenames.Add(entry.Filename + ".partial.json"))
+                !filenames.Add(entry.Filename + ".partial") || !filenames.Add(entry.Filename + ".partial.json") ||
+                !filenames.Add(entry.Filename + ModelStore.PendingMetadataSuffix))
             {
                 throw new InvalidDataException("The native model catalog contains an invalid entry.");
             }
