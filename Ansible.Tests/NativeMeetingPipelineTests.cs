@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Threading.Channels;
 using Ansible.Core;
 using Xunit.Abstractions;
 
@@ -19,11 +18,13 @@ public sealed class NativeMeetingPipelineTests(ITestOutputHelper output)
         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(4));
         var pcm = await new AudioInputReader().ReadReplayAsync(
             Path.Combine(workspace, ".runtime", "validation", "sample_16k.wav"), timeout.Token);
-        var capture = new ReplayCaptureFactory(pcm);
+        var capture = new FakeMeetingCapture();
+        capture.Send(pcm);
+        var captures = new FakeMeetingCaptureFactory { Create = () => capture };
         var firstSpeech = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var timer = Stopwatch.StartNew();
         var session = new MeetingSession(
-            () => new NativeAudioEngine(library, catalog, models, threads: 4), capture,
+            () => new NativeAudioEngine(library, catalog, models, threads: 4), captures,
             new MeetingStore(storeDirectory), () => new RecognitionOptions(Backend: NativeBackend.Cpu),
             alignerFactory: () => new NativeMeetingWordAligner(library, catalog, models, threads: 4),
             getModelId: () => "vibevoice-streaming-1.5b-q4");
@@ -36,11 +37,11 @@ public sealed class NativeMeetingPipelineTests(ITestOutputHelper output)
         };
         try
         {
-            await session.StartAsync(new(MeetingPlaybackSource.SystemAudio)).WaitAsync(timeout.Token);
+            await session.StartAsync(new()).WaitAsync(timeout.Token);
             await firstSpeech.Task.WaitAsync(timeout.Token);
             Assert.True(session.IsActive);
-            Assert.False(capture.Capture.IsReleased);
-            Assert.False(capture.Capture.Audio.Completion.IsCompleted);
+            Assert.False(capture.IsReleased);
+            Assert.False(capture.Audio.Completion.IsCompleted);
             Assert.Equal(MeetingSessionPhase.Recording, session.State.Phase);
             Assert.Null(session.State.Error);
             output.WriteLine($"Measured: first public-sample speech through combined pipeline {timer.Elapsed.TotalSeconds:F2}s; aligned turns {session.Document!.Turns.Count(turn => turn.TimingQuality == MeetingTimingQuality.Aligned)}.");
@@ -49,7 +50,7 @@ public sealed class NativeMeetingPipelineTests(ITestOutputHelper output)
             Assert.Equal(MeetingSessionPhase.Completed, session.State.Phase);
             Assert.Null(session.State.Error);
             Assert.False(session.IsActive);
-            Assert.True(capture.Capture.IsReleased);
+            Assert.True(capture.IsReleased);
             var document = await new MeetingStore(storeDirectory).LoadAsync(session.Document!.Id, timeout.Token);
             Assert.Equal(MeetingStatus.Completed, document.Status);
             Assert.NotEmpty(document.Turns);
@@ -86,33 +87,5 @@ public sealed class NativeMeetingPipelineTests(ITestOutputHelper output)
             directory = directory.Parent;
         }
         throw new DirectoryNotFoundException("Run this test in the application workspace.");
-    }
-
-    private sealed class ReplayCaptureFactory(byte[] pcm) : IMeetingCaptureFactory
-    {
-        public ReplayCapture Capture { get; } = new(pcm);
-        public Task<IAudioCapture> StartAsync(MeetingCaptureRequest request, CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            request.Validate();
-            return Task.FromResult<IAudioCapture>(Capture);
-        }
-    }
-
-    private sealed class ReplayCapture : IAudioCapture
-    {
-        private readonly Channel<byte[]> _audio = Channel.CreateBounded<byte[]>(1);
-        private volatile bool _released;
-        public ReplayCapture(byte[] pcm)
-        {
-            CapturedSeconds = pcm.Length / 32000.0;
-            if (!_audio.Writer.TryWrite(pcm)) throw new InvalidOperationException("Could not supply the public validation sample.");
-        }
-        public ChannelReader<byte[]> Audio => _audio.Reader;
-        public double CapturedSeconds { get; }
-        public bool IsReleased => _released;
-        public event Action<double>? LevelChanged { add { } remove { } }
-        public Task StopAsync() { _audio.Writer.TryComplete(); _released = true; return Task.CompletedTask; }
-        public ValueTask DisposeAsync() => new(StopAsync());
     }
 }

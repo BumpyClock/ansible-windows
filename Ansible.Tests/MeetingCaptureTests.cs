@@ -21,26 +21,53 @@ public sealed class MeetingCaptureTests
     }
 
     [Fact]
-    public void MeetingApplicationRequiresSelectedProcess()
+    public void OutputDevicesAreSummedWithSaturation()
     {
-        Assert.Throws<ArgumentException>(() => new MeetingCaptureRequest(MeetingPlaybackSource.MeetingApp).Validate());
-        new MeetingCaptureRequest(MeetingPlaybackSource.SystemAudio).Validate();
+        var total = new byte[6];
+        MeetingPcmMixer.Accumulate(total, [0x30, 0x75, 0x00, 0x80, 0x10, 0x00]);
+        MeetingPcmMixer.Accumulate(total, [0x30, 0x75, 0x00, 0x80, 0x05, 0x00]);
+        Assert.Equal(new byte[] { 0xFF, 0x7F, 0x00, 0x80, 0x15, 0x00 }, total);
+        Assert.Throws<ArgumentException>(() => MeetingPcmMixer.Accumulate(total, new byte[4]));
     }
 
-    [Theory, InlineData(false), InlineData(true), Trait("Category", "NativeIntegration")]
-    public async Task AudioAndMicrophoneStartProducePcmAndRelease(bool processOnly)
+    [Fact]
+    public void LateOutputTimelineStartsAtTheSharedCursor()
+    {
+        var timeline = new MeetingPacketTimeline(1000);
+        timeline.Add(996, [1, 0, 2, 0, 3, 0, 4, 0, 5, 0, 6, 0], 1100);
+        Assert.Equal(1000, timeline.Cursor);
+        Assert.Equal(new byte[] { 5, 0, 6, 0, 0, 0 }, timeline.Read(3, out var captured));
+        Assert.Equal(2, captured);
+        Assert.Throws<ArgumentOutOfRangeException>(() => new MeetingPacketTimeline(-1));
+    }
+
+    [Fact]
+    public void SpeakerNamingProcessIsOptional()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new MeetingCaptureRequest(0).Validate());
+        new MeetingCaptureRequest().Validate();
+        new MeetingCaptureRequest(42).Validate();
+    }
+
+    [Fact, Trait("Category", "NativeIntegration")]
+    public async Task AudioAndMicrophoneStartProducePcmAndRelease()
     {
         if (!OperatingSystem.IsWindows()) return;
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-        await using var capture = await new MeetingCaptureFactory().StartAsync(
-            new(processOnly ? MeetingPlaybackSource.MeetingApp : MeetingPlaybackSource.SystemAudio,
-                processOnly ? Environment.ProcessId : null), timeout.Token);
+        await using var capture = await new MeetingCaptureFactory().StartAsync(new(), timeout.Token);
         using var tone = new MeetingTestTone();
-        var metadata = Assert.IsAssignableFrom<IMeetingAudioSourceMetadata>(capture);
+        var playbackMixedRms = 0.0;
+        capture.Activity += activity => playbackMixedRms = Math.Max(playbackMixedRms, activity.PlaybackRms);
         var maximumToneAmplitude = 0.0;
         for (var index = 0; index < 50; index++)
         {
-            var bytes = await capture.Audio.ReadAsync(timeout.Token);
+            byte[] bytes;
+            try { bytes = await capture.Audio.ReadAsync(timeout.Token); }
+            catch (System.Threading.Channels.ChannelClosedException error)
+            {
+                throw new Xunit.Sdk.XunitException($"{error.InnerException?.Message}\n" +
+                    System.Text.Json.JsonSerializer.Serialize(capture.Health, LocalDiagnosticJson.Default.MeetingCaptureHealth));
+            }
             Assert.Equal(1280, bytes.Length);
             double sine = 0, cosine = 0;
             for (var sampleIndex = 0; sampleIndex < bytes.Length / 2; sampleIndex++)
@@ -54,16 +81,21 @@ public sealed class MeetingCaptureTests
                 2 * Math.Sqrt(sine * sine + cosine * cosine) / (bytes.Length / 2));
         }
         Assert.True(maximumToneAmplitude > 0.01, "The generated 440 Hz tone must reach the meeting capture stream.");
-        Assert.True(metadata.ClockSamplePosition >= capture.CapturedSeconds * 16000);
+        Assert.True(capture.ClockSamplePosition >= capture.CapturedSeconds * 16000);
         await capture.StopAsync();
-        var stoppedPosition = metadata.ClockSamplePosition;
+        var stoppedPosition = capture.ClockSamplePosition;
         long flushedSamples = 0;
         await foreach (var packet in capture.Audio.ReadAllAsync(timeout.Token)) flushedSamples += packet.Length / 2;
         Assert.True(flushedSamples > 0, "Stop must emit pending holdback audio.");
         Assert.Equal(stoppedPosition, (long)Math.Round(capture.CapturedSeconds * 16000));
         await Task.Delay(20, timeout.Token);
-        Assert.Equal(stoppedPosition, metadata.ClockSamplePosition);
+        Assert.Equal(stoppedPosition, capture.ClockSamplePosition);
         Assert.True(capture.IsReleased);
+        var health = Assert.IsType<MeetingCaptureHealth>(capture.Health);
+        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(health, LocalDiagnosticJson.Default.MeetingCaptureHealth));
+        Assert.True(health.Playback.Packets > 0, "Playback must supply real packets, not only synthetic mixer silence.");
+        Assert.True(health.Playback.PeakInputRms > 0.001, "Playback itself must contain a signal; microphone pickup is not sufficient.");
+        Assert.True(playbackMixedRms > 0.001, "Playback signal must survive the timestamp mixer.");
     }
 }
 

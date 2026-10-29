@@ -278,8 +278,7 @@ public sealed partial class MeetingWindow : Window
             }
         }
         var title = MeetingTitle.Text;
-        await _session.StartAsync(new MeetingCaptureRequest(system ? MeetingPlaybackSource.SystemAudio : MeetingPlaybackSource.MeetingApp,
-            system ? process is { IsTeams: true } ? process.Id : null : process?.Id));
+        await _session.StartAsync(new MeetingCaptureRequest(process is { IsTeams: true } ? process.Id : null));
         if (!string.IsNullOrWhiteSpace(title) && title != "New meeting") await _session.RenameAsync(title);
     }
 
