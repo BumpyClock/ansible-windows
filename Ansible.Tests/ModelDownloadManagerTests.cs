@@ -17,6 +17,91 @@ public sealed class ModelDownloadManagerTests : IDisposable
     };
 
     [Fact]
+    public async Task DiagnosticSummariesSeparateTransferVerificationAndInstallWithoutPaths()
+    {
+        using var http = Client(_ => Response(Weights));
+        var log = new LocalDiagnosticLog(Path.Combine(_directory, "diagnostics"));
+        log.SetEnabled(true);
+        await using var manager = new ModelDownloadManager([Entry], new HashSet<string> { "test_asr" },
+            _directory, http, _ => long.MaxValue, log);
+        await manager.DownloadAsync("tiny");
+        await manager.InstallAsync("tiny");
+        await log.DisposeAsync();
+        var lines = await File.ReadAllLinesAsync(Path.Combine(log.DirectoryPath, "local-diagnostics.jsonl"));
+        Assert.Equal(3, lines.Length);
+        Assert.DoesNotContain(_directory, string.Join("", lines));
+        Assert.DoesNotContain("test/models", string.Join("", lines));
+        var entries = lines.Select(line => System.Text.Json.JsonDocument.Parse(line)).ToArray();
+        try
+        {
+            var transfer = entries[0].RootElement;
+            var verify = entries[1].RootElement;
+            var install = entries[2].RootElement;
+            Assert.Equal("ModelDownload", transfer.GetProperty("Family").GetString());
+            Assert.Equal("Transfer", transfer.GetProperty("Stage").GetString());
+            Assert.Equal("Completed", transfer.GetProperty("Outcome").GetString());
+            Assert.Equal(0, transfer.GetProperty("ResumeOffsetBytes").GetInt64());
+            Assert.Equal(Weights.Length, transfer.GetProperty("DownloadedBytes").GetInt64());
+            Assert.Equal(200, transfer.GetProperty("HttpStatusCode").GetInt32());
+            Assert.Equal("Verify", verify.GetProperty("Stage").GetString());
+            Assert.Equal(transfer.GetProperty("AttemptId").GetGuid(), verify.GetProperty("AttemptId").GetGuid());
+            Assert.Equal("Install", install.GetProperty("Stage").GetString());
+            Assert.Equal("Completed", install.GetProperty("Outcome").GetString());
+            Assert.Equal(System.Text.Json.JsonValueKind.Null, transfer.GetProperty("ModelFamily").ValueKind);
+        }
+        finally { foreach (var entry in entries) entry.Dispose(); }
+    }
+
+    [Theory]
+    [InlineData("status", 200)]
+    [InlineData("range", 206)]
+    [InlineData("etag", 206)]
+    [InlineData("length", 206)]
+    [InlineData("encoding", 206)]
+    public async Task RejectedResponseDiagnosticsRetainObservedHttpStatus(string fault, int status)
+    {
+        Directory.CreateDirectory(_directory);
+        var path = Path.Combine(_directory, Entry.Filename);
+        File.WriteAllBytes(path + ".partial", Weights[..4]);
+        var metadata = System.Text.Json.JsonSerializer.Serialize(
+            new ModelResume(Entry.Sha256, Entry.Bytes, Entry.DownloadUri.AbsoluteUri, "\"revision-one\""),
+            ModelDownloadJsonContext.Default.ModelResume);
+        File.WriteAllText(path + ".partial.json", metadata);
+        using var http = Client(_ =>
+        {
+            var response = ResumedResponse();
+            switch (fault)
+            {
+                case "status": response.StatusCode = HttpStatusCode.OK; break;
+                case "range": response.Content.Headers.ContentRange = new ContentRangeHeaderValue(3, 15, 16); break;
+                case "etag": response.Headers.ETag = new EntityTagHeaderValue("\"changed\""); break;
+                case "length": response.Content.Headers.ContentLength = 11; break;
+                case "encoding": response.Content.Headers.ContentEncoding.Add("gzip"); break;
+            }
+            return response;
+        });
+        await using var log = new LocalDiagnosticLog(Path.Combine(_directory, "diagnostics"));
+        log.SetEnabled(true);
+        await using var manager = new ModelDownloadManager([Entry], new HashSet<string> { "test_asr" },
+            _directory, http, _ => long.MaxValue, log);
+        Assert.NotNull(await Record.ExceptionAsync(() => manager.DownloadAsync("tiny")));
+        await log.DisposeAsync();
+        var lines = await File.ReadAllLinesAsync(Path.Combine(log.DirectoryPath, "local-diagnostics.jsonl"));
+        using var document = System.Text.Json.JsonDocument.Parse(Assert.Single(lines));
+        var transfer = document.RootElement;
+        Assert.Equal("Transfer", transfer.GetProperty("Stage").GetString());
+        Assert.Equal("Failed", transfer.GetProperty("Outcome").GetString());
+        Assert.Equal(status, transfer.GetProperty("HttpStatusCode").GetInt32());
+        Assert.Equal(4, transfer.GetProperty("ResumeOffsetBytes").GetInt64());
+        Assert.Equal(4, transfer.GetProperty("DownloadedBytes").GetInt64());
+        Assert.Equal(Weights[..4], File.ReadAllBytes(path + ".partial"));
+        Assert.Equal(metadata, File.ReadAllText(path + ".partial.json"));
+        Assert.False(File.Exists(path));
+        Assert.DoesNotContain(_directory, lines[0]);
+        Assert.DoesNotContain("test/models", lines[0]);
+    }
+
+    [Fact]
     public async Task VerifiedTransferWaitsForExplicitAtomicInstallation()
     {
         using var http = Client(_ => Response(Weights));
@@ -105,6 +190,9 @@ public sealed class ModelDownloadManagerTests : IDisposable
     [InlineData("status")]
     [InlineData("range")]
     [InlineData("length")]
+    [InlineData("total")]
+    [InlineData("unit")]
+    [InlineData("weak")]
     public async Task InconsistentResumeResponsesPreserveThePartial(string fault)
     {
         var stream = new PausingStream(Weights[..4]);
@@ -119,6 +207,9 @@ public sealed class ModelDownloadManagerTests : IDisposable
                 case "status": response.StatusCode = HttpStatusCode.OK; break;
                 case "range": response.Content.Headers.ContentRange = new ContentRangeHeaderValue(3, 15, 16); break;
                 case "length": response.Content.Headers.ContentLength = 11; break;
+                case "total": response.Content.Headers.ContentRange = new ContentRangeHeaderValue(4, 15, 17); break;
+                case "unit": response.Content.Headers.ContentRange!.Unit = "items"; break;
+                case "weak": response.Headers.ETag = new EntityTagHeaderValue("\"revision-one\"", isWeak: true); break;
             }
             return response;
         });
@@ -127,7 +218,8 @@ public sealed class ModelDownloadManagerTests : IDisposable
         await stream.Blocked.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await manager.PauseAsync();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => first);
-        await Assert.ThrowsAsync<InvalidDataException>(() => manager.DownloadAsync("tiny"));
+        var error = await Assert.ThrowsAsync<HttpRequestException>(() => manager.DownloadAsync("tiny"));
+        Assert.Equal(fault == "status" ? HttpStatusCode.OK : HttpStatusCode.PartialContent, error.StatusCode);
         Assert.Equal(Weights[..4], File.ReadAllBytes(manager.Get("tiny").Path + ".partial"));
         Assert.False(File.Exists(manager.Get("tiny").Path));
     }
@@ -367,6 +459,113 @@ public sealed class ModelDownloadManagerTests : IDisposable
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => transfer);
         await manager.DiscardPartialAsync("tiny");
         Assert.False(manager.Get("tiny").HasPartial);
+    }
+
+    [Fact]
+    public async Task InstallCleanupFailureRemainsInstalledAndSurfacesTheRecoveryWarning()
+    {
+        using var http = Client(_ => Response(Weights));
+        await using var manager = Manager(http);
+        await manager.DownloadAsync("tiny");
+        var path = manager.Get("tiny").Path;
+        using (var blocked = new FileStream(path + ".partial.json", FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            await manager.InstallAsync("tiny");
+            var installed = manager.Get("tiny");
+            Assert.Equal(ModelInstallState.Installed, installed.State);
+            Assert.True(installed.HasModelFile);
+            Assert.True(installed.HasPartial);
+            Assert.Contains("Model installed", installed.Error);
+        }
+        await manager.RefreshAsync();
+        Assert.Equal(Weights, File.ReadAllBytes(path));
+        Assert.Null(manager.Get("tiny").Error);
+        Assert.False(manager.Get("tiny").HasPartial);
+    }
+
+    [Fact]
+    public async Task ChangingDirectoryReleasesPreparedLeasesWithoutDeletingWeights()
+    {
+        using var http = Client(_ => Response(Weights));
+        await using var manager = Manager(http);
+        await manager.DownloadAsync("tiny");
+        var previous = manager.Get("tiny").Path + ".partial";
+        manager.ChangeDirectory(Path.Combine(_directory, "other"));
+        using var writable = new FileStream(previous, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        Assert.Equal(Weights.Length, writable.Length);
+        Assert.Equal(ModelInstallState.NotInstalled, manager.Get("tiny").State);
+    }
+
+    [Fact]
+    public async Task InvalidDirectoryDoesNotReleaseTheCurrentPreparedStore()
+    {
+        using var http = Client(_ => Response(Weights));
+        await using var manager = Manager(http);
+        await manager.DownloadAsync("tiny");
+        var path = manager.Get("tiny").Path;
+        Assert.Throws<ArgumentException>(() => manager.ChangeDirectory("\0"));
+        await manager.InstallAsync("tiny");
+        Assert.Equal(Weights, File.ReadAllBytes(path));
+    }
+
+    [Theory]
+    [InlineData("gzip")]
+    [InlineData("br")]
+    public async Task EncodedResponseNeverWritesPartialBytes(string encoding)
+    {
+        using var http = Client(_ =>
+        {
+            var response = Response(Weights);
+            response.Content.Headers.ContentEncoding.Add(encoding);
+            return response;
+        });
+        await using var manager = Manager(http);
+        var error = await Assert.ThrowsAsync<HttpRequestException>(() => manager.DownloadAsync("tiny"));
+        Assert.Equal(HttpStatusCode.OK, error.StatusCode);
+        Assert.False(File.Exists(manager.Get("tiny").Path + ".partial"));
+    }
+
+    [Fact]
+    public async Task ApprovedHostRedirectLoopStopsAfterEightRedirects()
+    {
+        var requests = 0;
+        using var http = Client(_ =>
+        {
+            requests++;
+            return new HttpResponseMessage(HttpStatusCode.Found)
+                { Headers = { Location = new Uri("https://huggingface.co/next") } };
+        });
+        await using var manager = Manager(http);
+        await Assert.ThrowsAsync<InvalidDataException>(() => manager.DownloadAsync("tiny"));
+        Assert.Equal(9, requests);
+        Assert.False(File.Exists(manager.Get("tiny").Path));
+    }
+
+    [Fact]
+    public async Task WeakValidatorIsNotSavedOrSentAsIfRange()
+    {
+        var stream = new PausingStream(Weights[..4]);
+        var requests = 0;
+        using var http = Client(request =>
+        {
+            if (++requests == 1)
+            {
+                var response = PausingResponse(stream);
+                response.Headers.ETag = new EntityTagHeaderValue("\"weak\"", isWeak: true);
+                return response;
+            }
+            Assert.Null(request.Headers.IfRange);
+            Assert.Equal(4, Assert.Single(request.Headers.Range!.Ranges).From);
+            return ResumedResponse();
+        });
+        await using var manager = Manager(http);
+        var transfer = manager.DownloadAsync("tiny");
+        await stream.Blocked.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await manager.PauseAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => transfer);
+        await manager.DownloadAsync("tiny");
+        await manager.InstallAsync("tiny");
+        Assert.Equal(Weights, File.ReadAllBytes(manager.Get("tiny").Path));
     }
 
     private ModelDownloadManager Manager(HttpClient http, Func<string, long>? freeSpace = null) =>
