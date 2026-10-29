@@ -398,10 +398,7 @@ public sealed partial class MainPage : Page
         if (Down(VirtualKey.Control)) { modifiers |= 2; }
         if (Down(VirtualKey.Shift)) { modifiers |= 4; }
         if (Down(VirtualKey.LeftWindows) || Down(VirtualKey.RightWindows)) { modifiers |= 8; }
-        if (args.Key is VirtualKey.Control or VirtualKey.LeftControl or VirtualKey.RightControl
-            or VirtualKey.Shift or VirtualKey.LeftShift or VirtualKey.RightShift
-            or VirtualKey.Menu or VirtualKey.LeftMenu or VirtualKey.RightMenu
-            or VirtualKey.LeftWindows or VirtualKey.RightWindows)
+        if (IsModifierKey(args.Key))
         {
             if (!_shortcutPrimarySeen)
             {
@@ -425,7 +422,14 @@ public sealed partial class MainPage : Page
 
     private void ShortcutKeyUp(object sender, KeyRoutedEventArgs args)
     {
-        if (!_recordingShortcut || _pendingShortcut is not { } shortcut) { return; }
+        if (!_recordingShortcut) { return; }
+        if (_pendingShortcut is not { } shortcut)
+        {
+            // An invalid chord leaves nothing pending. Releasing its primary key must end it, or a later
+            // modifier-only shortcut would never be accepted during this capture.
+            if (!IsModifierKey(args.Key)) { _shortcutPrimarySeen = false; }
+            return;
+        }
         if (shortcut.IsModifierOnly)
         {
             if (!CtrlWinShortcutState.IsControl((uint)args.Key) && !CtrlWinShortcutState.IsWindows((uint)args.Key)) return;
@@ -439,6 +443,12 @@ public sealed partial class MainPage : Page
 
     private static bool Down(VirtualKey key) =>
         (InputKeyboardSource.GetKeyStateForCurrentThread(key) & CoreVirtualKeyStates.Down) != 0;
+
+    private static bool IsModifierKey(VirtualKey key) =>
+        key is VirtualKey.Control or VirtualKey.LeftControl or VirtualKey.RightControl
+            or VirtualKey.Shift or VirtualKey.LeftShift or VirtualKey.RightShift
+            or VirtualKey.Menu or VirtualKey.LeftMenu or VirtualKey.RightMenu
+            or VirtualKey.LeftWindows or VirtualKey.RightWindows;
 
     private void ShortcutLostFocus(object sender, RoutedEventArgs args) => EndShortcutCapture();
 
