@@ -11,9 +11,9 @@ card; the text is gone from Home until you dictate again. Shortcut dictations
 carry an insertion tag: **Inserted** when the target field confirmed the text,
 **Not verified** when the app accepted it without confirmation, **Partially
 inserted**, or **Not inserted**. Failed injected-key release also shows **Not
-verified**. Check the keyboard and destination field; some or none of the text
-may have arrived. The app never retries that uncertain input automatically.
-In-app dictations have no tag. History stays in
+verified**. Check the keyboard and destination field; none, some, or all of
+the text may have arrived. The app never retries that uncertain input
+automatically. In-app dictations have no tag. History stays in
 memory for this app session. Closing Ansible clears it. The history keeps at
 most 100 entries within a bounded text budget. Search can hide entries until
 you clear its filter. WAV results and dictations too large for history remain
