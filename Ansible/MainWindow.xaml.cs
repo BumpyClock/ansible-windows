@@ -391,9 +391,12 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    // A window hidden to the tray is not showing the lesson, so it must not hold the global shortcut.
+    // A window hidden to the tray or minimized is not showing the lesson, so it must not hold the global shortcut.
+    // AppWindow.IsVisible stays true for a minimized window, so the presenter state is checked separately.
     private WelcomePage? CurrentWelcome() =>
-        !_closed && AppWindow.IsVisible && ReferenceEquals(MainContent.Content, _welcome) ? _welcome : null;
+        !_closed && AppWindow.IsVisible
+        && AppWindow.Presenter is not OverlappedPresenter { State: OverlappedPresenterState.Minimized }
+        && ReferenceEquals(MainContent.Content, _welcome) ? _welcome : null;
 
     private void OpenShortcutLesson()
     {
