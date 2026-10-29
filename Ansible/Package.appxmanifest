@@ -8,7 +8,7 @@
   <!-- Development identity. Associate with the Store before creating a submission. -->
   <Identity Name="BumpyClock.Ansible.Development"
             Publisher="CN=BumpyClock"
-            Version="1.0.1.0" />
+            Version="1.0.1.12" />
 
   <Properties>
     <DisplayName>Ansible</DisplayName>
