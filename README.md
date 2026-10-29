@@ -100,10 +100,11 @@ options and checks.
   to about five seconds. Ordinary dictation stays plain ASR.
   Automatic Teams detection offers a notetaker prompt when Teams holds an active
   microphone session; it never starts recording. Disable it in Settings.
-  Capture includes the default microphone and either a selected application
-  process tree or explicitly selected system playback. Browser capture includes
-  other tabs in that browser's process tree. Pause/Resume keeps one recognition
-  stream; End meeting finishes pending speech. Audio stays in bounded memory.
+  Capture includes the default microphone plus endpoint loopback from every
+  active render device. A selected Teams process is used only for speaker
+  naming. Other app audio on those outputs can be included. Pause/Resume keeps
+  one recognition stream; End meeting finishes pending speech. Audio stays in
+  bounded memory.
   The capture limit is two hours; long-session speaker accuracy and the 5–10
   second update target need qualification on each model/backend combination.
   Teams names use visible accessibility evidence matched to confident local
