@@ -9,6 +9,9 @@ namespace Ansible;
 
 public sealed partial class DictationPage : Page
 {
+    internal event Action? ShortcutLessonRequested;
+    private void ShortcutLessonClicked(object sender, RoutedEventArgs args) => ShortcutLessonRequested?.Invoke();
+
     private static readonly TimeSpan CopiedDuration = TimeSpan.FromSeconds(2);
 
     private readonly DictationSession _session;
@@ -181,7 +184,7 @@ public sealed partial class DictationPage : Page
     private void RenderHomeHistory(bool animate)
     {
         HistoryView.Render(HomeHistoryProjection.Create(_history.Snapshot(), HistoryView.Query,
-            _history.OversizedCurrentResult, HomeModelDisplayName, DateTime.Today), animate);
+            _history.OversizedCurrentResult, HomeModelDisplayName, DateTime.Today, _history.StorageError), animate);
     }
 
     private void HistoryChanged()
@@ -267,6 +270,7 @@ public sealed partial class DictationPage : Page
 
     private void RenderRecordControl()
     {
+        ShortcutLessonButton.IsEnabled = _state.IsIdle;
         var canRecord = !_picking && (_state.CanStart || _state.CanFinish);
         CompactDictateButton.IsEnabled = canRecord;
         var label = _state.CanFinish ? "Finish dictation" : "Start dictation";

@@ -11,7 +11,7 @@
     </Page.Resources>
     <local:PageCanvas x:Name="HomeViewport"
                       Title="Good afternoon"
-                      Subtitle="Your dictations, kept in memory on this device for this session."
+                      Subtitle="Your latest 100 transcriptions, saved on this device."
                       SizeChanged="HomeViewportSizeChanged">
         <local:PageCanvas.HeaderActions>
             <StackPanel x:Name="DictateControl" Spacing="8" VerticalAlignment="Center"
@@ -56,6 +56,8 @@
                         </Grid>
                         <TextBlock x:Name="CompactStatusDetail" Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap" />
                     </StackPanel>
+                    <HyperlinkButton x:Name="ShortcutLessonButton" Content="Learn your shortcut" Click="ShortcutLessonClicked" Padding="0,4"
+                                     HorizontalAlignment="Left" AutomationProperties.AutomationId="ShortcutLessonButton" />
             </StackPanel>
         </local:PageCanvas.HeaderActions>
         <Grid>

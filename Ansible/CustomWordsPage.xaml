@@ -44,12 +44,9 @@
                     <ColumnDefinition x:Name="SearchColumn" Width="{StaticResource HistorySearchColumnWidth}" />
                 </Grid.ColumnDefinitions>
                 <TextBlock Text="Words" VerticalAlignment="Center" Style="{StaticResource HomeCardTitleStyle}" />
-                <Border Grid.Column="1" Style="{StaticResource HistoryCountStyle}" Background="{ThemeResource AppCardBrush}">
-                    <TextBlock x:Name="CountText" VerticalAlignment="Center" TextWrapping="NoWrap"
-                               Style="{StaticResource CaptionSecondaryStyle}"
-                               AutomationProperties.AutomationId="CustomWordsCount"
-                               AutomationProperties.LiveSetting="Polite" />
-                </Border>
+                <local:Badge x:Name="CountText" Grid.Column="1"
+                             AutomationProperties.AutomationId="CustomWordsCount"
+                             AutomationProperties.LiveSetting="Polite" />
                 <TextBox x:Name="SearchBox" Grid.Column="3" Height="36" VerticalContentAlignment="Center"
                          Padding="{StaticResource HistorySearchPadding}" FontSize="{StaticResource HistorySearchFontSize}"
                          Background="{ThemeResource AppSearchBrush}" BorderBrush="{ThemeResource AppBorderBrush}"
