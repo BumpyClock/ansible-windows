@@ -632,9 +632,9 @@ public sealed class MeetingSession : IAsyncDisposable
         if (!_cleanupSettings.Automatic || Document is not { Status: MeetingStatus.Completed, Turns.Count: > 0 } document ||
             document.Turns.Any(turn => turn.IsProvisional)) return;
         using var cancellation = new CancellationTokenSource();
-        // DisposeAsync sets _disposing and then cancels under _gate. Checking and publishing under the same
-        // lock means disposal either finds this source and cancels it, or this method sees disposal and
-        // never calls the provider.
+        // DisposeAsync sets _disposing and cancels under this same lock. Checking and publishing under it
+        // means disposal either finds this source and cancels it, or this method sees disposal and never
+        // calls the provider.
         lock (_gate)
         {
             if (Volatile.Read(ref _disposing) != 0) return;
@@ -907,8 +907,12 @@ public sealed class MeetingSession : IAsyncDisposable
     private async Task DisposeCoreAsync()
     {
         if (_disposed) return;
-        Interlocked.Exchange(ref _disposing, 1);
-        CancelTextCleanup();
+        // Set and cancel under the lock that CleanCompletedMeetingAsync uses to check and publish its source.
+        lock (_gate)
+        {
+            Interlocked.Exchange(ref _disposing, 1);
+            _textCleanupCancellation?.Cancel();
+        }
         CancelPreparation();
         await EndAsync();
         await _recognition;
