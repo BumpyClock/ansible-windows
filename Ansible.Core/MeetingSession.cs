@@ -375,7 +375,7 @@ public sealed class MeetingSession : IAsyncDisposable
             await SaveAsync();
             LogMeetingTerminal(State.Error is null ? discard ? MeetingDiagnosticOutcome.Discarded :
                 MeetingDiagnosticOutcome.Completed : MeetingDiagnosticOutcome.Failed);
-            if (!discard && State.Error is null && Volatile.Read(ref _disposing) == 0)
+            if (!discard && State.Error is null)
                 await CleanCompletedMeetingAsync();
         }
         catch (Exception error)
@@ -619,7 +619,14 @@ public sealed class MeetingSession : IAsyncDisposable
         if (!_cleanupSettings.Automatic || Document is not { Status: MeetingStatus.Completed, Turns.Count: > 0 } document ||
             document.Turns.Any(turn => turn.IsProvisional)) return;
         using var cancellation = new CancellationTokenSource();
-        lock (_gate) _textCleanupCancellation = cancellation;
+        // DisposeAsync sets _disposing and then cancels under _gate. Checking and publishing under the same
+        // lock means disposal either finds this source and cancels it, or this method sees disposal and
+        // never calls the provider.
+        lock (_gate)
+        {
+            if (Volatile.Read(ref _disposing) != 0) return;
+            _textCleanupCancellation = cancellation;
+        }
         SetTextCleanupState(MeetingTextCleanupState.Running);
         try
         {
