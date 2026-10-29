@@ -33,8 +33,9 @@
 - Keep speech model cards in catalog order with fixed row and column positions.
   Startup verification, downloads, and model selection no longer reshuffle them.
 - Match meeting windows to the shell theme and shared title typography. Restore
-  audio-source controls and **Try again** after a failed empty meeting releases
-  its resources, with instructions that match the available controls.
+  the **Teams app for speaker names** choice and **Try again** after a failed
+  empty meeting releases its resources, with instructions that match the
+  available controls.
 - Preserve the current meeting retry error and avoid inferring startup failure
   from an empty transcript. Refresh shell and meeting title-bar colors when the
   Windows High Contrast scheme changes.
