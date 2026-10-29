@@ -11,7 +11,7 @@
     </Page.Resources>
     <local:PageCanvas x:Name="HomeViewport"
                       Title="Good afternoon"
-                      Subtitle="Your latest 100 transcriptions, saved on this device."
+                      Subtitle="Up to 100 recent transcriptions, saved on this device."
                       SizeChanged="HomeViewportSizeChanged">
         <local:PageCanvas.HeaderActions>
             <StackPanel x:Name="DictateControl" Spacing="8" VerticalAlignment="Center"
