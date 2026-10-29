@@ -2,31 +2,77 @@
 
 See the [README](../README.md#build-and-run) to build and launch the app.
 
+## First launch
+
+A new install opens a three-step welcome lesson. An existing `settings.json`
+that has no welcome flag is treated as already complete, so current installs
+are not forced through it. **Skip for now** and finishing the lesson both save
+completion in settings.
+
+1. Intro. Speak into a focused field. Recognition stays on this device.
+2. Shortcut. An original Windows keyboard illustration highlights your chord
+   and animates those keys. If Windows animations are off, the keys stay still.
+3. Practice. Click the practice field, then use the shortcut. Final words go
+   only into that field, not the clipboard or another app. A successful
+   practice still stores in local dictation history.
+
+Practice needs microphone permission and an installed microphone-capable model.
+**Set up a speech model** opens Speech models. Returning to Home resumes the
+lesson until you finish or skip. Home **Learn your shortcut** replays it from
+the first step. Change the chord later in Settings.
+
+## Close to the notification area
+
+Closing the main window with X or Alt+F4 hides it to a Windows notification-area
+Ansible icon. Recognition, global dictation shortcuts, downloads, and meetings
+keep running. Closing the window never starts recording.
+
+Click the icon to reopen the main window. Right-click it for **Open Ansible** or
+**Exit**. **Exit** performs the existing coordinated shutdown. It stops active
+capture and recognition and joins owned work.
+
+If the tray icon cannot be created, the window stays visible and Ansible reports
+an error instead of hiding. Later close attempts retry tray creation. Windows may
+put the icon in the hidden-icons overflow.
+
 ## Home and appearance
 
-**Home** shows recent completed dictations grouped by day, with the time, the
-transcript, search, **Copy transcript**, and a **More** menu with **Remove from
-history**. Removing the current dictation's row also hides its transcript
-card; the text is gone from Home until you dictate again. Shortcut dictations
-carry an insertion tag: **Inserted** when the target field confirmed the text,
-**Not verified** when the app accepted it without confirmation, **Partially
-inserted**, or **Not inserted**. Failed injected-key release also shows **Not
-verified**. Check the keyboard and destination field; none, some, or all of
-the text may have arrived. The app never retries that uncertain input
-automatically. In-app dictations have no tag. History stays in
-memory for this app session. Closing Ansible clears it. The history keeps at
-most 100 entries within a bounded text budget. Search can hide entries until
-you clear its filter. WAV results and dictations too large for history remain
-available in the separate transcript area. Audio is never saved. The Activity
-card shades each day by its recorded dictation count, up to four levels; days
-with no recorded dictations stay unshaded.
+**Home** shows the latest successful dictations, newest first, grouped as Today,
+Yesterday, and older dates. Each row shows the time, transcript, **Copy
+transcript**, and a **More** menu with **Remove from history**. Remove deletes
+that entry from saved history. Removing the current dictation's row also hides
+its transcript card. Shortcut dictations keep an insertion tag across restarts:
+**Inserted** when the target field confirmed the text, **Not verified** when
+the app accepted it without confirmation, **Partially inserted**, or **Not
+inserted**. Failed injected-key release also shows **Not verified**. Check the
+keyboard and destination field. None, some, or all of the text may have
+arrived. The app never retries that uncertain input automatically. In-app
+dictations have no tag. History reloads after restart. It keeps at most 100
+successful dictations within a 500,000-character text budget. Large entries can
+make fewer than 100 fit. An entry larger than that budget stays in the
+current-result area only. Search covers every retained entry. WAV results stay
+outside dictation history and remain in the separate transcript area. Audio is
+never saved. Prior session-only transcripts from earlier app versions cannot be
+recovered. **Learn your shortcut** reopens the welcome lesson from the first
+step.
 
 Use **Dictate** or your configured shortcut to record. Choose the active model
 and use **Transcribe WAV file** on **Models**.
-The Insights cards show actual local usage counts. A failed or overflowed
-background usage write appears there as a warning; it does not delay transcript
-insertion. History and local usage counts are separate. Turning off usage
-statistics does not save transcripts.
+Insights show measured local counts, not estimates. The large number is
+all-time dictated words on this device. Words per microphone minute, dictation
+count, and microphone minutes sit with it. Pace and microphone time include
+pauses. File transcription is excluded from those dictation totals and from
+pace. Missing or unreadable usage stays unknown (`--`), not zero. A loaded
+empty file can show zero. Unknown word counts stay unknown and blank the word
+total and pace. There is no time-saved figure. Activity is a dotted 24-hour
+clock of completed dictations by local completion hour over the last 7 or 30
+calendar days, including today. Week and Month stay. The center is the period
+total. Marks are 00, 06, 12, and 18. Accent dots scale to the busiest hour.
+Hover an hour for its actual count. Files are not included. **Most-used models** counts dictation and WAV sessions
+together, all time. A failed or overflowed background usage write appears
+there as a warning; it does not delay transcript insertion. History and local
+usage counts are separate. Turning off usage statistics does not change saved
+dictation history.
 
 Ansible uses a Mica window base and follows Windows light, dark, and High Contrast appearance. Pages sit
 directly on that base; each section is a title above one borderless tonal card, and High Contrast adds
@@ -71,6 +117,16 @@ Use the model card's remove icon to remove weights or discard a partial download
 both require confirmation. Installation, removal, and folder changes are available
 only while recognition is idle. Removing the last model leaves the app disconnected
 until another model is installed.
+
+If a model installs but its resume data cannot be removed, the card reports
+that cleanup failed. The verified model remains installed. Choose **Model folder >
+Verify installed files** to retry cleanup without downloading or removing the
+weights. An interrupted resume-data update never replaces the previous valid
+metadata with a partially written file.
+
+Do not run `Setup-AudioBackend.ps1` against the selected model folder while the
+app is downloading or changing weights. Setup uses a separate download protocol;
+its partial files cannot be resumed by the app.
 
 The app remembers the selected model by ID. If none is saved and
 `nemotron-asr-0.6b-q8` is installed, dictation uses it. Default setup installs
@@ -118,27 +174,45 @@ prove that a model can load or run on your hardware.
 ## Dictate into another app
 
 1. Focus an editable field in the destination app.
-2. Hold F9 while speaking, then release it to finish capture.
+2. For Ctrl + Win (either Windows key), hold both keys briefly until listening
+   starts, then speak. Keep holding, then release to finish. If you already
+   saved F9 or another shortcut, hold that instead.
 3. Wait for recognition and check the inserted text.
 
 The default activation mode is **Hold to talk**. In **Settings > Activation mode**,
 choose **Press to start and stop** to finish with a second shortcut press instead.
 Click the shortcut field to record a different key or key combination; Esc
-cancels the change. **Reset** restores the default shortcut.
+cancels the change. **Reset** restores Ctrl + Win. Saved F9 and other custom
+shortcuts stay until you change or reset them. The only modifier-only chord is
+Ctrl + Win. Other shortcuts still need a primary key, including F9. A short
+Ctrl + Win tap does not start dictation. A quick third key still goes to
+Windows and does not activate Ansible. **Press to start and stop** uses that
+same brief hold to start, then a second press to finish. It does not require
+holding through speech.
 
-Shortcut dictation inserts authoritative final speech once, after successful
-recognition. Cancelling or failing recognition inserts no text. Held Ctrl, Alt,
-Shift, or Win keys delay insertion until released. Model loading and recognition
-can continue after capture stops.
+After the shortcut is accepted, Ansible opens the microphone immediately and
+holds PCM in a bounded in-memory buffer. That audio is not sent to the
+recognizer until the destination field check succeeds. If the check is rejected
+or fails, capture stops, the buffer is discarded, and nothing is transcribed,
+saved to history, or inserted. This removes the wait on that software check. It
+does not remove hardware microphone startup delay, and it does not capture
+speech spoken before the shortcut. Shortcut dictation inserts authoritative
+final speech once, after successful recognition. Cancelling or failing
+recognition inserts no text. Held Ctrl, Alt, Shift, or Win keys delay insertion
+until released. Model loading and recognition can continue after capture stops.
 
 In **Hold to talk** mode, the microphone stays open for **500 ms after key
-release** to capture the end of the phrase. The waveform remains visible until
-capture stops. Pressing the shortcut again during that tail keeps the current
-recording open; its next release starts a new 500 ms tail. Cancellation and
+release** to capture the end of the phrase. Release can Finish the recording
+while the destination check is still pending. Buffered packets are kept if that
+check later succeeds. The waveform remains visible until capture stops.
+Pressing the shortcut again during that tail keeps the current
+recording open. Its next release starts a new 500 ms tail. Cancellation and
 window shutdown do not wait for the tail. **Press to start and stop** and manual
 Finish keep their immediate-stop behavior.
 
-The waveform pill shows microphone energy while capture is active. Every bar
+The waveform pill appears after the microphone opens, including in-app
+recording. Until then, accessible status is Starting microphone. The pill shows
+microphone energy while capture is active. Every bar
 follows the current level through a fixed shape, tallest in the middle, so the
 pill breathes with your voice instead of scrolling through time. Loud moments
 settle at a bounded rate rather than snapping to silence. The pill hides when
@@ -146,14 +220,16 @@ capture stops, including after the hold-to-talk release tail. If stopping fails,
 it remains visible until capture is released. It does not show transcript text.
 Reduced-motion mode shows the same shape without bar animation.
 
-**Settings > Overlay position** chooses where the pill appears. By default it
-sits just under the text cursor of the destination field. The cursor position is
-read once when you press the shortcut, from the Windows caret or the field's
-UI Automation text provider; the pill does not follow later cursor movement.
-If the pill would leave the work area it moves above the cursor line. When
-Windows cannot report a cursor position, for dictation started from the app
-window, or when the option is off, the pill appears at the bottom centre of the
-screen. The option applies to the next dictation and persists across restarts.
+**Settings > Overlay position** chooses where the pill appears. Looking up the
+caret no longer delays the microphone. The pill may first appear at the bottom
+centre of the screen, then move under the verified caret when that check
+completes. By default it sits just under the text cursor of the destination
+field. The cursor position is read from the Windows caret or the field's UI
+Automation text provider. The pill does not follow later cursor movement. If
+the pill would leave the work area it moves above the cursor line. When Windows
+cannot report a cursor position, for dictation started from the app window, or
+when the option is off, the pill stays at the bottom centre. The option applies
+to the next dictation and persists across restarts.
 
 ### Text insertion
 
@@ -319,6 +395,47 @@ The host-memory guard runs on both backends; it does not guarantee sufficient
 GPU memory. The offline 7B model has about 9.86 GB of weights and needs additional
 memory to load and decode. Keep the guard enabled.
 
+### Transcript cleanup
+
+Open **Settings > Transcript cleanup**. Choose **Copilot CLI** or **OpenAI API**.
+Each provider has its own model and reasoning effort. Automatic cleanup stays
+off until you enable it and select **Save cleanup settings**. That save is the
+opt-in to send meeting text to the cloud. Enabling OpenAI automatic cleanup
+requires a saved API key and an OpenAI API model ID. No OpenAI model is guessed.
+Enabling it authorizes sending each new completed meeting transcript to the
+selected provider. No extra confirmation appears per meeting.
+
+The selected provider is used alone. There is no fallback to the other provider
+or another account. Audio is never uploaded. Only finalized local text is sent,
+and only after the original transcript is saved.
+
+**Copilot CLI** uses the installed GitHub Copilot CLI and its signed-in account.
+Run `copilot login` if needed. It does not use an OpenAI API key. The default
+model is `gpt-6-luna` with `high` reasoning. Cleanup starts a subprocess with
+tools, hooks, memory, and custom instructions disabled. That isolation applies
+only to the subprocess. It does not change your global Copilot CLI config.
+Obsolete `--no-remote` is not passed. `--no-remote-export` is replaced by
+`--sync-session off`. If the installed CLI rejects a flag, the app reports that
+the CLI is incompatible and keeps the original transcript. CLI errors are
+classified. Raw stderr is not shown.
+
+**OpenAI API** posts transcript text to the OpenAI Responses API with `store`
+false. Enter a valid OpenAI API model ID from your OpenAI account. Copilot
+aliases are not mapped. Save the key with **Save API key**. The key is stored
+in Windows Credential Locker. It is not written to `settings.json` or logs.
+OpenAI API billing is separate from Copilot. Remove the saved key with
+**Remove saved key**.
+
+The meeting snapshots the cleanup provider at Start. Automatic cleanup runs
+only after a successful **End meeting** when that snapshot has automatic cleanup
+on. Failed, discarded, or empty meetings are not sent. Reopening a saved meeting
+does not send text. **Exit** cancels pending cleanup, waits for it to
+stop, and does not start a new cloud cleanup during shutdown. **Clean up wording**
+asks you to confirm the currently saved Settings provider and model. It does not
+edit those values in the meeting window. **Restore original** remains. Failed,
+cancelled, or partial cleanup keeps the original wording. Cleanup success and
+failure are separate from recognition errors. Review model output. It can be wrong.
+
 ## Meeting transcripts
 
 Automatic Teams detection is enabled by default while Ansible is open. After
@@ -346,7 +463,31 @@ exclusive mode are skipped. Use headphones: echo cancellation is not
 implemented.
 
 The optional **Teams app for speaker names** choice is used only for automatic
-speaker naming. It does not limit what audio is recorded.
+speaker naming. It does not limit what audio is recorded. The lookup is
+read-only Windows accessibility. It does not change Teams settings. Teams process audio
+can be silent to Windows application loopback even when you hear the call,
+which is why recording uses output devices instead.
+
+While recording, the window shows a microphone line and a **Speakers and
+headphones** line with the device count. Each line uses one of
+**Audio detected**, **No audio packets**, **No recent audio packets**, or
+**Quiet**. Detected means RMS energy at or above 0.001 (-60 dBFS) in the last
+five seconds. That is not speech detection and does not mean words were
+recognized.
+
+After 15 seconds with no playback signal, an inline hint appears. Silence can
+be normal when others are quiet. If no output device can be recorded, only the
+microphone is transcribed until one becomes available. **More > Open audio
+diagnostics folder** opens the local metadata logs described under [Local data
+and privacy](#local-data-and-privacy), if any have been saved. It does not create
+the folder.
+
+| What you see | Reading |
+| --- | --- |
+| Microphone **Audio detected**, speakers **No audio packets** | No WASAPI packets from any output device |
+| Microphone **Audio detected**, speakers **Quiet** | Packets arrived below the energy threshold |
+| Speakers **Audio detected**, little or no transcript | Capture has energy. Recognition or mixing may still be failing |
+| **No output device available** | Every output device was missing or in exclusive use |
 
 Default setup installs Nemotron ASR and Nemotron 3 Diarization. The Meetings
 window does not offer a model picker. If you have explicitly selected a
@@ -382,13 +523,29 @@ stay **Unknown speaker**. Kroko words that run through a pause are judged by
 the speech where they begin, so the last word before a pause stays with its
 speaker when someone else speaks next.
 VibeVoice meetings keep that model's speaker labels. Rename a speaker by
-selecting its heading. When Teams is selected,
-the app reads visible speaking markers through Windows accessibility. Names require
-two consistent, nonoverlapping final turns with an exclusive microphone/playback
-source and full observation coverage. Ambiguous evidence retains model labels;
-manual names take precedence. Other meeting apps retain editable model labels.
-Hidden windows, unsupported layouts, and unsupported marker languages can prevent
-automatic names. No voiceprints or calendar-name guesses are used.
+selecting its heading. When Teams is selected, the app reads visible
+participant tiles through Windows accessibility. It looks for explicit speaking
+markers on named tiles or their visible descendants. Current Teams labels such
+as **video is on**, **video is off**, **Myself video**, mute state, and
+**Has control of production tools** are tile descriptions, not names. Names that
+contain commas stay intact. Unmuted, video on, and roster presence do not prove
+speaking. Mapping still requires two consistent, nonoverlapping final turns with
+an exclusive microphone/playback source and full observation coverage.
+Ambiguous evidence retains model labels. Manual names take precedence. Other
+meeting apps retain editable model labels. Names are not inferred from
+transcript text. Popups, minimized or hidden tiles, unsupported layouts, and
+Teams windows that omit speaking metadata can prevent automatic names. Live
+mapping on a real call is not yet established. No voiceprints or calendar-name
+guesses are used.
+
+Recognition chunks are not speaker turns. The window joins adjacent chunks from
+the same speaker into one text block. Each block has the speaker heading, rename
+control, and combined time range. A speaker change starts a new block. If the
+same speaker returns after someone else, that later speech is a new block.
+Saved meetings keep each original chunk's wording and timing. Cleanup still
+aligns those saved turns. One **Original wording** expander covers the grouped
+block. If any joined chunk is untimed or **Unknown speaker**, the block is not
+shown as fully ASR-aligned.
 
 Install **Nemotron ASR** weights to enable optional timing refinement on CPU
 for meetings that still publish untimed VibeVoice turns.
@@ -409,11 +566,11 @@ unqualified.
 meeting and processes retained pending speech. Speech during the pause is not
 captured. **End meeting** stops capture and processes pending chunks before
 releasing resources; the window stays open for review. Closing an active meeting
-offers finishing or explicitly discarding pending speech. Closing the main app
-finishes its active meeting before shutting down. If the meeting is still
-preparing, closing that meeting window cancels preparation and waits for
-startup and any opened capture to stop before closing. Closing the main app
-also cancels preparation and waits for that cleanup. If shutdown fails, the app
+offers finishing or explicitly discarding pending speech. Hiding the main window
+does not end the meeting. **Exit** finishes an active meeting before shutting
+down. If the meeting is still preparing, closing that meeting window cancels
+preparation and waits for startup and any opened capture to stop before closing.
+**Exit** also cancels preparation and waits for that cleanup. If shutdown fails, the app
 waits for owned shortcut and delivery work to stop before allowing another
 recording; the shutdown error remains visible.
 
@@ -426,7 +583,7 @@ can be retried. Failed wording cleanup keeps the completed original for retry.
 The Meetings list supports
 reopening saved text; each transcript window offers Copy, text export, and Delete.
 If a meeting fails before any speech is transcribed, its window restores the
-audio-source controls and offers **Try again** after resources are released.
+**Teams app for speaker names** choice and offers **Try again** after resources are released.
 Resolve the displayed error before retrying. The failed attempt stays saved.
 Capture is limited to two hours. A full 30-second recognition queue or capture
 failure stops the meeting with an error and keeps text already produced. Native
@@ -443,15 +600,18 @@ keeps the app's copy. The export preserves the original file, including any
 format errors; it does not repair the transcript or contain audio. A failure
 accessing the meeting folder itself can still prevent capture.
 
-After **End meeting**, **Clean up wording** can send transcript text to GitHub
-Copilot CLI. Install and authenticate Copilot CLI first if prompted. Choose the
-model and reasoning effort in the dialog; defaults are `gpt-6-luna` and `high`.
-Cleanup preserves speaker labels and timing, keeps original wording, and supports
-**Restore original**. Model output can be wrong; review the result. Failed or
-cancelled requests keep the existing transcript. CLI requests run with tools,
-hooks, memory, and custom instructions disabled, in temporary app-owned state
-directories removed after the process exits. Copilot's service can still retain
-requests under its own policies; local session isolation does not change those policies.
+After a successful **End meeting**, automatic wording cleanup runs only when the
+Start snapshot had it enabled. See [Transcript cleanup](#transcript-cleanup).
+The original transcript is saved locally first. Then finalized text is sent to
+the selected provider. Failed, discarded, or empty meetings are not sent.
+**Clean up wording** confirms the currently saved Settings provider and model.
+It does not edit those values in the meeting dialog. Cleanup preserves speaker
+labels and timing and supports **Restore original**. Failed, cancelled, or
+incomplete cleanup keeps the original. Cleanup status is separate from
+recognition failure. Reopening a saved meeting does not send text. **Exit**
+cancels pending cleanup, waits for it to finish, and does not start a new cloud
+cleanup during shutdown. Copilot or OpenAI can still retain sent text
+under their own policies.
 
 ## Local data and privacy
 
@@ -464,11 +624,16 @@ Windows capture exclusion; this is not protection against every recorder or a
 camera. The app reports an app-wide warning if Windows cannot apply or verify
 the setting.
 
-Captured audio always stays in memory. Dictation transcripts stay in memory;
-meeting transcripts, titles, and speaker names save locally. Recognition does
+Captured audio always stays in memory and is never saved or uploaded.
+Successful dictation transcripts persist as text and metadata in
+`dictation-history.json`. Meeting transcripts, titles, and speaker names save
+locally. Recognition does
 not upload audio. Auto device qualification uses only the bundled public sample
-in a local process; it does not send or save user audio. Optional Copilot cleanup
-uploads transcript text after the explicit **Send text and clean up** action.
+in a local process; it does not send or save user audio. Optional transcript
+cleanup sends meeting text only after you enable it in **Settings > Transcript
+cleanup** and a completed original is saved locally. Choose Copilot CLI or the
+OpenAI API. There is no provider fallback. Audio is never uploaded. The OpenAI
+API key is stored in Windows Credential Locker, not in `settings.json` or logs.
 Model downloads also use the network.
 **Copy** uses the ordinary clipboard; Windows clipboard features and destination
 apps can retain text you copy or insert. Automatic shortcut paste leaves dictated
@@ -481,17 +646,83 @@ Per-user files are in Windows package storage, normally
 
 | Path | Contents |
 | --- | --- |
-| `settings.json` | Preferences, chosen model folder, and custom vocabulary |
+| `settings.json` | Preferences, chosen model folder, custom vocabulary, transcript cleanup provider settings, and whether the first-launch lesson is complete. The OpenAI API key is not stored here |
+| `dictation-history.json` | Latest successful dictation transcripts, metadata, and insertion status; no audio |
 | `device-benchmarks.json` | Cached Auto device timings for model, runtime, hardware, and mode; no user audio |
 | `usage.json` | Session IDs, completion timestamps, model IDs, session type, speech-word counts, and durations |
 | `meetings\<id>.json` | Titles, dates, transcript turns, timing quality, manual/automatic names, and original wording after cleanup; no audio |
+| `diagnostics\local-diagnostics.jsonl` | Opt-in operational metadata beside `settings.json`. Rotates to `local-diagnostics.jsonl.previous` at 1 MiB. No audio or transcript text |
 | `models\` | Default location for downloaded model weights |
-| `startup-error.log` | Startup failure diagnostics, when a startup error occurs |
+
+If `dictation-history.json` is corrupt or unreadable, Ansible leaves the file
+unchanged, shows a warning, and keeps new rows in memory until storage can be
+recovered.
+
+Enable **Local diagnostics** in Settings to record operational metadata. It is
+off by default and independent of **Usage statistics**. Turning it off discards
+queued records and stops new collection. A write already in progress may
+finish. Existing files are not deleted. Earlier app versions may have written
+`startup-error.log` or `meeting-capture.jsonl` without this setting. Those files
+and their previous rotations are not removed or counted toward the new log's limit.
+
+Logs stay under `diagnostics\`. The current file is
+`local-diagnostics.jsonl`. When it is at least 1 MiB, the next append rotates it
+to `local-diagnostics.jsonl.previous`. Only those two files are kept, so total
+size can exceed 2 MiB by bounded record overhead. Rotation is size-based, not a time
+retention promise. The JSONL never includes audio, transcript text, participant
+names, window titles, device names, model file paths, or raw exception
+messages. It includes timestamps, a random capture ID (new at capture
+start and resume), active, skipped, and
+lost output-device counts, kind/stage names, HRESULT, packet and sample counts, WASAPI silent-sample
+counts, synthetic missing mixed samples, input and mixed RMS maxima, last-packet
+and last-signal ages, and about every five
+seconds the downstream captured, consumed, and processed seconds plus a
+recognition-update count. Kind, stage, and pipeline phase
+serialize as readable names, not numbers. Each source may include a bounded
+`LastPacketTiming` sample with timestamp sample, expected sample, packet sample
+count, current and previous device position, and native flags. Those values are
+numeric metadata only. A logging write failure does not stop capture. The
+meeting window shows that diagnostics error instead. Dropped events are counted
+in later records.
+
+Session operation records include a run ID, package version, operation ID,
+known catalog model ID, activity, outcome,
+and monotonic durations in milliseconds. Microphone and stream readiness are
+measured from operation admission, not the shortcut press. The first-partial
+and finish-to-result durations are null when unavailable. The terminal duration
+includes resource cleanup. These records do not yet cover every app workflow.
+They include the requested backend and a numeric error code when available.
+Native selection records include the selected backend, selection source,
+session reuse, and durations when those facts are available.
+Meeting lifecycle records link start, model-family selection, pause, resume,
+availability of optional naming and timing refinement, and terminal outcome to
+one operation ID. Pipeline records carry that ID when capture restarts during
+the same enabled diagnostics interval. Opt-in terminal records may include
+Application stages `CleanupCopilot` and `CleanupOpenAI` with outcome, duration,
+and a numeric HRESULT when available. They never include transcript text, API
+keys, or raw CLI stderr.
+
+Shortcut delivery records describe the insertion outcome, method, paste chord,
+typed reason, time after recognition, and time deferred for modifier release.
+Shortcut records include admission rejections and link admitted attempts to
+the operation. They do not
+include destination or clipboard contents. Microphone capture summaries include
+packet and sample counts, maximum callback gap, backlog high-water mark, and
+stop and release status. Model download summaries distinguish transfer,
+verification, and installation. They include byte counts and HTTP status when
+available, but not download addresses. Permission status, hotkey registration,
+startup, and shutdown outcomes are recorded after diagnostics are enabled.
+Settings save, usage and history load and save, and meeting load, save, and
+flush outcomes include durations and numeric error codes.
 
 **Insights** uses completed sessions. Failed and cancelled sessions are excluded.
 Unknown speech-word counts remain unknown and are excluded from word totals and
-pace. Dictation pace includes microphone pauses; file transcription is excluded
-from pace. Completed sessions are queued for local writes, at most 32 pending,
+pace. Missing or unreadable usage stays unknown rather than showing invented
+zeros. Dictation pace includes microphone pauses; file transcription is
+excluded from pace. The activity clock groups completed dictations by local
+hour over the selected 7 or 30 days. Files are not included. Model
+distribution includes dictation and WAV sessions. The app does not compute
+time saved. Completed sessions are queued for local writes, at most 32 pending,
 so insertion is not delayed. If a write fails or that queue overflows, Insights
 shows the error; a later successful write does not recover a lost entry.
 Shutdown drains and joins remaining writes. Disable **Usage statistics** in

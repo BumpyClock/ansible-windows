@@ -172,10 +172,18 @@ node .\tools\Generate-DesignAssets.cjs
 
 The generated Windows assets use transparent backgrounds and optical cuts for
 small sizes. Tray artwork is available for future integration; the app does not
-currently create a notification-area icon. In-app history is bounded and held
-only in memory. The session emits a typed successful dictation completion after
+currently create a notification-area icon. Successful dictation history persists
+locally in `dictation-history.json` beside `settings.json`, newest first, at most
+100 entries within a 500,000-character budget. An oversized entry stays
+current-result only. WAV results stay outside that store. The session emits a
+typed successful dictation completion after
 cleanup. One app-owned history instance receives it independently of page
-lifetime. History and Insights views consume typed projections; the dictation
+lifetime and reloads after restart. History uses `CoalescingSnapshotWriter<T>`
+after loading and merging saved rows. Changes made during loading are admitted
+as one merged snapshot; shutdown waits for loading, drains and joins the writer.
+Corrupt or unreadable history is left
+untouched, a warning is shown, and new rows stay in memory until storage can be
+recovered. History and Insights views consume typed projections; the dictation
 page owns recording and file actions. Failed, cancelled, and unreleased
 operations never enter history. Usage writes use a 32-entry bounded queue so
 disk work never delays that completion or final insertion. Shutdown drains and
@@ -186,6 +194,8 @@ are not shown. Bounded `PageCanvas` layouts retain a finite minimum
 height and allow outer overflow in short windows, so warnings cannot collapse their lists.
 `SettingsRow` owns the shared adaptive setting
 layout; pages provide labels, descriptions, and controls.
+`Badge` sizes to its label up to 240 effective pixels, trims overflow, and uses
+6px rounded corners with a 28px minimum height.
 
 ## Tests
 
@@ -296,6 +306,10 @@ target inspection finishes. Packets stay off the recognizer until inspection
 succeeds. Rejected or failed inspection cancels or fails the operation and
 discards that buffer, with no transcript, history row, or insertion. Hold-to-talk
 release still uses the 500 ms tail and may Finish while inspection is pending.
+Native model-load buffering is unchanged. The overlay waveform is shown after
+capture opens. Accessible startup status is Starting microphone. Removing the
+inspection wait does not prove a missing first word is gone, and it cannot
+remove hardware microphone startup delay or speech before the shortcut.
 
 `MeetingStore.ListAsync` returns summaries rather than transcript documents.
 The in-memory cache validates file identity on each listing and reads changed
@@ -303,15 +317,50 @@ files one at a time. Opening a meeting loads and validates the full transcript.
 Interrupted-session recovery is an owned startup task independent of dictation
 initialization. It must finish successfully before a meeting can start.
 
-`MeetingTranscriptProjection` retains positional presentation rows. Typed
+`MeetingTranscriptProjection` retains positional presentation rows. Adjacent
+source turns with the same speaker id become one visible block; a speaker
+change or a later return after another speaker starts a new block. Typed
 bindings update only changed properties in a constrained virtualized ListView.
 ASR and speaker corrections can revise older turns; unchanged row text is not
 reassigned. Expanding original wording is presentation state, not saved speech.
 
 Meeting capture, persistence, speaker parsing, and lifecycle tests live in
-`MeetingCaptureTests`, `MeetingStoreTests`, `MeetingTranscriptTests`,
-`MeetingSessionTests`, and `DiarizedMeetingSessionTests`. Live capture tests are marked `NativeIntegration` and
-generate an in-memory tone; they require microphone access and an output device.
+`MeetingCaptureTests`, `MeetingCaptureDiagnosticsTests`, `MeetingCaptureWorkerTests`,
+`MeetingPacketTimelineTests`, `MeetingStoreTests`,
+`MeetingTranscriptTests`, `MeetingSessionTests`, and
+`DiarizedMeetingSessionTests`. `MeetingCaptureDiagnosticsTests` is
+deterministic. It covers status labels, missing versus silent samples, JSONL
+field allowlists, string enum names, 1 MiB rotation, the nonblocking 64-entry
+queue, and shutdown drain. `MeetingPacketTimelineTests` covers packet-clock
+continuity, native-rate and zero counters, and real gaps.
+`MeetingCaptureWorkerTests` runs deterministic tests of the real worker against
+fake devices and a manual clock. Coverage includes mixing, stop-position drain,
+contiguous activity, output discovery and thread ownership, apartment balance,
+output loss, microphone timing and read failures, queue overflow, startup
+cancellation, and retained ownership after release failure. It also covers
+output Stop/Dispose exceptions, terminal health-handler exceptions, cancellation
+during stop-drain, slow output-stop timing, and failing-clock teardown.
+Scanner cases cover release of prepared but unadopted sources and transient
+catalog retry. Output cases cover start retry with a new instance, fatal start
+failure, and removed outputs. Timing cases reject invalid QPC/device positions.
+These three deterministic classes open no devices and do not prove real WASAPI
+behavior. The `NativeIntegration` test in `MeetingCaptureTests` remains the
+hardware check. Shared session fakes `FakeMeetingCapture` and
+`FakeMeetingCaptureFactory` live in `MeetingCaptureFakes.cs`. Live capture tests are marked `NativeIntegration` and generate an
+in-memory tone. They open a microphone and play that tone, so they need
+consent and an output device. Do not treat them as routine tests. Repeating
+those native checks does not qualify Teams-selected missing audio.
+`TeamsSpeakerObserverTests` covers marker parsing and conservative matching.
+The read-only NativeIntegration test
+`ExistingTeamsWindowCanBeReadWithoutInteraction` observes an already-open
+Teams window. It does not click, record, upload, or change Teams settings:
+
+```powershell
+dotnet test .\Ansible.Tests\Ansible.Tests.csproj --filter 'FullyQualifiedName~ExistingTeamsWindowCanBeReadWithoutInteraction'
+```
+
+If Teams is not open, the test logs that and returns. A populated read does
+not prove real-call name mapping.
 `NativeMeetingTests` exercises the retained VibeVoice streaming path with the
 public sample and checks that speech appears before input ends. Set
 `DICTATION_MODELS_DIRECTORY` when using an existing model folder. Run native
@@ -322,9 +371,13 @@ speaker checks.
 before loading its own native engine. Reservation joins/unloads dictation
 preparation and prevents dictation/settings/model maintenance until all meeting
 capture and inference resources are released. Recognition callbacks queue saves
-without waiting for disk. `MeetingPersistence` owns one writer with one active
-snapshot and one replaceable pending snapshot. It starts writes without a timer;
-Pause, End and Close flush the required revision, and disposal joins the writer.
+without waiting for disk. `MeetingPersistence` uses `CoalescingSnapshotWriter<T>`
+with one active snapshot and one replaceable pending snapshot. It retains
+meeting-specific diagnostics and failure handling. The worker starts writes
+without a timer; Pause, End and Close flush the required revision. Disposal
+joins attempts; only a successful flush confirms saving. History and Meetings
+share scheduling, not their retention, serializers or recovery rules. Usage and
+diagnostics keep their event queues and never coalesce entries.
 Atomic replacement and disk flush remain required. Disk latency determines the
 unsaved interval, so no fixed crash-recovery time bound is promised. Failed
 completed-meeting edits retain their committed status and original wording.
@@ -337,12 +390,102 @@ Nemotron pair, Kroko pair, then VibeVoice path. Explicit Nemotron or Kroko
 without the companion fails Start rather than switching models. Capture privacy is a visual
 setting that can change during a meeting. Pause gates the same channel
 reader; it does not reset the native stream. Capture writes 16 kHz mono PCM16
-into bounded queues. Transcripts use atomic source-generated JSON saves; audio
-never reaches disk. Startup marks unfinished readable documents Interrupted.
+into bounded queues. `MeetingPacketClock` maps each packet start. When the
+native device counter advances by the previous PCM sample count, the next
+start continues from that length. Native-rate counters that do not match the
+PCM count, and unavailable zero counters, keep the previous timestamp mapping.
+Genuine device-counter gaps remain gaps. An 80-sample (5 ms) QPC snap remains
+only as fallback. QPC correlation can move by more than five milliseconds
+while native frames remain contiguous. This must not become an artificial
+overlap or gap. `MeetingCaptureDiagnostics` and
+`Windows\MeetingCaptureMetrics` publish source health at about 1 Hz. Capture
+and downstream summaries log about every five seconds, plus Starting,
+Recording, Failed, Stopped, and final pipeline events. Capture stats and
+elapsed time reset on resume. Downstream counters span the whole meeting.
+`ProcessedSeconds` stays null unless a recognition update reports its processed
+sample count. Consumed seconds
+count engine input. They are not proof of recognized speech. Window RMS fields
+are maxima since the previous health snapshot (about one second).
+`PeakInputRms` is cumulative. `MissingMixedSamples` counts timeline slots
+absent from capture and filled as silence. That is distinct from WASAPI
+silent samples. The RMS signal threshold is 0.001 (-60 dBFS). Recent-signal
+status uses a five-second window. Local JSONL uses one bounded 64-entry
+nonblocking queue under `diagnostics\` beside `settings.json`. Collection is
+opt-in and off for missing or unreadable settings. Opt-out invalidates queued
+records, while a write already in progress may finish. Existing files are kept.
+Live capture health does not depend on logging. Session operation start and
+terminal records share the queue and use monotonic millisecond durations.
+The same queue carries typed meeting lifecycle, shortcut delivery, microphone
+capture, native selection and session, model download, settings save, usage and
+history load and save, meeting load, save, and flush,
+permission, hotkey, startup, shutdown, and optional wording-cleanup terminal
+records. Cleanup stages are `CleanupCopilot` and `CleanupOpenAI`. Those records
+carry outcome, duration, and numeric HRESULT only. They never include transcript
+text, keys, or raw stderr. Delivery latency begins when the recognition result becomes
+available, before operation cleanup. Send duration ends when input handling
+returns before verification. Microphone
+backlog high-water is sampled after enqueue and can miss a concurrent dequeue.
+Native preload records use a separate operation ID and set `BackgroundPreload`.
+Download transfer and verification share an attempt ID. Installation has a
+separate attempt ID. These records do not yet cover every app workflow.
+The current file
+`local-diagnostics.jsonl` rotates to `local-diagnostics.jsonl.previous` when it is
+at least 1 MiB, two files total. Size can exceed 2 MiB by bounded record overhead. MainWindow
+joins the logger on shutdown. Logging I/O failures do not stop capture. They
+surface as `DiagnosticsError`. Dropped events are counted numerically. Write
+failures emit a Trace warning with the HRESULT at most once per minute. Kind, stage, and pipeline phase serialize as names, not
+numbers. Meeting playback is endpoint loopback of every active render device,
+summed with saturation into one playback stream. Teams process loopback was
+measured silent (about 0.000015 RMS) while endpoint loopback carried the call,
+so `MeetingCaptureRequest.ProcessId` is used only for speaker naming. The
+first output scan runs before the microphone starts. Later scans run every two
+seconds on a dedicated MTA thread that opens, initializes, and services
+endpoints, then queues them. The capture thread only starts queued endpoints,
+because endpoint open measured 73 to 454 ms and would otherwise overflow the
+microphone buffer. WASAPI buffers are 500 ms; packets stay about 10 ms. A late
+device starts at the shared timeline cursor. Health adds `OutputDevices`,
+`SkippedOutputDevices`, and `OutputDevicesLost`. Events add `OutputAdded`,
+`OutputSkipped`, and `OutputLost`, plus stage `EnumerateOutputs`. Each source health may include bounded `LastPacketTiming` numeric
+fields (`TimestampSample`, `ExpectedSample`, packet `Samples`, current and
+previous device position, native `Flags`). Records
+never include audio, transcript content, participant names, window titles,
+device names, model names, paths, or raw exception messages. Transcripts use
+atomic source-generated JSON saves; audio never reaches disk. Startup marks unfinished readable documents Interrupted.
 Listing isolates unreadable files and returns their identifiers separately, so
 they do not block healthy history or capture. The Meetings recovery action
 exports the original bytes, flushes and completes the destination file, then
 removes the app copy. Cancellation or export failure preserves the source.
+
+`IMeetingCaptureFactory.StartAsync` returns one `IMeetingCapture` combining
+`IAudioCapture`, `IMeetingAudioSourceMetadata`, and `IMeetingCaptureDiagnostics`.
+`MeetingSession` does not probe optional capture capabilities at runtime.
+Positions are capture-relative 16 kHz samples, with zero at microphone start.
+Each capture after resume restarts at zero; the consumer owns meeting offsets.
+`Activity` fires on the capture thread before each packet enters `Audio`.
+Packets normally contain 640 samples; the last drain packet can be shorter.
+`StartSample` is contiguous from zero. A throwing handler fails capture.
+`ClockSamplePosition` is thread-safe. Emission uses a 250 ms holdback (4000 samples).
+Packet granularity and scheduling can make the clock-to-emitted gap larger.
+Normal stop freezes the clock and emits exactly to that position. `HealthChanged` fires on the capture thread. Subscribe first,
+then read `Health` to replay the latest snapshot.
+`StopAsync` and `DisposeAsync` are idempotent and join the worker.
+`IsReleased` becomes true before `Audio` completes. A device release exception
+keeps it false and faults `Audio` with an `AggregateException` stating that
+resources remain owned. Failed adapter `Dispose` is terminal for this worker
+after its COM owner thread exits. The capture retains failed resource references
+and keeps `IsReleased` false. There is no cross-thread retry; new work stays
+blocked. Startup returns a recording capture, throws after full release, or
+throws `MeetingCaptureOwnershipException` carrying retained capture.
+
+The internal `IMeetingAudioDevices` boundary owns per-thread COM apartment entry,
+microphone open, and output catalog open. `IMeetingOutputCatalog` lists active
+output IDs and opens loopback sources. `IMeetingAudioSource` starts, stops,
+reads packets, and disposes. `WasapiMeetingAudioDevices` implements production
+device access. An internal `MeetingCaptureFactory` constructor injects devices,
+a 100 ns clock, and the output scan interval. The public constructor is unchanged.
+Transient scanner catalog or apartment acquisition failures retry at the scan
+interval on the scanner's own MTA thread. Fatal scanner failures surface instead
+of silently leaving permanent microphone-only capture.
 
 Paired Nemotron or Kroko meetings load the Nemotron 3 diarizer beside the ASR.
 Both consume the same captured PCM, share memory admission, and reset or
@@ -365,10 +508,18 @@ qualification.
 | `Ansible` | WinUI pages, floating waveform, shortcuts, text insertion, composition and UI dispatch |
 | `Ansible.Core\DictationSession.cs` | Operation lifecycle, settings, cancellation, preloading and shutdown |
 | `Ansible.Core\ModelSelectionPolicy.cs` | Dictation and meeting model eligibility, default preference, meeting candidate order and companion requirement |
+| `Ansible.Core\ModelStore.cs`, `HttpModelSource.cs` | Staged model files, resume metadata, verified commit/removal and pinned HTTP transfer |
+| `Ansible.Core\ModelDownloadManager.cs` | Download UI snapshots, supported-family policy, one owned operation and joined cancellation |
 | `Ansible.Core\ShortcutDictation.cs` | Shortcut admission, release tails, destination inspection, insert-once delivery, warnings and shutdown join |
+| `Ansible.Core\CoalescingSnapshotWriter.cs` | Latest-pending snapshot scheduling, revision acknowledgement and joined shutdown for History and Meetings |
 | `Ansible.Core\RecognitionContracts.cs`, `SessionState.cs` | Testable boundaries and immutable UI snapshots |
 | `Ansible.Core\NativeAudioEngine.cs`, `NativeAudioApi.cs` | Native model/session ownership and C ABI |
-| `Ansible.Core\Windows` | Microphone capture and retained-resource teardown |
+| `Ansible.Core\AutoDeviceQualifier.cs` | Auto device identity, benchmark caches, isolated probe sequencing and exact-selection GPU rejection |
+| `Ansible.Core\MeetingCaptureContracts.cs` | Meeting capture contract, factory, and ownership transfer on failed startup |
+| `Ansible.Core\MeetingCaptureDiagnostics.cs` | Meeting source-health records and bounded local JSONL |
+| `Ansible.Core\MeetingTextCleanup.cs`, `CopilotMeetingTextCleanup.cs`, `OpenAIMeetingTextCleanup.cs` | Meeting wording cleanup contract and Copilot CLI / OpenAI Responses providers |
+| `Ansible\MeetingCleanupService.cs` | Provider routing and OpenAI Credential Locker key storage |
+| `Ansible.Core\Windows` | Microphone capture, meeting device boundary, packet clock, capture metrics, and retained-resource teardown |
 | `Ansible.Probe` | Real WAV and paced streaming recognition outside the UI |
 | `Ansible.DeviceProbe` | Isolated CPU/Vulkan qualification worker, packaged under `DeviceProbe\` |
 | `Ansible.Tests` | Deterministic contract tests and tagged native integration tests |
@@ -379,6 +530,29 @@ qualification.
 Pages share a session; `UiSessionObserver` dispatches versioned snapshots.
 Capture, downloads and inference run off the UI thread. The session owns each
 operation and rejects overlapping work or unsafe settings changes.
+
+`AutoDeviceQualifier` has no native model handles. The engine verifies admitted
+models before qualification and retains its operation gate. On a cache miss,
+the engine releases resident weights and checks memory before the qualifier
+starts a worker. Preparation, offline recognition and streaming share
+`NativeAutoRecovery`; a GPU failure updates only its qualified-device ticket's
+cache entry. Consumed live audio is never replayed. Qualifier contract tests use
+temporary cache files and a fake worker without loading speech models.
+
+`ModelStore` owns one directory's app-side file protocol. `ModelDownloadManager`
+serializes its operations and joins transfer or verification before disposing
+the store. Resume metadata is flushed to `.partial.json.pending`, then renamed
+over `.partial.json`. The final model rename is the installation commit point.
+Metadata cleanup failure leaves the verified model installed and publishes a
+warning; Verify installed files retries cleanup when no partial body remains.
+The directory lock coordinates app stores only. `Setup-AudioBackend.ps1` uses
+a separate protocol and must not write the same folder concurrently.
+
+`NativeModelIntegrity` remains the native-read authority. Catalog discovery
+checks presence and length, not readiness for native use. Resident read leases
+still block deletion, and session maintenance releases the engine before
+installation or removal. `ModelStoreTests` uses a fake source and temporary
+files; HTTP-handler tests cover resume and redirect rules without network access.
 
 Launch owns a microphone permission preflight before initializing the session,
 shortcut, and meeting detector. `AppCapability.CheckAccess` is passive;
@@ -391,30 +565,72 @@ no capture device is opened merely to provoke consent. See Microsoft's
 [permission request API](https://learn.microsoft.com/en-us/uwp/api/windows.security.authorization.appcapabilityaccess.appcapability.requestaccessasync).
 
 Closing the main window rejects new work and joins owned operations before
-exit. Failed native teardown retains the resource owners and blocks new work;
+exit. Pending meeting wording cleanup is cancelled and joined. Disposal does
+not start a new cloud cleanup.
+Failed native teardown retains the resource owners and blocks new work;
 it must not turn into a false idle state. Native cancellation waits for the
 current blocking kernel before release. Keep capture queues and memory
 admission bounded.
 
-Meeting naming uses the selected Teams process's cached UI Automation tree on
-a dedicated worker. Tests cover marker parsing and conservative matching; a
-visible live call is still required to qualify real Teams layouts. Optional
+Meeting naming uses the selected Teams process on a dedicated worker. A
+provider-side FindAllBuildCache query, scoped to each selected Teams window's
+descendants, finds candidate MenuItems or nodes with known participant/video
+automation IDs. Bounded raw traversal then runs only inside validated tiles.
+Node, depth, and time budgets remain 256
+nodes, depth 32, and 750 ms. Classification recognizes current Teams labels
+such as `, video is on/off`, `Myself video, <name>, ...`, mute state, and
+`Has control of production tools`, and it keeps comma-containing names.
+Unmuted, video on, and roster presence do not prove speaking. Explicit
+speaking markers in named tiles or their descendants remain necessary.
+Mapping still requires aligned source-exclusive turns and independent
+consistent evidence. Names are not inferred from transcript text. Popups,
+minimized or hidden tiles, or Teams not exposing speaking metadata can prevent
+naming. A baseline live read of 256 raw UIA nodes across Teams windows
+returned Unavailable. Live success on a real call is not yet established. Optional
 Nemotron timing runs on CPU through the existing C ABI; deterministic alignment
 tests do not prove live ASR accuracy. Keep its 30-second audio ring in memory.
-Copilot cleanup uses JSONL process output, validates a complete text-only result,
-and isolates CLI home/cache/log/work directories. Test it with synthetic text;
-never use personal meeting text in diagnostics or print authentication values.
+Meeting wording cleanup is `IMeetingTextCleanup`. Core snapshots the cleanup
+choice at meeting Start. Automatic cleanup runs only after a successful End and
+a local save of a completed original. Failed, discarded, or empty meetings are
+not sent. Reopened meetings do not upload. Saving automatic OpenAI cleanup
+requires a key and an OpenAI API model ID. No OpenAI model is guessed.
+`CopilotMeetingTextCleanup` runs an isolated Copilot CLI subprocess. Obsolete
+`--no-remote` is omitted. Obsolete `--no-remote-export` is `--sync-session off`.
+Those flags were checked against Copilot CLI 1.0.103 with synthetic text.
+Incompatible CLI stderr is mapped to a sanitized message. Isolation of tools,
+hooks, and instructions applies only to that subprocess. It does not edit the
+user's global Copilot config. `OpenAIMeetingTextCleanup` posts to the OpenAI
+Responses API with `store` false. It uses source-generated JSON and `HttpClient`.
+No extra package is required. `MeetingCleanupService` selects the provider and
+stores the OpenAI key in Windows Credential Locker. Do not write the key to
+`settings.json` or logs. There is no provider fallback. Manual retry confirms
+the currently saved Settings provider and model. It does not edit them in the
+meeting dialog. Test Copilot cleanup in `CopilotMeetingTextCleanupTests` with
+synthetic text. Cover OpenAI cleanup in `OpenAIMeetingTextCleanupTests` for
+`store` false, sanitized HTTP failures, and completed Responses parsing. Never
+use personal meeting text in diagnostics or print authentication values.
+Opt-in diagnostics may emit Application stages `CleanupCopilot` and
+`CleanupOpenAI` with outcome, duration, and numeric HRESULT only. They never
+include transcript text, keys, or raw stderr.
 
 Automatic Teams detection enumerates active WASAPI capture sessions without
 reading audio. It resolves capture owners through a bounded process ancestry
 snapshot, checking creation-time order before identifying a Teams root. It
 identifies Teams by process ID and start time, debounces a
 candidate for three seconds, and rearms dismissed identities after ten seconds
-of observed absence. Failed or disabled scans are not evidence of absence.
-The UI polls off-thread, suppresses suggestions during owned speech operations,
-and joins the monitor before shutdown. Detection opens a configured notetaker;
-the user still starts capture. Test policy separately from the tagged native
-enumeration smoke test; real Teams join/mute behavior requires live qualification.
+of observed absence. `MeetingSuggestions` owns polling and offer lifetime on the
+UI thread; `TeamsMeetingDetector` runs native enumeration off-thread. The shell
+supplies availability and active selections, renders offers, and opens the notetaker.
+Busy, failed, disabled, and stopped monitoring do not establish absence. Busy
+metadata scans still suppress suggestions for an already-active meeting.
+Opening rechecks the candidate. A stale or rejected open invalidates the offer
+and requires fresh stable observations. Only explicit **Start** captures audio.
+Shutdown cancels polling and confirmation before startup joins, then joins both
+before disposal. Failed-shutdown recovery restarts only a previously started
+monitor. `MeetingSuggestionsTests` uses a fake detector, UI synchronization
+context, and `TimeProvider` to cover these contracts without Windows devices.
+Keep the tagged native enumeration smoke test separate; real Teams join/mute
+behavior requires live qualification.
 Microsoft documents that session enumeration can race with newly created
 sessions; this polling detector is best-effort. See
 [GetSessionEnumerator](https://learn.microsoft.com/en-us/windows/win32/api/audiopolicy/nf-audiopolicy-iaudiosessionmanager2-getsessionenumerator).
