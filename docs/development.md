@@ -282,6 +282,23 @@ a native rebuild.
 
 ## Source and ownership
 
+`DictationSession` has one admission and shutdown owner. Model replacement owns
+candidate and previous engines. Recognition snapshots its admitted engine,
+model and options. Streaming owns its pipe and tasks; only dictation owns
+microphone capture and stop controls. Preview publication uses `StateChanged`;
+shortcut insertion consumes the final operation outcome.
+
+`MeetingStore.ListAsync` returns summaries rather than transcript documents.
+The in-memory cache validates file identity on each listing and reads changed
+files one at a time. Opening a meeting loads and validates the full transcript.
+Interrupted-session recovery is an owned startup task independent of dictation
+initialization. It must finish successfully before a meeting can start.
+
+`MeetingTranscriptProjection` retains positional presentation rows. Typed
+bindings update only changed properties in a constrained virtualized ListView.
+ASR and speaker corrections can revise older turns; unchanged row text is not
+reassigned. Expanding original wording is presentation state, not saved speech.
+
 Meeting capture, persistence, speaker parsing, and lifecycle tests live in
 `MeetingCaptureTests`, `MeetingStoreTests`, `MeetingTranscriptTests`,
 `MeetingSessionTests`, and `DiarizedMeetingSessionTests`. Live capture tests are marked `NativeIntegration` and
@@ -295,9 +312,14 @@ speaker checks.
 `MeetingSession` owns the meeting operation and reserves `DictationSession`
 before loading its own native engine. Reservation joins/unloads dictation
 preparation and prevents dictation/settings/model maintenance until all meeting
-capture and inference resources are released. Recognition, including final
-transcript callbacks and their saves, runs without the UI synchronization
-context. End joins this work before releasing the reservation. Session tests
+capture and inference resources are released. Recognition callbacks queue saves
+without waiting for disk. `MeetingPersistence` owns one writer with one active
+snapshot and one replaceable pending snapshot. It starts writes without a timer;
+Pause, End and Close flush the required revision, and disposal joins the writer.
+Atomic replacement and disk flush remain required. Disk latency determines the
+unsaved interval, so no fixed crash-recovery time bound is promised. Failed
+completed-meeting edits retain their committed status and original wording.
+Session tests
 exercise completion from a single-thread UI context to catch save/refinement
 deadlocks. Start snapshots recognition options before reserve. It honors an
 explicit saved streaming dictation model only when that saved ID matches the

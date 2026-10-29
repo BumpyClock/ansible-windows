@@ -115,7 +115,8 @@ options and checks.
   Qwen buffers input. Shortcut insertion always waits for the final result.
 - Auto is the default recognition processor. Settings without a processor field
   load Auto. An explicit saved CPU or GPU choice is kept. It benchmarks CPU,
-  then GPU, on a bundled public speech sample. GPU wins when it is within five
+  then GPU, on a bundled public speech sample, using the median of three warm
+  runs per device. GPU wins when it is within five
   percent of CPU. A GPU worker crash or timeout keeps a working CPU; shared
   calibration errors abort without writing a device cache entry. Manual GPU has
   no automatic fallback. Nemotron GPU streaming has a reported native crash;

@@ -63,6 +63,7 @@ public sealed partial class MainWindow : Window
     private readonly MicrophonePermissionPreflight _microphonePermission;
     private CancellationTokenSource _startupCancellation = new();
     private Task? _startupTask;
+    private Task? _meetingRecoveryTask;
     private Task? _permissionRetryTask;
     private Task? _microphoneSettingsTask;
     private bool _launchReady;
@@ -97,15 +98,15 @@ public sealed partial class MainWindow : Window
         AppWindow.Resize(size);
         AppWindow.Move(new Windows.Graphics.PointInt32(area.X + (area.Width - size.Width) / 2, area.Y + (area.Height - size.Height) / 2));
         MainContent.Loaded += Initialize;
-        Activated += async (_, _) =>
+        Activated += async (_, args) =>
         {
-            if (_closed || _closing) return;
+            if (_closed || _closing || args.WindowActivationState == WindowActivationState.Deactivated) return;
             if (_permissionCheckComplete && _permissionRetryTask is not { IsCompleted: false })
             {
                 _microphonePermission.CheckAccess();
                 RenderMicrophonePermission();
             }
-            await _meetings.RefreshAsync();
+            if (ReferenceEquals(MainContent.Content, _meetings)) await _meetings.RefreshAsync();
         };
         AppWindow.Closing += CloseRequested;
         Closed += WindowClosed;
@@ -119,6 +120,7 @@ public sealed partial class MainWindow : Window
         if (_initialized) { return; }
         _initialized = true;
         _startupTask = InitializeAsync(_startupCancellation.Token);
+        _meetingRecoveryTask = RecoverMeetingsAsync(_startupCancellation.Token);
         await _startupTask;
     }
 
@@ -139,18 +141,6 @@ public sealed partial class MainWindow : Window
             token.ThrowIfCancellationRequested();
             _permissionCheckComplete = true;
             RenderMicrophonePermission();
-            Exception? meetingRecoveryError = null;
-            IReadOnlyList<MeetingReadFailure> meetingRecoveryFailures = [];
-            try
-            {
-                meetingRecoveryFailures = await _meetingStore.MarkInterruptedSessionsAsync(token);
-                _meetingRecoveryComplete = true;
-            }
-            catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or System.Text.Json.JsonException)
-            {
-                meetingRecoveryError = error;
-            }
-            token.ThrowIfCancellationRequested();
             await _session.InitializeAsync();
             token.ThrowIfCancellationRequested();
             if (_closed || _closing) { return; }
@@ -164,15 +154,31 @@ public sealed partial class MainWindow : Window
                     _configuredHotkey, HotkeyChanged);
             }
             catch (Exception error) { _session.Notify(NoticeKind.Error, "Shortcut unavailable", error.Message, NoticeArea.Settings | NoticeArea.Dictation); }
-            if (meetingRecoveryError is not null)
-                _session.Notify(NoticeKind.Error, "Meeting recovery failed", meetingRecoveryError.Message, NoticeArea.Meetings);
-            else if (meetingRecoveryFailures.Count > 0)
-                _session.Notify(NoticeKind.Warning, "Some saved transcripts unavailable",
-                    "Open Meetings to export and remove unreadable files. New meetings are still available.", NoticeArea.Meetings);
             StartMeetingDetection();
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         catch (Exception error) { _session.ReportUiError(error, NoticeArea.Application); }
+    }
+
+    private async Task RecoverMeetingsAsync(CancellationToken token)
+    {
+        SessionNotice? notice = null;
+        try
+        {
+            var failures = await Task.Run(() => _meetingStore.MarkInterruptedSessionsAsync(token), token);
+            token.ThrowIfCancellationRequested();
+            _meetingRecoveryComplete = true;
+            if (failures.Count > 0)
+                notice = new(NoticeKind.Warning, "Some saved transcripts unavailable",
+                    "Open Meetings to export and remove unreadable files. New meetings are still available.", NoticeArea.Meetings);
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { return; }
+        catch (Exception error) { notice = new(NoticeKind.Error, "Meeting recovery failed", error.Message, NoticeArea.Meetings); }
+        // Initialization publishes its own notice. Report recovery problems afterward without delaying dictation.
+        if (notice is not null && _startupTask is not null) await _startupTask;
+        if (token.IsCancellationRequested || _closed || _closing) return;
+        if (notice is not null) _session.Notify(notice.Kind, notice.Title, notice.Message, notice.Area);
+        if (ReferenceEquals(MainContent.Content, _meetings)) await _meetings.RefreshAsync();
     }
 
     private void RenderMicrophonePermission()
@@ -351,10 +357,12 @@ public sealed partial class MainWindow : Window
         });
     }
 
-    private Task OpenMeetingAsync(MeetingDocument? document)
+    private async Task OpenMeetingAsync(MeetingDocument? document)
     {
+        if (_meetingRecoveryTask is not null) await _meetingRecoveryTask;
+        if (!_meetingRecoveryComplete) throw new InvalidOperationException("Meeting storage must initialize successfully before opening a meeting.");
+        if (_closing || _closed) return;
         OpenMeeting(document).Activate();
-        return Task.CompletedTask;
     }
 
     private MeetingWindow OpenMeeting(MeetingDocument? document)
@@ -405,8 +413,12 @@ public sealed partial class MainWindow : Window
         });
         window.Closed += async (_, _) =>
         {
-            _meetingWindows.RemoveAll(item => ReferenceEquals(item.window, window));
-            try { await meeting.DisposeAsync(); await _meetings.RefreshAsync(); }
+            try
+            {
+                await meeting.DisposeAsync();
+                _meetingWindows.RemoveAll(item => ReferenceEquals(item.window, window));
+                if (ReferenceEquals(MainContent.Content, _meetings)) await _meetings.RefreshAsync();
+            }
             catch (Exception error) { _session.ReportUiError(error, NoticeArea.Meetings); }
         };
         return window;
@@ -818,6 +830,7 @@ public sealed partial class MainWindow : Window
         try
         {
             if (_startupTask is not null) await _startupTask;
+            if (_meetingRecoveryTask is not null) await _meetingRecoveryTask;
             if (_permissionRetryTask is not null) await _permissionRetryTask;
             if (_microphoneSettingsTask is not null) await _microphoneSettingsTask;
             await _meetings.BeginShutdownAsync();
@@ -859,7 +872,7 @@ public sealed partial class MainWindow : Window
             catch (Exception stopError) { failures.Add(stopError); }
             var joined = Task.WhenAll(new[]
             {
-                _startupTask, _permissionRetryTask, _microphoneSettingsTask,
+                _startupTask, _meetingRecoveryTask, _permissionRetryTask, _microphoneSettingsTask,
                 _detectionTask, _detectionActionTask, _captureTask, _pressTask, _deliveryTask, _releaseTailTask
             }.OfType<Task>());
             try { await joined; }

@@ -1,6 +1,7 @@
 <Window x:Class="Ansible.MeetingWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:Ansible">
     <Window.SystemBackdrop><MicaBackdrop /></Window.SystemBackdrop>
     <Grid x:Name="Root" Background="{ThemeResource AppWindowBrush}" RowSpacing="0" ActualThemeChanged="RootThemeChanged">
         <Grid.RowDefinitions><RowDefinition Height="48"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
@@ -37,9 +38,40 @@
                      Visibility="Collapsed" Closed="ErrorBarClosed"/>
         </StackPanel>
         <Grid Grid.Row="3" Margin="32,0,32,0">
-            <ScrollViewer x:Name="TranscriptScroll" HorizontalScrollBarVisibility="Disabled">
-                <StackPanel x:Name="TranscriptRows" Spacing="16" Padding="0,0,0,24"/>
-            </ScrollViewer>
+            <ListView x:Name="TranscriptRows" SelectionMode="None" IsItemClickEnabled="False"
+                      Padding="0,0,0,24" Loaded="TranscriptLoaded" LayoutUpdated="TranscriptLayoutUpdated"
+                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                      ScrollViewer.HorizontalScrollMode="Disabled" AutomationProperties.Name="Meeting transcript">
+                <ListView.ItemsPanel>
+                    <ItemsPanelTemplate><ItemsStackPanel ItemsUpdatingScrollMode="KeepItemsInView"/></ItemsPanelTemplate>
+                </ListView.ItemsPanel>
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        <Setter Property="Padding" Value="0"/>
+                        <Setter Property="Margin" Value="0,0,0,16"/>
+                    </Style>
+                </ListView.ItemContainerStyle>
+                <ListView.ItemTemplate>
+                    <DataTemplate x:DataType="local:MeetingTranscriptRow">
+                        <StackPanel Spacing="6">
+                            <Button Content="{x:Bind SpeakerName, Mode=OneWay}" Tag="{x:Bind SpeakerId, Mode=OneWay}"
+                                    Visibility="{x:Bind local:MeetingWindow.ToVisibility(ShowSpeaker), Mode=OneWay}"
+                                    AutomationProperties.Name="{x:Bind RenameSpeakerName, Mode=OneWay}" Click="SpeakerClicked"
+                                    Background="{x:Null}" BorderThickness="0" Padding="0,4,0,4" HorizontalAlignment="Left"/>
+                            <TextBlock Text="{x:Bind TimingText, Mode=OneWay}" Style="{StaticResource CaptionSecondaryStyle}"/>
+                            <Border CornerRadius="8" Padding="12,10" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
+                                <TextBlock Text="{x:Bind Text, Mode=OneWay}" TextWrapping="Wrap" IsTextSelectionEnabled="True" FontSize="16"/>
+                            </Border>
+                            <Expander Header="Original wording" IsExpanded="{x:Bind IsOriginalExpanded, Mode=TwoWay}"
+                                      Visibility="{x:Bind local:MeetingWindow.ToVisibility(HasCleanup), Mode=OneWay}"
+                                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                                <TextBlock Text="{x:Bind OriginalText, Mode=OneWay}" TextWrapping="Wrap" IsTextSelectionEnabled="True"/>
+                            </Expander>
+                        </StackPanel>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
             <StackPanel x:Name="EmptyState" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="10" MaxWidth="400">
                 <TextBlock x:Name="EmptyTitle" Text="Ready when you are" Style="{StaticResource SubtitleTextBlockStyle}" TextAlignment="Center"/>
                 <TextBlock x:Name="EmptyDescription" Text="Start the meeting to see speaker-labelled text here." Style="{StaticResource PageSubtitleStyle}" TextAlignment="Center"/>

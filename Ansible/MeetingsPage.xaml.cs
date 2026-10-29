@@ -14,6 +14,9 @@ public sealed partial class MeetingsPage : Page
     private CancellationTokenSource _shutdown = new();
     private Task? _exportTask;
     private Task? _refreshTask;
+    private Task? _openTask;
+    private IReadOnlyList<MeetingSummary> _displayedSummaries = [];
+    private IReadOnlyList<MeetingReadFailure> _displayedFailures = [];
     private UiSessionObserver? _observer;
 
     internal MeetingsPage(DictationSession session, MeetingStore store, Func<MeetingDocument?, Task> openMeeting, Func<nint> windowHandle)
@@ -42,21 +45,14 @@ public sealed partial class MeetingsPage : Page
     {
         try
         {
-            var result = await _store.ListAsync(_shutdown.Token);
+            var token = _shutdown.Token;
+            var result = await Task.Run(() => _store.ListAsync(token), token);
             if (_shutdown.IsCancellationRequested) return;
-            var documents = result.Documents;
-            MeetingList.Items.Clear();
-            foreach (var document in documents)
-            {
-                var row = new StackPanel { Tag = document, Spacing = 6, Padding = new Thickness(12, 16, 12, 16) };
-                row.Children.Add(new TextBlock { Text = document.Title, Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"] });
-                row.Children.Add(new TextBlock
-                {
-                    Text = $"{document.CreatedAt.ToLocalTime():MMM d, yyyy · h:mm tt} · {document.Status}",
-                    Style = (Style)Application.Current.Resources["CaptionSecondaryStyle"]
-                });
-                MeetingList.Items.Add(row);
-            }
+            var summaries = result.Summaries;
+            if (_displayedSummaries.SequenceEqual(summaries) && _displayedFailures.SequenceEqual(result.Failures)) return;
+            _displayedSummaries = summaries;
+            _displayedFailures = result.Failures;
+            MeetingList.ItemsSource = summaries.Select(summary => new MeetingHistoryRow(summary)).ToArray();
             UnreadableMeetings.Children.Clear();
             foreach (var failure in result.Failures)
             {
@@ -72,8 +68,8 @@ public sealed partial class MeetingsPage : Page
                 UnreadableMeetings.Children.Add(row);
             }
             UnreadableMeetings.Visibility = result.Failures.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
-            EmptyState.Visibility = documents.Count == 0 && result.Failures.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-            MeetingList.Visibility = documents.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+            EmptyState.Visibility = summaries.Count == 0 && result.Failures.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            MeetingList.Visibility = summaries.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
         }
         catch (OperationCanceledException) when (_shutdown.IsCancellationRequested) { }
         catch (Exception error) { ShowError(error); }
@@ -113,6 +109,7 @@ public sealed partial class MeetingsPage : Page
         _shutdown.Cancel();
         if (_exportTask is not null) await _exportTask;
         if (_refreshTask is not null) await _refreshTask;
+        if (_openTask is not null) await _openTask;
     }
 
     internal void ResumeAfterFailedShutdown()
@@ -123,14 +120,29 @@ public sealed partial class MeetingsPage : Page
 
     private async void NewMeetingClicked(object sender, RoutedEventArgs args)
     {
-        try { await _openMeeting(null); }
-        catch (Exception error) { ShowError(error); }
+        if (_shutdown.IsCancellationRequested || _openTask is { IsCompleted: false }) return;
+        _openTask = OpenAsync(null);
+        await _openTask;
     }
 
     private async void MeetingClicked(object sender, ItemClickEventArgs args)
     {
-        if (args.ClickedItem is not FrameworkElement { Tag: MeetingDocument document }) return;
-        try { await _openMeeting(await _store.LoadAsync(document.Id)); }
+        if (_shutdown.IsCancellationRequested || _openTask is { IsCompleted: false } ||
+            args.ClickedItem is not MeetingHistoryRow row) return;
+        _openTask = OpenAsync(row.Summary.Id);
+        await _openTask;
+    }
+
+    private async Task OpenAsync(Guid? id)
+    {
+        try
+        {
+            var token = _shutdown.Token;
+            var document = id is { } savedId ? await Task.Run(() => _store.LoadAsync(savedId, token), token) : null;
+            token.ThrowIfCancellationRequested();
+            await _openMeeting(document);
+        }
+        catch (OperationCanceledException) when (_shutdown.IsCancellationRequested) { }
         catch (Exception error) { ShowError(error); }
     }
 
@@ -152,4 +164,10 @@ public sealed partial class MeetingsPage : Page
         if (args.Reason == InfoBarCloseReason.CloseButton) _session.DismissNotice(_session.State.Notice);
         sender.Visibility = Visibility.Collapsed;
     }
+}
+
+public sealed record MeetingHistoryRow(MeetingSummary Summary)
+{
+    public string Title => Summary.Title;
+    public string Description => $"{Summary.CreatedAt.ToLocalTime():MMM d, yyyy \u00b7 h:mm tt} \u00b7 {Summary.Status}";
 }

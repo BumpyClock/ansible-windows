@@ -14,12 +14,6 @@ public sealed record MeetingCleanupOptions(string Model = "gpt-6-luna", string R
     }
 }
 
-public interface IMeetingTextCleanup
-{
-    Task<IReadOnlyList<string>> CleanAsync(MeetingDocument document, MeetingCleanupOptions options,
-        CancellationToken cancellationToken = default);
-}
-
 internal sealed record CleanupTurn(int Id, string Text);
 internal sealed record CleanupPayload(IReadOnlyList<CleanupTurn> Turns);
 

@@ -17,7 +17,6 @@
             <Color x:Key="AppSecondaryTextColor">#536174</Color>
             <Color x:Key="AppMutedTextColor">#657286</Color>
             <Color x:Key="AppTranscriptColor">#29364A</Color>
-            <Color x:Key="AppSelectedColor">#FFFFFF</Color>
             <Color x:Key="AppKeyBorderColor">#BCC7D4</Color>
             <Color x:Key="AppTrackColor">#BCC7D4</Color>
             <Color x:Key="AppActivityColor">#E0E6ED</Color>
@@ -90,7 +89,6 @@
             <SolidColorBrush x:Key="AppSecondaryTextBrush" Color="{StaticResource AppSecondaryTextColor}" />
             <SolidColorBrush x:Key="AppMutedTextBrush" Color="{StaticResource AppMutedTextColor}" />
             <SolidColorBrush x:Key="AppTranscriptBrush" Color="{StaticResource AppTranscriptColor}" />
-            <SolidColorBrush x:Key="AppSelectedBrush" Color="{StaticResource AppSelectedColor}" />
             <SolidColorBrush x:Key="AppKeyBorderBrush" Color="{StaticResource AppKeyBorderColor}" />
             <SolidColorBrush x:Key="AppTrackBrush" Color="{StaticResource AppTrackColor}" />
             <SolidColorBrush x:Key="AppTagBrush" Color="{StaticResource AppTagColor}" />
@@ -165,7 +163,6 @@
             <Color x:Key="AppSecondaryTextColor">#9CA1A7</Color>
             <Color x:Key="AppMutedTextColor">#8E949B</Color>
             <Color x:Key="AppTranscriptColor">#E3E6E8</Color>
-            <Color x:Key="AppSelectedColor">#3A4555</Color>
             <Color x:Key="AppKeyBorderColor">#34373B</Color>
             <Color x:Key="AppTrackColor">#5A5E64</Color>
             <Color x:Key="AppActivityColor">#2A3443</Color>
@@ -237,7 +234,6 @@
             <SolidColorBrush x:Key="AppSecondaryTextBrush" Color="{StaticResource AppSecondaryTextColor}" />
             <SolidColorBrush x:Key="AppMutedTextBrush" Color="{StaticResource AppMutedTextColor}" />
             <SolidColorBrush x:Key="AppTranscriptBrush" Color="{StaticResource AppTranscriptColor}" />
-            <SolidColorBrush x:Key="AppSelectedBrush" Color="{StaticResource AppSelectedColor}" />
             <SolidColorBrush x:Key="AppKeyBorderBrush" Color="{StaticResource AppKeyBorderColor}" />
             <SolidColorBrush x:Key="AppTrackBrush" Color="{StaticResource AppTrackColor}" />
             <SolidColorBrush x:Key="AppTagBrush" Color="{StaticResource AppTagColor}" />
@@ -315,7 +311,6 @@
             <SolidColorBrush x:Key="AppSecondaryTextBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
             <SolidColorBrush x:Key="AppMutedTextBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
             <SolidColorBrush x:Key="AppTranscriptBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
-            <SolidColorBrush x:Key="AppSelectedBrush" Color="{ThemeResource SystemColorHighlightColor}" />
             <SolidColorBrush x:Key="AppKeyBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="AppTrackBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
             <SolidColorBrush x:Key="AppTagBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
@@ -439,7 +434,6 @@
     <Thickness x:Key="SidebarPadding">14,30,14,18</Thickness>
     <Thickness x:Key="SidebarBrandMargin">10,0,10,28</Thickness>
     <Thickness x:Key="SettingsSegmentPadding">14,0</Thickness>
-    <x:Double x:Key="SettingsSegmentMinWidth">0</x:Double>
     <CornerRadius x:Key="SettingsSegmentCornerRadius">8</CornerRadius>
     <CornerRadius x:Key="SettingsCheckBoxCornerRadius">6</CornerRadius>
     <x:Double x:Key="BenchmarkBarHeight">8</x:Double>
@@ -878,9 +872,6 @@
     </Style>
     <Style x:Key="HomeLegendHighChipStyle" TargetType="Border" BasedOn="{StaticResource HomeLegendChipStyle}">
         <Setter Property="Background" Value="{ThemeResource ActivityHighBrush}" />
-    </Style>
-    <Style x:Key="HomeLegendFutureChipStyle" TargetType="Border" BasedOn="{StaticResource HomeLegendChipStyle}">
-        <Setter Property="Opacity" Value="{ThemeResource FutureActivityOpacity}" />
     </Style>
         <Style x:Key="HistoryDividerStyle" TargetType="Border">
             <Setter Property="Height" Value="1" />

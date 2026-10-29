@@ -20,7 +20,7 @@ internal sealed record DeviceBenchmarkSelection(string Key, DeviceBenchmarkResul
     NativeBackend Backend, DateTimeOffset MeasuredAt)
 {
     public string Summary => $"Auto selected {Backend}. CPU: {Describe(Cpu)}; Vulkan: {Describe(Gpu)}. " +
-        $"Public sample measured {MeasuredAt:u}; loading and warmup excluded.";
+        $"Public sample median of three runs measured {MeasuredAt:u}; loading and warmup excluded.";
     private static string Describe(DeviceBenchmarkResult result) =>
         result.Working ? $"{result.Milliseconds:F1} ms" : result.Error ?? "invalid measurement";
 }
@@ -104,15 +104,19 @@ internal static class DeviceBenchmark
         return new(key, cpu, gpu, backend, DateTimeOffset.UtcNow);
     }
 
-    internal static string Key(DeviceBenchmarkRequest request, string modelHash, CancellationToken token)
+    internal static string Key(DeviceBenchmarkRequest request, string modelHash, CancellationToken token,
+        DeviceBenchmarkIdentity runtimeIdentity)
     {
         token.ThrowIfCancellationRequested();
-        var identity = new StringBuilder($"benchmark-v3|{modelHash}|{request.ModelId}|{request.Mode}|{request.History}|" +
-            $"{request.Device}|{request.Threads}|{request.Headroom}|{request.UseDictionary}|{Environment.OSVersion}|{Environment.ProcessorCount}|");
-        identity.Append(HashFile(request.Library, token)).Append('|').Append(HashFile(request.Sample, token));
-        // Native dependencies and their contents are part of the compiled backend identity.
-        foreach (var path in Directory.EnumerateFiles(Path.GetDirectoryName(request.Library)!, "*.dll").Order(StringComparer.OrdinalIgnoreCase))
-            identity.Append('|').Append(Path.GetFileName(path)).Append(':').Append(HashFile(path, token));
+        var identity = $"benchmark-v4|{modelHash}|{request.ModelId}|{request.Mode}|{request.History}|" +
+            $"{request.Device}|{request.Threads}|{request.Headroom}|{request.UseDictionary}|" +
+            runtimeIdentity.Read(request.Library, request.Sample, token);
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity)));
+    }
+
+    internal static string ReadHardwareIdentity()
+    {
+        var identity = new StringBuilder($"{Environment.OSVersion}|{Environment.ProcessorCount}");
         if (!OperatingSystem.IsWindows())
             throw new PlatformNotSupportedException("Device qualification requires Windows hardware identity.");
         using var cpu = Registry.LocalMachine.OpenSubKey(@"HARDWARE\DESCRIPTION\System\CentralProcessor\0")
@@ -131,23 +135,7 @@ internal static class DeviceBenchmark
             identity.Append('|').Append(name).Append(':').Append(description).Append(':')
                 .Append(driverVersion).Append(':').Append(adapter.GetValue("MatchingDeviceId"));
         }
-        token.ThrowIfCancellationRequested();
-        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity.ToString())));
-    }
-
-    private static string HashFile(string path, CancellationToken token)
-    {
-        NativeModelIntegrity.RejectLinks(path);
-        using var stream = File.OpenRead(path);
-        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        var buffer = new byte[128 * 1024];
-        int count;
-        while ((count = stream.Read(buffer)) > 0)
-        {
-            token.ThrowIfCancellationRequested();
-            hash.AppendData(buffer, 0, count);
-        }
-        return Convert.ToHexString(hash.GetHashAndReset());
+        return identity.ToString();
     }
 
     internal static List<DeviceBenchmarkSelection> ReadCache(string? path)

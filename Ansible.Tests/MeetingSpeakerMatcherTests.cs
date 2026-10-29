@@ -5,6 +5,20 @@ namespace Ansible.Tests;
 public sealed class MeetingSpeakerMatcherTests
 {
     [Fact]
+    public void MissingObservationsClearOldAutomaticNamesWithoutChangingManualNamesOrSpeech()
+    {
+        var document = Document(Turn("Speaker 0", 1, 3)) with
+        {
+            AutoSpeakerNames = new Dictionary<string, string> { ["Speaker 0"] = "Old observation" },
+            SpeakerNames = new Dictionary<string, string> { ["Speaker 0"] = "Chosen name" }
+        };
+        var refined = new MeetingSpeakerMatcher().Refine(document);
+        Assert.Empty(refined.AutoSpeakerNames);
+        Assert.Equal("Chosen name", refined.GetSpeakerName("Speaker 0"));
+        Assert.Equal(document.Turns, refined.Turns);
+    }
+
+    [Fact]
     public void TwoIndependentCoveredTurnsNameSpeakerWithoutChangingSpeech()
     {
         var matcher = Observations(0, 10, "Alex");

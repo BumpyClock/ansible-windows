@@ -240,7 +240,8 @@ public sealed class DeviceBenchmarkTests
             File.WriteAllText(dll, "native one");
             File.WriteAllText(sample, "sample one");
             var request = new DeviceBenchmarkRequest(dll, "catalog", "models", sample, "moonshine", NativeBackend.Cpu, 0, 4, 512, "offline", 0);
-            string Key(DeviceBenchmarkRequest input, string hash = "model-sha") => DeviceBenchmark.Key(input, hash, CancellationToken.None);
+            var runtime = new DeviceBenchmarkIdentity();
+            string Key(DeviceBenchmarkRequest input, string hash = "model-sha") => DeviceBenchmark.Key(input, hash, CancellationToken.None, runtime);
             var original = Key(request);
             Assert.Equal(original, Key(request with
             {
@@ -252,6 +253,8 @@ public sealed class DeviceBenchmarkTests
             Assert.NotEqual(original, Key(request with { UseDictionary = true }));
             Assert.NotEqual(original, Key(request with { Device = 1 }));
             Assert.NotEqual(original, Key(request with { Threads = 2 }));
+            Assert.NotEqual(original, Key(request with { Headroom = 1024 }));
+            Assert.NotEqual(original, Key(request with { ModelId = "other-model" }));
             Assert.NotEqual(original, Key(request, "changed-model-sha"));
             Assert.NotEqual(Key(request, "asr-sha|diar-one|low"), Key(request, "asr-sha|diar-two|low"));
             Assert.NotEqual(Key(request, "asr-sha|diar-one|low"), Key(request, "asr-sha|diar-one|very_low"));
@@ -261,6 +264,105 @@ public sealed class DeviceBenchmarkTests
             File.WriteAllText(dll, "native one");
             File.WriteAllText(sample, "sample two");
             Assert.NotEqual(original, Key(request));
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
+    [Fact]
+    public void WarmRuntimeIdentityReadsNoContentAndStillChecksDriverAndDllMembership()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "Ansible-identity-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var dll = Path.Combine(directory, "native.dll");
+            var sibling = Path.Combine(directory, "dependency.dll");
+            var sample = Path.Combine(directory, "sample.wav");
+            File.WriteAllText(dll, "native bytes");
+            File.WriteAllText(sibling, "dependency bytes");
+            File.WriteAllText(sample, "sample bytes");
+            var reads = new List<string>();
+            var hardware = "cpu|adapter|driver-v1";
+            var runtime = new DeviceBenchmarkIdentity(() => hardware, (file, token) =>
+            {
+                reads.Add(file.Name);
+                return DeviceBenchmarkIdentity.HashFile(file, token);
+            });
+            string Read() => runtime.Read(dll, sample, CancellationToken.None);
+            var original = Read();
+            Assert.Equal(3, reads.Count);
+            Assert.Equal(1, reads.Count(path => path == dll));
+            reads.Clear();
+            Assert.Equal(original, Read());
+            Assert.Empty(reads);
+            hardware = "cpu|adapter|driver-v2";
+            Assert.NotEqual(original, Read());
+            Assert.Empty(reads);
+            hardware = "cpu|other-adapter|driver-v1";
+            Assert.NotEqual(original, Read());
+            Assert.Empty(reads);
+            hardware = "cpu|adapter|driver-v1";
+            var extra = Path.Combine(directory, "extra.dll");
+            File.WriteAllText(extra, "new dependency");
+            Assert.NotEqual(original, Read());
+            Assert.Equal([extra], reads);
+            reads.Clear();
+            File.Delete(extra);
+            Assert.Equal(original, Read());
+            Assert.Empty(reads);
+            File.Delete(sibling);
+            Assert.NotEqual(original, Read());
+            Assert.Empty(reads);
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
+    [Theory]
+    [InlineData("native.dll", false)]
+    [InlineData("dependency.dll", false)]
+    [InlineData("sample.wav", false)]
+    [InlineData("native.dll", true)]
+    [InlineData("dependency.dll", true)]
+    [InlineData("sample.wav", true)]
+    public void RuntimeIdentityRehashesChangedAndReplacedFiles(string changedName, bool replace)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "Ansible-identity-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            foreach (var name in new[] { "native.dll", "dependency.dll", "sample.wav" })
+                File.WriteAllText(Path.Combine(directory, name), "original");
+            var reads = new List<string>();
+            var runtime = new DeviceBenchmarkIdentity(() => "hardware", (file, token) =>
+            {
+                reads.Add(file.Name);
+                return DeviceBenchmarkIdentity.HashFile(file, token);
+            });
+            string Read() => runtime.Read(Path.Combine(directory, "native.dll"),
+                Path.Combine(directory, "sample.wav"), CancellationToken.None);
+            var original = Read();
+            reads.Clear();
+            var changed = Path.Combine(directory, changedName);
+            var writeTime = File.GetLastWriteTimeUtc(changed);
+            if (replace)
+            {
+                var replacement = Path.Combine(directory, "replacement");
+                File.WriteAllText(replacement, "modified");
+                File.SetLastWriteTimeUtc(replacement, writeTime);
+                File.SetCreationTimeUtc(replacement, File.GetCreationTimeUtc(changed));
+                File.Move(replacement, changed, overwrite: true);
+            }
+            else
+            {
+                File.WriteAllText(changed, "modified");
+                File.SetLastWriteTimeUtc(changed, writeTime.AddSeconds(1));
+            }
+            var updated = Read();
+            Assert.NotEqual(original, updated);
+            Assert.Equal([changed], reads);
+            reads.Clear();
+            Assert.Equal(updated, Read());
+            Assert.Empty(reads);
         }
         finally { Directory.Delete(directory, true); }
     }

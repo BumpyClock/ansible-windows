@@ -99,7 +99,7 @@ public sealed class HomeProjectionTests
 
     [Theory]
     [InlineData(TextDeliveryStatus.Verified, "Inserted", true)]
-    [InlineData(TextDeliveryStatus.CleanupFailed, "Inserted", false)]
+    [InlineData(TextDeliveryStatus.CleanupFailed, "Not verified", false)]
     [InlineData(TextDeliveryStatus.Sent, "Not verified", false)]
     [InlineData(TextDeliveryStatus.Partial, "Partially inserted", false)]
     [InlineData(TextDeliveryStatus.Rejected, "Not inserted", false)]
@@ -122,6 +122,43 @@ public sealed class HomeProjectionTests
         var item = History(DateTimeOffset.Now, "speech") with { Delivery = status };
 
         Assert.Null(new HomeHistoryEntry(item, null).Tag);
+    }
+
+    [Fact]
+    public async Task FailedReleaseOfPartialPasteNeverClaimsInsertionOrReplaysInput()
+    {
+        var insertions = 0;
+        var sentKeys = new List<WindowsTextTarget.KeyboardEvent[]>();
+        var delivery = new FinalTextDelivery((_, _) =>
+        {
+            insertions++;
+            var result = WindowsTextTarget.SendPasteChord(PasteShortcut.ControlV, keys =>
+            {
+                sentKeys.Add(keys);
+                return sentKeys.Count == 1 ? 1u : 0u;
+            }, _ => throw new InvalidOperationException("A partial chord must not wait."), () => false);
+            return Task.FromResult(result!.Value);
+        }, () => true, () => false);
+
+        await delivery.RunAsync(Task.FromResult(new SessionOutcome(SessionOutcomeKind.Completed,
+            new RecognitionResult("speech", "speech"))), CancellationToken.None);
+
+        Assert.Equal(1, insertions);
+        Assert.False(delivery.Sent);
+        Assert.Equal(TextDeliveryStatus.CleanupFailed, delivery.Delivery!.Value.Status);
+        Assert.Contains("release", delivery.Error);
+        Assert.All(sentKeys.Skip(1), keys =>
+        {
+            var key = Assert.Single(keys);
+            Assert.Equal((ushort)0x11, key.Key.VirtualKey);
+            Assert.Equal(2u, key.Key.Flags);
+        });
+        var tag = new HomeHistoryEntry(History(DateTimeOffset.Now, "speech") with
+            { Delivery = delivery.Delivery.Value.Status }, null).Tag!;
+        Assert.Equal("Not verified", tag.Label);
+        Assert.False(tag.Inserted);
+        Assert.Contains("keys", tag.Meaning);
+        Assert.DoesNotContain("clipboard", tag.Meaning, StringComparison.OrdinalIgnoreCase);
     }
 
     private static HomeHistoryItem History(DateTimeOffset time, string text) =>
