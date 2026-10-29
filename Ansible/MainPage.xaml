@@ -256,6 +256,67 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
+                        <TextBlock Text="Transcript cleanup" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <TextBlock Grid.Column="1" Text="Meeting text only" Style="{StaticResource SettingsCardMetaStyle}" />
+                    </Grid>
+                    <Border Style="{StaticResource SettingsCardStyle}">
+                        <ContentControl x:Name="CleanupSettingsPanel" HorizontalContentAlignment="Stretch">
+                        <StackPanel Spacing="16">
+                            <TextBlock Text="Choose where completed meeting text is sent. Audio stays local. Automatic cleanup is off until you enable it and save. Original wording is kept."
+                                       Style="{StaticResource SettingsDescriptionStyle}" TextWrapping="Wrap" />
+                            <local:SettingsRow Title="Connection" Description="No fallback to another service or account.">
+                                <ComboBox x:Name="CleanupProviderChoice" AutomationProperties.Name="Cleanup provider"
+                                          SelectionChanged="CleanupProviderChanged" HorizontalAlignment="Stretch">
+                                    <x:String>Copilot CLI</x:String>
+                                    <x:String>OpenAI API</x:String>
+                                </ComboBox>
+                            </local:SettingsRow>
+                            <StackPanel x:Name="CopilotCleanupFields" Spacing="12">
+                                <TextBlock Text="Uses the installed Copilot CLI and its signed-in account. Run copilot login if needed. No OpenAI API key is used."
+                                           Style="{StaticResource SettingsDescriptionStyle}" TextWrapping="Wrap" />
+                                <TextBox x:Name="CopilotCleanupModelBox" Header="Copilot model" MaxLength="128"
+                                         AutomationProperties.Name="Copilot cleanup model" />
+                                <ComboBox x:Name="CopilotCleanupEffortChoice" Header="Copilot reasoning effort"
+                                          HorizontalAlignment="Stretch" AutomationProperties.Name="Copilot cleanup reasoning effort" />
+                            </StackPanel>
+                            <StackPanel x:Name="OpenAICleanupFields" Spacing="12">
+                                <TextBlock Text="Sends text directly to the OpenAI Responses API. Requires an OpenAI API model with structured outputs and separate API billing. Copilot model names are not automatically mapped."
+                                           Style="{StaticResource SettingsDescriptionStyle}" TextWrapping="Wrap" />
+                                <TextBox x:Name="OpenAICleanupModelBox" Header="OpenAI API model" MaxLength="128"
+                                         PlaceholderText="Enter the model ID from your OpenAI API account"
+                                         AutomationProperties.Name="OpenAI cleanup model" />
+                                <ComboBox x:Name="OpenAICleanupEffortChoice" Header="OpenAI reasoning effort"
+                                          HorizontalAlignment="Stretch" AutomationProperties.Name="OpenAI cleanup reasoning effort" />
+                                <PasswordBox x:Name="OpenAIKeyBox" Header="OpenAI API key" MaxLength="1024"
+                                             PlaceholderText="Enter a key to save or replace it"
+                                             PasswordRevealMode="Hidden" AutomationProperties.Name="OpenAI API key" />
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button Content="Save API key" Click="SaveOpenAIKeyClicked" />
+                                    <Button Content="Remove saved key" Click="RemoveOpenAIKeyClicked" />
+                                </StackPanel>
+                                <TextBlock x:Name="OpenAIKeyStatus" Style="{StaticResource SettingsDescriptionStyle}"
+                                           TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+                            </StackPanel>
+                            <ToggleSwitch x:Name="AutomaticCleanupToggle" Header="Automatic cleanup"
+                                          OnContent="Send completed meeting text automatically"
+                                          OffContent="Send completed meeting text automatically"
+                                          AutomationProperties.Name="Automatic transcript cleanup" />
+                            <TextBlock Text="Enabling this authorizes sending each new completed meeting transcript to the selected provider without another confirmation. Applies to meetings started after saving. Saved meetings are not uploaded automatically."
+                                       Style="{StaticResource SettingsDescriptionStyle}" TextWrapping="Wrap" />
+                            <Button Content="Save cleanup settings" Click="SaveCleanupSettingsClicked" />
+                            <TextBlock x:Name="CleanupSettingsStatus" Style="{StaticResource SettingsDescriptionStyle}"
+                                       TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+                        </StackPanel>
+                        </ContentControl>
+                    </Border>
+                </StackPanel>
+
+                <StackPanel Spacing="{StaticResource SectionHeaderGap}" Margin="0,8,0,0">
+                    <Grid Style="{StaticResource SettingsCardHeaderStyle}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
                         <TextBlock Text="Privacy" Style="{StaticResource BodyStrongTextBlockStyle}" />
                         <TextBlock Grid.Column="1" Text="Capture, meetings, telemetry" Style="{StaticResource SettingsCardMetaStyle}" />
                     </Grid>
@@ -292,8 +353,7 @@
                                        Style="{StaticResource SettingsDescriptionStyle}" />
                         </StackPanel>
 
-                        <StackPanel x:Name="UsageRow" Spacing="{StaticResource SettingsOptionGap}"
-                                    Padding="{StaticResource SettingsLastOptionPadding}" Background="Transparent">
+                        <StackPanel x:Name="UsageRow" Spacing="{StaticResource SettingsOptionGap}" Background="Transparent">
                             <TextBlock Text="Usage statistics" Style="{StaticResource SettingsLabelStyle}" />
                             <!-- The switch content is its visible label; the automation name stays "Usage statistics". -->
                             <ToggleSwitch x:Name="UsageToggle" HorizontalAlignment="Left"
@@ -304,6 +364,15 @@
                             <TextBlock Text="Session counts only. Never audio or text."
                                        Style="{StaticResource SettingsDescriptionStyle}" />
                         </StackPanel>
+
+                        <local:SettingsRow x:Name="DiagnosticsRow" Title="Local diagnostics"
+                            Description="Off by default. When enabled, operational metadata stays on this device. No audio or transcript text is recorded.">
+                            <ToggleSwitch x:Name="DiagnosticsToggle"
+                                AutomationProperties.AutomationId="DiagnosticsToggle"
+                                AutomationProperties.Name="Local diagnostics"
+                                OnContent="Record local diagnostics" OffContent="Record local diagnostics"
+                                Toggled="DiagnosticsToggled" />
+                        </local:SettingsRow>
                     </StackPanel>
                 </Border>
                 </StackPanel>

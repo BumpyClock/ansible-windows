@@ -16,14 +16,19 @@ public sealed partial class MainPage : Page
     private readonly Action<DictationShortcut> _changeHotkey;
     private readonly Action<bool> _changeMode;
     private readonly Action<bool> _captureShortcut;
+    private readonly LocalDiagnosticLog _diagnostics;
+    private readonly DispatcherTimer _diagnosticStatusTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private bool _recordingShortcut;
     private DictationShortcut? _pendingShortcut;
+    private bool _shortcutPrimarySeen;
     private UiSessionObserver? _observer;
     private SessionSnapshot _state;
     private bool _rendering;
+    private MeetingCleanupSettings? _renderedCleanupSettings;
 
     internal MainPage(DictationSession session, AppPaths paths, Func<nint> windowHandle,
-        Action<DictationShortcut> changeHotkey, Action<bool> changeMode, Action<bool> captureShortcut)
+        Action<DictationShortcut> changeHotkey, Action<bool> changeMode, Action<bool> captureShortcut,
+        LocalDiagnosticLog diagnostics)
     {
         _rendering = true;
         InitializeComponent();
@@ -31,7 +36,13 @@ public sealed partial class MainPage : Page
         _changeHotkey = changeHotkey;
         _changeMode = changeMode;
         _captureShortcut = captureShortcut;
+        _diagnostics = diagnostics;
         _state = session.State;
+        foreach (var effort in new[] { "none", "minimal", "low", "medium", "high", "xhigh", "max" })
+        {
+            CopilotCleanupEffortChoice.Items.Add(effort);
+            OpenAICleanupEffortChoice.Items.Add(effort);
+        }
         const string typingHelp = "Click to record a new shortcut. Esc cancels. The completed transcript is inserted once after recognition succeeds. Held Ctrl, Alt, Shift or Win keys delay insertion until released. Some editors cannot distinguish fields within the same window. Hold to talk finishes when you release the shortcut; otherwise press it again to finish. Cancelling recognition inserts no text. Check the destination before dictating.";
         ToolTipService.SetToolTip(HotkeyCaptureBox, typingHelp);
         AutomationProperties.SetHelpText(HotkeyCaptureBox, typingHelp);
@@ -45,12 +56,15 @@ public sealed partial class MainPage : Page
         Loaded += (_, _) =>
         {
             _observer = new UiSessionObserver(session, DispatcherQueue, state => { _state = state; Render(); });
+            if (_state.Settings.LocalDiagnostics) _diagnosticStatusTimer.Start();
         };
         Unloaded += (_, _) =>
         {
+            _diagnosticStatusTimer.Stop();
             EndShortcutCapture();
             _observer?.Dispose(); _observer = null;
         };
+        _diagnosticStatusTimer.Tick += (_, _) => RenderDiagnosticStatus();
     }
 
     private void Render()
@@ -80,6 +94,11 @@ public sealed partial class MainPage : Page
             if (LanguageBox.FocusState == FocusState.Unfocused) { LanguageBox.Text = _state.Language; }
             RenderNotice();
             UsageToggle.IsOn = _state.Settings.CollectUsage;
+            DiagnosticsToggle.IsOn = _state.Settings.LocalDiagnostics;
+            DiagnosticsToggle.IsEnabled = idle;
+            if (_state.Settings.LocalDiagnostics) _diagnosticStatusTimer.Start();
+            else _diagnosticStatusTimer.Stop();
+            RenderDiagnosticStatus();
             HideFromCaptureChoice.IsChecked = _state.Settings.HideFromCapture;
             AutoDetectMeetingsChoice.IsChecked = _state.Settings.AutoDetectMeetings;
             UsageToggle.IsEnabled = idle;
@@ -96,6 +115,8 @@ public sealed partial class MainPage : Page
             RenderInsertion(idle);
             MicrophoneBoostBox.IsEnabled = idle;
             MicrophoneBoostBox.Value = _state.Settings.MicrophoneBoostDecibels;
+            CleanupSettingsPanel.IsEnabled = idle;
+            RenderCleanupSettings();
         }
         finally { _rendering = false; }
     }
@@ -114,6 +135,93 @@ public sealed partial class MainPage : Page
         TypingGapRow.Visibility = typing ? Visibility.Visible : Visibility.Collapsed;
         TypingGapBox.IsEnabled = idle;
         TypingGapBox.Value = _state.Settings.TypingGapMilliseconds;
+    }
+
+    private void RenderCleanupSettings()
+    {
+        var settings = _state.Settings.MeetingCleanup;
+        if (settings == _renderedCleanupSettings) return;
+        _renderedCleanupSettings = settings;
+        CleanupProviderChoice.SelectedIndex = (int)settings.Provider;
+        CopilotCleanupModelBox.Text = settings.CopilotModel;
+        CopilotCleanupEffortChoice.SelectedItem = settings.CopilotReasoningEffort;
+        OpenAICleanupModelBox.Text = settings.OpenAIModel;
+        OpenAICleanupEffortChoice.SelectedItem = settings.OpenAIReasoningEffort;
+        AutomaticCleanupToggle.IsOn = settings.Automatic;
+        RenderCleanupProvider();
+        RenderKeyStatus();
+    }
+
+    private void CleanupProviderChanged(object sender, SelectionChangedEventArgs args)
+    {
+        if (CopilotCleanupFields is not null) RenderCleanupProvider();
+    }
+
+    private void RenderCleanupProvider()
+    {
+        CopilotCleanupFields.Visibility = CleanupProviderChoice.SelectedIndex == 0 ? Visibility.Visible : Visibility.Collapsed;
+        OpenAICleanupFields.Visibility = CleanupProviderChoice.SelectedIndex == 1 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void RenderKeyStatus()
+    {
+        try
+        {
+            OpenAIKeyStatus.Text = MeetingCleanupService.HasKey
+                ? "API key saved in Windows Credential Locker. It is not stored in settings or logs."
+                : "No API key saved. The key is stored in Windows Credential Locker, not settings or logs.";
+        }
+        catch (Exception) { OpenAIKeyStatus.Text = "Windows Credential Locker could not be read. Save the key again or check Windows credential access."; }
+    }
+
+    private void SaveOpenAIKeyClicked(object sender, RoutedEventArgs args)
+    {
+        try
+        {
+            MeetingCleanupService.SaveKey(OpenAIKeyBox.Password.Trim());
+            OpenAIKeyBox.Password = "";
+            RenderKeyStatus();
+        }
+        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); }
+    }
+
+    private void RemoveOpenAIKeyClicked(object sender, RoutedEventArgs args)
+    {
+        try
+        {
+            MeetingCleanupService.RemoveKey();
+            OpenAIKeyBox.Password = "";
+            RenderKeyStatus();
+        }
+        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); }
+    }
+
+    private void SaveCleanupSettingsClicked(object sender, RoutedEventArgs args)
+    {
+        try
+        {
+            var settings = new MeetingCleanupSettings
+            {
+                Provider = (MeetingCleanupProvider)CleanupProviderChoice.SelectedIndex,
+                Automatic = AutomaticCleanupToggle.IsOn,
+                CopilotModel = CopilotCleanupModelBox.Text.Trim(),
+                CopilotReasoningEffort = (string)CopilotCleanupEffortChoice.SelectedItem,
+                OpenAIModel = OpenAICleanupModelBox.Text.Trim(),
+                OpenAIReasoningEffort = (string)OpenAICleanupEffortChoice.SelectedItem
+            };
+            settings.Validate();
+            if (settings.Automatic && settings.Provider == MeetingCleanupProvider.OpenAI && !MeetingCleanupService.HasKey)
+                throw new InvalidOperationException("Save an OpenAI API key before enabling automatic cleanup.");
+            _session.SetMeetingCleanup(settings);
+            CleanupSettingsStatus.Text = _session.State.Notice.Kind is NoticeKind.Warning or NoticeKind.Error
+                ? _session.State.Notice.Message
+                : settings.Automatic ? "Saved. New completed meetings will be cleaned up automatically." : "Saved. Automatic cleanup is off.";
+        }
+        catch (Exception error)
+        {
+            CleanupSettingsStatus.Text = error.Message;
+            _session.ReportUiError(error, NoticeArea.Settings);
+        }
     }
 
     private void RenderNotice()
@@ -165,6 +273,21 @@ public sealed partial class MainPage : Page
         if (_rendering) { return; }
         try { _session.SetUsageEnabled(UsageToggle.IsOn); }
         catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); Render(); }
+    }
+
+    private void DiagnosticsToggled(object sender, RoutedEventArgs args)
+    {
+        if (_rendering || DiagnosticsToggle.IsOn == _session.State.Settings.LocalDiagnostics) return;
+        try { _session.SetLocalDiagnosticsEnabled(DiagnosticsToggle.IsOn); }
+        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); Render(); }
+    }
+
+    private void RenderDiagnosticStatus()
+    {
+        DiagnosticsRow.Description = _diagnostics.Error ??
+            (_diagnostics.DroppedEvents > 0
+                ? $"Diagnostics are saving. {_diagnostics.DroppedEvents} records were lost in this run."
+                : "Off by default. When enabled, operational metadata stays on this device. No audio or transcript text is recorded.");
     }
 
     private void OverlayFollowsCaretToggled(object sender, RoutedEventArgs args)
@@ -253,6 +376,7 @@ public sealed partial class MainPage : Page
             _captureShortcut(true);
             _recordingShortcut = true;
             _pendingShortcut = null;
+            _shortcutPrimarySeen = false;
             SetShortcutDisplay("Press a shortcut; Esc cancels");
         }
         catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); }
@@ -269,17 +393,30 @@ public sealed partial class MainPage : Page
         if (args.Key == VirtualKey.Tab) { return; }
         args.Handled = true;
         if (args.Key == VirtualKey.Escape) { EndShortcutCapture(); return; }
-        if (args.Key is VirtualKey.Control or VirtualKey.Shift or VirtualKey.Menu or VirtualKey.LeftWindows or VirtualKey.RightWindows)
-            return;
         uint modifiers = 0;
         if (Down(VirtualKey.Menu)) { modifiers |= 1; }
         if (Down(VirtualKey.Control)) { modifiers |= 2; }
         if (Down(VirtualKey.Shift)) { modifiers |= 4; }
         if (Down(VirtualKey.LeftWindows) || Down(VirtualKey.RightWindows)) { modifiers |= 8; }
+        if (args.Key is VirtualKey.Control or VirtualKey.LeftControl or VirtualKey.RightControl
+            or VirtualKey.Shift or VirtualKey.LeftShift or VirtualKey.RightShift
+            or VirtualKey.Menu or VirtualKey.LeftMenu or VirtualKey.RightMenu
+            or VirtualKey.LeftWindows or VirtualKey.RightWindows)
+        {
+            if (!_shortcutPrimarySeen)
+            {
+                _pendingShortcut = modifiers == 10 ? DictationShortcut.Default : null;
+                if (_pendingShortcut is { } modifierOnly)
+                    SetShortcutDisplay($"{modifierOnly.DisplayText} (release to apply)");
+            }
+            return;
+        }
+        _shortcutPrimarySeen = true;
+        _pendingShortcut = null;
         var shortcut = new DictationShortcut(modifiers, (uint)args.Key);
         if (!shortcut.IsValid)
         {
-            SetShortcutDisplay("Use F1-F11, or Ctrl/Alt/Win with a letter or digit");
+            SetShortcutDisplay("Use Ctrl + Win, F1-F11, or Ctrl/Alt/Win with a letter or digit");
             return;
         }
         _pendingShortcut = shortcut;
@@ -288,7 +425,12 @@ public sealed partial class MainPage : Page
 
     private void ShortcutKeyUp(object sender, KeyRoutedEventArgs args)
     {
-        if (!_recordingShortcut || _pendingShortcut is not { } shortcut || (uint)args.Key != shortcut.Key) { return; }
+        if (!_recordingShortcut || _pendingShortcut is not { } shortcut) { return; }
+        if (shortcut.IsModifierOnly)
+        {
+            if (!CtrlWinShortcutState.IsControl((uint)args.Key) && !CtrlWinShortcutState.IsWindows((uint)args.Key)) return;
+        }
+        else if ((uint)args.Key != shortcut.Key) { return; }
         args.Handled = true;
         try { _changeHotkey(shortcut); }
         catch (Exception error) { _session.Notify(NoticeKind.Error, "Shortcut unavailable", error.Message, NoticeArea.Settings); }
@@ -305,6 +447,7 @@ public sealed partial class MainPage : Page
         if (!_recordingShortcut) { return; }
         _recordingShortcut = false;
         _pendingShortcut = null;
+        _shortcutPrimarySeen = false;
         try { _captureShortcut(false); }
         catch (Exception error) { _session.Notify(NoticeKind.Error, "Shortcut unavailable", error.Message, NoticeArea.Settings); }
         SetShortcutDisplay(_session.State.Settings.Shortcut.DisplayText);
