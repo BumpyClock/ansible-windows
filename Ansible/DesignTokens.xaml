@@ -519,12 +519,12 @@
     <x:Double x:Key="HistoryEmptyDetailFontSize">12.5</x:Double>
     <x:Double x:Key="HistoryEmptyGap">4</x:Double>
     <x:Double x:Key="HomeActivityHeatmapGap">4</x:Double>
-    <Thickness x:Key="HistoryCountPadding">9,3</Thickness>
-    <CornerRadius x:Key="HistoryCountCornerRadius">20</CornerRadius>
+    <Thickness x:Key="SectionBadgePadding">10,4</Thickness>
+    <CornerRadius x:Key="SectionBadgeCornerRadius">6</CornerRadius>
+    <x:Double x:Key="SectionBadgeMinHeight">28</x:Double>
+    <x:Double x:Key="SectionBadgeMaxWidth">240</x:Double>
     <Thickness x:Key="HistorySearchPadding">36,7,68,7</Thickness>
     <x:Double x:Key="HistorySearchFontSize">13.5</x:Double>
-    <Thickness x:Key="HomeActivityStreakPadding">10,4</Thickness>
-    <CornerRadius x:Key="HomeActivityStreakCornerRadius">20</CornerRadius>
     <x:Double x:Key="HomeLegendChipSize">11</x:Double>
     <CornerRadius x:Key="HomeLegendChipCornerRadius">3</CornerRadius>
     <!-- History timeline rows (Pencil P4f14c rows xwIiZ..tSBom). -->
@@ -674,10 +674,11 @@
         <Setter Property="Padding" Value="{StaticResource SearchKeycapPadding}" />
         <Setter Property="MinHeight" Value="{StaticResource SearchKeycapMinHeight}" />
     </Style>
-    <Style x:Key="HistoryCountStyle" TargetType="Border">
+    <Style x:Key="SectionBadgeStyle" TargetType="Border">
         <Setter Property="Background" Value="{ThemeResource AppControlBrush}" />
-        <Setter Property="CornerRadius" Value="{StaticResource HistoryCountCornerRadius}" />
-        <Setter Property="Padding" Value="{StaticResource HistoryCountPadding}" />
+        <Setter Property="CornerRadius" Value="{StaticResource SectionBadgeCornerRadius}" />
+        <Setter Property="Padding" Value="{StaticResource SectionBadgePadding}" />
+        <Setter Property="MinHeight" Value="{StaticResource SectionBadgeMinHeight}" />
         <Setter Property="HorizontalAlignment" Value="Left" />
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
@@ -851,12 +852,6 @@
         <Setter Property="Background" Value="{ThemeResource AppCardBrush}" />
         <Setter Property="BorderBrush" Value="{ThemeResource AppBorderBrush}" />
         <Setter Property="BorderThickness" Value="{StaticResource CardBorderThickness}" />
-    </Style>
-    <Style x:Key="HomeActivityStreakStyle" TargetType="Border">
-        <Setter Property="Background" Value="{ThemeResource AccentSoftBrush}" />
-        <Setter Property="CornerRadius" Value="{StaticResource HomeActivityStreakCornerRadius}" />
-        <Setter Property="Padding" Value="{StaticResource HomeActivityStreakPadding}" />
-        <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
     <Style x:Key="HomeLegendChipStyle" TargetType="Border">
         <Setter Property="Width" Value="{StaticResource HomeLegendChipSize}" />

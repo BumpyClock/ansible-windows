@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl x:Class="Ansible.Badge"
+             x:Name="BadgeRoot"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             HorizontalAlignment="Left" VerticalAlignment="Center"
+             MaxWidth="{StaticResource SectionBadgeMaxWidth}"
+             ToolTipService.ToolTip="{x:Bind Text, Mode=OneWay}"
+             Background="{ThemeResource AppCardBrush}">
+    <Border Style="{StaticResource SectionBadgeStyle}" HorizontalAlignment="Stretch"
+            Background="{x:Bind Background, Mode=OneWay}">
+        <Grid x:Name="BadgeLayout">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <ContentPresenter x:Name="IconPresenter" Content="{x:Bind Icon, Mode=OneWay}"
+                              VerticalAlignment="Center" Visibility="Collapsed"
+                              AutomationProperties.AccessibilityView="Raw" />
+            <TextBlock Grid.Column="1" Text="{x:Bind Text, Mode=OneWay}"
+                       Style="{StaticResource CaptionSecondaryStyle}" VerticalAlignment="Center"
+                       TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+        </Grid>
+    </Border>
+</UserControl>
