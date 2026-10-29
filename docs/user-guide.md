@@ -332,17 +332,21 @@ seconds. Disable **Suggest notetaking when Teams uses the microphone** in
 Settings. Other apps still start
 manually; detection does not fetch calendar events or automatically end recording.
 
-Open **Meetings > Start meeting**. Select the meeting application, or explicitly
-choose **All system audio**, then start. Start snapshots the recognition
+Open **Meetings > Start meeting**, then start. Start snapshots the recognition
 processor, language hint, and vocabulary for that meeting. After Start, the
 window shows **Preparing**. Wait until it shows **Transcribing** before speaking.
 A cold Auto run benchmarks and loads the meeting model before capture opens, so
 the 30-second recognition backlog does not fill during qualification. That first
 preparation can take longer than later meetings that reuse a cached device
-choice. The app then captures the Windows default microphone and playback together.
-Application capture includes its child-process tree; a browser selection can
-include audio from other tabs. Windows build 20348 or later is required for
-application capture. Use headphones: echo cancellation is not implemented.
+choice. The app then records the Windows default microphone plus everything
+playing on every active speaker and headphone device. This includes
+notifications and other apps, not only the meeting. Devices that appear during
+the meeting join within about two seconds. Devices that another app holds in
+exclusive mode are skipped. Use headphones: echo cancellation is not
+implemented.
+
+The optional **Teams app for speaker names** choice is used only for automatic
+speaker naming. It does not limit what audio is recorded.
 
 Default setup installs Nemotron ASR and Nemotron 3 Diarization. The Meetings
 window does not offer a model picker. If you have explicitly selected a
