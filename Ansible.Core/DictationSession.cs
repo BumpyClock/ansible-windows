@@ -512,7 +512,7 @@ public sealed class DictationSession
                 settings = settings with { ModelsDirectory = Path.GetFullPath(modelsDirectory) };
                 operation.SettingsWarning = SaveSettings(settings, NoticeArea.Models);
             }
-            var preferredId = settings.ModelId ?? operation.Model?.Id;
+            var preferredId = settings.ModelId;
             var selectedIndex = models.ToList().FindIndex(model => model.Id == preferredId);
             if (preferredId is null)
                 selectedIndex = models.ToList().FindIndex(model => model.Id == AudioModelDefaults.RecognitionModelId);

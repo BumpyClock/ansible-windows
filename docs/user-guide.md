@@ -4,12 +4,19 @@ See the [README](../README.md#build-and-run) to build and launch the app.
 
 ## Home and appearance
 
-**Home** shows recent completed dictations with timestamps, search, and Copy.
-History stays in memory for this app session. Closing Ansible clears it. The
-history keeps at most 100 entries within a bounded text budget. Copy completed
-dictations from History. Search can hide entries until you clear its filter.
-WAV results and dictations too large for history remain available in the separate
-transcript area. Audio is never saved.
+**Home** shows recent completed dictations grouped by day, with the time, the
+transcript, search, **Copy transcript**, and a **More** menu with **Remove from
+history**. Removing the current dictation's row also hides its transcript
+card; the text is gone from Home until you dictate again. Shortcut dictations
+carry an insertion tag: **Inserted** when the target field confirmed the text,
+**Not verified** when the app accepted it without confirmation, **Partially
+inserted**, or **Not inserted**. In-app dictations have no tag. History stays in
+memory for this app session. Closing Ansible clears it. The history keeps at
+most 100 entries within a bounded text budget. Search can hide entries until
+you clear its filter. WAV results and dictations too large for history remain
+available in the separate transcript area. Audio is never saved. The Activity
+card shades each day by its recorded dictation count, up to four levels; days
+with no recorded dictations stay unshaded.
 
 Use **Dictate** or your configured shortcut to record. Choose the active model
 and use **Transcribe WAV file** on **Models**.
@@ -18,7 +25,9 @@ background usage write appears there as a warning; it does not delay transcript
 insertion. History and local usage counts are separate. Turning off usage
 statistics does not save transcripts.
 
-Ansible uses a Mica window base and follows Windows light, dark, and High Contrast appearance. The default
+Ansible uses a Mica window base and follows Windows light, dark, and High Contrast appearance. Pages sit
+directly on that base; each section is a title above one borderless tonal card, and High Contrast adds
+outlines. The default
 Ink / Citron identity matches the Pencil design. Additional color schemes are
 prepared through shared brand tokens; a scheme picker is not yet available.
 Compact windows use an icon sidebar, smaller page padding, and stacked controls.

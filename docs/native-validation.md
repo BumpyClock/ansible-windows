@@ -47,7 +47,7 @@ unknown. Cancellation waits for an executing native call to finish.
 
 | Option | Effect |
 | --- | --- |
-| `--file-only` | Skip streaming; offline models always skip it |
+| `--file-only` | Skip streaming. Offline models also skip it unless `--stream-only` is specified. |
 | `--stream-only` | Skip WAV transcription; prepare once, then stream |
 | `--repeat <1..20>` | Repeat the paced stream for warm first-preview and input-end-to-final timings. Missing previews stay missing. Cannot combine with `--file-only`. Use `--stream-only` with `--repeat` for buffered offline dictation. |
 | `--backend cpu`, `--backend vulkan`, or `--backend auto` | Select the backend; default CPU. Auto is not implied. |

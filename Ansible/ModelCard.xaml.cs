@@ -15,7 +15,9 @@ public sealed partial class ModelCard : UserControl
     private string _name = "";
     private Uri? _iconUri;
     private bool _iconFailureLogged;
-    private string? _stateDotBrushKey;
+    private bool _keyboardFocusWithin;
+    private bool _active;
+    private bool _pointerOver;
     private ModelInstallState _state;
     private bool _removeDiscardsPartial;
     private string _behavior = "";
@@ -24,6 +26,7 @@ public sealed partial class ModelCard : UserControl
     public ModelCard()
     {
         InitializeComponent();
+        ApplyIconButtonBrushes();
         Loaded += OnLoaded;
         ActualThemeChanged += OnThemeChanged;
     }
@@ -99,13 +102,12 @@ public sealed partial class ModelCard : UserControl
         StateLine.Visibility = stateLabel is null && caption.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
         ToolTipService.SetToolTip(StateLineText, installed ? MemoryEstimateTip : null);
         StateDot.Visibility = stateLabel is null ? Visibility.Collapsed : Visibility.Visible;
-        _stateDotBrushKey = stateLabel is null ? null
-            : !snapshot.Supported || (!active && state == ModelInstallState.Failed) ? "SystemFillColorCriticalBrush"
-            : active ? "AccentGraphicBrush"
-            : "SystemFillColorCautionBrush";
-        ApplyStateDot();
-        CardBorder.BorderBrush = (Brush)Application.Current.Resources[active ? "AccentGraphicBrush" : "CardStrokeColorDefaultBrush"];
-        CardBorder.BorderThickness = new Thickness(active ? 1.5 : 1);
+        VisualStateManager.GoToState(this, stateLabel is null ? "DotNone"
+            : !snapshot.Supported || (!active && state == ModelInstallState.Failed) ? "DotCritical"
+            : active ? "DotAccent"
+            : "DotCaution", false);
+        _active = active;
+        ApplyCardBorder();
 
         var sizes = $"{FormatBytes(entry.Bytes)} download \u00B7 {memory} memory";
         StatsText.Text = installed ? "" : _behavior.Length > 0 ? $"{_behavior} \u00B7 {sizes}" : sizes;
@@ -196,12 +198,50 @@ public sealed partial class ModelCard : UserControl
     private void OnThemeChanged(FrameworkElement sender, object args)
     {
         ApplyIcon();
-        ApplyStateDot();
+        ApplyIconButtonBrushes();
     }
 
-    // Theme brushes resolved from code do not follow theme changes, so the fill is reapplied on ActualThemeChanged.
-    private void ApplyStateDot() =>
-        StateDot.Fill = _stateDotBrushKey is { } key ? (Brush)Application.Current.Resources[key] : null;
+    private void ApplyIconButtonBrushes()
+    {
+        foreach (var button in new[] { RemoveButton, DetailsButton })
+            PageCanvas.ApplyBrandInteractionBrushes(button, "ButtonBackgroundPointerOver", "ButtonBackgroundPressed");
+    }
+
+    // Cards are borderless tonal layers: hover and keyboard focus lift the fill, and the in-use card keeps its accent outline.
+    // High Contrast has no tonal fill to lift, so it strengthens the outline instead. The border is always 1.5 px so
+    // selection and focus never shift the layout. Rest colours come from CardStyle; the states are in ModelCard.xaml.
+    private void ApplyCardBorder()
+    {
+        var lifted = _pointerOver || _keyboardFocusWithin;
+        var highContrast = _themeSettings?.HighContrast == true;
+        VisualStateManager.GoToState(this, lifted && !highContrast ? "FillLifted" : "FillRest", false);
+        VisualStateManager.GoToState(this,
+            lifted && !_active && (highContrast || _keyboardFocusWithin) ? "OutlineKey" : _active ? "OutlineActive" : "OutlineRest", false);
+    }
+
+    private void CardPointerEntered(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        _pointerOver = true;
+        ApplyCardBorder();
+    }
+
+    private void CardPointerExited(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        _pointerOver = false;
+        ApplyCardBorder();
+    }
+
+    private void CardGotFocus(object sender, RoutedEventArgs e)
+    {
+        _keyboardFocusWithin = e.OriginalSource is Control { FocusState: FocusState.Keyboard };
+        ApplyCardBorder();
+    }
+
+    private void CardLostFocus(object sender, RoutedEventArgs e)
+    {
+        _keyboardFocusWithin = false;
+        ApplyCardBorder();
+    }
 
     private void OnThemeSettingsChanged(ThemeSettings sender, object args)
     {

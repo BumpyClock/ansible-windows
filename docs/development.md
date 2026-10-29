@@ -136,9 +136,10 @@ lists use its bounded mode and let the list own scrolling. The design check
 rejects page roots that bypass the shared canvas. `DeviceComparisonView` renders
 structured benchmark snapshots without parsing presentation text.
 
-The shell and meeting window use one Mica backdrop per window, with transparent
-chrome and the shared `PageSurfaceStyle` content layer. That style uses WinUI's
-translucent `LayerFillColorDefaultBrush`; cards use native card brushes. Keep
+The shell and meeting window use one Mica backdrop per window with transparent
+chrome. Main pages use Microsoft's card pattern through the shared `CardStyle`;
+the transcript window uses a contiguous `PageSurfaceStyle`. Both use WinUI's
+translucent `LayerFillColorDefaultBrush` above Mica. Keep
 these platform resources and Acrylic flyout resources unmodified so their
 theme, High Contrast, inactive-window, transparency, and power fallbacks remain
 available. Acrylic belongs to transient flyouts and menus, not the main page.

@@ -49,7 +49,8 @@
             <SolidColorBrush x:Key="AccentForegroundBrush" Color="{StaticResource BrandAccentForegroundLightColor}" />
             <SolidColorBrush x:Key="ActivityLowBrush" Color="#D5E3AB" />
             <SolidColorBrush x:Key="ActivityMediumBrush" Color="#A9C45C" />
-            <SolidColorBrush x:Key="ActivityHighBrush" Color="{StaticResource BrandAccentForegroundLightColor}" />
+            <SolidColorBrush x:Key="ActivityHighBrush" Color="#7E9A33" />
+            <SolidColorBrush x:Key="ActivityPeakBrush" Color="{StaticResource BrandAccentForegroundLightColor}" />
             <SolidColorBrush x:Key="PillBackdropFillBrush" Color="#D9F6F8FB" />
             <SolidColorBrush x:Key="PillWaveBrush" Color="{StaticResource BrandAccentForegroundLightColor}" />
             <x:Double x:Key="FutureActivityOpacity">0.35</x:Double>
@@ -73,6 +74,7 @@
 
             <SolidColorBrush x:Key="AppBackgroundBrush" Color="{StaticResource AppBackgroundColor}" />
             <SolidColorBrush x:Key="AppWindowBrush" Color="{StaticResource ControlFillColorTransparent}" />
+            <SolidColorBrush x:Key="AppCardStrokeBrush" Color="{StaticResource ControlFillColorTransparent}" />
             <SolidColorBrush x:Key="AppSurfaceBrush" Color="{StaticResource AppSurfaceColor}" />
             <SolidColorBrush x:Key="AppCardBrush" Color="{StaticResource AppCardColor}" />
             <SolidColorBrush x:Key="AppControlBrush" Color="{StaticResource AppControlColor}" />
@@ -191,7 +193,8 @@
             <SolidColorBrush x:Key="AccentForegroundBrush" Color="{StaticResource BrandAccentForegroundDarkColor}" />
             <SolidColorBrush x:Key="ActivityLowBrush" Color="#3C4B31" />
             <SolidColorBrush x:Key="ActivityMediumBrush" Color="#607D3D" />
-            <SolidColorBrush x:Key="ActivityHighBrush" Color="{StaticResource BrandAccentForegroundDarkColor}" />
+            <SolidColorBrush x:Key="ActivityHighBrush" Color="#93A94B" />
+            <SolidColorBrush x:Key="ActivityPeakBrush" Color="{StaticResource BrandAccentForegroundDarkColor}" />
             <SolidColorBrush x:Key="PillBackdropFillBrush" Color="#CC191F29" />
             <SolidColorBrush x:Key="PillWaveBrush" Color="{StaticResource BrandAccentForegroundDarkColor}" />
             <x:Double x:Key="FutureActivityOpacity">0.35</x:Double>
@@ -214,6 +217,7 @@
 
             <SolidColorBrush x:Key="AppBackgroundBrush" Color="{StaticResource AppBackgroundColor}" />
             <SolidColorBrush x:Key="AppWindowBrush" Color="{StaticResource ControlFillColorTransparent}" />
+            <SolidColorBrush x:Key="AppCardStrokeBrush" Color="{StaticResource ControlFillColorTransparent}" />
             <SolidColorBrush x:Key="AppSurfaceBrush" Color="{StaticResource AppSurfaceColor}" />
             <SolidColorBrush x:Key="AppCardBrush" Color="{StaticResource AppCardColor}" />
             <SolidColorBrush x:Key="AppControlBrush" Color="{StaticResource AppControlColor}" />
@@ -289,6 +293,7 @@
         <ResourceDictionary x:Key="HighContrast">
             <SolidColorBrush x:Key="AppBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="AppWindowBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="AppCardStrokeBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="AppSurfaceBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
             <SolidColorBrush x:Key="AppCardBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="AppControlBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
@@ -360,6 +365,7 @@
             <SolidColorBrush x:Key="ActivityLowBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="ActivityMediumBrush" Color="{ThemeResource SystemColorHotlightColor}" />
             <SolidColorBrush x:Key="ActivityHighBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="ActivityPeakBrush" Color="{ThemeResource SystemColorHighlightColor}" />
             <x:Double x:Key="FutureActivityOpacity">1</x:Double>
             <SolidColorBrush x:Key="AppBrandVoiceBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="AppBrandReplyBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
@@ -380,7 +386,7 @@
     -->
     <x:Double x:Key="PageContentMaxWidth">1440</x:Double>
     <x:Double x:Key="BoundedPageMinHeight">620</x:Double>
-    <Thickness x:Key="PagePadding">36,34,36,36</Thickness>
+    <Thickness x:Key="PagePadding">36,24,40,40</Thickness>
     <Thickness x:Key="CompactPagePadding">18</Thickness>
     <x:Double x:Key="CompactPageThreshold">800</x:Double>
     <x:Double x:Key="NarrowActionsThreshold">400</x:Double>
@@ -398,14 +404,17 @@
     <x:Double x:Key="ApplicationNoticeMaxWidth">460</x:Double>
     <Thickness x:Key="ApplicationNoticePadding">16,12</Thickness>
     <x:Double x:Key="CardGap">20</x:Double>
-    <x:Double x:Key="HomeCardGap">14</x:Double>
+    <x:Double x:Key="HomeCardGap">20</x:Double>
+    <x:Double x:Key="HomeSectionGap">24</x:Double>
+    <x:Double x:Key="SectionHeaderGap">10</x:Double>
+    <x:Double x:Key="HomeSectionTitleFontSize">28</x:Double>
+    <x:Double x:Key="HomeSectionHeaderMinHeight">36</x:Double>
     <x:Double x:Key="NavLabelGap">12</x:Double>
     <Thickness x:Key="CardBorderThickness">1</Thickness>
-    <Thickness x:Key="CardPadding">24</Thickness>
+    <Thickness x:Key="CardPadding">20</Thickness>
     <Thickness x:Key="HomeMetricCardPadding">20</Thickness>
-    <Thickness x:Key="SettingsCardPadding">28,24</Thickness>
-    <CornerRadius x:Key="CardCornerRadius">16</CornerRadius>
-    <CornerRadius x:Key="PanelCornerRadius">14</CornerRadius>
+    <Thickness x:Key="SettingsCardPadding">24,4,24,4</Thickness>
+    <CornerRadius x:Key="CardCornerRadius">12</CornerRadius>
     <CornerRadius x:Key="ControlCornerRadius">8</CornerRadius>
     <x:Double x:Key="IconSize">18</x:Double>
     <x:Double x:Key="RadioButtonsColumnSpacing">2</x:Double>
@@ -416,28 +425,57 @@
     <GridLength x:Key="CompactSidebarColumnWidth">72</GridLength>
     <x:Double x:Key="CompactNavigationThreshold">1000</x:Double>
     <Thickness x:Key="CompactSidebarPadding">8,30,8,18</Thickness>
-    <Thickness x:Key="ShellPadding">0,0,10,10</Thickness>
+    <Thickness x:Key="ShellPadding">0</Thickness>
     <Thickness x:Key="SidebarPadding">14,30,14,18</Thickness>
     <Thickness x:Key="SidebarBrandMargin">10,0,10,28</Thickness>
     <Thickness x:Key="SettingsSegmentPadding">14,0</Thickness>
     <x:Double x:Key="SettingsSegmentMinWidth">0</x:Double>
     <CornerRadius x:Key="SettingsSegmentCornerRadius">8</CornerRadius>
-    <CornerRadius x:Key="SettingsCheckBoxCornerRadius">4</CornerRadius>
-    <x:Double x:Key="BenchmarkBarHeight">6</x:Double>
+    <CornerRadius x:Key="SettingsCheckBoxCornerRadius">6</CornerRadius>
+    <x:Double x:Key="BenchmarkBarHeight">8</x:Double>
     <x:Double x:Key="BenchmarkValueMaxWidth">160</x:Double>
-    <CornerRadius x:Key="BenchmarkBarCornerRadius">3</CornerRadius>
-    <Thickness x:Key="SettingsSegmentTrackPadding">3</Thickness>
+    <CornerRadius x:Key="BenchmarkBarCornerRadius">4</CornerRadius>
+    <Thickness x:Key="SettingsSegmentTrackPadding">2</Thickness>
     <CornerRadius x:Key="SettingsSegmentTrackCornerRadius">11</CornerRadius>
     <x:Double x:Key="SettingsSegmentGap">2</x:Double>
     <x:Double x:Key="SettingsSegmentMinHeight">32</x:Double>
-    <x:Double x:Key="SettingsRowRowSpacing">8</x:Double>
+    <x:Double x:Key="SettingsRowRowSpacing">12</x:Double>
     <x:Double x:Key="SettingsRowDescriptionSpacing">5</x:Double>
     <x:Double x:Key="SettingsRowDescriptionMaxWidth">620</x:Double>
     <x:Double x:Key="SettingsSelectWidth">320</x:Double>
     <x:Double x:Key="SettingsNumberWidth">132</x:Double>
     <x:Double x:Key="SettingsLanguageWidth">180</x:Double>
-    <x:Double x:Key="SettingsProcessorWidth">220</x:Double>
+    <x:Double x:Key="SettingsProcessorWidth">305</x:Double>
     <x:Double x:Key="SettingsWideMinWidth">700</x:Double>
+    <Thickness x:Key="SettingsPrivacyCardPadding">24,8,24,24</Thickness>
+    <Thickness x:Key="SettingsRowPadding">0,20</Thickness>
+    <Thickness x:Key="SettingsLastOptionPadding">0,20,0,0</Thickness>
+    <Thickness x:Key="SettingsRowBorderThickness">0,0,0,1</Thickness>
+    <Thickness x:Key="SettingsBenchmarkMargin">0,0,0,20</Thickness>
+    <x:Double x:Key="SettingsRowColumnGap">32</x:Double>
+    <x:Double x:Key="SettingsLabelFontSize">14.5</x:Double>
+    <x:Double x:Key="SettingsLabelLineHeight">20</x:Double>
+    <x:Double x:Key="SettingsDescriptionFontSize">13</x:Double>
+    <x:Double x:Key="SettingsDescriptionLineHeight">19.5</x:Double>
+    <x:Double x:Key="SettingsLinkFontSize">13.5</x:Double>
+    <x:Double x:Key="SettingsOptionGap">10</x:Double>
+    <x:Double x:Key="SettingsOptionFontSize">14</x:Double>
+    <Thickness x:Key="BenchmarkPanelPadding">24,20</Thickness>
+    <CornerRadius x:Key="BenchmarkPanelCornerRadius">12</CornerRadius>
+    <x:Double x:Key="BenchmarkColumnGap">32</x:Double>
+    <x:Double x:Key="BenchmarkRowGap">18</x:Double>
+    <x:Double x:Key="BenchmarkBarGap">12</x:Double>
+    <x:Double x:Key="BenchmarkLabelWidth">52</x:Double>
+    <x:Double x:Key="BenchmarkValueMinWidth">84</x:Double>
+    <x:Double x:Key="BenchmarkResultWidth">340</x:Double>
+    <x:Double x:Key="BenchmarkLabelFontSize">13</x:Double>
+    <x:Double x:Key="BenchmarkFootnoteFontSize">12</x:Double>
+    <x:Double x:Key="BenchmarkFootnoteLineHeight">18</x:Double>
+    <Thickness x:Key="BenchmarkTagPadding">10,3</Thickness>
+    <CornerRadius x:Key="BenchmarkTagCornerRadius">20</CornerRadius>
+    <x:Double x:Key="BenchmarkTagFontSize">12</x:Double>
+    <x:Double x:Key="BenchmarkTagGap">5</x:Double>
+    <Thickness x:Key="SettingsGroupHeaderPadding">4,0</Thickness>
     <x:Double x:Key="NavItemGap">4</x:Double>
     <x:Double x:Key="BrandSize">32</x:Double>
     <x:Double x:Key="TitleBarHeight">44</x:Double>
@@ -485,7 +523,29 @@
     <CornerRadius x:Key="HomeActivityStreakCornerRadius">20</CornerRadius>
     <x:Double x:Key="HomeLegendChipSize">11</x:Double>
     <CornerRadius x:Key="HomeLegendChipCornerRadius">3</CornerRadius>
-    <x:Double x:Key="HomeActivityCardMinHeight">292</x:Double>
+    <!-- History timeline rows (Pencil P4f14c rows xwIiZ..tSBom). -->
+    <Thickness x:Key="HistoryRowPadding">20,14,12,14</Thickness>
+    <CornerRadius x:Key="HistoryRowCornerRadius">10</CornerRadius>
+    <GridLength x:Key="HistoryTimeColumnWidth">64</GridLength>
+    <x:Double x:Key="HistoryRowColumnGap">20</x:Double>
+    <x:Double x:Key="HistoryTranscriptFontSize">15.5</x:Double>
+    <x:Double x:Key="HistoryTranscriptLineHeight">24</x:Double>
+    <x:Double x:Key="HistoryTimeFontSize">13</x:Double>
+    <x:Double x:Key="HistoryMetaFontSize">12</x:Double>
+    <x:Double x:Key="HistoryMetaGap">8</x:Double>
+    <x:Double x:Key="HistoryGroupLabelFontSize">11.5</x:Double>
+    <Thickness x:Key="HistoryGroupMargin">20,16,16,8</Thickness>
+    <x:Double x:Key="HistoryTagFontSize">11.5</x:Double>
+    <Thickness x:Key="HistoryTagPadding">8,2</Thickness>
+    <CornerRadius x:Key="HistoryTagCornerRadius">20</CornerRadius>
+    <x:Double x:Key="HistoryTagIconSize">11</x:Double>
+    <x:Double x:Key="IconButtonSize">32</x:Double>
+    <x:Double x:Key="IconButtonGlyphSize">16</x:Double>
+    <x:Double x:Key="HistoryActionGap">2</x:Double>
+    <!-- Motion. Theme transitions follow the Windows animation setting on their own. -->
+    <x:Double x:Key="MotionFastMilliseconds">120</x:Double>
+    <x:Double x:Key="MotionNormalMilliseconds">200</x:Double>
+    <x:Double x:Key="MotionEntranceOffset">12</x:Double>
 
 
 
@@ -640,18 +700,18 @@
         <Setter Property="LineHeight" Value="{StaticResource SearchKeycapLineHeight}" />
         <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
     </Style>
-    <!-- Mica is the window base. WinUI owns the translucent content/card layers and
-         Acrylic flyout resources, including their accessibility and power fallbacks. -->
+    <!-- Mica is the window base. Native translucent layers preserve its tint and system fallbacks.
+         AppCardStrokeBrush keeps the card pattern borderless outside High Contrast. -->
     <Style x:Key="PageSurfaceStyle" TargetType="Border">
         <Setter Property="Background" Value="{ThemeResource LayerFillColorDefaultBrush}" />
-        <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource AppCardStrokeBrush}" />
         <Setter Property="BorderThickness" Value="{StaticResource CardBorderThickness}" />
         <Setter Property="CornerRadius" Value="{StaticResource PanelCornerRadius}" />
     </Style>
     <Style x:Key="CardStyle" TargetType="Border">
-        <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
-        <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
-        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Background" Value="{ThemeResource LayerFillColorDefaultBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource AppCardStrokeBrush}" />
+        <Setter Property="BorderThickness" Value="{StaticResource CardBorderThickness}" />
         <Setter Property="CornerRadius" Value="{StaticResource CardCornerRadius}" />
         <Setter Property="Padding" Value="{StaticResource CardPadding}" />
     </Style>
@@ -843,9 +903,63 @@
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
 
+    <Style x:Key="HistoryTranscriptTextStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
+        <Setter Property="FontSize" Value="{StaticResource HistoryTranscriptFontSize}" />
+        <Setter Property="LineHeight" Value="{StaticResource HistoryTranscriptLineHeight}" />
+        <Setter Property="Foreground" Value="{ThemeResource AppTranscriptBrush}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="IsTextSelectionEnabled" Value="True" />
+    </Style>
+    <Style x:Key="HistoryTimeTextStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
+        <Setter Property="FontSize" Value="{StaticResource HistoryTimeFontSize}" />
+        <Setter Property="Foreground" Value="{ThemeResource AppMutedTextBrush}" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+    </Style>
+    <Style x:Key="HistoryMetaTextStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
+        <Setter Property="FontSize" Value="{StaticResource HistoryMetaFontSize}" />
+        <Setter Property="Foreground" Value="{ThemeResource AppMutedTextBrush}" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+    <Style x:Key="HistoryGroupLabelStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
+        <Setter Property="FontSize" Value="{StaticResource HistoryGroupLabelFontSize}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{ThemeResource AppMutedTextBrush}" />
+    </Style>
+    <Style x:Key="HistoryTagStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource AppTagBackgroundBrush}" />
+        <Setter Property="CornerRadius" Value="{StaticResource HistoryTagCornerRadius}" />
+        <Setter Property="Padding" Value="{StaticResource HistoryTagPadding}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style x:Key="HistoryTagTextStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
+        <Setter Property="FontSize" Value="{StaticResource HistoryTagFontSize}" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="Foreground" Value="{ThemeResource AppTagBrush}" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+    </Style>
+    <!-- Transparent at rest. Hover and pressed fills come from the default Button template; give each
+         instance ButtonBackgroundPointerOver = AppHoverBrush and ButtonBackgroundPressed = AppActiveBrush
+         in its Resources (code or XAML) to use the brand surfaces instead of the Fluent greys. -->
+    <Style x:Key="IconButtonStyle" TargetType="Button">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{ThemeResource AppSecondaryTextBrush}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Width" Value="{StaticResource IconButtonSize}" />
+        <Setter Property="Height" Value="{StaticResource IconButtonSize}" />
+        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+    </Style>
+    <Style x:Key="ActivityPeakCellStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource ActivityPeakBrush}" />
+    </Style>
+    <Style x:Key="HomeLegendPeakChipStyle" TargetType="Border" BasedOn="{StaticResource HomeLegendChipStyle}">
+        <Setter Property="Background" Value="{ThemeResource ActivityPeakBrush}" />
+    </Style>
         <Style x:Key="HistoryRowStyle" TargetType="Border">
-            <Setter Property="CornerRadius" Value="10" />
-            <Setter Property="Padding" Value="12,10,8,10" />
+        <Setter Property="CornerRadius" Value="{StaticResource HistoryRowCornerRadius}" />
+        <Setter Property="Padding" Value="{StaticResource HistoryRowPadding}" />
             <Setter Property="Background" Value="Transparent" />
         </Style>
 

@@ -23,12 +23,28 @@ public sealed partial class MeetingsPage : Page
         _store = store;
         _openMeeting = openMeeting;
         _windowHandle = windowHandle;
+        ApplyRowBrushes();
+        ActualThemeChanged += (_, _) => ApplyRowBrushes();
         Loaded += async (_, _) =>
         {
             _observer = new UiSessionObserver(session, DispatcherQueue, RenderNotice);
             await RefreshAsync();
         };
         Unloaded += (_, _) => { _observer?.Dispose(); _observer = null; };
+    }
+
+    private void ApplyRowBrushes() =>
+        PageCanvas.ApplyBrandInteractionBrushes(MeetingList, "ListViewItemBackgroundPointerOver", "ListViewItemBackgroundPressed");
+
+    // Wide layouts keep Start meeting beside the heading; narrow layouts stack it under the text.
+    private void MeetingsHeaderSizeChanged(object sender, SizeChangedEventArgs args)
+    {
+        var narrow = args.NewSize.Width < (double)Application.Current.Resources["HomeHeaderStackThreshold"];
+        Grid.SetColumnSpan(MeetingsHeading, narrow ? 2 : 1);
+        Grid.SetRow(NewMeetingButton, narrow ? 1 : 0);
+        Grid.SetColumn(NewMeetingButton, narrow ? 0 : 1);
+        NewMeetingButton.HorizontalAlignment = narrow ? HorizontalAlignment.Left : HorizontalAlignment.Right;
+        NewMeetingButton.Margin = narrow ? new Thickness(0, 12, 0, 0) : new Thickness(0);
     }
 
     internal Task RefreshAsync()

@@ -2,7 +2,9 @@
 <UserControl x:Class="Ansible.ModelCard"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+             HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+             PointerEntered="CardPointerEntered" PointerExited="CardPointerExited" PointerCanceled="CardPointerExited"
+             GotFocus="CardGotFocus" LostFocus="CardLostFocus">
     <UserControl.Resources>
         <!-- Transparent at rest; the default Button template supplies the hover and pressed fills. -->
         <Style x:Key="IconButtonStyle" TargetType="Button">
@@ -18,7 +20,50 @@
             <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
         </Style>
     </UserControl.Resources>
-    <Border x:Name="CardBorder" Style="{StaticResource CardStyle}">
+    <Border x:Name="CardBorder" Style="{StaticResource CardStyle}" BorderThickness="1.5">
+        <!-- Interaction and state colours are visual states with ThemeResource setters, so they follow this
+             element's theme and High Contrast without resolving brushes from code. -->
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="FillStates">
+                <VisualState x:Name="FillRest" />
+                <VisualState x:Name="FillLifted">
+                    <VisualState.Setters>
+                        <Setter Target="CardBorder.Background" Value="{ThemeResource AppHoverBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+            <VisualStateGroup x:Name="OutlineStates">
+                <VisualState x:Name="OutlineRest" />
+                <VisualState x:Name="OutlineActive">
+                    <VisualState.Setters>
+                        <Setter Target="CardBorder.BorderBrush" Value="{ThemeResource AccentGraphicBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="OutlineKey">
+                    <VisualState.Setters>
+                        <Setter Target="CardBorder.BorderBrush" Value="{ThemeResource AppKeyBorderBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+            <VisualStateGroup x:Name="StateDotStates">
+                <VisualState x:Name="DotNone" />
+                <VisualState x:Name="DotCritical">
+                    <VisualState.Setters>
+                        <Setter Target="StateDot.Fill" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="DotAccent">
+                    <VisualState.Setters>
+                        <Setter Target="StateDot.Fill" Value="{ThemeResource AccentGraphicBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="DotCaution">
+                    <VisualState.Setters>
+                        <Setter Target="StateDot.Fill" Value="{ThemeResource SystemFillColorCautionBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
         <StackPanel Spacing="16">
             <Grid ColumnSpacing="12">
                 <Grid.ColumnDefinitions>
@@ -85,23 +130,23 @@
                                         <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
                                     </StackPanel>
                                     <StackPanel Spacing="4">
-                                        <TextBlock Text="Capabilities" Style="{StaticResource DetailLabelStyle}" />
+                                        <TextBlock Text="Capabilities" Style="{StaticResource CaptionSecondaryStyle}" />
                                         <TextBlock x:Name="CapabilityText" TextWrapping="Wrap" Style="{StaticResource BodyTextBlockStyle}" />
                                     </StackPanel>
                                     <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
                                     <StackPanel Spacing="4">
-                                        <TextBlock Text="License" Style="{StaticResource DetailLabelStyle}" />
+                                        <TextBlock Text="License" Style="{StaticResource CaptionSecondaryStyle}" />
                                         <TextBlock x:Name="LicenseDetailText" TextWrapping="Wrap" Style="{StaticResource BodyTextBlockStyle}" />
                                     </StackPanel>
                                     <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
                                     <StackPanel Spacing="4">
-                                        <TextBlock Text="Source" Style="{StaticResource DetailLabelStyle}" />
+                                        <TextBlock Text="Source" Style="{StaticResource CaptionSecondaryStyle}" />
                                         <TextBlock x:Name="SourceText" TextWrapping="Wrap" Style="{StaticResource BodyTextBlockStyle}"
                                                    IsTextSelectionEnabled="True" />
                                     </StackPanel>
                                     <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
                                     <StackPanel Spacing="4">
-                                        <TextBlock Text="Verification" Style="{StaticResource DetailLabelStyle}" />
+                                        <TextBlock Text="Verification" Style="{StaticResource CaptionSecondaryStyle}" />
                                         <TextBlock x:Name="PrecisionText" TextWrapping="Wrap" Style="{StaticResource BodyTextBlockStyle}"
                                                    IsTextSelectionEnabled="True" />
                                         <TextBlock x:Name="ByteCountText" Style="{StaticResource BodyTextBlockStyle}"
@@ -111,7 +156,7 @@
                                     </StackPanel>
                                     <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
                                     <StackPanel Spacing="4">
-                                        <TextBlock Text="Location" Style="{StaticResource DetailLabelStyle}" />
+                                        <TextBlock Text="Location" Style="{StaticResource CaptionSecondaryStyle}" />
                                         <TextBlock x:Name="LocationText" TextWrapping="Wrap" Style="{StaticResource BodyTextBlockStyle}"
                                                    IsTextSelectionEnabled="True" />
                                     </StackPanel>

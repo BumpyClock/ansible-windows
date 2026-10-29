@@ -8,7 +8,8 @@
              mc:Ignorable="d">
     <UserControl.Content>
         <Grid x:Name="LayoutRoot"
-              ColumnSpacing="{StaticResource CardGap}"
+              Padding="{StaticResource SettingsRowPadding}"
+              ColumnSpacing="{StaticResource SettingsRowColumnGap}"
               RowSpacing="{StaticResource SettingsRowRowSpacing}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -24,10 +25,15 @@
                     MaxWidth="{StaticResource SettingsRowDescriptionMaxWidth}"
                     HorizontalAlignment="Left">
             <TextBlock Text="{x:Bind Title, Mode=OneWay}"
+                       FontSize="{StaticResource SettingsLabelFontSize}"
+                       LineHeight="{StaticResource SettingsLabelLineHeight}"
+                       FontWeight="Medium"
                        Style="{StaticResource BodyTextBlockStyle}" />
             <TextBlock x:Name="DescriptionText"
                        Text="{x:Bind Description, Mode=OneWay}"
                        TextWrapping="Wrap"
+                       FontSize="{StaticResource SettingsDescriptionFontSize}"
+                       LineHeight="{StaticResource SettingsDescriptionLineHeight}"
                        Style="{StaticResource CaptionSecondaryStyle}" />
         </StackPanel>
 

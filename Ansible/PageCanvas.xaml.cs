@@ -40,6 +40,14 @@ public sealed partial class PageCanvas : UserControl
     public double ContentWidth => Math.Max(0, ContentHost.ActualWidth - ContentPadding.Left - ContentPadding.Right);
     public double ViewportHeight => Viewport.ActualHeight;
 
+    // Control-template interaction brushes must be reapplied when the element's theme changes.
+    internal static void ApplyBrandInteractionBrushes(FrameworkElement element, string pointerOverKey, string pressedKey)
+    {
+        var resources = Application.Current.Resources;
+        element.Resources[pointerOverKey] = resources["AppHoverBrush"];
+        element.Resources[pressedKey] = resources["AppActiveBrush"];
+    }
+
     private void ViewportSizeChanged(object sender, SizeChangedEventArgs args)
     {
         UpdateLayoutBounds();

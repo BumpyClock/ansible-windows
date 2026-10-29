@@ -54,12 +54,6 @@ public sealed partial class HomeInsightsView : UserControl
         }
     }
 
-    internal void SetWideLayout(bool wide)
-    {
-        if (wide) { HomeActivityCard.MinHeight = (double)Application.Current.Resources["HomeActivityCardMinHeight"]; }
-        else { HomeActivityCard.ClearValue(FrameworkElement.MinHeightProperty); }
-    }
-
     private void ClearActivity()
     {
         HomeHeatmapGrid.Children.Clear();
@@ -112,7 +106,8 @@ public sealed partial class HomeInsightsView : UserControl
                 var count = activity.GetValueOrDefault(day);
                 var styleKey = day > today ? "ActivityFutureCellStyle" : count switch
                 {
-                    0 => "ActivityEmptyCellStyle", 1 => "ActivityLowCellStyle", 2 => "ActivityMediumCellStyle", _ => "ActivityHighCellStyle"
+                    0 => "ActivityEmptyCellStyle", 1 => "ActivityLowCellStyle", 2 => "ActivityMediumCellStyle",
+                    3 => "ActivityHighCellStyle", _ => "ActivityPeakCellStyle"
                 };
                 var cell = new Border { Style = (Style)Application.Current.Resources[styleKey], Width = cellSize, Height = cellSize, CornerRadius = cellCornerRadius };
                 var unit = count == 1 ? "session" : "sessions";

@@ -38,7 +38,7 @@
                 </Button.Flyout>
             </Button>
         </local:PageCanvas.HeaderActions>
-        <StackPanel Spacing="16">
+        <StackPanel Spacing="{StaticResource PageSectionSpacing}">
             <InfoBar x:Name="StatusInfo" IsOpen="False" IsClosable="False" Visibility="Collapsed" />
 
             <Grid x:Name="ModelsGrid" ColumnSpacing="16" RowSpacing="16"

@@ -67,7 +67,7 @@
                      SizeChanged="StatusInfoSizeChanged"
                      Closing="StatusInfoClosing" Closed="StatusInfoClosed" />
 
-            <Grid x:Name="HomeColumns" ColumnSpacing="{StaticResource HomeCardGap}" RowSpacing="{StaticResource HomeCardGap}" SizeChanged="HomeColumnsSizeChanged">
+            <Grid x:Name="HomeColumns" ColumnSpacing="{StaticResource HomeCardGap}" RowSpacing="{StaticResource HomeSectionGap}" SizeChanged="HomeColumnsSizeChanged">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="2*" />
                     <ColumnDefinition Width="1*" />

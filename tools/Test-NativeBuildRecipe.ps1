@@ -114,8 +114,8 @@ try {
     $fixtures += $current
     $result = Invoke-VerifyRuntimeOnly $current
     Assert-Condition $result.Threw "Expected the placeholder (non-PE) DLL to fail PE inspection after passing the recipe check."
-    Assert-Condition ($result.Threw -and $result.Message -notmatch 'patch recipe' -and $result.Message -notmatch 'model family') `
-        "A current, correctly-recipe'd record was rejected by the recipe check itself. Got: $($result.Message)"
+    Assert-Condition ($result.Threw -and $result.Message -match '^(Cannot inspect PE imports|Native deployment contains a non-x64 PE file:)') `
+        "A current recipe did not reach PE inspection. Got: $($result.Message)"
 } finally {
     foreach ($fixture in $fixtures) {
         if (Test-Path -LiteralPath $fixture) { Remove-Item -LiteralPath $fixture -Recurse -Force }
