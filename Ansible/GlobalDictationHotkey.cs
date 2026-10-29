@@ -8,9 +8,9 @@ namespace Ansible;
 
 // Global dictation hotkey. Construct / Suspend / Resume / Dispose on the UI thread that owns hwnd.
 // Win32 only delivers a key-DOWN for a hotkey, so press is reported from WM_HOTKEY and release is detected
-// by polling GetAsyncKeyState from a DispatcherTimer (no low-level keyboard hook). The window is never
-// focused and no input is synthesised. onPressedChanged(true) fires on press; onPressedChanged(false) fires
-// when any chord key/modifier is released.
+// by polling GetAsyncKeyState from a DispatcherTimer. Ctrl+Win alone uses a low-level keyboard hook
+// on the same message thread, with a short qualification delay to exclude ordinary three-key chords.
+// Physical downs and ups are always forwarded. A balanced, unassigned-key pair masks Start on qualification.
 
 internal sealed partial class GlobalDictationHotkey : IDisposable
 {
@@ -43,6 +43,13 @@ internal sealed partial class GlobalDictationHotkey : IDisposable
     private readonly nuint _subclassId;
     private readonly nint _subclassProcPtr;
     private readonly DispatcherTimer _pollTimer;
+    private readonly uint _ownerThread;
+    private readonly CtrlWinShortcutState _modifierState = new();
+    private readonly KeyboardHookCallback _keyboardCallback;
+    // Keep callbacks rooted even if Windows fails to release a hook.
+    [ThreadStatic] private static HashSet<GlobalDictationHotkey>? s_hookOwners;
+    private nint _keyboardHook;
+    private WindowsTextTarget.KeyboardEvent[]? _pendingMenuMaskRelease;
 
     private GCHandle _self;
     private bool _registered;
@@ -62,6 +69,10 @@ internal sealed partial class GlobalDictationHotkey : IDisposable
         _id = NextId();
         _subclassId = (nuint)_id;
         _shortcut = shortcut;
+        _ownerThread = GetCurrentThreadId();
+        if (GetWindowThreadProcessId(hwnd, out _) != _ownerThread)
+            throw new ArgumentException("The hotkey must be created on its window's message thread.", nameof(hwnd));
+        _keyboardCallback = OnKeyboardInput;
 
         // Created on the UI thread so the timer binds to this thread's dispatcher queue.
         _pollTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(PollIntervalMs) };
@@ -82,17 +93,19 @@ internal sealed partial class GlobalDictationHotkey : IDisposable
             throw new Win32Exception(err, "Failed to install the window subclass for the global hotkey.");
         }
 
-        if (!RegisterHotKey(_hwnd, _id, shortcut.Modifiers | MOD_NOREPEAT, shortcut.Key))
+        try
         {
-            int err = Marshal.GetLastWin32Error();
+            Register();
+        }
+        catch
+        {
             if (RemoveWindowSubclass(_hwnd, _subclassProcPtr, _subclassId))
                 _self.Free();
             else
                 Debug.WriteLine($"Global hotkey subclass removal failed after registration error: {Marshal.GetLastWin32Error()}");
-            throw new Win32Exception(err, $"Failed to register the global hotkey {shortcut.DisplayText} (it may be in use by another application).");
+            _pollTimer.Tick -= OnPollTick;
+            throw;
         }
-
-        _registered = true;
     }
 
     /// <summary>
@@ -104,18 +117,21 @@ internal sealed partial class GlobalDictationHotkey : IDisposable
     /// <exception cref="Win32Exception">The chord could not be released.</exception>
     public void Suspend()
     {
+        VerifyOwnerThread();
         bool fireRelease = false;
         lock (_sync)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             if (!_registered) { return; }
+            ReleaseMenuMaskKey();
 
-            if (!UnregisterHotKey(_hwnd, _id))
+            if (!Unregister())
             {
                 throw new Win32Exception(Marshal.GetLastWin32Error(),
                     $"Failed to release {_shortcut.DisplayText} for capture; it is still registered.");
             }
             _registered = false;
+            _modifierState.Reset();
 
             _pollTimer.Stop();
             if (_pressed) { _pressed = false; fireRelease = true; }
@@ -132,28 +148,31 @@ internal sealed partial class GlobalDictationHotkey : IDisposable
     /// <exception cref="Win32Exception">The chord could not be re-registered.</exception>
     public void Resume()
     {
+        VerifyOwnerThread();
         lock (_sync)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             if (_registered) { return; }
 
-            if (!RegisterHotKey(_hwnd, _id, _shortcut.Modifiers | MOD_NOREPEAT, _shortcut.Key))
-            {
-                throw new Win32Exception(Marshal.GetLastWin32Error(),
-                    $"Failed to re-register {_shortcut.DisplayText} after capture (it may be in use by another application).");
-            }
-            _registered = true;
+            Register();
         }
     }
 
     public void Dispose()
     {
-        lock (_sync)
+        VerifyOwnerThread();
+        bool fireRelease = false;
+        try
         {
-            if (_disposed) { return; }
-            _disposed = true;
-            ReleaseNative();
+            lock (_sync)
+            {
+                if (_released) { return; }
+                fireRelease = _pressed;
+                _disposed = true;
+                ReleaseNative();
+            }
         }
+        finally { if (fireRelease) SafeInvoke(false); }
     }
 
     // Runs under _sync, or from the subclass callback on WM_NCDESTROY. Idempotent; a failed subclass removal
@@ -161,8 +180,10 @@ internal sealed partial class GlobalDictationHotkey : IDisposable
     private void ReleaseNative(bool windowDestroying = false)
     {
         if (_released) { return; }
+        ReleaseMenuMaskKey();
 
         _pressed = false;
+        _modifierState.Reset();
         _pollTimer.Stop();
         _pollTimer.Tick -= OnPollTick;
 
@@ -171,8 +192,11 @@ internal sealed partial class GlobalDictationHotkey : IDisposable
 
         if (_registered)
         {
-            if (!UnregisterHotKey(_hwnd, _id))
-                Debug.WriteLine($"Global hotkey unregistration failed: {Marshal.GetLastWin32Error()}");
+            if (!Unregister())
+            {
+                _released = false;
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "Failed to release the global dictation shortcut.");
+            }
             _registered = false;
         }
         if (!RemoveWindowSubclass(_hwnd, _subclassProcPtr, _subclassId))
@@ -190,6 +214,26 @@ internal sealed partial class GlobalDictationHotkey : IDisposable
     // UI-thread tick: ends the press as soon as any chord key/modifier is no longer held.
     private void OnPollTick(object? sender, object e)
     {
+        if (_shortcut.IsModifierOnly)
+        {
+            if (_disposed || !_registered) { _pollTimer.Stop(); return; }
+            if (_modifierState.Advance(Environment.TickCount64))
+            {
+                try
+                {
+                    MaskWindowsMenu();
+                    _pressed = true;
+                    SafeInvoke(true);
+                }
+                catch (Exception error)
+                {
+                    _modifierState.Reset(PhysicalKeysDown());
+                    Trace.TraceWarning($"Ctrl + Win could not suppress Start; dictation was not started: {error.Message}");
+                }
+            }
+            if (!_modifierState.IsPending) _pollTimer.Stop();
+            return;
+        }
         bool fireRelease = false;
         lock (_sync)
         {
@@ -248,6 +292,119 @@ internal sealed partial class GlobalDictationHotkey : IDisposable
 
     private static bool IsKeyDown(int vk) => (GetAsyncKeyState(vk) & 0x8000) != 0;
 
+    private void VerifyOwnerThread()
+    {
+        if (GetCurrentThreadId() != _ownerThread)
+            throw new InvalidOperationException("Global hotkeys must be managed on their owning window's message thread.");
+    }
+
+    private void Register()
+    {
+        if (_shortcut.IsModifierOnly)
+        {
+            // Keys held while installing/resuming must be released before a fresh chord can start.
+            _modifierState.Reset(PhysicalKeysDown());
+            _keyboardHook = SetWindowsHookExW(13, Marshal.GetFunctionPointerForDelegate(_keyboardCallback), GetModuleHandleW(null), 0);
+            if (_keyboardHook == 0)
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "Failed to install the Ctrl + Win global keyboard hook.");
+            (s_hookOwners ??= []).Add(this);
+        }
+        else if (!RegisterHotKey(_hwnd, _id, _shortcut.Modifiers | MOD_NOREPEAT, _shortcut.Key))
+        {
+            throw new Win32Exception(Marshal.GetLastWin32Error(),
+                $"Failed to register the global hotkey {_shortcut.DisplayText} (it may be in use by another application).");
+        }
+        _registered = true;
+    }
+
+    private bool Unregister()
+    {
+        if (!_shortcut.IsModifierOnly) return UnregisterHotKey(_hwnd, _id);
+        if (_keyboardHook == 0) return true;
+        if (!UnhookWindowsHookEx(_keyboardHook)) return false;
+        _keyboardHook = 0;
+        s_hookOwners?.Remove(this);
+        return true;
+    }
+
+    private nint OnKeyboardInput(int code, nuint message, nint data)
+    {
+        if (code >= 0 && !_disposed && _registered)
+        {
+            try
+            {
+                var input = Marshal.PtrToStructure<KeyboardInput>(data);
+                var down = message is 0x0100 or 0x0104;
+                var up = message is 0x0101 or 0x0105;
+                if (down || up)
+                {
+                    var wasPressed = _modifierState.IsPressed;
+                    _modifierState.Process(input.Key, down, (input.Flags & 0x12) != 0, Environment.TickCount64);
+                    if (_modifierState.IsPending) _pollTimer.Start();
+                    else _pollTimer.Stop();
+                    if (wasPressed && !_modifierState.IsPressed)
+                    {
+                        _pressed = false;
+                        SafeInvoke(false);
+                    }
+                }
+            }
+            catch (Exception error)
+            {
+                Debug.WriteLine($"Global modifier shortcut callback failed: {error}");
+            }
+        }
+        return CallNextHookEx(_keyboardHook, code, message, data);
+    }
+
+    private static IEnumerable<uint> PhysicalKeysDown() => Enumerable.Range(8, 248)
+        .Where(key => key is not VK_CONTROL and not VK_SHIFT and not VK_MENU and not 0xE8 && IsKeyDown(key))
+        .Select(key => (uint)key);
+
+    private void MaskWindowsMenu()
+    {
+        ReleaseMenuMaskKey();
+        // VK_E8 is unassigned. Unlike dropping Win-up, a complete mask leaves physical modifier state intact.
+        // https://www.autohotkey.com/docs/v2/lib/A_MenuMaskKey.htm documents this menu-masking key.
+        // Send the pair together, while Ctrl+Win are still down, before reporting the qualified press.
+        var release = new[] { WindowsTextTarget.KeyboardEvent.Virtual(0xE8, 2) };
+        var inputs = new[] { WindowsTextTarget.KeyboardEvent.Virtual(0xE8, 0), release[0] };
+        var sent = SendMenuMaskInput(inputs);
+        if (sent == 2) return;
+        var error = Marshal.GetLastWin32Error();
+        if (sent == 1)
+        {
+            _pendingMenuMaskRelease = release;
+            ReleaseMenuMaskKey();
+            return;
+        }
+        throw new Win32Exception(error, "Windows did not queue the balanced Start-menu mask.");
+    }
+
+    private void ReleaseMenuMaskKey()
+    {
+        if (_pendingMenuMaskRelease is not { } release) return;
+        if (!WindowsTextTarget.ReleaseOwnedKeys(release, SendMenuMaskInput))
+            throw new Win32Exception(Marshal.GetLastWin32Error(), "Windows could not release the Start-menu mask key.");
+        _pendingMenuMaskRelease = null;
+    }
+
+    private static uint SendMenuMaskInput(WindowsTextTarget.KeyboardEvent[] inputs) =>
+        SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<WindowsTextTarget.KeyboardEvent>());
+
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+    private delegate nint KeyboardHookCallback(int code, nuint message, nint data);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct KeyboardInput
+    {
+        public uint Key;
+        public uint ScanCode;
+        public uint Flags;
+        public uint Time;
+        public nuint ExtraInfo;
+    }
+
     [UnmanagedCallersOnly]
     private static nint SubclassProc(nint hWnd, uint uMsg, nuint wParam, nint lParam, nuint uIdSubclass, nuint dwRefData)
     {
@@ -264,7 +421,10 @@ internal sealed partial class GlobalDictationHotkey : IDisposable
                 }
                 else if (uMsg == WM_NCDESTROY)
                 {
-                    lock (self._sync) { self.ReleaseNative(windowDestroying: true); }
+                    var wasPressed = self._pressed;
+                    try { lock (self._sync) { self.ReleaseNative(windowDestroying: true); } }
+                    catch (Exception error) { Debug.WriteLine($"Global shortcut teardown failed: {error}"); }
+                    finally { if (wasPressed) self.SafeInvoke(false); }
                 }
             }
         }
@@ -288,6 +448,28 @@ internal sealed partial class GlobalDictationHotkey : IDisposable
 
     [LibraryImport("user32.dll")]
     private static partial short GetAsyncKeyState(int vKey);
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    private static partial uint SendInput(uint count, [In] WindowsTextTarget.KeyboardEvent[] inputs, int size);
+
+    [LibraryImport("kernel32.dll")]
+    private static partial uint GetCurrentThreadId();
+
+    [LibraryImport("user32.dll")]
+    private static partial uint GetWindowThreadProcessId(nint hwnd, out uint processId);
+
+    [LibraryImport("kernel32.dll", StringMarshalling = StringMarshalling.Utf16)]
+    private static partial nint GetModuleHandleW(string? moduleName);
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    private static partial nint SetWindowsHookExW(int hook, nint callback, nint module, uint threadId);
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool UnhookWindowsHookEx(nint hook);
+
+    [LibraryImport("user32.dll")]
+    private static partial nint CallNextHookEx(nint hook, int code, nuint message, nint data);
 
     [LibraryImport("comctl32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

@@ -24,7 +24,7 @@ internal static unsafe partial class WindowsTextTarget
         Func<KeyboardEvent[], uint> send, Action<int> wait, Func<bool> interrupted)
     {
         if (interrupted())
-            return TextDeliveryOutcome.Rejected("The operation ended before the paste shortcut was sent.");
+            return TextDeliveryOutcome.Rejected("The operation ended before the paste shortcut was sent.", TextDeliveryReason.Superseded);
         var downs = PasteKeyDowns(shortcut);
         // Prepare every possible partial-keydown cleanup before taking ownership of injected keys.
         var partialReleases = new KeyboardEvent[downs.Length][];
@@ -32,7 +32,7 @@ internal static unsafe partial class WindowsTextTarget
             partialReleases[count - 1] = downs.Take(count).Reverse().Select(KeyRelease).ToArray();
         var sent = Math.Min(send(downs), (uint)downs.Length);
         if (sent == 0)
-            return TextDeliveryOutcome.Rejected("Windows did not queue the paste shortcut. Dictated text remains on the clipboard.");
+            return TextDeliveryOutcome.Rejected("Windows did not queue the paste shortcut. Dictated text remains on the clipboard.", TextDeliveryReason.InputNotQueued);
         var releases = partialReleases[sent - 1];
         var cleaned = false;
         var stopped = false;
@@ -48,11 +48,11 @@ internal static unsafe partial class WindowsTextTarget
             cleaned = ReleaseOwnedKeys(releases, send);
         }
         if (!cleaned)
-            return TextDeliveryOutcome.CleanupFailed("Windows could not release all injected paste keys. Check keyboard state and the field; no paste will be replayed.");
+            return TextDeliveryOutcome.CleanupFailed("Windows could not release all injected paste keys. Check keyboard state and the field; no paste will be replayed.", TextDeliveryReason.KeyReleaseFailed);
         if (sent != downs.Length)
-            return TextDeliveryOutcome.Partial("Windows queued only part of the paste chord. Owned keys were released; check the field. No paste will be replayed.");
+            return TextDeliveryOutcome.Partial("Windows queued only part of the paste chord. Owned keys were released; check the field. No paste will be replayed.", TextDeliveryReason.InputPartial);
         if (stopped)
-            return TextDeliveryOutcome.Sent("The paste shortcut was queued before cancellation or supersession. Owned keys were released; insertion is unverified. No paste will be replayed.");
+            return TextDeliveryOutcome.Sent("The paste shortcut was queued before cancellation or supersession. Owned keys were released; insertion is unverified. No paste will be replayed.", TextDeliveryReason.CancelledAfterInput);
         return null;
     }
 

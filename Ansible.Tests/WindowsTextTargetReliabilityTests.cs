@@ -122,6 +122,7 @@ public sealed class WindowsTextTargetReliabilityTests
             () => { observations++; return null; }, () => !lostFocus,
             _ => throw new InvalidOperationException("Must not poll unavailable target."), () => 0);
         Assert.Equal(TextDeliveryStatus.Sent, result.Status);
+        Assert.Equal(TextDeliveryReason.SentUnverified, result.Reason);
         Assert.Equal(lostFocus ? 0 : 1, observations);
     }
 
@@ -193,6 +194,7 @@ public sealed class WindowsTextTargetReliabilityTests
             return calls.Count == 1 ? (uint)count : (uint)events.Length;
         }, _ => throw new InvalidOperationException("Incomplete chord must not be held."), () => false);
         Assert.Equal(TextDeliveryStatus.Partial, result!.Value.Status);
+        Assert.Equal(TextDeliveryReason.InputPartial, result.Value.Reason);
         Assert.Equal(2, calls.Count);
         Assert.Equal(count == 1 ? new ushort[] { 0x11 } : [0x10, 0x11],
             calls[1].Select(key => key.Key.VirtualKey));
@@ -224,6 +226,7 @@ public sealed class WindowsTextTargetReliabilityTests
             return calls.Count == 1 ? (uint)events.Length : 0;
         }, _ => { }, () => false);
         Assert.Equal(TextDeliveryStatus.CleanupFailed, result!.Value.Status);
+        Assert.Equal(TextDeliveryReason.KeyReleaseFailed, result.Value.Reason);
         Assert.Equal(4, calls.Count);
         Assert.All(calls.Skip(1).SelectMany(call => call), key => Assert.Equal(2u, key.Key.Flags));
     }
@@ -245,6 +248,7 @@ public sealed class WindowsTextTargetReliabilityTests
             if (throwDuringHold) { throw new OperationCanceledException(); }
         }, () => cancelled);
         Assert.Equal(TextDeliveryStatus.Sent, result!.Value.Status);
+        Assert.Equal(TextDeliveryReason.CancelledAfterInput, result.Value.Reason);
         Assert.Equal(2, calls.Count);
         Assert.All(calls[1], key => Assert.Equal(2u, key.Key.Flags));
     }
