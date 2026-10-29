@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl x:Class="Ansible.ShortcutIllustration"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Border Background="{ThemeResource AppSearchBrush}" CornerRadius="24" Padding="12">
+        <Viewbox Stretch="Uniform" MaxHeight="300">
+            <Canvas Width="640" Height="340" IsHitTestVisible="False"
+                    AutomationProperties.AccessibilityView="Raw">
+                <Path Data="M300,165 L420,85 M380,205 L500,125" Stroke="{ThemeResource AppKeyBorderBrush}"
+                      StrokeThickness="1.5" StrokeDashArray="3,5" />
+                <Border Canvas.Left="373" Canvas.Top="12" Width="220" Padding="20"
+                        Background="{ThemeResource AppCardBrush}" BorderBrush="{ThemeResource AppBorderBrush}"
+                        BorderThickness="1" CornerRadius="14">
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="Your voice becomes text" FontSize="13" Foreground="{ThemeResource AppTextBrush}" />
+                        <Border Height="5" Width="170" HorizontalAlignment="Left" Background="{ThemeResource AppTrackBrush}" CornerRadius="2" />
+                        <Border Height="5" Width="134" HorizontalAlignment="Left" Background="{ThemeResource AccentGraphicBrush}" CornerRadius="2" />
+                        <Border Height="5" Width="152" HorizontalAlignment="Left" Background="{ThemeResource AppTrackBrush}" CornerRadius="2" />
+                    </StackPanel>
+                </Border>
+                <Canvas x:Name="Keyboard" Width="500" Height="216">
+                    <Canvas.RenderTransform>
+                        <MatrixTransform Matrix="0.88,0.40,-0.75,0.48,170,24" />
+                    </Canvas.RenderTransform>
+                    <Border Width="500" Height="216" CornerRadius="16" Background="{ThemeResource AppCardBrush}"
+                            BorderBrush="{ThemeResource AppKeyBorderBrush}" BorderThickness="2" />
+                    <Canvas x:Name="Keys" Canvas.Left="12" Canvas.Top="10" />
+                </Canvas>
+            </Canvas>
+        </Viewbox>
+    </Border>
+</UserControl>

@@ -136,6 +136,13 @@
                             AutomationProperties.AutomationId="OpenSuggestedMeetingButton" />
                 </InfoBar.ActionButton>
             </InfoBar>
+            <InfoBar x:Name="TrayError" Margin="{StaticResource ApplicationNoticeMargin}"
+                     IsOpen="False" IsClosable="False" Visibility="Collapsed"
+                     Severity="Error" Title="Tray icon unavailable" AutomationProperties.AutomationId="TrayError">
+                <InfoBar.ActionButton>
+                    <Button Content="Exit Ansible" Click="ExitClicked" AutomationProperties.AutomationId="TrayErrorExitButton" />
+                </InfoBar.ActionButton>
+            </InfoBar>
             <InfoBar x:Name="ShutdownError" Margin="{StaticResource ApplicationNoticeMargin}"
                      IsOpen="False" IsClosable="False" Visibility="Collapsed"
                      Severity="Error" Title="Close failed" AutomationProperties.AutomationId="ShutdownError" />
