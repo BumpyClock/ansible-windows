@@ -125,6 +125,62 @@ public sealed class MeetingSpeakerEvidenceSessionTests : IDisposable
         Assert.Equal(MeetingSessionPhase.Completed, session.State.Phase);
     }
 
+    [Fact]
+    public async Task ObserverFailureAtResumeFailsTheMeetingAndReleasesTheNewCapture()
+    {
+        var engine = new Engine();
+        var captures = CreateCaptures();
+        var observer = new FakeSpeakerObserver();
+        var releases = 0;
+        await using var session = Create(engine, captures, observerFactory: () => observer,
+            release: () => { releases++; return Task.CompletedTask; });
+        await session.StartAsync(new(42)).WaitAsync(TimeSpan.FromSeconds(5));
+        await SendAsync(captures.Captures[0], engine, 1, 1);
+        await session.PauseAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        observer.StartFailure = new IOException("observer lost");
+
+        var error = await Assert.ThrowsAsync<IOException>(() => session.ResumeAsync().WaitAsync(TimeSpan.FromSeconds(5)));
+
+        Assert.Equal("observer lost", error.Message);
+        Assert.Equal(MeetingSessionPhase.Failed, session.State.Phase);
+        Assert.Equal("observer lost", session.State.Error);
+        Assert.Equal(MeetingStatus.Failed, session.Document!.Status);
+        Assert.Equal(2, captures.Captures.Count);
+        Assert.True(captures.Captures[1].IsReleased);
+        Assert.False(session.IsActive);
+        Assert.Equal(1, releases);
+    }
+
+    [Fact]
+    public async Task CaptureFactoryFailureAtResumeLeavesThePausedMeetingRetryable()
+    {
+        var engine = new Engine();
+        var creates = 0;
+        var captures = new FakeMeetingCaptureFactory
+        {
+            Create = () =>
+            {
+                if (++creates == 2) throw new IOException("endpoint busy");
+                return new() { PlaybackRms = 0.2 };
+            }
+        };
+        var releases = 0;
+        await using var session = Create(engine, captures, release: () => { releases++; return Task.CompletedTask; });
+        await session.StartAsync(new(42)).WaitAsync(TimeSpan.FromSeconds(5));
+        await session.PauseAsync().WaitAsync(TimeSpan.FromSeconds(5));
+
+        await Assert.ThrowsAsync<IOException>(() => session.ResumeAsync().WaitAsync(TimeSpan.FromSeconds(5)));
+
+        Assert.Equal(MeetingSessionPhase.Paused, session.State.Phase);
+        Assert.True(session.IsActive);
+        Assert.Equal(0, releases);
+        await session.ResumeAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(MeetingSessionPhase.Recording, session.State.Phase);
+        await session.EndAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(MeetingSessionPhase.Completed, session.State.Phase);
+        Assert.Equal(1, releases);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -170,8 +226,8 @@ public sealed class MeetingSpeakerEvidenceSessionTests : IDisposable
 
     private static MeetingSession Create(Engine engine, FakeMeetingCaptureFactory captures,
         Func<FakeSpeakerObserver>? observerFactory = null, FakeWordAligner? aligner = null,
-        LocalDiagnosticLog? diagnostics = null) =>
-        new(() => engine, captures, new(Path.GetTempPath()), () => new(),
+        LocalDiagnosticLog? diagnostics = null, Func<Task>? release = null) =>
+        new(() => engine, captures, new(Path.GetTempPath()), () => new(), release: release,
             observerFactory: observerFactory, alignerFactory: aligner is null ? null : () => aligner,
             writeMeeting: _ => Task.CompletedTask, diagnostics: diagnostics);
 

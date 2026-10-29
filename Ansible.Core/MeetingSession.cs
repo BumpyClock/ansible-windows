@@ -304,32 +304,45 @@ public sealed class MeetingSession : IAsyncDisposable
     public async Task ResumeAsync()
     {
         await _commands.WaitAsync();
+        IMeetingCapture? started = null;
         try
         {
             RequirePhase(MeetingSessionPhase.Paused);
             if (_capture is not null) throw new InvalidOperationException("Release the previous capture before resuming the meeting.");
-            _capture = await _captureFactory.StartAsync(_request!, _cancellation!.Token);
-            await AttachCaptureAsync(_capture);
+            started = _capture = await _captureFactory.StartAsync(_request!, _cancellation!.Token);
+            await AttachCaptureAsync(started);
             SetPhase(MeetingSessionPhase.Recording, MeetingStatus.Recording);
             await Task.Run(FlushPendingUpdate);
             _reader!.Resume();
-            _pump = PumpAsync(_capture, _cancellation.Token);
+            _pump = PumpAsync(started, _cancellation.Token);
             await SaveAsync();
             LogMeeting(MeetingDiagnosticKind.Resumed);
         }
         catch (MeetingCaptureOwnershipException error)
         {
             _capture = error.Capture;
-            FailMeeting(MeetingDiagnosticStage.Capture, error);
-            _cancellation!.Cancel();
-            _reader!.Resume();
-            _audio!.Writer.TryComplete(error);
-            await _recognition;
-            await ReleaseResourcesAsync();
-            await SaveAsync();
+            await FailResumeAsync(error);
+            throw;
+        }
+        // A factory failure before a capture exists leaves the session paused and retryable. Any later failure
+        // leaves a live capture, so it must fail the meeting and release the capture and reservation.
+        catch (Exception error) when (started is not null)
+        {
+            await FailResumeAsync(error);
             throw;
         }
         finally { _commands.Release(); }
+    }
+
+    private async Task FailResumeAsync(Exception error)
+    {
+        FailMeeting(MeetingDiagnosticStage.Capture, error);
+        _cancellation!.Cancel();
+        _reader!.Resume();
+        _audio!.Writer.TryComplete(error);
+        await _recognition;
+        try { await ReleaseResourcesAsync(); }
+        finally { await SaveAsync(); }
     }
 
     public async Task EndAsync() => await FinishAsync(false);
