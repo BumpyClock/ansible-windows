@@ -391,7 +391,9 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private WelcomePage? CurrentWelcome() => ReferenceEquals(MainContent.Content, _welcome) ? _welcome : null;
+    // A window hidden to the tray is not showing the lesson, so it must not hold the global shortcut.
+    private WelcomePage? CurrentWelcome() =>
+        !_closed && AppWindow.IsVisible && ReferenceEquals(MainContent.Content, _welcome) ? _welcome : null;
 
     private void OpenShortcutLesson()
     {
