@@ -344,7 +344,7 @@ public sealed partial class MainWindow : Window
                     && MeetingSession.SupportsMeeting(selected)
                     ? selected.Id : null;
             });
-        var window = new MeetingWindow(meeting, _meetingStore, document);
+        var window = new MeetingWindow(meeting, _meetingStore, document, ShellRoot.RequestedTheme);
         try { window.ApplyCapturePrivacy(_session.State.Settings.HideFromCapture); }
         catch (Exception error) { _session.Notify(NoticeKind.Warning, "Screen capture privacy unavailable", error.Message, NoticeArea.Application); }
         _meetingWindows.Add((meeting, window, document?.Id));

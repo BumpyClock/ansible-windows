@@ -248,6 +248,14 @@ public sealed partial class ModelCard : UserControl
     private bool IsHighContrast() => (_themeSettings ??
         throw new InvalidOperationException("Initialize the model card before loading it.")).HighContrast;
 
+    private void DetailsOpening(object sender, object args)
+    {
+        // A finite content width makes long hashes and descriptions wrap inside the popup.
+        // Leave room for the presenter's padding and the window edge at compact sizes.
+        DetailsViewport.Width = Math.Min(360, Math.Max(0, XamlRoot.Size.Width - 64));
+        DetailsViewport.MaxHeight = Math.Min(420, Math.Max(0, XamlRoot.Size.Height - 64));
+    }
+
     private void PrimaryClicked(object sender, RoutedEventArgs e)
     {
         if (_state is ModelInstallState.Downloading or ModelInstallState.Verifying) { PauseRequested?.Invoke(ModelId); }

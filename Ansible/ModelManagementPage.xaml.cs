@@ -17,8 +17,6 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
     private readonly List<ModelCard> _cardList = [];
     private static double TwoColumnThreshold => (double)Application.Current.Resources["ModelTwoColumnThreshold"];
     private int _columns;
-    private IReadOnlyList<ModelCard> _ordered = [];
-    private ModelCard[] _laidOut = [];
     private ModelDownloadManager? _manager;
     private ThemeSettings? _themeSettings;
     private UiSessionObserver? _observer;
@@ -80,9 +78,10 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
                         card.DiscardRequested += OnDiscardRequested;
                         card.UseRequested += OnUseRequested;
                         _cardList.Add(card);
+                        ModelsGrid.Children.Add(card);
                     }
-                    _ordered = _cardList.ToArray();
-                    LayoutCards(_ordered, ModelsGrid.ActualWidth >= TwoColumnThreshold ? 2 : 1);
+                    _columns = 0;
+                    LayoutCards(ModelsGrid.ActualWidth >= TwoColumnThreshold ? 2 : 1);
                 }
                 candidate.Changed += ManagerChanged;
                 _manager = candidate;
@@ -96,8 +95,6 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
                     foreach (var card in _cardList) { card.DetachThemeEvents(); }
                     ModelsGrid.Children.Clear();
                     _cardList.Clear();
-                    _ordered = [];
-                    _laidOut = [];
                     _columns = 0;
                     _themeSettings = null;
                     await candidate.DisposeAsync();
@@ -116,32 +113,25 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
     }
 
     private void OnModelsGridSizeChanged(object sender, SizeChangedEventArgs args) =>
-        LayoutCards(_ordered, args.NewSize.Width >= TwoColumnThreshold ? 2 : 1);
+        LayoutCards(args.NewSize.Width >= TwoColumnThreshold ? 2 : 1);
 
-    private void ModelHeaderSizeChanged(object sender, SizeChangedEventArgs args)
+    // Catalog order stays fixed through verification, downloads, and selection. A row-based grid
+    // keeps each card in its slot even when a preceding card's status changes its height.
+    private void LayoutCards(int columns)
     {
-        var compact = args.NewSize.Width < (double)Application.Current.Resources["CompactPageThreshold"];
-        Grid.SetColumnSpan(ModelPageTitle, compact ? 2 : 1);
-        Grid.SetRow(ModelHeaderActions, compact ? 1 : 0);
-        Grid.SetColumn(ModelHeaderActions, compact ? 0 : 1);
-        Grid.SetColumnSpan(ModelHeaderActions, compact ? 2 : 1);
-        ModelHeaderActions.HorizontalAlignment = compact ? HorizontalAlignment.Left : HorizontalAlignment.Right;
-        ModelHeaderActions.Orientation = args.NewSize.Width < (double)Application.Current.Resources["NarrowActionsThreshold"]
-            ? Orientation.Vertical : Orientation.Horizontal;
-        ModelHeaderActions.Margin = compact ? new Thickness(0, 8, 0, 0) : new Thickness(0);
-    }
-
-    // Children are re-added in display order so keyboard navigation follows the visual order; the
-    // StaggeredPanel packs cards of different heights into the shortest column.
-    private void LayoutCards(IReadOnlyList<ModelCard> cards, int columns)
-    {
-        if (columns < 1) { columns = 1; }
-        ModelsGrid.Columns = columns;
-        if (_columns == columns && _laidOut.SequenceEqual(cards)) { return; }
+        if (_columns == columns) { return; }
         _columns = columns;
-        _laidOut = cards.ToArray();
-        ModelsGrid.Children.Clear();
-        foreach (var card in cards) { ModelsGrid.Children.Add(card); }
+        ModelsGrid.ColumnDefinitions.Clear();
+        ModelsGrid.RowDefinitions.Clear();
+        for (var column = 0; column < columns; column++)
+            ModelsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        for (var row = 0; row < (_cardList.Count + columns - 1) / columns; row++)
+            ModelsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        for (var index = 0; index < _cardList.Count; index++)
+        {
+            Grid.SetRow(_cardList[index], index / columns);
+            Grid.SetColumn(_cardList[index], index % columns);
+        }
     }
 
     private void Render()
@@ -189,9 +179,6 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
             card.Update(snapshots[card], idle, managerIdle, managerBusy,
                 active: activeId == card.ModelId, canSelect: canSelect, busyReason: busyReason);
         }
-        // In use first, then installed, then not installed. OrderBy is stable, so catalog order holds within each group.
-        _ordered = _cardList.OrderBy(card => card.ModelId == activeId ? 0 : snapshots[card].HasModelFile ? 1 : 2).ToArray();
-        LayoutCards(_ordered, _columns);
     }
 
     private void OnUseRequested(string id)

@@ -254,17 +254,6 @@ public sealed partial class CustomWordsPage : Page
 
     private void ModelsClicked(object sender, RoutedEventArgs args) => _openModels();
 
-    private void DictionaryHeaderSizeChanged(object sender, SizeChangedEventArgs args)
-    {
-        var compact = args.NewSize.Width < (double)Application.Current.Resources["CompactPageThreshold"];
-        Grid.SetColumnSpan(DictionaryPageTitle, compact ? 2 : 1);
-        Grid.SetRow(DictionaryHeaderActions, compact ? 1 : 0);
-        Grid.SetColumn(DictionaryHeaderActions, compact ? 0 : 1);
-        Grid.SetColumnSpan(DictionaryHeaderActions, compact ? 2 : 1);
-        DictionaryHeaderActions.HorizontalAlignment = compact ? HorizontalAlignment.Left : HorizontalAlignment.Right;
-        DictionaryHeaderActions.Margin = compact ? new Thickness(0, 8, 0, 0) : new Thickness(0);
-    }
-
     private void RenderNotice()
     {
         var notice = _state.Notice;

@@ -188,6 +188,17 @@ foreach ($themeName in @('Light', 'Dark')) {
 }
 
 $appContent = Get-Content -LiteralPath $appPath -Raw
+foreach ($key in @('LayerFillColorDefaultBrush', 'LayerFillColorAltBrush', 'LayerFillColorDisabledBrush',
+    'CardBackgroundFillColorDefaultBrush', 'CardBackgroundFillColorSecondaryBrush',
+    'CardBackgroundFillColorTertiaryBrush', 'CardStrokeColorDefaultBrush', 'AcrylicInAppFillColorDefaultBrush')) {
+    Assert-Condition (-not $tokenKeySet.Contains($key)) "Material resource '$key' must remain owned by WinUI so Mica layering and accessibility fallbacks work."
+}
+foreach ($page in @('DictationPage', 'MainPage', 'ModelManagementPage', 'CustomWordsPage', 'MeetingsPage')) {
+    [xml]$pageDocument = Get-Content -LiteralPath (Join-Path $RepoRoot "Ansible\$page.xaml")
+    $canvas = $pageDocument.SelectSingleNode('//*[local-name()="PageCanvas"]')
+    Assert-Condition ($null -ne $canvas -and $canvas.HasAttribute('Title')) "$page must use the shared PageCanvas title and action layout."
+    Assert-Condition ($pageDocument.SelectNodes('//*[@Style="{StaticResource PageTitleStyle}"]').Count -eq 0) "$page duplicates the shared page heading."
+}
 $controlsIndex = $appContent.IndexOf('<XamlControlsResources', [StringComparison]::Ordinal)
 $tokensIndex = $appContent.IndexOf('<ResourceDictionary Source="DesignTokens.xaml"', [StringComparison]::Ordinal)
 Assert-Condition ($controlsIndex -ge 0) 'App.xaml does not merge XamlControlsResources.'

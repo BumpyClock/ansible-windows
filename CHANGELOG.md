@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Share page titles, subtitles, responsive action placement, and content bounds
+  through `PageCanvas`. Remove page-specific header grids and breakpoint logic.
+- Use Mica beneath the shell and meeting content, native translucent content
+  and card layers, and native Acrylic flyouts. Preserve platform material and
+  accessibility fallbacks instead of replacing them with opaque palette copies.
+- Keep compact Speech models layouts in one column until two 400 DIP cards fit.
+  Constrain model details to the window so descriptions, source revisions, and
+  file paths wrap within a scrollable flyout.
+- Keep speech model cards in catalog order with fixed row and column positions.
+  Startup verification, downloads, and model selection no longer reshuffle them.
+- Match meeting windows to the shell theme and shared title typography. Restore
+  audio-source controls and **Try again** after a failed empty meeting releases
+  its resources, with instructions that match the available controls.
 - Shrink the dictation overlay to a 128 by 32 DIP pill and drive every bar from
   the current microphone level through a fixed centre-weighted shape, with a
   bounded release, instead of scrolling energy history across the pill.

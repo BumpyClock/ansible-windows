@@ -65,7 +65,7 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
                 <TitleBar x:Name="AppTitleBar" Height="{StaticResource TitleBarHeight}" Background="Transparent" Foreground="{ThemeResource AppTextBrush}" />
-                <Border Grid.Row="1" Background="{ThemeResource AppSurfaceBrush}" BorderBrush="{ThemeResource AppBorderBrush}" BorderThickness="{StaticResource CardBorderThickness}" CornerRadius="{StaticResource PanelCornerRadius}">
+                <Border Grid.Row="1" Style="{StaticResource PageSurfaceStyle}">
                     <Grid>
                         <ContentControl x:Name="MainContent" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
                         <Border x:Name="MicrophonePermissionNotice"

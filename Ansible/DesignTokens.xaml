@@ -127,13 +127,6 @@
             <SolidColorBrush x:Key="ControlStrokeColorSecondaryBrush" Color="{StaticResource AppKeyBorderColor}" />
             <SolidColorBrush x:Key="ControlStrokeColorOnAccentBrush" Color="{StaticResource BrandOnAccentColor}" />
             <SolidColorBrush x:Key="ControlStrokeColorDisabledBrush" Color="{StaticResource AppBorderColor}" />
-            <SolidColorBrush x:Key="CardBackgroundFillColorDefaultBrush" Color="{StaticResource AppCardColor}" />
-            <SolidColorBrush x:Key="CardBackgroundFillColorSecondaryBrush" Color="{StaticResource AppSurfaceColor}" />
-            <SolidColorBrush x:Key="CardBackgroundFillColorTertiaryBrush" Color="{StaticResource AppBackgroundColor}" />
-            <SolidColorBrush x:Key="CardStrokeColorDefaultBrush" Color="{StaticResource AppBorderColor}" />
-            <SolidColorBrush x:Key="LayerFillColorDefaultBrush" Color="{StaticResource AppBackgroundColor}" />
-            <SolidColorBrush x:Key="LayerFillColorAltBrush" Color="{StaticResource AppSurfaceColor}" />
-            <SolidColorBrush x:Key="LayerFillColorDisabledBrush" Color="{StaticResource AppBackgroundColor}" />
             <SolidColorBrush x:Key="SubtleFillColorTransparentBrush" Color="{StaticResource ControlFillColorTransparent}" />
             <SolidColorBrush x:Key="SubtleFillColorSecondaryBrush" Color="{StaticResource AppActiveColor}" />
             <SolidColorBrush x:Key="SubtleFillColorTertiaryBrush" Color="{StaticResource AppHoverColor}" />
@@ -275,13 +268,6 @@
             <SolidColorBrush x:Key="ControlStrokeColorSecondaryBrush" Color="{StaticResource AppKeyBorderColor}" />
             <SolidColorBrush x:Key="ControlStrokeColorOnAccentBrush" Color="{StaticResource BrandOnAccentColor}" />
             <SolidColorBrush x:Key="ControlStrokeColorDisabledBrush" Color="{StaticResource AppBorderColor}" />
-            <SolidColorBrush x:Key="CardBackgroundFillColorDefaultBrush" Color="{StaticResource AppCardColor}" />
-            <SolidColorBrush x:Key="CardBackgroundFillColorSecondaryBrush" Color="{StaticResource AppSurfaceColor}" />
-            <SolidColorBrush x:Key="CardBackgroundFillColorTertiaryBrush" Color="{StaticResource AppBackgroundColor}" />
-            <SolidColorBrush x:Key="CardStrokeColorDefaultBrush" Color="{StaticResource AppBorderColor}" />
-            <SolidColorBrush x:Key="LayerFillColorDefaultBrush" Color="{StaticResource AppBackgroundColor}" />
-            <SolidColorBrush x:Key="LayerFillColorAltBrush" Color="{StaticResource AppSurfaceColor}" />
-            <SolidColorBrush x:Key="LayerFillColorDisabledBrush" Color="{StaticResource AppBackgroundColor}" />
             <SolidColorBrush x:Key="SubtleFillColorTransparentBrush" Color="{StaticResource ControlFillColorTransparent}" />
             <SolidColorBrush x:Key="SubtleFillColorSecondaryBrush" Color="{StaticResource AppActiveColor}" />
             <SolidColorBrush x:Key="SubtleFillColorTertiaryBrush" Color="{StaticResource AppHoverColor}" />
@@ -357,13 +343,6 @@
             <SolidColorBrush x:Key="ControlStrokeColorSecondaryBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
             <SolidColorBrush x:Key="ControlStrokeColorOnAccentBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
             <SolidColorBrush x:Key="ControlStrokeColorDisabledBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
-            <SolidColorBrush x:Key="CardBackgroundFillColorDefaultBrush" Color="{ThemeResource SystemColorWindowColor}" />
-            <SolidColorBrush x:Key="CardBackgroundFillColorSecondaryBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
-            <SolidColorBrush x:Key="CardBackgroundFillColorTertiaryBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
-            <SolidColorBrush x:Key="CardStrokeColorDefaultBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
-            <SolidColorBrush x:Key="LayerFillColorDefaultBrush" Color="{ThemeResource SystemColorWindowColor}" />
-            <SolidColorBrush x:Key="LayerFillColorAltBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
-            <SolidColorBrush x:Key="LayerFillColorDisabledBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
             <SolidColorBrush x:Key="SubtleFillColorTransparentBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="SubtleFillColorSecondaryBrush" Color="{ThemeResource SystemColorHighlightColor}" />
             <SolidColorBrush x:Key="SubtleFillColorTertiaryBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
@@ -405,13 +384,13 @@
     <Thickness x:Key="CompactPagePadding">18</Thickness>
     <x:Double x:Key="CompactPageThreshold">800</x:Double>
     <x:Double x:Key="NarrowActionsThreshold">400</x:Double>
-    <x:Double x:Key="HomeHeaderStackThreshold">760</x:Double>
     <x:Double x:Key="ShortcutStackThreshold">440</x:Double>
     <x:Double x:Key="HistorySearchStackThreshold">520</x:Double>
     <x:Double x:Key="HomeColumnsStackThreshold">900</x:Double>
     <GridLength x:Key="HomeInsightsColumnWidth">400</GridLength>
     <GridLength x:Key="HistorySearchColumnWidth">280</GridLength>
-    <x:Double x:Key="ModelTwoColumnThreshold">620</x:Double>
+    <!-- Two 400 DIP cards plus the 16 DIP gutter keep model names and status readable. -->
+    <x:Double x:Key="ModelTwoColumnThreshold">816</x:Double>
     <Thickness x:Key="PageSectionBottomMargin">0,0,0,20</Thickness>
     <Thickness x:Key="PageFooterTopMargin">0,20,0,0</Thickness>
     <x:Double x:Key="PageSectionSpacing">28</x:Double>
@@ -661,9 +640,17 @@
         <Setter Property="LineHeight" Value="{StaticResource SearchKeycapLineHeight}" />
         <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
     </Style>
+    <!-- Mica is the window base. WinUI owns the translucent content/card layers and
+         Acrylic flyout resources, including their accessibility and power fallbacks. -->
+    <Style x:Key="PageSurfaceStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource LayerFillColorDefaultBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+        <Setter Property="BorderThickness" Value="{StaticResource CardBorderThickness}" />
+        <Setter Property="CornerRadius" Value="{StaticResource PanelCornerRadius}" />
+    </Style>
     <Style x:Key="CardStyle" TargetType="Border">
-        <Setter Property="Background" Value="{ThemeResource AppCardBrush}" />
-        <Setter Property="BorderBrush" Value="{ThemeResource AppBorderBrush}" />
+        <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="{StaticResource CardCornerRadius}" />
         <Setter Property="Padding" Value="{StaticResource CardPadding}" />
@@ -679,7 +666,6 @@
         <Setter Property="Padding" Value="{StaticResource SettingsSegmentTrackPadding}" />
     </Style>
     <Style x:Key="MetricCardStyle" TargetType="Border" BasedOn="{StaticResource CardStyle}">
-        <Setter Property="Background" Value="{ThemeResource AppCardBrush}" />
         <Setter Property="Padding" Value="{StaticResource HomeMetricCardPadding}" />
     </Style>
     <Style x:Key="AppPrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}">
