@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using Ansible.Core;
 using Ansible.Core.Windows;
@@ -17,6 +18,66 @@ public sealed class TeamsSpeakerObserverTests(ITestOutputHelper output)
         Assert.Equal(new[] { "Jordan" }, observation.SpeakingNames);
         Assert.Equal("Jordan", observation.SelfName);
         Assert.Equal(16000, observation.SamplePosition);
+    }
+    [Theory]
+    [InlineData("Morgan, video is on, Has control of production tools, Context menu is available")]
+    [InlineData("Morgan, video is off, Context menu is available")]
+    [InlineData("Morgan, Has control of production tools, muted, Context menu is available")]
+    [InlineData("Morgan, muted, Context menu is available")]
+    public void CurrentTeamsTilesKeepNamesAndRequireSpeakingEvidence(string label)
+    {
+        var silent = TeamsSpeakerClassifier.Classify([new(label)], 0);
+        Assert.Equal(MeetingSpeakerReadStatus.Unavailable, silent.Status);
+        Assert.Empty(silent.SpeakingNames);
+        var active = TeamsSpeakerClassifier.Classify([new(label), new("Speaking", Parent: 0)], 16000);
+        Assert.Equal(MeetingSpeakerReadStatus.Readable, active.Status);
+        Assert.Equal(new[] { "Morgan" }, active.SpeakingNames);
+    }
+    [Fact]
+    public void CurrentTeamsSelfTileRemovesRolePrefixAndPreservesCommaInName()
+    {
+        var observation = TeamsSpeakerClassifier.Classify([
+            new("Myself video, Taylor, Jordan, Has control of production tools, Unmuted, Has context menu"),
+            new("You are speaking", Parent: 0)], 0);
+        Assert.Equal(MeetingSpeakerReadStatus.Readable, observation.Status);
+        Assert.Equal("Taylor, Jordan", observation.SelfName);
+        Assert.Equal(new[] { "Taylor, Jordan" }, observation.SpeakingNames);
+    }
+    [Fact]
+    public void UnmutedSelfTileIdentifiesSelfButDoesNotProveSpeaking()
+    {
+        var observation = TeamsSpeakerClassifier.Classify([
+            new("Myself video, Jordan, Unmuted, Has context menu")], 0);
+        Assert.Equal("Jordan", observation.SelfName);
+        Assert.Equal(MeetingSpeakerReadStatus.Unavailable, observation.Status);
+        Assert.Empty(observation.SpeakingNames);
+    }
+    [Fact]
+    public void CurrentTeamsDescriptionsInChatTextAreNotParticipantTiles()
+    {
+        var observation = TeamsSpeakerClassifier.Classify([
+            new("Morgan, video is on, Speaking", ControlType: 50026)], 0);
+        Assert.Equal(MeetingSpeakerReadStatus.Unavailable, observation.Status);
+        Assert.Empty(observation.SpeakingNames);
+    }
+    [Fact]
+    public void PartialStateWordsInNamesDoNotCreateTiles()
+    {
+        var observation = TeamsSpeakerClassifier.Classify([
+            new("Morgan, Video online, Speaking"), new("Jordan, Unmuted guest, Speaking")], 0);
+        Assert.Equal(MeetingSpeakerReadStatus.Unavailable, observation.Status);
+        Assert.Empty(observation.SpeakingNames);
+    }
+    [Fact]
+    public void CurrentTeamsNamesAndSilenceMarkersRemainConsistentAcrossDuplicateTiles()
+    {
+        var observation = TeamsSpeakerClassifier.Classify([
+            new("Myself video, Jordan, Unmuted, Has context menu", ItemStatus: "Not speaking"),
+            new("Morgan, video is on, Context menu is available", ItemStatus: "Speaking"),
+            new("Morgan, video is on, Has control of production tools", HelpText: "Speaking")], 0);
+        Assert.Equal(MeetingSpeakerReadStatus.Readable, observation.Status);
+        Assert.Equal("Jordan", observation.SelfName);
+        Assert.Equal(new[] { "Morgan" }, observation.SpeakingNames);
     }
     [Fact]
     public void RosterAndVideoStateDoNotProveSpeaking()
@@ -104,14 +165,21 @@ public sealed class TeamsSpeakerObserverTests(ITestOutputHelper output)
         using var teams = Process.GetProcessesByName("ms-teams").FirstOrDefault(process => process.MainWindowHandle != 0);
         if (teams is null) { output.WriteLine("Teams is not open; no live validation."); return; }
         await using var observer = new TeamsSpeakerObserver();
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var received = new TaskCompletionSource<MeetingSpeakerObservation>(TaskCreationOptions.RunContinuationsAsynchronously);
-        await observer.StartAsync(teams.Id, () => 16000, observation => received.TrySetResult(observation), timeout.Token);
-        var result = await received.Task.WaitAsync(timeout.Token);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var readings = new ConcurrentQueue<(MeetingSpeakerObservation Observation, TeamsSpeakerReadDiagnostics Diagnostics)>();
+        await observer.StartAsync(teams.Id, () => 16000,
+            observation => readings.Enqueue((observation, observer.LastRead)), timeout.Token);
+        await Task.Delay(TimeSpan.FromSeconds(5), timeout.Token);
         await observer.StopAsync();
-        Assert.Equal(16000, result.SamplePosition);
-        Assert.True(Enum.IsDefined(result.Status));
-        output.WriteLine($"Teams observation status: {result.Status}; explicit speaking names: {result.SpeakingNames.Count}; self name available: {result.SelfName is not null}. Names redacted. A real meeting remains unqualified.");
-        output.WriteLine($"Visible windows: {observer.LastRead.WindowCount}; nodes inspected: {observer.LastRead.NodeCount}; budget exceeded: {observer.LastRead.BudgetExceeded}.");
+        Assert.NotEmpty(readings);
+        Assert.All(readings, reading =>
+        {
+            Assert.Equal(16000, reading.Observation.SamplePosition);
+            Assert.True(Enum.IsDefined(reading.Observation.Status));
+        });
+        var best = readings.OrderByDescending(reading => reading.Diagnostics.NodeCount).First();
+        output.WriteLine($"Readings: {readings.Count}; readable: {readings.Count(reading => reading.Observation.Status == MeetingSpeakerReadStatus.Readable)}; self name available: {readings.Any(reading => reading.Observation.SelfName is not null)}; explicit speaking names: {readings.Max(reading => reading.Observation.SpeakingNames.Count)}. Names redacted. Mapping a real meeting still requires separate qualification.");
+        output.WriteLine($"Most populated read: visible windows {best.Diagnostics.WindowCount}; nodes inspected {best.Diagnostics.NodeCount}; budget exceeded {best.Diagnostics.BudgetExceeded}; error HRESULT {best.Diagnostics.ErrorHResult:X8}.");
+        output.WriteLine($"Budget failures: {readings.Count(reading => reading.Diagnostics.BudgetExceeded)}; errors: {string.Join(", ", readings.Where(reading => reading.Diagnostics.ErrorHResult is not null).Select(reading => $"{reading.Diagnostics.ErrorHResult:X8}").Distinct())}.");
     }
 }

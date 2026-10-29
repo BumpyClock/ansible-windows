@@ -1,14 +1,19 @@
 using System.Threading.Channels;
+using System.Diagnostics;
 
 namespace Ansible.Core;
 
 public enum MeetingSessionPhase { Idle, Starting, Recording, Paused, Finishing, Completed, Failed, Refining }
+public enum MeetingTextCleanupState { None, Running, Completed, Cancelled, Failed }
 
 public sealed record MeetingSessionSnapshot(long Version, MeetingSessionPhase Phase, MeetingDocument? Document,
     double CapturedSeconds, double PendingSeconds, string? Error)
 {
     /// <summary>Why an unconfigured meeting skipped an installed pair, or null when the first candidate was used.</summary>
     public string? SelectionNotice { get; init; }
+    public MeetingCaptureHealth? CaptureHealth { get; init; }
+    public MeetingTextCleanupState TextCleanup { get; init; }
+    public string? TextCleanupError { get; init; }
 }
 
 public sealed class MeetingSession : IAsyncDisposable
@@ -24,21 +29,31 @@ public sealed class MeetingSession : IAsyncDisposable
     private readonly Func<IMeetingRecognitionEngine> _engineFactory;
     private readonly IMeetingCaptureFactory _captureFactory;
     private readonly MeetingStore _store;
+    private readonly LocalDiagnosticLog? _diagnostics;
+    private readonly IMeetingTextCleanup? _textCleanup;
+    private readonly Func<MeetingCleanupSettings>? _getCleanupSettings;
+    private MeetingCleanupSettings _cleanupSettings = new();
+    private CancellationTokenSource? _textCleanupCancellation;
+    private Guid _diagnosticOperationId;
+    private long? _diagnosticGeneration;
+    private long _diagnosticStartedAt;
+    private int _diagnosticTerminal;
+    private volatile MeetingDiagnosticStage _diagnosticStage;
+    private MeetingDiagnosticFailure? _diagnosticFailure;
+    private long _recognitionUpdates;
+    private long _processedSamples = -1;
+    private double _nextPipelineLogSeconds;
     private readonly Func<RecognitionOptions> _getOptions;
     private readonly Func<string?>? _getModelId;
     private readonly Func<Task> _reserve;
     private readonly Func<Task> _release;
     private readonly Func<IMeetingSpeakerObserver>? _observerFactory;
     private readonly Func<IMeetingWordAligner>? _alignerFactory;
-    private IMeetingSpeakerObserver? _observer;
-    private IMeetingWordAligner? _aligner;
-    private bool _alignmentUnavailable;
-    private MeetingAudioTimeline _timeline = new();
-    private MeetingSpeakerMatcher _speakerMatcher = new();
+    private MeetingSpeakerEvidence? _evidence;
     private MeetingSessionSnapshot _state = new(0, MeetingSessionPhase.Idle, null, 0, 0, null);
     private MeetingCaptureRequest? _request;
     private IMeetingRecognitionEngine? _engine;
-    private IAudioCapture? _capture;
+    private IMeetingCapture? _capture;
     private CancellationTokenSource? _cancellation;
     private CancellationTokenSource? _preparation;
     private Channel<byte[]>? _audio;
@@ -48,27 +63,33 @@ public sealed class MeetingSession : IAsyncDisposable
     private Task _pump = Task.CompletedTask;
     private Task _recognition = Task.CompletedTask;
     private long _capturedSamples;
-    private long _captureClockBase;
     private bool _reserved;
     private bool _disposed;
     private int _disposing;
     private bool _discarding;
 
+    private sealed record MeetingDiagnosticFailure(MeetingDiagnosticStage Stage, int ErrorHResult);
+
     public MeetingSession(Func<IMeetingRecognitionEngine> engineFactory, IMeetingCaptureFactory captureFactory,
         MeetingStore store, Func<RecognitionOptions> getOptions, Func<Task>? reserve = null, Func<Task>? release = null,
         Func<IMeetingSpeakerObserver>? observerFactory = null, Func<IMeetingWordAligner>? alignerFactory = null,
-        Func<string?>? getModelId = null, Func<MeetingDocument, Task>? writeMeeting = null)
+        Func<string?>? getModelId = null, Func<MeetingDocument, Task>? writeMeeting = null,
+        LocalDiagnosticLog? diagnostics = null, IMeetingTextCleanup? textCleanup = null,
+        Func<MeetingCleanupSettings>? getCleanupSettings = null)
     {
         _engineFactory = engineFactory;
         _captureFactory = captureFactory;
         _store = store;
+        _diagnostics = diagnostics;
+        _textCleanup = textCleanup;
+        _getCleanupSettings = getCleanupSettings;
         _getOptions = getOptions;
         _getModelId = getModelId;
         _reserve = reserve ?? (() => Task.CompletedTask);
         _release = release ?? (() => Task.CompletedTask);
         _observerFactory = observerFactory;
         _alignerFactory = alignerFactory;
-        _persistence = new(writeMeeting ?? (document => _store.SaveAsync(document)), StorageFailed);
+        _persistence = new(writeMeeting ?? (document => _store.SaveAsync(document)), StorageFailed, diagnostics);
     }
 
     public event Action<MeetingSessionSnapshot>? StateChanged;
@@ -78,13 +99,41 @@ public sealed class MeetingSession : IAsyncDisposable
 
     public async Task StartAsync(MeetingCaptureRequest request)
     {
-        request.Validate();
+        try { request.Validate(); }
+        catch (Exception error)
+        {
+            if (_diagnostics?.CurrentGeneration is { } generation)
+            {
+                var id = Guid.NewGuid();
+                var started = Stopwatch.GetTimestamp();
+                _diagnostics.Write(new MeetingDiagnostic(id, DateTimeOffset.UtcNow, MeetingDiagnosticKind.Starting,
+                    MeetingDiagnosticStage.Prepare), generation);
+                _diagnostics.Write(new MeetingDiagnostic(id, DateTimeOffset.UtcNow, MeetingDiagnosticKind.Terminal,
+                    MeetingDiagnosticStage.Prepare, MeetingDiagnosticOutcome.Failed,
+                    DurationMilliseconds: Stopwatch.GetElapsedTime(started).TotalMilliseconds, ErrorHResult: error.HResult),
+                    generation);
+            }
+            throw;
+        }
         await _commands.WaitAsync();
         CancellationTokenSource? preparation = null;
+        var admitted = false;
         try
         {
             ObjectDisposedException.ThrowIf(_disposed || Volatile.Read(ref _disposing) != 0, this);
             if (IsActive) throw new InvalidOperationException("End the current meeting before starting another.");
+            await _recognition;
+            _diagnosticGeneration = _diagnostics?.CurrentGeneration;
+            _diagnosticOperationId = _diagnosticGeneration is null ? Guid.Empty : Guid.NewGuid();
+            _diagnosticStartedAt = _diagnosticGeneration is null ? 0 : Stopwatch.GetTimestamp();
+            lock (_gate)
+            {
+                _diagnosticTerminal = 0;
+                _diagnosticFailure = null;
+            }
+            _diagnosticStage = MeetingDiagnosticStage.Prepare;
+            admitted = true;
+            LogMeeting(MeetingDiagnosticKind.Starting);
             await SaveAsync();
             lock (_gate)
             {
@@ -92,6 +141,10 @@ public sealed class MeetingSession : IAsyncDisposable
                 _preparation = preparation = new();
             }
             var options = _getOptions() ?? throw new InvalidOperationException("Meeting recognition settings are unavailable.");
+            _cleanupSettings = _getCleanupSettings?.Invoke() ?? new();
+            _cleanupSettings.Validate();
+            if (_diagnosticGeneration is { } generation)
+                options = options with { Diagnostics = new(_diagnostics!, generation, _diagnosticOperationId, options.Backend) };
             var selectedId = _getModelId?.Invoke();
             await _reserve();
             lock (_gate)
@@ -104,21 +157,23 @@ public sealed class MeetingSession : IAsyncDisposable
             Publish();
             _request = request;
             _capturedSamples = 0;
+            _recognitionUpdates = 0;
+            _processedSamples = -1;
             _transcript = new();
-            _timeline = new();
-            _speakerMatcher = new();
-            _alignmentUnavailable = false;
             _discarding = false;
             _recognition = Task.CompletedTask;
             _pump = Task.CompletedTask;
             _cancellation?.Dispose();
             _cancellation = CancellationTokenSource.CreateLinkedTokenSource(preparation.Token);
+            var evidence = _evidence = new MeetingSpeakerEvidence(_observerFactory, _alignerFactory, request.ProcessId,
+                (kind, available, error) => LogMeeting(kind, error: error, available: available), _cancellation.Token);
             _audio = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(300)
             { SingleWriter = true, SingleReader = true, AllowSynchronousContinuations = false });
-            _reader = new PausableReader(_audio.Reader, _timeline.Append);
+            _reader = new PausableReader(_audio.Reader, evidence.Append);
             await SaveAsync();
             _engine = _engineFactory();
             var models = await _engine.ConnectAsync(_cancellation.Token);
+            _diagnosticStage = MeetingDiagnosticStage.SelectModel;
             var candidates = ModelSelectionPolicy.MeetingCandidates(models, selectedId);
             var requested = options;
             var skipped = new List<string>();
@@ -126,6 +181,7 @@ public sealed class MeetingSession : IAsyncDisposable
             for (var index = 0; index < candidates.Count; index++)
             {
                 model = candidates[index];
+                LogMeeting(MeetingDiagnosticKind.Candidate, model: model, explicitModel: selectedId is not null);
                 options = requested with { CustomDictionary = ModelSelectionPolicy.EffectiveDictionary(model, requested.CustomDictionary) };
                 try
                 {
@@ -134,12 +190,22 @@ public sealed class MeetingSession : IAsyncDisposable
                 }
                 catch (MeetingRealTimeException error) when (index < candidates.Count - 1)
                 {
+                    LogMeeting(MeetingDiagnosticKind.CandidateRejected, model: model,
+                        explicitModel: selectedId is not null, error: error);
                     // Unconfigured meetings continue down the documented order; an explicit choice is its only candidate.
                     skipped.Add(error.Message);
                 }
                 catch (MeetingRealTimeException error) when (skipped.Count > 0)
                 {
+                    LogMeeting(MeetingDiagnosticKind.CandidateRejected, model: model,
+                        explicitModel: selectedId is not null, error: error);
                     throw new MeetingRealTimeException(error.ModelId, error.Backend, error.RealTimeFactor, error.Maximum, string.Join(" ", skipped));
+                }
+                catch (MeetingRealTimeException error)
+                {
+                    LogMeeting(MeetingDiagnosticKind.CandidateRejected, model: model,
+                        explicitModel: selectedId is not null, error: error);
+                    throw;
                 }
             }
             if (skipped.Count > 0)
@@ -149,11 +215,12 @@ public sealed class MeetingSession : IAsyncDisposable
                 Publish();
             }
             _cancellation.Token.ThrowIfCancellationRequested();
+            _diagnosticStage = MeetingDiagnosticStage.Capture;
             _capture = await _captureFactory.StartAsync(request, _cancellation.Token);
             _cancellation.Token.ThrowIfCancellationRequested();
-            AttachSourceMetadata(_capture);
+            await AttachCaptureAsync(_capture);
             _pump = PumpAsync(_capture, _cancellation.Token);
-            await StartObserverAsync();
+            _diagnosticStage = MeetingDiagnosticStage.Recognize;
             var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             _recognition = Task.Run(() => RecognizeAsync(model!, options, ready));
             if (await Task.WhenAny(ready.Task, _recognition) == _recognition)
@@ -169,16 +236,28 @@ public sealed class MeetingSession : IAsyncDisposable
         }
         catch (Exception error)
         {
-            if (error is CaptureOwnershipException ownership) _capture = ownership.Capture;
-            if (IsActive)
+            var failureStage = _diagnosticStage;
+            if (admitted && error is not OperationCanceledException)
+                RememberDiagnosticFailure(failureStage, error);
+            try
             {
-                SetPhase(MeetingSessionPhase.Failed, MeetingStatus.Failed, error.Message);
-                _cancellation?.Cancel();
-                _reader?.Resume();
-                _audio?.Writer.TryComplete(error);
-                await _recognition;
-                try { await ReleaseResourcesAsync(); }
-                finally { await SaveAsync(); }
+                if (error is MeetingCaptureOwnershipException ownership) _capture = ownership.Capture;
+                if (admitted && IsActive)
+                {
+                    FailMeeting(failureStage, error, recordDiagnostic: error is not OperationCanceledException);
+                    _cancellation?.Cancel();
+                    _reader?.Resume();
+                    _audio?.Writer.TryComplete(error);
+                    await _recognition;
+                    try { await ReleaseResourcesAsync(); }
+                    finally { await SaveAsync(); }
+                }
+            }
+            finally
+            {
+                if (admitted)
+                    LogMeetingTerminal(error is OperationCanceledException ? MeetingDiagnosticOutcome.Cancelled :
+                        MeetingDiagnosticOutcome.Failed, error, failureStage);
             }
             throw;
         }
@@ -208,10 +287,11 @@ public sealed class MeetingSession : IAsyncDisposable
             SetPhase(MeetingSessionPhase.Paused, MeetingStatus.Paused);
             await StopCaptureAsync();
             await SaveAsync();
+            LogMeeting(MeetingDiagnosticKind.Paused);
         }
         catch (Exception error)
         {
-            SetPhase(MeetingSessionPhase.Failed, MeetingStatus.Failed, error.Message);
+            FailMeeting(MeetingDiagnosticStage.Cleanup, error);
             _cancellation?.Cancel();
             _reader?.Resume();
             _audio?.Writer.TryComplete(error);
@@ -229,18 +309,18 @@ public sealed class MeetingSession : IAsyncDisposable
             RequirePhase(MeetingSessionPhase.Paused);
             if (_capture is not null) throw new InvalidOperationException("Release the previous capture before resuming the meeting.");
             _capture = await _captureFactory.StartAsync(_request!, _cancellation!.Token);
-            AttachSourceMetadata(_capture);
-            await StartObserverAsync();
+            await AttachCaptureAsync(_capture);
             SetPhase(MeetingSessionPhase.Recording, MeetingStatus.Recording);
             await Task.Run(FlushPendingUpdate);
             _reader!.Resume();
             _pump = PumpAsync(_capture, _cancellation.Token);
             await SaveAsync();
+            LogMeeting(MeetingDiagnosticKind.Resumed);
         }
-        catch (CaptureOwnershipException error)
+        catch (MeetingCaptureOwnershipException error)
         {
             _capture = error.Capture;
-            SetPhase(MeetingSessionPhase.Failed, MeetingStatus.Failed, error.Message);
+            FailMeeting(MeetingDiagnosticStage.Capture, error);
             _cancellation!.Cancel();
             _reader!.Resume();
             _audio!.Writer.TryComplete(error);
@@ -264,7 +344,12 @@ public sealed class MeetingSession : IAsyncDisposable
         await _commands.WaitAsync();
         try
         {
-            if (!IsActive) { await SaveAsync(); return; }
+            if (!IsActive)
+            {
+                await _recognition;
+                await SaveAsync();
+                return;
+            }
             SetPhase(MeetingSessionPhase.Finishing, MeetingStatus.Finishing);
             if (discard)
             {
@@ -280,7 +365,7 @@ public sealed class MeetingSession : IAsyncDisposable
             if (!discard && State.Error is null)
             {
                 SetPhase(MeetingSessionPhase.Refining, MeetingStatus.Finishing);
-                lock (_gate) _state = _state with { Document = _speakerMatcher.Refine(_state.Document!) };
+                lock (_gate) _state = _state with { Document = _evidence!.NameSpeakers(_state.Document!) };
                 Publish();
             }
             await ReleaseResourcesAsync();
@@ -288,15 +373,23 @@ public sealed class MeetingSession : IAsyncDisposable
                 SetPhase(MeetingSessionPhase.Completed, discard ? MeetingStatus.Interrupted : MeetingStatus.Completed);
             else SetPhase(MeetingSessionPhase.Failed, MeetingStatus.Failed);
             await SaveAsync();
+            LogMeetingTerminal(State.Error is null ? discard ? MeetingDiagnosticOutcome.Discarded :
+                MeetingDiagnosticOutcome.Completed : MeetingDiagnosticOutcome.Failed);
+            if (!discard && State.Error is null && Volatile.Read(ref _disposing) == 0)
+                await CleanCompletedMeetingAsync();
         }
         catch (Exception error)
         {
-            SetPhase(MeetingSessionPhase.Failed, MeetingStatus.Failed, error.Message);
+            FailMeeting(MeetingDiagnosticStage.Cleanup, error);
             _cancellation?.Cancel();
             _reader?.Resume();
             _audio?.Writer.TryComplete(error);
-            await _recognition;
-            await SaveAsync();
+            try
+            {
+                await _recognition;
+                await SaveAsync();
+            }
+            finally { LogMeetingTerminal(MeetingDiagnosticOutcome.Failed, error); }
             throw;
         }
         finally { _commands.Release(); }
@@ -314,17 +407,20 @@ public sealed class MeetingSession : IAsyncDisposable
         catch (OperationCanceledException) when (_cancellation!.IsCancellationRequested) { }
         catch (Exception error)
         {
+            FailMeeting(MeetingDiagnosticStage.Recognize, error, publish: false);
             _cancellation!.Cancel();
             _reader!.Resume();
             _audio!.Writer.TryComplete(error);
-            SetPhase(MeetingSessionPhase.Failed, MeetingStatus.Failed, error.Message);
+            Publish();
         }
         finally
         {
+            LogPipeline();
             if (State.Phase == MeetingSessionPhase.Failed)
             {
                 try { await ReleaseResourcesAsync(); await SaveAsync(); }
                 catch (Exception error) { SetPhase(MeetingSessionPhase.Failed, MeetingStatus.Failed, $"{State.Error} {error.Message}"); }
+                LogMeetingTerminal(MeetingDiagnosticOutcome.Failed);
             }
         }
     }
@@ -359,8 +455,9 @@ public sealed class MeetingSession : IAsyncDisposable
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         catch (Exception error)
         {
+            FailMeeting(MeetingDiagnosticStage.Capture, error, publish: false);
             _audio!.Writer.TryComplete(error);
-            SetPhase(MeetingSessionPhase.Failed, MeetingStatus.Failed, error.Message);
+            Publish();
             _cancellation!.Cancel();
             _reader!.Resume();
         }
@@ -399,32 +496,27 @@ public sealed class MeetingSession : IAsyncDisposable
         var processed = update.ProcessedSamples ?? _reader!.ReadSamples;
         if (processed < 0 || processed > _reader!.ReadSamples)
             throw new InvalidDataException("Recognition returned a timestamp outside the consumed audio.");
-        var turns = update.SpeakerTurns is { } timed
-            ? ValidateTimedTurns(timed, processed, update.IsFinal)
-            : _transcript.Update(update.Text, processed / 16000.0, update.IsFinal).ToArray();
+        Interlocked.Increment(ref _recognitionUpdates);
+        Interlocked.Exchange(ref _processedSamples, update.ProcessedSamples ?? -1);
         var previous = Document!.Turns;
-        for (var index = 0; update.SpeakerTurns is null && index < turns.Length; index++)
+        var evidence = _evidence!;
+        MeetingTurn[] turns;
+        if (update.SpeakerTurns is { } timed)
         {
-            var old = index < previous.Count ? previous[index] : null;
-            if (old?.SpeakerId == turns[index].SpeakerId && old.Text == turns[index].Text)
-                turns[index] = old with { IsProvisional = turns[index].IsProvisional };
+            turns = ValidateTimedTurns(timed, processed, update.IsFinal);
+            evidence.RefineTimedTurns(turns, previous);
         }
-        if (update.SpeakerTurns is null) RefineTiming(turns, processed);
-        for (var index = 0; index < turns.Length; index++)
+        else
         {
-            var turn = turns[index];
-            if (turn.TimingQuality != MeetingTimingQuality.Aligned) continue;
-            var old = index < previous.Count ? previous[index] : null;
-            var unchangedBounds = old?.TimingQuality == MeetingTimingQuality.Aligned &&
-                old.StartSeconds == turn.StartSeconds && old.EndSeconds == turn.EndSeconds;
-            turns[index] = turn with { Source = unchangedBounds ? old!.Source : _timeline.Source(turn.StartSeconds, turn.EndSeconds) };
+            turns = _transcript.Update(update.Text, processed / 16000.0, update.IsFinal).ToArray();
+            evidence.RefineChunkTurns(turns, previous, processed);
         }
         lock (_gate)
         {
             if (_discarding) return;
             if (_state.Phase == MeetingSessionPhase.Paused) { _pendingUpdate = update; return; }
             var document = _state.Document! with { Turns = turns, UpdatedAt = DateTimeOffset.UtcNow };
-            _state = _state with { Version = _state.Version + 1, Document = _speakerMatcher.Refine(document),
+            _state = _state with { Version = _state.Version + 1, Document = evidence.NameSpeakers(document),
                 PendingSeconds = Math.Max(0, (_capturedSamples - _reader!.ReadSamples) / 16000.0) };
         }
     }
@@ -487,86 +579,149 @@ public sealed class MeetingSession : IAsyncDisposable
         {
             if (IsActive || Document?.Status != MeetingStatus.Completed || Document.Turns.Any(turn => turn.IsProvisional))
                 throw new InvalidOperationException("End the meeting before cleaning its transcript.");
-            MeetingDocument updated;
-            lock (_gate)
-            {
-                var document = _state.Document ?? throw new InvalidOperationException("No meeting transcript is open.");
-                if (texts.Count != document.Turns.Count || texts.Any(text => string.IsNullOrWhiteSpace(text) || text.Contains('\0')))
-                    throw new ArgumentException("Cleanup must retain every existing transcript turn.");
-                var turns = document.Turns.Select((turn, index) => turn with
-                    { OriginalText = turn.OriginalText ?? turn.Text, Text = texts[index] }).ToArray();
-                updated = document with { Turns = turns, UpdatedAt = DateTimeOffset.UtcNow };
-            }
-            long revision;
-            lock (_gate)
-            {
-                revision = _state.Version + 1;
-                _state = _state with { Version = revision };
-                _persistence.Queue(revision, updated);
-            }
-            await _persistence.FlushAsync(revision);
-            lock (_gate) _state = _state with { Version = _state.Version + 1, Document = updated };
-            Publish();
+            SetTextCleanupState(MeetingTextCleanupState.None);
+            await ApplyCleanupCoreAsync(texts);
         }
         finally { _commands.Release(); }
     }
 
-    private void AttachSourceMetadata(IAudioCapture capture)
+    private async Task ApplyCleanupCoreAsync(IReadOnlyList<string> texts)
     {
-        var start = Interlocked.Read(ref _capturedSamples);
-        Interlocked.Exchange(ref _captureClockBase, start);
-        if (capture is IMeetingAudioSourceMetadata metadata)
-            metadata.Activity += activity => _timeline.Observe(activity with { StartSample = start + activity.StartSample });
+        MeetingDocument updated;
+        lock (_gate)
+        {
+            var document = _state.Document ?? throw new InvalidOperationException("No meeting transcript is open.");
+            if (texts.Count != document.Turns.Count || texts.Any(text => string.IsNullOrWhiteSpace(text) || text.Contains('\0')))
+                throw new ArgumentException("Cleanup must retain every existing transcript turn.");
+            var turns = document.Turns.Select((turn, index) => turn with
+                { OriginalText = turn.OriginalText ?? turn.Text, Text = texts[index] }).ToArray();
+            updated = document with { Turns = turns, UpdatedAt = DateTimeOffset.UtcNow };
+        }
+        long revision;
+        lock (_gate)
+        {
+            revision = _state.Version + 1;
+            _state = _state with { Version = revision };
+            _persistence.Queue(revision, updated);
+        }
+        await FlushMeetingAsync(revision);
+        lock (_gate) _state = _state with { Version = _state.Version + 1, Document = updated };
+        Publish();
     }
 
-    private async Task StartObserverAsync()
+    public void CancelTextCleanup()
     {
-        if (_observerFactory is null || _request?.ProcessId is not > 0)
-            return;
-        _observer ??= _observerFactory();
-        try
-        {
-            await _observer.StartAsync(_request.ProcessId.Value, ObservationSamplePosition,
-                _speakerMatcher.Observe, _cancellation!.Token);
-        }
-        catch (Exception error) when (error is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or System.Runtime.InteropServices.COMException)
-        {
-            System.Diagnostics.Trace.TraceWarning("Ansible: automatic speaker names unavailable. {0}", error.Message);
-        }
+        lock (_gate) _textCleanupCancellation?.Cancel();
     }
 
-    private long ObservationSamplePosition() => _capture is IMeetingAudioSourceMetadata metadata
-        ? Interlocked.Read(ref _captureClockBase) + metadata.ClockSamplePosition
-        : Interlocked.Read(ref _capturedSamples);
-
-    private void RefineTiming(MeetingTurn[] turns, long processed)
+    private async Task CleanCompletedMeetingAsync()
     {
-        if (_alignerFactory is null || _alignmentUnavailable) return;
-        var clip = _timeline.Clip(processed);
-        if (clip is null) return;
-        var origin = clip.Value.StartSample / 16000.0;
-        var indices = Enumerable.Range(0, turns.Length).Where(index =>
-            !turns[index].IsProvisional && (turns[index].TimingQuality == MeetingTimingQuality.Aligned
-                ? turns[index].EndSeconds > origin : turns[index].StartSeconds >= origin)).ToArray();
-        if (!indices.Any(index => turns[index].TimingQuality != MeetingTimingQuality.Aligned)) return;
+        if (!_cleanupSettings.Automatic || Document is not { Status: MeetingStatus.Completed, Turns.Count: > 0 } document ||
+            document.Turns.Any(turn => turn.IsProvisional)) return;
+        using var cancellation = new CancellationTokenSource();
+        lock (_gate) _textCleanupCancellation = cancellation;
+        SetTextCleanupState(MeetingTextCleanupState.Running);
         try
         {
-            _aligner ??= _alignerFactory();
-            _aligner.InitializeAsync(_cancellation!.Token).GetAwaiter().GetResult();
-            var candidates = indices.Select(index => turns[index] with
-                { StartSeconds = Math.Max(0, turns[index].StartSeconds - origin), EndSeconds = turns[index].EndSeconds - origin }).ToArray();
-            var aligned = _aligner.AlignAsync(clip.Value.Audio, candidates, _cancellation.Token).GetAwaiter().GetResult();
-            for (var index = 0; index < indices.Length; index++)
-                if (turns[indices[index]].TimingQuality != MeetingTimingQuality.Aligned && aligned[index].TimingQuality == MeetingTimingQuality.Aligned)
-                    turns[indices[index]] = aligned[index] with
-                        { StartSeconds = aligned[index].StartSeconds + origin, EndSeconds = aligned[index].EndSeconds + origin };
+            var provider = _textCleanup ?? throw new InvalidOperationException("Transcript cleanup is not configured. Open Settings.");
+            var texts = await provider.CleanAsync(document, _cleanupSettings.Options, cancellation.Token);
+            cancellation.Token.ThrowIfCancellationRequested();
+            await ApplyCleanupCoreAsync(texts);
+            SetTextCleanupState(MeetingTextCleanupState.Completed);
         }
-        catch (OperationCanceledException) when (_cancellation!.IsCancellationRequested) { }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+            SetTextCleanupState(MeetingTextCleanupState.Cancelled);
+        }
         catch (Exception error)
         {
-            _alignmentUnavailable = true;
-            System.Diagnostics.Trace.TraceWarning("Ansible: optional timing refinement unavailable. {0}", error.Message);
+            SetTextCleanupState(MeetingTextCleanupState.Failed, error.Message);
         }
+        finally { lock (_gate) _textCleanupCancellation = null; }
+    }
+
+    private void SetTextCleanupState(MeetingTextCleanupState state, string? error = null)
+    {
+        lock (_gate) _state = _state with { Version = _state.Version + 1, TextCleanup = state, TextCleanupError = error };
+        Publish();
+    }
+
+    private async Task AttachCaptureAsync(IMeetingCapture capture)
+    {
+        _nextPipelineLogSeconds = 0;
+        capture.HealthChanged += CaptureHealthChanged;
+        if (capture.Health is { } health) CaptureHealthChanged(health);
+        await _evidence!.AttachAsync(capture, Interlocked.Read(ref _capturedSamples));
+    }
+
+    private void CaptureHealthChanged(MeetingCaptureHealth health)
+    {
+        lock (_gate) _state = _state with { Version = _state.Version + 1, CaptureHealth = health };
+        Publish();
+        if (health.ElapsedSeconds < _nextPipelineLogSeconds) return;
+        _nextPipelineLogSeconds = health.ElapsedSeconds + 5;
+        LogPipeline();
+    }
+
+    private void LogPipeline()
+    {
+        if (_diagnostics?.Enabled != true) return;
+        var state = State;
+        if (state.CaptureHealth is not { } health) return;
+        var processed = Interlocked.Read(ref _processedSamples);
+        _diagnostics?.Write(new MeetingCaptureDiagnostic(health.CaptureId, DateTimeOffset.UtcNow, MeetingCaptureDiagnosticKind.Pipeline,
+            MeetingCaptureStage.Mix, health, Pipeline: new(state.Phase, Interlocked.Read(ref _capturedSamples) / 16000.0,
+                (_reader?.ReadSamples ?? 0) / 16000.0, Interlocked.Read(ref _recognitionUpdates),
+                processed < 0 ? null : processed / 16000.0))
+        {
+            MeetingOperationId = _diagnosticGeneration is not null &&
+                _diagnosticGeneration == _diagnostics?.CurrentGeneration ? _diagnosticOperationId : null
+        });
+    }
+
+    private void LogMeeting(MeetingDiagnosticKind kind, MeetingDiagnosticOutcome? outcome = null,
+        AudioModel? model = null, bool? explicitModel = null, Exception? error = null, bool? available = null,
+        MeetingDiagnosticStage? stage = null, int? errorHResult = null)
+    {
+        if (_diagnosticGeneration is not { } generation) return;
+        var family = model?.Family switch
+        {
+            "nemotron_asr" => MeetingModelFamily.Nemotron,
+            "kroko_asr" => MeetingModelFamily.Kroko,
+            "vibevoice_asr_streaming" => MeetingModelFamily.VibeVoiceStreaming,
+            _ => (MeetingModelFamily?)null
+        };
+        var captureId = _capture?.Health?.CaptureId;
+        _diagnostics!.Write(new MeetingDiagnostic(_diagnosticOperationId, DateTimeOffset.UtcNow, kind,
+            stage ?? _diagnosticStage, outcome, family, explicitModel, captureId,
+            kind == MeetingDiagnosticKind.Terminal ? Stopwatch.GetElapsedTime(_diagnosticStartedAt).TotalMilliseconds : null,
+            errorHResult ?? error?.HResult)
+        {
+            Available = available,
+            ModelId = model is null ? null : NativeDiagnosticContext.SafeModelId(model.Id),
+            RetainedResources = kind == MeetingDiagnosticKind.Terminal
+                ? _capture?.IsReleased == false || _engine is not null || _evidence?.HasResources == true ||
+                    IsActive : null,
+            RealTimeFactor = error is MeetingRealTimeException realtime && double.IsFinite(realtime.RealTimeFactor)
+                ? realtime.RealTimeFactor : null,
+            MaximumRealTimeFactor = error is MeetingRealTimeException limit && double.IsFinite(limit.Maximum)
+                ? limit.Maximum : null,
+            QualifiedBackend = (error as MeetingRealTimeException)?.Backend
+        }, generation);
+    }
+
+    private void LogMeetingTerminal(MeetingDiagnosticOutcome outcome, Exception? error = null,
+        MeetingDiagnosticStage? stage = null)
+    {
+        MeetingDiagnosticFailure? failure;
+        lock (_gate)
+        {
+            if (_diagnosticTerminal != 0) return;
+            _diagnosticTerminal = 1;
+            failure = _diagnosticFailure;
+        }
+        LogMeeting(MeetingDiagnosticKind.Terminal, failure is null ? outcome : MeetingDiagnosticOutcome.Failed,
+            error: error, stage: failure?.Stage ?? stage, errorHResult: failure?.ErrorHResult);
     }
 
     public async Task RenameSpeakerAsync(string id, string name)
@@ -598,13 +753,35 @@ public sealed class MeetingSession : IAsyncDisposable
         }
     }
 
-    private Task SaveAsync() => Document is null ? Task.CompletedTask : _persistence.FlushAsync(QueueSave());
+    private Task SaveAsync() => Document is null ? Task.CompletedTask : FlushMeetingAsync(QueueSave());
+
+    private async Task FlushMeetingAsync(long revision)
+    {
+        var generation = _diagnostics?.CurrentGeneration;
+        var started = generation is null ? 0 : Stopwatch.GetTimestamp();
+        Exception? failure = null;
+        try { await _persistence.FlushAsync(revision); }
+        catch (Exception error)
+        {
+            failure = error;
+            RememberDiagnosticFailure(MeetingDiagnosticStage.Storage, error);
+            throw;
+        }
+        finally
+        {
+            if (generation is { } value)
+                _diagnostics!.Write(new StorageDiagnostic(DateTimeOffset.UtcNow, StorageDiagnosticCategory.Meeting,
+                    StorageDiagnosticStage.Flush, failure is null ? DiagnosticOutcome.Completed : DiagnosticOutcome.Failed,
+                    Stopwatch.GetElapsedTime(started).TotalMilliseconds, failure?.HResult), value);
+        }
+    }
 
     private void StorageFailed(Exception error)
     {
         // Inactive edits report failure to their awaiting caller and retain their committed transcript.
         if (!IsActive) return;
-        SetPhase(MeetingSessionPhase.Failed, MeetingStatus.Failed, $"Meeting transcript save failed. {error.Message}");
+        _diagnosticStage = MeetingDiagnosticStage.Storage;
+        FailMeeting(MeetingDiagnosticStage.Storage, error, $"Meeting transcript save failed. {error.Message}");
         _cancellation?.Cancel();
         _reader?.Resume();
         _audio?.Writer.TryComplete(error);
@@ -619,17 +796,17 @@ public sealed class MeetingSession : IAsyncDisposable
 
     private async Task StopCaptureCoreAsync()
     {
-        if (_observer is not null)
-        {
-            await _observer.StopAsync();
-            _speakerMatcher.Observe(new(ObservationSamplePosition(), [], null, MeetingSpeakerReadStatus.Unavailable));
-        }
         var capture = _capture;
         if (capture is null) return;
-        await capture.StopAsync();
-        await _pump;
+        await _evidence!.DetachAsync(async () =>
+        {
+            await capture.StopAsync();
+            await _pump;
+        });
+        LogPipeline();
+        capture.HealthChanged -= CaptureHealthChanged;
         await capture.DisposeAsync();
-        if (!capture.IsReleased) throw new InvalidOperationException("Meeting audio resources remain owned. Retry ending the meeting.");
+        if (!capture.IsReleased) throw new InvalidOperationException("Meeting audio resources remain owned. New capture is blocked.");
         _capture = null;
     }
 
@@ -640,9 +817,7 @@ public sealed class MeetingSession : IAsyncDisposable
         {
             await StopCaptureCoreAsync();
             if (_engine is { } engine) { await Task.Run(async () => await engine.DisposeAsync()); _engine = null; }
-            if (_aligner is { } aligner) { await Task.Run(async () => await aligner.DisposeAsync()); _aligner = null; }
-            if (_observer is { } observer) { await observer.DisposeAsync(); _observer = null; }
-            _timeline = new();
+            if (_evidence is { } evidence) await evidence.DisposeAsync();
             if (IsActive)
             {
                 await _release();
@@ -660,6 +835,36 @@ public sealed class MeetingSession : IAsyncDisposable
     private void RequirePhase(MeetingSessionPhase phase)
     {
         if (State.Phase != phase || !IsActive) throw new InvalidOperationException($"The meeting must be {phase.ToString().ToLowerInvariant()} for this action.");
+    }
+
+    private void RememberDiagnosticFailure(MeetingDiagnosticStage stage, Exception error)
+    {
+        lock (_gate) RememberDiagnosticFailureLocked(stage, error);
+    }
+
+    private void RememberDiagnosticFailureLocked(MeetingDiagnosticStage stage, Exception error)
+    {
+        if (_diagnosticGeneration is not null && _diagnosticTerminal == 0 && _diagnosticFailure is null)
+            _diagnosticFailure = new(stage, error.HResult);
+    }
+
+    private void FailMeeting(MeetingDiagnosticStage stage, Exception error, string? message = null,
+        bool recordDiagnostic = true, bool publish = true)
+    {
+        lock (_gate)
+        {
+            if (recordDiagnostic) RememberDiagnosticFailureLocked(stage, error);
+            _state = _state with
+            {
+                Version = _state.Version + 1,
+                Phase = MeetingSessionPhase.Failed,
+                Error = _state.Phase == MeetingSessionPhase.Failed && _state.Error is not null
+                    ? _state.Error : message ?? error.Message,
+                Document = _state.Document is { } document
+                    ? document with { Status = MeetingStatus.Failed, UpdatedAt = DateTimeOffset.UtcNow } : null
+            };
+        }
+        if (publish) Publish();
     }
 
     private void SetPhase(MeetingSessionPhase phase, MeetingStatus status, string? error = null)
@@ -683,6 +888,7 @@ public sealed class MeetingSession : IAsyncDisposable
     {
         if (_disposed) return;
         Interlocked.Exchange(ref _disposing, 1);
+        CancelTextCleanup();
         CancelPreparation();
         await EndAsync();
         await _recognition;
