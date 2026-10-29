@@ -227,6 +227,69 @@ public sealed partial class DictationSessionTests
     }
 
     [Fact]
+    public async Task EntryThatCannotBeSerializedIsDroppedWhileLaterEntriesStillWrite()
+    {
+        var directory = Path.Combine(AppContext.BaseDirectory, "diagnostics-test-" + Guid.NewGuid().ToString("N"));
+        var log = new LocalDiagnosticLog(directory);
+        log.SetEnabled(true);
+        var generation = log.CurrentGeneration!.Value;
+        var id = Guid.NewGuid();
+        try
+        {
+            log.Write(Terminal(id, double.NaN), generation);
+            log.Write(Terminal(id, 12), generation);
+            await log.DisposeAsync();
+
+            Assert.Equal(1, log.DroppedEvents);
+            var line = Assert.Single(await File.ReadAllLinesAsync(Path.Combine(directory, "local-diagnostics.jsonl")));
+            using var json = JsonDocument.Parse(line);
+            Assert.Equal(12, json.RootElement.GetProperty("DurationMilliseconds").GetDouble());
+            Assert.Equal(1, json.RootElement.GetProperty("DroppedEvents").GetInt64());
+        }
+        finally
+        {
+            await log.DisposeAsync();
+            if (Directory.Exists(directory)) Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public async Task UnexpectedAppendFailureDropsOnlyThatEntryAndDisposeCompletes()
+    {
+        var directory = Path.Combine(AppContext.BaseDirectory, "diagnostics-test-" + Guid.NewGuid().ToString("N"));
+        var written = new List<string>();
+        var calls = 0;
+        var log = new LocalDiagnosticLog(directory, (_, line) =>
+        {
+            if (++calls == 1) throw new NotSupportedException("PRIVATE-EXCEPTION-PATH");
+            written.Add(line);
+            return Task.CompletedTask;
+        });
+        log.SetEnabled(true);
+        var generation = log.CurrentGeneration!.Value;
+        var id = Guid.NewGuid();
+        try
+        {
+            log.Write(Terminal(id, 1), generation);
+            log.Write(Terminal(id, 2), generation);
+            await log.DisposeAsync();
+
+            Assert.Equal(1, log.DroppedEvents);
+            Assert.Equal(2, calls);
+            Assert.DoesNotContain("PRIVATE-EXCEPTION-PATH", Assert.Single(written));
+        }
+        finally
+        {
+            await log.DisposeAsync();
+            if (Directory.Exists(directory)) Directory.Delete(directory, true);
+        }
+    }
+
+    private static OperationDiagnostic Terminal(Guid id, double durationMilliseconds) =>
+        new(id, DateTimeOffset.UtcNow, OperationDiagnosticKind.Terminal, SessionActivity.Dictation,
+            OperationDiagnosticStage.Recognize, SessionOutcomeKind.Completed, DurationMilliseconds: durationMilliseconds);
+
+    [Fact]
     public async Task DiagnosticEventsCorrelateCompletedAndCancelledOperationsWithoutContent()
     {
         var directory = Path.Combine(AppContext.BaseDirectory, "diagnostics-test-" + Guid.NewGuid().ToString("N"));
