@@ -221,6 +221,16 @@ input, cleanup-only retries, cancellation, and outcome propagation. Real
 Teams/Copilot field and terminal behavior still requires application qualification;
 a passing unit suite or package build does not establish it.
 
+### Prepared opt-in push checks
+
+The [tracked hook setup and fixture contract](../.githooks/README.md) targets
+`stack/10-docs`, including its linked app/probe test sources. It pins SDK 10.0.100
+and the deterministic test dependency graph. Installation is explicit through
+`tools/Install-GitHooks.ps1`; no hooks install automatically. Windows formatting
+and unit execution still need native qualification. The hook never loads the app
+MSBuild graph, whose pre-build target publishes DeviceProbe. It never downloads
+models or substitutes for the native and package gates below.
+
 ### Core and native checks
 
 Run the deterministic tests without native model dependencies:

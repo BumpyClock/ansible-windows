@@ -1,0 +1,4 @@
+# Keep Git Bash entrypoints portable when autocrlf is enabled.
+.githooks/pre-push text eol=lf
+.githooks/*.sh text eol=lf
+scripts/install-hooks.sh text eol=lf

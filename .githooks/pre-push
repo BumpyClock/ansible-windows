@@ -1,0 +1,43 @@
+#!/bin/sh
+set -eu
+root=$(git rev-parse --show-toplevel)
+cd "$root"
+head=$(git rev-parse HEAD)
+seen=0
+checks=0
+while read -r local_ref local_oid remote_ref remote_oid extra || [ -n "${local_ref:-}" ]; do
+  if [ -z "$local_ref" ] || [ -z "$local_oid" ] || [ -z "$remote_ref" ] || [ -z "$remote_oid" ] || [ -n "$extra" ]; then
+    echo 'Malformed pre-push input. Refusing unchecked push.' >&2
+    exit 1
+  fi
+  for oid in "$local_oid" "$remote_oid"; do
+    case "$oid" in *[!0-9a-fA-F]*) echo 'Invalid push object ID.' >&2; exit 1;; esac
+    if [ "${#oid}" -ne 40 ] && [ "${#oid}" -ne 64 ]; then
+      echo 'Invalid push object ID length.' >&2
+      exit 1
+    fi
+  done
+  seen=1
+  case "$local_oid" in *[!0]*)
+    if [ "$local_oid" != "$head" ]; then
+      echo 'Push ref is not checked-out HEAD. Use a clean checkout of that commit and retry.' >&2
+      exit 1
+    fi
+    checks=1
+  esac
+done
+# Full checks make new branches, missing remote bases, renames and deletions fail closed.
+if [ "$seen" -eq 1 ] && [ "$checks" -eq 0 ]; then
+  exit 0
+fi
+status=$(git status --porcelain --untracked-files=all)
+if [ -n "$status" ]; then
+  echo 'Pre-push requires a clean checkout, including untracked files. No files were changed.' >&2
+  exit 1
+fi
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) ;;
+  *) echo 'This hook requires Windows with Git Bash and PowerShell 7. No native checks ran.' >&2; exit 1;;
+esac
+command -v pwsh >/dev/null 2>&1 || { echo 'Install PowerShell 7 before using this opt-in hook.' >&2; exit 1; }
+exec pwsh -NoLogo -NoProfile -File .githooks/check.ps1
