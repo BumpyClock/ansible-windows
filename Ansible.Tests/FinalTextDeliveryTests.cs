@@ -7,6 +7,53 @@ public sealed class FinalTextDeliveryTests
     private static SessionOutcome Completed(string? speech) =>
         new(SessionOutcomeKind.Completed, new RecognitionResult("Speaker 0: display", speech));
 
+    [Theory]
+    [InlineData(TextDeliveryStatus.Sent, DeliveryDiagnosticOutcome.Sent)]
+    [InlineData(TextDeliveryStatus.Verified, DeliveryDiagnosticOutcome.Verified)]
+    [InlineData(TextDeliveryStatus.Rejected, DeliveryDiagnosticOutcome.Rejected)]
+    [InlineData(TextDeliveryStatus.Partial, DeliveryDiagnosticOutcome.Partial)]
+    [InlineData(TextDeliveryStatus.CleanupFailed, DeliveryDiagnosticOutcome.CleanupFailed)]
+    public async Task DeliveryTraceUsesTypedTerminalStatus(TextDeliveryStatus status, DeliveryDiagnosticOutcome expected)
+    {
+        var traces = new List<DeliveryTrace>();
+        var delivery = new FinalTextDelivery((_, _) =>
+            Task.FromResult(new TextDeliveryOutcome(status, "arbitrary private message")),
+            () => true, () => false, traces.Add);
+        await delivery.RunAsync(Task.FromResult(Completed("private speech")), CancellationToken.None);
+        var trace = Assert.Single(traces);
+        Assert.Equal(expected, trace.Outcome);
+        Assert.True(trace.ResultToDeliveryMilliseconds >= 0);
+    }
+
+    [Theory]
+    [InlineData(null, DeliveryDiagnosticOutcome.NoAuthoritativeSpeech)]
+    [InlineData("", DeliveryDiagnosticOutcome.EmptySpeech)]
+    public async Task DeliveryTraceDistinguishesMissingAndEmptySpeech(string? speech, DeliveryDiagnosticOutcome expected)
+    {
+        var traces = new List<DeliveryTrace>();
+        var delivery = new FinalTextDelivery((_, _) => throw new InvalidOperationException(),
+            () => true, () => false, traces.Add);
+        await delivery.RunAsync(Task.FromResult(Completed(speech)), CancellationToken.None);
+        Assert.Equal(expected, Assert.Single(traces).Outcome);
+    }
+
+    [Fact]
+    public async Task DeliveryTraceSeparatesVerificationTimeFromResultToSend()
+    {
+        var traces = new List<DeliveryTrace>();
+        var delivery = new FinalTextDelivery(async (_, _) =>
+        {
+            await Task.Delay(20);
+            return TextDeliveryOutcome.Verified("verified", TextDeliveryReason.Verified) with
+                { VerificationMilliseconds = 1 };
+        }, () => true, () => false, traces.Add);
+        await delivery.RunAsync(Task.FromResult(Completed("speech")), CancellationToken.None);
+        var trace = Assert.Single(traces);
+        Assert.Equal(1, trace.VerificationMilliseconds);
+        Assert.True(trace.ResultToSendMilliseconds >= 0);
+        Assert.Equal(trace.ResultToDeliveryMilliseconds!.Value - 1, trace.ResultToSendMilliseconds!.Value, 5);
+    }
+
     [Fact]
     public async Task VibeVoiceFinalInsertsCleanedSpeechOnce()
     {
@@ -86,16 +133,18 @@ public sealed class FinalTextDeliveryTests
     public async Task CancellationWhileDeferredDoesNotInsert()
     {
         var calls = 0;
+        var traces = new List<DeliveryTrace>();
         var delivery = new FinalTextDelivery((_, _) =>
         {
             calls++;
             return Task.FromResult(TextDeliveryOutcome.Sent("ok"));
-        }, () => true, () => true);
+        }, () => true, () => true, traces.Add);
         using var cancellation = new CancellationTokenSource();
         var pending = delivery.RunAsync(Task.FromResult(Completed("speech")), cancellation.Token);
         cancellation.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
         Assert.Equal(0, calls);
+        Assert.Equal(DeliveryDiagnosticOutcome.Cancelled, Assert.Single(traces).Outcome);
     }
 
     [Fact]

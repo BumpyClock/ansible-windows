@@ -9,11 +9,13 @@ public sealed class DictationSession
     private readonly IAudioCaptureFactory _captureFactory;
     private readonly IAudioInputReader _input;
     private readonly IUsageStore _usageStore;
-    private readonly Channel<UsageEntry> _pendingUsage = Channel.CreateBounded<UsageEntry>(
+    private readonly Channel<(UsageEntry Entry, long? Generation)> _pendingUsage = Channel.CreateBounded<(UsageEntry, long?)>(
         new BoundedChannelOptions(32) { SingleReader = true, SingleWriter = true, FullMode = BoundedChannelFullMode.Wait });
     private readonly Task _usageWork;
     private readonly IAppSettingsStore _settingsStore;
+    private readonly LocalDiagnosticLog? _diagnostics;
     private readonly SessionNotice? _initialSettingsWarning;
+    private long _usageDropped;
     private readonly TimeProvider _time;
     private readonly TimeSpan _timeout;
     private readonly TimeSpan _idleUnload;
@@ -36,7 +38,7 @@ public sealed class DictationSession
         Func<string, IRecognitionEngine> engineFactory, IAudioCaptureFactory captureFactory,
         IAudioInputReader input, IUsageStore usageStore, string modelsDirectory,
         IAppSettingsStore settingsStore, TimeProvider? time = null, TimeSpan? operationTimeout = null,
-        TimeSpan? idleUnloadAfter = null)
+        TimeSpan? idleUnloadAfter = null, LocalDiagnosticLog? diagnostics = null)
     {
         _engineFactory = engineFactory;
         _captureFactory = captureFactory;
@@ -44,6 +46,7 @@ public sealed class DictationSession
         _usageStore = usageStore;
         ArgumentNullException.ThrowIfNull(settingsStore);
         _settingsStore = settingsStore;
+        _diagnostics = diagnostics;
         _time = time ?? TimeProvider.System;
         _timeout = operationTimeout ?? TimeSpan.FromMinutes(5);
         _idleUnload = idleUnloadAfter ?? TimeSpan.FromMinutes(10);
@@ -67,6 +70,7 @@ public sealed class DictationSession
             Models = [], SelectedIndex = -1, ModelsDirectory = settings.ModelsDirectory ?? modelsDirectory,
             BackendVersion = "", Settings = settings, Transcript = ""
         };
+        _diagnostics?.SetEnabled(settings.LocalDiagnostics);
         _usageWork = Task.Run(PersistUsageAsync);
     }
 
@@ -94,6 +98,9 @@ public sealed class DictationSession
     public Task<SessionOutcome> StartDictationAsync() =>
         Admit(() => new DictationOperation(RecognitionInputs(requiresMicrophone: true),
             _state.Settings.MicrophoneBoostDecibels, _timeout, _time));
+    public Task<SessionOutcome> StartShortcutDictationAsync(long? shortcutTimestamp, Task? targetValidation = null) =>
+        Admit(() => new DictationOperation(RecognitionInputs(requiresMicrophone: true),
+            _state.Settings.MicrophoneBoostDecibels, _timeout, _time, shortcutTimestamp, targetValidation));
     public Task<SessionOutcome> ReplayAsync(string path) =>
         Admit(() => new ReplayOperation(RecognitionInputs(requiresMicrophone: true), path, _timeout, _time));
     public Task<SessionOutcome> TranscribeFileAsync(string path) =>
@@ -130,6 +137,9 @@ public sealed class DictationSession
     public void SetUsageEnabled(bool enabled) =>
         ChangeSettings(state => state with { Settings = state.Settings with { CollectUsage = enabled } },
             new(NoticeKind.Success, "Settings saved", "Local usage collection was updated.", NoticeArea.Settings));
+    public void SetLocalDiagnosticsEnabled(bool enabled) =>
+        ChangeSettings(state => state with { Settings = state.Settings with { LocalDiagnostics = enabled } },
+            new(NoticeKind.Success, "Settings saved", "Local diagnostics collection was updated.", NoticeArea.Settings));
     public void SetShortcut(DictationShortcut shortcut) =>
         ChangeSettings(state => state with { Settings = state.Settings with { Shortcut = shortcut } },
             new(NoticeKind.Success, "Shortcut updated", $"Use {shortcut.DisplayText} in another app.", NoticeArea.Settings));
@@ -232,7 +242,10 @@ public sealed class DictationSession
             RequireIdle();
             var updated = change(_state);
             updated.Settings.Validate();
+            var diagnosticsChanged = updated.Settings.LocalDiagnostics != _state.Settings.LocalDiagnostics;
             state = SetState(updated with { Notice = SaveSettings(updated.Settings, notice.Area) ?? notice });
+            if (diagnosticsChanged) Interlocked.Exchange(ref _usageDropped, 0);
+            _diagnostics?.SetEnabled(updated.Settings.LocalDiagnostics);
             // A model or processor change prepares the new session; other settings leave it resident.
             KeepEngineWarm();
         }
@@ -245,9 +258,17 @@ public sealed class DictationSession
             return new(NoticeKind.Warning, "Settings not saved",
                 "The change applies only to this session because the saved settings could not be read at startup. " +
                 "Resolve the read error and restart the app before saving settings. The saved document remains unchanged.", area);
-        try { _settingsStore.Save(settings); return null; }
+        var generation = _diagnostics?.CurrentGeneration;
+        var started = generation is null ? 0 : _time.GetTimestamp();
+        try
+        {
+            _settingsStore.Save(settings);
+            LogStorage(generation, StorageDiagnosticCategory.Settings, StorageDiagnosticStage.Save, started, null);
+            return null;
+        }
         catch (Exception error)
         {
+            LogStorage(generation, StorageDiagnosticCategory.Settings, StorageDiagnosticStage.Save, started, error);
             return new(NoticeKind.Warning, "Settings not saved",
                 $"The change applies to this session, but could not be saved for restart: {error.Message}", area);
         }
@@ -298,6 +319,19 @@ public sealed class DictationSession
         {
             RequireIdle();
             operation = create();
+            operation.DiagnosticGeneration = _diagnostics?.CurrentGeneration;
+            if (operation.DiagnosticGeneration is { } generation)
+            {
+                operation.DiagnosticStartedAt = _time.GetTimestamp();
+                if (operation is RecognitionOperation diagnosticRecognition)
+                    diagnosticRecognition.AttachDiagnostics(new(_diagnostics!, generation, operation.Id, diagnosticRecognition.Input.Options.Backend));
+                _diagnostics!.Write(new OperationDiagnostic(operation.Id, _time.GetUtcNow(), OperationDiagnosticKind.Starting,
+                    operation.Activity, OperationDiagnosticStage.Admitted)
+                {
+                    RequestedBackend = (operation as RecognitionOperation)?.Input.Options.Backend,
+                    ModelId = operation is RecognitionOperation recognized ? NativeDiagnosticContext.SafeModelId(recognized.Input.Model.Id) : null
+                }, generation);
+            }
             _operation = operation;
             _lastElapsed = TimeSpan.Zero;
             StopIdleTimer();
@@ -338,7 +372,14 @@ public sealed class DictationSession
             kind = SessionOutcomeKind.Failed;
         }
 
+        var terminalStage = operation.DiagnosticStage;
+        var executionErrors = errors.Count;
         await operation.ReleaseAsync(this, errors);
+        if (operation is DictationOperation { Capture: IMicrophoneCaptureDiagnostics captureDiagnostics } &&
+            operation.DiagnosticGeneration is { } captureGeneration)
+            _diagnostics!.Write(captureDiagnostics.Snapshot(operation.Id), captureGeneration);
+        if (errors.Count > executionErrors && executionErrors == 0)
+            terminalStage = OperationDiagnosticStage.Cleanup;
         var recognition = operation as RecognitionOperation;
         var connection = operation as ModelOperation;
         if (recognition is DictationOperation { CommandError: { } commandError }) { AddError(errors, commandError); }
@@ -350,7 +391,34 @@ public sealed class DictationSession
             1 => errors[0],
             _ => new AggregateException("Recognition and cleanup reported failures.", errors)
         };
-        var outcome = new SessionOutcome(kind, recognition?.Result, errorResult);
+        var outcome = new SessionOutcome(kind, recognition?.Result, errorResult)
+        {
+            DiagnosticResultTimestamp = recognition?.DiagnosticResultTimestamp
+        };
+        if (operation.DiagnosticGeneration is { } generation)
+        {
+            var streaming = operation as StreamingOperation;
+            var dictation = operation as DictationOperation;
+            _diagnostics!.Write(new OperationDiagnostic(operation.Id, _time.GetUtcNow(), OperationDiagnosticKind.Terminal,
+                operation.Activity, terminalStage, kind,
+                errors.OfType<NativeExecutionException>().FirstOrDefault()?.StatusCode,
+                operation.HasRetainedResources,
+                DiagnosticMilliseconds(operation.DiagnosticStartedAt, _time.GetTimestamp()),
+                DiagnosticMilliseconds(operation.DiagnosticStartedAt, dictation?.MicrophoneReadyAt),
+                DiagnosticMilliseconds(operation.DiagnosticStartedAt, streaming?.StreamReadyAt),
+                DiagnosticMilliseconds(operation.DiagnosticStartedAt, recognition?.FirstPartialAt),
+                DiagnosticMilliseconds(dictation?.FinishRequestedAt, recognition?.ResultAt))
+            {
+                ErrorHResult = errors.FirstOrDefault()?.HResult,
+                RequestedBackend = recognition?.Input.Options.Backend,
+                ActualBackend = recognition?.Input.Options.Diagnostics?.ActualBackend,
+                SessionReused = recognition?.Input.Options.Diagnostics?.SessionReused,
+                ModelId = recognition is null ? null : NativeDiagnosticContext.SafeModelId(recognition.Input.Model.Id),
+                NativeBuild = recognition?.Input.Engine.Version is { Length: <= 32 } version &&
+                    Version.TryParse(version, out var parsedVersion) ? parsedVersion.ToString() : null,
+                ShortcutToMicrophoneMilliseconds = dictation?.ShortcutToMicrophoneMilliseconds
+            }, generation);
+        }
         DictationCompletion? completion = null;
         SessionSnapshot state;
         lock (_gate)
@@ -434,6 +502,8 @@ public sealed class DictationSession
     {
         if (operation.InitializeUsage)
         {
+            var started = operation.DiagnosticGeneration is null ? 0 : _time.GetTimestamp();
+            Exception? failure = null;
             try
             {
                 var usage = await _usageStore.LoadAsync(operation.Token);
@@ -441,7 +511,14 @@ public sealed class DictationSession
             }
             catch (Exception error) when (error is not OperationCanceledException)
             {
+                failure = error;
                 UpdateCurrent(operation, state => state with { UsageError = $"Local statistics could not be read: {error.Message}" });
+            }
+            catch (Exception error) { failure = error; throw; }
+            finally
+            {
+                LogStorage(operation.DiagnosticGeneration, StorageDiagnosticCategory.Usage,
+                    StorageDiagnosticStage.Load, started, failure);
             }
         }
         operation.Token.ThrowIfCancellationRequested();
@@ -537,17 +614,25 @@ public sealed class DictationSession
 
     private async Task RecognizeFileAsync(FileOperation operation)
     {
+        operation.DiagnosticStage = OperationDiagnosticStage.ReadInput;
         var recording = await _input.ReadRecordingAsync(operation.Path, operation.Token);
         operation.Token.ThrowIfCancellationRequested();
         operation.StartedAt = _time.GetTimestamp();
+        operation.DiagnosticStage = OperationDiagnosticStage.Recognize;
         operation.Result = await operation.Input.Engine.TranscribeAsync(
             operation.Input.Model, recording, operation.Input.Options, Progress(operation), operation.Token);
         operation.Token.ThrowIfCancellationRequested();
+        if (operation.DiagnosticGeneration is not null)
+        {
+            operation.ResultAt = _time.GetTimestamp();
+            operation.DiagnosticResultTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
+        }
         UpdateResult(operation);
     }
 
     private Task StartStream(StreamingOperation operation)
     {
+        operation.DiagnosticStage = OperationDiagnosticStage.StartStream;
         operation.Token.ThrowIfCancellationRequested();
         var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         operation.Inference = operation.Input.Engine.StreamAsync(operation.Input.Model, operation.Pipe.Reader,
@@ -562,7 +647,14 @@ public sealed class DictationSession
         // bounded backlog, which stops recording at its five-minute limit rather than dropping samples.
         try
         {
+            operation.DiagnosticStage = OperationDiagnosticStage.OpenMicrophone;
             operation.Capture = await _captureFactory.StartAsync(operation.Token, operation.MicrophoneBoostDecibels);
+            if (operation.DiagnosticGeneration is not null)
+            {
+                operation.MicrophoneReadyAt = _time.GetTimestamp();
+                if (operation.ShortcutTimestamp is { } shortcut)
+                    operation.ShortcutToMicrophoneMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(shortcut).TotalMilliseconds;
+            }
         }
         catch (CaptureOwnershipException error)
         {
@@ -574,7 +666,6 @@ public sealed class DictationSession
         lock (_gate) { EnsureCurrent(operation); }
         operation.LevelHandler = value => PublishLevel(operation, value);
         operation.Capture.LevelChanged += operation.LevelHandler;
-        operation.Producer = ForwardAsync(operation.Capture.Audio, operation.Pipe.Writer, operation.Token);
         operation.StartedAt = _time.GetTimestamp();
         var loading = !ready.IsCompleted;
         UpdateCurrent(operation, state => state with
@@ -584,6 +675,12 @@ public sealed class DictationSession
                 ? new(NoticeKind.Information, "Listening", "The model is loading. Speech is kept and recognized when it is ready. Audio stays local.")
                 : new(NoticeKind.Information, "Listening", "Audio stays local. Finish when you are done.")
         });
+        // Capture owns the early audio, but an invalid destination must never produce a transcript or history.
+        if (operation.TargetValidation is { } validation)
+            await validation.WaitAsync(operation.Token);
+        operation.Token.ThrowIfCancellationRequested();
+        operation.Producer = ForwardAsync(operation.Capture.Audio, operation.Pipe.Writer, operation.Token);
+        operation.DiagnosticStage = OperationDiagnosticStage.StreamReady;
         await WaitForStreamAsync(operation, ready);
         if (loading)
         {
@@ -596,14 +693,17 @@ public sealed class DictationSession
             }
             if (loaded is not null) { Publish(loaded); }
         }
+        operation.DiagnosticStage = OperationDiagnosticStage.Recognize;
         await CompleteStreamAsync(operation);
         operation.RecordingSeconds = operation.Capture.CapturedSeconds;
     }
 
     private async Task RecognizeReplayAsync(ReplayOperation operation)
     {
+        operation.DiagnosticStage = OperationDiagnosticStage.ReadInput;
         var replay = await _input.ReadReplayAsync(operation.Path, operation.Token);
         var ready = StartStream(operation);
+        operation.DiagnosticStage = OperationDiagnosticStage.StreamReady;
         await WaitForStreamAsync(operation, ready);
         operation.Producer = ReplayAsync(operation, replay);
         operation.StartedAt = _time.GetTimestamp();
@@ -612,12 +712,18 @@ public sealed class DictationSession
             Phase = DictationPhase.Recording,
             Notice = new(NoticeKind.Information, "Live verification", "A WAV recording feeds microphone-style recognition; no microphone is open.")
         });
+        operation.DiagnosticStage = OperationDiagnosticStage.Recognize;
         await CompleteStreamAsync(operation);
     }
 
     private async Task CompleteStreamAsync(StreamingOperation operation)
     {
         operation.Result = await operation.Inference!;
+        if (operation.DiagnosticGeneration is not null)
+        {
+            operation.ResultAt = _time.GetTimestamp();
+            operation.DiagnosticResultTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
+        }
         operation.Token.ThrowIfCancellationRequested();
         await operation.Producer!;
         UpdateResult(operation);
@@ -631,6 +737,7 @@ public sealed class DictationSession
             throw new InvalidOperationException("The native stream completed before audio input was admitted.");
         }
         await ready.WaitAsync(operation.Token);
+        if (operation.DiagnosticGeneration is not null) operation.StreamReadyAt = _time.GetTimestamp();
         operation.Token.ThrowIfCancellationRequested();
         lock (_gate) { EnsureCurrent(operation); }
     }
@@ -642,6 +749,9 @@ public sealed class DictationSession
         if (_state.SelectedModel is { SupportsMicrophone: true } model)
         {
             var options = new RecognitionOptions(_state.Language, "", _state.Settings.Backend);
+            if (_diagnostics?.CurrentGeneration is { } generation)
+                options = options with { Diagnostics = new(_diagnostics, generation, Guid.NewGuid(), options.Backend,
+                    backgroundPreload: true) };
             QueueEngineWork((engine, token) => engine.PrepareAsync(model, options, token),
                 "Model not preloaded", "The model loads when dictation starts instead.");
         }
@@ -743,26 +853,38 @@ public sealed class DictationSession
             Words = operation.Result!.SpokenWords, RecordingSeconds = (operation as DictationOperation)?.RecordingSeconds ?? 0,
             ElapsedSeconds = elapsed.TotalSeconds
         };
-        return _pendingUsage.Writer.TryWrite(entry) ? null :
-            _closing ? "The transcript succeeded, but local counts could not be queued because the session is closing." :
-                "The transcript succeeded, but local counts could not be saved because the background usage queue is full.";
+        var generation = _diagnostics?.CurrentGeneration;
+        if (_pendingUsage.Writer.TryWrite((entry, generation))) return null;
+        if (generation is not null)
+        {
+            var dropped = Interlocked.Increment(ref _usageDropped);
+            LogStorage(generation, StorageDiagnosticCategory.Usage, StorageDiagnosticStage.Queue, null,
+                null, dropped, failed: true);
+        }
+        return _closing ? "The transcript succeeded, but local counts could not be queued because the session is closing." :
+            "The transcript succeeded, but local counts could not be saved because the background usage queue is full.";
     }
 
     private async Task PersistUsageAsync()
     {
-        await foreach (var entry in _pendingUsage.Reader.ReadAllAsync())
+        await foreach (var queued in _pendingUsage.Reader.ReadAllAsync())
         {
             UsageDocument? usage = null;
             string? warning = null;
+            var started = queued.Generation is null ? 0 : _time.GetTimestamp();
+            Exception? failure = null;
             try
             {
                 using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(2), _time);
-                usage = await _usageStore.RecordAsync(entry, deadline.Token);
+                usage = await _usageStore.RecordAsync(queued.Entry, deadline.Token);
             }
             catch (Exception error)
             {
+                failure = error;
                 warning = $"The transcript succeeded, but local counts could not be saved: {error.Message}";
             }
+            LogStorage(queued.Generation, StorageDiagnosticCategory.Usage, StorageDiagnosticStage.Save, started,
+                failure, Interlocked.Read(ref _usageDropped));
             SessionSnapshot state;
             lock (_gate)
             {
@@ -773,6 +895,7 @@ public sealed class DictationSession
                     UsageError = warning ?? _state.UsageError
                 });
             }
+
             if (StateChanged is { } observers)
             {
                 foreach (Action<SessionSnapshot> observer in observers.GetInvocationList())
@@ -787,6 +910,17 @@ public sealed class DictationSession
         }
     }
 
+    private void LogStorage(long? generation, StorageDiagnosticCategory category, StorageDiagnosticStage stage,
+        long? started, Exception? error, long? dropped = null, bool failed = false)
+    {
+        if (generation is { } value)
+            _diagnostics!.Write(new StorageDiagnostic(_time.GetUtcNow(), category, stage,
+                error is OperationCanceledException ? DiagnosticOutcome.Cancelled :
+                error is null && !failed ? DiagnosticOutcome.Completed : DiagnosticOutcome.Failed,
+                started is { } start ? _time.GetElapsedTime(start).TotalMilliseconds : null,
+                error?.HResult, dropped), value);
+    }
+
     public async Task FinishAsync()
     {
         DictationOperation? operation;
@@ -795,6 +929,7 @@ public sealed class DictationSession
         {
             operation = _operation as DictationOperation;
             if (_closing || operation is null || !_state.CanFinish) { return; }
+            if (operation.DiagnosticGeneration is not null) operation.FinishRequestedAt = _time.GetTimestamp();
             state = SetState(_state with
             {
                 Phase = DictationPhase.Finishing,
@@ -864,10 +999,20 @@ public sealed class DictationSession
             lock (_gate) { recovery = _recovery; }
             if (recovery is not null)
             {
-                await recovery.ReleaseRetainedAsync(this);
+                try
+                {
+                    await recovery.ReleaseRetainedAsync(this);
+                    LogRecovery(recovery, null);
+                }
+                catch (Exception error)
+                {
+                    LogRecovery(recovery, error);
+                    throw;
+                }
                 recovery.Dispose();
                 lock (_gate) { _recovery = null; }
             }
+
             await StopEngineWorkAsync();
             if (_engine is not null) { await _engine.DisposeAsync(); _engine = null; }
             SessionSnapshot state;
@@ -889,6 +1034,16 @@ public sealed class DictationSession
             Publish(state);
             throw;
         }
+    }
+
+    private void LogRecovery(SessionOperation operation, Exception? error)
+    {
+        if (operation.DiagnosticGeneration is { } generation)
+            _diagnostics!.Write(new OperationDiagnostic(operation.Id, _time.GetUtcNow(), OperationDiagnosticKind.Recovery,
+                operation.Activity, OperationDiagnosticStage.Cleanup,
+                error is null ? SessionOutcomeKind.Completed : SessionOutcomeKind.Failed,
+                RetainedResources: operation.HasRetainedResources)
+            { ErrorHResult = error?.HResult }, generation);
     }
 
     private static async Task ObserveAsync(Task? task, CancellationToken token, List<Exception> errors)
@@ -986,6 +1141,9 @@ public sealed class DictationSession
         {
             if (!ReferenceEquals(_operation, operation) || _closing || operation.Token.IsCancellationRequested || operation.HasFinal) { return; }
             operation.HasFinal = update.IsFinal;
+            if (!update.IsFinal && operation.DiagnosticGeneration is not null && operation.FirstPartialAt is null &&
+                !string.IsNullOrEmpty(update.Text))
+                operation.FirstPartialAt = _time.GetTimestamp();
         }
         UpdateCurrent(operation, state => state with { Transcript = update.Text });
     });
@@ -1053,12 +1211,18 @@ public sealed class DictationSession
         public void Report(T value) => report(value);
     }
 
+    private double? DiagnosticMilliseconds(long? start, long? end) =>
+        start is { } value && end is { } finish ? _time.GetElapsedTime(value, finish).TotalMilliseconds : null;
+
     private abstract class SessionOperation(TimeSpan timeout, TimeProvider time) : IDisposable
     {
         private readonly object _cancellationGate = new();
         private bool _disposed;
         private int _cancellationRequested;
         public Guid Id { get; } = Guid.NewGuid();
+        public long? DiagnosticGeneration { get; set; }
+        public long? DiagnosticStartedAt { get; set; }
+        public OperationDiagnosticStage DiagnosticStage { get; set; } = OperationDiagnosticStage.Admitted;
         public abstract SessionActivity Activity { get; }
         public abstract DictationPhase InitialPhase { get; }
         public abstract bool HasRetainedResources { get; }
@@ -1149,10 +1313,15 @@ public sealed class DictationSession
     private abstract class RecognitionOperation(RecognitionInput input, TimeSpan timeout, TimeProvider time)
         : SessionOperation(timeout, time)
     {
-        public RecognitionInput Input { get; } = input;
+        public RecognitionInput Input { get; private set; } = input;
+        public void AttachDiagnostics(NativeDiagnosticContext context) =>
+            Input = Input with { Options = Input.Options with { Diagnostics = context } };
         public RecognitionResult? Result { get; set; }
         public bool HasFinal { get; set; }
         public long? StartedAt { get; set; }
+        public long? FirstPartialAt { get; set; }
+        public long? ResultAt { get; set; }
+        public long? DiagnosticResultTimestamp { get; set; }
         public override bool HasRetainedResources => false;
         public override Task ReleaseAsync(DictationSession session, List<Exception> errors)
         {
@@ -1178,6 +1347,7 @@ public sealed class DictationSession
         public Channel<byte[]> Pipe { get; } = Channel.CreateBounded<byte[]>(16);
         public Task? Producer { get; set; }
         public Task<RecognitionResult>? Inference { get; set; }
+        public long? StreamReadyAt { get; set; }
         public override DictationPhase InitialPhase => DictationPhase.Preparing;
         public override async Task ReleaseAsync(DictationSession session, List<Exception> errors)
         {
@@ -1193,8 +1363,10 @@ public sealed class DictationSession
     }
 
     private sealed class DictationOperation(RecognitionInput input, int microphoneBoostDecibels,
-        TimeSpan timeout, TimeProvider time) : StreamingOperation(input, timeout, time)
+        TimeSpan timeout, TimeProvider time, long? shortcutTimestamp = null, Task? targetValidation = null)
+        : StreamingOperation(input, timeout, time)
     {
+        public Task? TargetValidation { get; } = targetValidation;
         public int MicrophoneBoostDecibels { get; } = microphoneBoostDecibels;
         public IAudioCapture? Capture { get; set; }
         public Action<double>? LevelHandler { get; set; }
@@ -1202,6 +1374,10 @@ public sealed class DictationSession
         public bool ControlsSealed { get; set; }
         public Exception? CommandError { get; set; }
         public double RecordingSeconds { get; set; }
+        public long? MicrophoneReadyAt { get; set; }
+        public long? FinishRequestedAt { get; set; }
+        public long? ShortcutTimestamp { get; } = shortcutTimestamp;
+        public double? ShortcutToMicrophoneMilliseconds { get; set; }
         public override bool HasRetainedResources => Capture?.IsReleased == false;
         public override SessionActivity Activity => SessionActivity.Dictation;
         public override Task ExecuteAsync(DictationSession session) => session.RecognizeDictationAsync(this);

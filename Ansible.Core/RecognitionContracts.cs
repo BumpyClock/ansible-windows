@@ -25,6 +25,8 @@ public sealed record DeviceComparisonSnapshot(
 public sealed record RecognitionOptions(string? Language = null, string CustomDictionary = "",
     NativeBackend Backend = NativeBackend.Auto, int DeviceIndex = 0)
 {
+    internal NativeDiagnosticContext? Diagnostics { get; init; }
+
     internal void ValidateBackend()
     {
         if (Backend is not NativeBackend.Cpu and not NativeBackend.Vulkan and not NativeBackend.Auto)
@@ -59,6 +61,11 @@ public interface IAudioCapture : IAsyncDisposable
     bool IsReleased { get; }
     event Action<double>? LevelChanged;
     Task StopAsync();
+}
+
+internal interface IMicrophoneCaptureDiagnostics
+{
+    MicrophoneCaptureDiagnostic Snapshot(Guid operationId);
 }
 
 public interface IAudioCaptureFactory

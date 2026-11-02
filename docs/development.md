@@ -287,6 +287,15 @@ candidate and previous engines. Recognition snapshots its admitted engine,
 model and options. Streaming owns its pipe and tasks; only dictation owns
 microphone capture and stop controls. Preview publication uses `StateChanged`;
 shortcut insertion consumes the final operation outcome.
+`ShortcutDictation` owns each shortcut attempt and its tasks. `MainWindow`
+forwards hotkey events, and `WindowsShortcutTarget` supplies the Windows
+destination. Final speech is sent at most once, only a deferred attempt
+retries, and shutdown joins inspection, press, delivery and release-tail work.
+Shortcut admission opens bounded in-memory microphone capture before Windows
+target inspection finishes. Packets stay off the recognizer until inspection
+succeeds. Rejected or failed inspection cancels or fails the operation and
+discards that buffer, with no transcript, history row, or insertion. Hold-to-talk
+release still uses the 500 ms tail and may Finish while inspection is pending.
 
 `MeetingStore.ListAsync` returns summaries rather than transcript documents.
 The in-memory cache validates file identity on each listing and reads changed
@@ -356,6 +365,7 @@ qualification.
 | `Ansible` | WinUI pages, floating waveform, shortcuts, text insertion, composition and UI dispatch |
 | `Ansible.Core\DictationSession.cs` | Operation lifecycle, settings, cancellation, preloading and shutdown |
 | `Ansible.Core\ModelSelectionPolicy.cs` | Dictation and meeting model eligibility, default preference, meeting candidate order and companion requirement |
+| `Ansible.Core\ShortcutDictation.cs` | Shortcut admission, release tails, destination inspection, insert-once delivery, warnings and shutdown join |
 | `Ansible.Core\RecognitionContracts.cs`, `SessionState.cs` | Testable boundaries and immutable UI snapshots |
 | `Ansible.Core\NativeAudioEngine.cs`, `NativeAudioApi.cs` | Native model/session ownership and C ABI |
 | `Ansible.Core\Windows` | Microphone capture and retained-resource teardown |
