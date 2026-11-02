@@ -217,6 +217,13 @@ internal sealed partial class GlobalDictationHotkey : IDisposable
         if (_shortcut.IsModifierOnly)
         {
             if (_disposed || !_registered) { _pollTimer.Stop(); return; }
+            var wasPressed = _modifierState.IsPressed;
+            _modifierState.Reconcile(static key => IsKeyDown((int)key));
+            if (wasPressed && !_modifierState.IsPressed)
+            {
+                _pressed = false;
+                SafeInvoke(false);
+            }
             if (_modifierState.Advance(Environment.TickCount64))
             {
                 try
@@ -231,7 +238,7 @@ internal sealed partial class GlobalDictationHotkey : IDisposable
                     Trace.TraceWarning($"Ctrl + Win could not suppress Start; dictation was not started: {error.Message}");
                 }
             }
-            if (!_modifierState.IsPending) _pollTimer.Stop();
+            if (!_modifierState.IsPressed && !_modifierState.IsPending) _pollTimer.Stop();
             return;
         }
         bool fireRelease = false;
@@ -339,8 +346,15 @@ internal sealed partial class GlobalDictationHotkey : IDisposable
                 if (down || up)
                 {
                     var wasPressed = _modifierState.IsPressed;
-                    _modifierState.Process(input.Key, down, (input.Flags & 0x12) != 0, Environment.TickCount64);
-                    if (_modifierState.IsPending) _pollTimer.Start();
+                    var injected = (input.Flags & 0x12) != 0;
+                    if (down && !injected &&
+                        (CtrlWinShortcutState.IsControl(input.Key) || CtrlWinShortcutState.IsWindows(input.Key)))
+                    {
+                        // The current event precedes its GetAsyncKeyState update, so retain that key.
+                        _modifierState.Reconcile(key => key == input.Key || IsKeyDown((int)key));
+                    }
+                    _modifierState.Process(input.Key, down, injected, Environment.TickCount64);
+                    if (_modifierState.IsPressed || _modifierState.IsPending) _pollTimer.Start();
                     else _pollTimer.Stop();
                     if (wasPressed && !_modifierState.IsPressed)
                     {

@@ -93,6 +93,17 @@ public sealed class CtrlWinShortcutState
         IsPressed = false;
     }
 
+    public void Reconcile(Predicate<uint> isPhysicallyDown)
+    {
+        _down.RemoveWhere(key => !isPhysicallyDown(key));
+        if (_down.Count == 0) _blocked = false;
+        if (!(_down.Any(IsControl) && _down.Any(IsWindows)))
+        {
+            _candidateAt = null;
+            IsPressed = false;
+        }
+    }
+
     /// <returns>Always false. Every observed physical keydown and keyup must reach Windows.</returns>
     public bool Process(uint key, bool down, bool injected, long milliseconds)
     {

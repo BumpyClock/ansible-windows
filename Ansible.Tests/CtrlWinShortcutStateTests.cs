@@ -188,6 +188,141 @@ public sealed class CtrlWinShortcutStateTests
         Assert.False(state.Advance(2000));
     }
 
+    [Fact]
+    public void ReconcileEndsActiveHoldWhenBothPhysicalKeysAreUp()
+    {
+        var state = Active();
+
+        state.Reconcile(static _ => false);
+
+        Assert.False(state.IsPressed);
+        Assert.False(state.IsPending);
+        Assert.False(state.Advance(1000));
+    }
+
+    [Fact]
+    public void ReconcileClearsStaleLockKeyBeforeTheNextChord()
+    {
+        var state = new CtrlWinShortcutState();
+        state.Process(0x5B, true, false, 0);
+        state.Process(0x4C, true, false, 10);
+        Assert.False(state.Advance(500));
+
+        state.Reconcile(static _ => false);
+        state.Process(0xA2, true, false, 510);
+        state.Process(0x5B, true, false, 520);
+
+        Assert.True(state.Advance(720));
+        Assert.True(state.IsPressed);
+    }
+
+    [Fact]
+    public void ReconcilePreservesMatchingCandidateAndHoldUntilPhysicalRelease()
+    {
+        var state = new CtrlWinShortcutState();
+        state.Process(0xA2, true, false, 0);
+        state.Process(0x5B, true, false, 10);
+
+        state.Reconcile(static key => key is 0xA2 or 0x5B);
+
+        Assert.True(state.IsPending);
+        Assert.False(state.IsPressed);
+        Assert.False(state.Advance(209));
+        Assert.True(state.Advance(210));
+
+        state.Reconcile(static key => key is 0xA2 or 0x5B);
+
+        Assert.True(state.IsPressed);
+        Assert.False(state.IsPending);
+        Assert.False(state.Advance(500));
+
+        state.Reconcile(static _ => false);
+
+        Assert.False(state.IsPressed);
+        Assert.False(state.IsPending);
+    }
+
+    [Theory]
+    [InlineData(0xA2u)]
+    [InlineData(0x5Bu)]
+    public void ReconcileEndsHoldWhenEitherPhysicalModifierIsUp(uint remaining)
+    {
+        var state = Active();
+
+        state.Reconcile(key => key == remaining);
+
+        Assert.False(state.IsPressed);
+        Assert.False(state.IsPending);
+        Assert.False(state.Advance(1000));
+
+        var released = remaining == 0xA2u ? 0x5Bu : 0xA2u;
+        state.Process(released, true, false, 1010);
+
+        Assert.True(state.Advance(1210));
+        Assert.True(state.IsPressed);
+    }
+
+    [Fact]
+    public void ReconcileDoesNotAddUntrackedPhysicalKeys()
+    {
+        var state = Active();
+        var physicallyDown = new HashSet<uint> { 0xA3, 0x5C, 0x4C };
+
+        state.Reconcile(physicallyDown.Contains);
+
+        Assert.False(state.IsPressed);
+        Assert.False(state.IsPending);
+
+        state.Process(0xA2, true, false, 300);
+        Assert.False(state.Advance(500));
+        state.Process(0x5B, true, false, 510);
+
+        Assert.True(state.Advance(710));
+        Assert.True(state.IsPressed);
+    }
+
+    [Fact]
+    public void ReconcileCancelsPendingCandidateWhenPhysicalKeysAreGone()
+    {
+        var state = new CtrlWinShortcutState();
+        state.Process(0xA2, true, false, 0);
+        state.Process(0x5B, true, false, 10);
+        Assert.True(state.IsPending);
+
+        state.Reconcile(static _ => false);
+
+        Assert.False(state.IsPending);
+        Assert.False(state.IsPressed);
+        Assert.False(state.Advance(1000));
+
+        state.Process(0xA2, true, false, 1010);
+        state.Process(0x5B, true, false, 1020);
+
+        Assert.True(state.Advance(1220));
+    }
+
+    [Fact]
+    public void ReconcileKeepsThirdKeyBlockingUntilEveryTrackedKeyIsUp()
+    {
+        var state = new CtrlWinShortcutState();
+        state.Process(0xA2, true, false, 0);
+        state.Process(0x5B, true, false, 10);
+        state.Process(0x4C, true, false, 20);
+
+        state.Reconcile(static key => key is 0xA2 or 0x5B);
+
+        Assert.False(state.Advance(500));
+        state.Process(0x5B, false, false, 510);
+        state.Process(0x5B, true, false, 520);
+        Assert.False(state.Advance(720));
+
+        state.Reconcile(static _ => false);
+        state.Process(0xA2, true, false, 730);
+        state.Process(0x5B, true, false, 740);
+
+        Assert.True(state.Advance(940));
+    }
+
     private static CtrlWinShortcutState Active()
     {
         var state = new CtrlWinShortcutState();
