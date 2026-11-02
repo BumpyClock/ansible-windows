@@ -4,22 +4,38 @@ Ansible is a local Windows dictation and WAV transcription prototype. It uses
 WinUI 3, .NET 10, and [audio.cpp](https://github.com/0xShug0/audio.cpp) through an
 in-process native DLL. Release MSIX packages use .NET NativeAOT.
 
-Focus a text field, hold F9, speak, and release the key. Ansible opens the
-microphone as soon as that shortcut is accepted and keeps early audio in a
-bounded memory buffer while it checks the destination field. It inserts the
-final speech after recognition succeeds. Speech before the shortcut, and the
-time the hardware microphone needs to start, can still miss the first word.
-The app also provides manual transcription, meeting transcripts,
+Focus a text field, hold Ctrl + Win (either Windows key), speak, and release.
+New installs use that default. A previously saved F9 or other custom shortcut
+still works. Ansible opens the microphone as soon as that shortcut is accepted
+and keeps early audio in a bounded memory buffer while it checks the destination
+field. It inserts the final speech after recognition succeeds. Speech before the
+shortcut, and the time the hardware microphone needs to start, can still miss
+the first word. The app also provides manual transcription, meeting transcripts,
 model downloads, custom vocabulary for supported models, and local usage insights.
 
 Microphone permission is checked at launch. Ansible requests missing consent
 before recording and offers Windows Settings guidance when access is blocked.
 
-Recognition runs on the device. Meeting transcripts save automatically on this
-device; dictation transcripts remain in memory. The app never saves audio or
-uploads audio. Optional **Clean up wording** sends transcript text to GitHub
-Copilot CLI only when requested. Text you copy or insert is subject to the
+Closing the main window with X or Alt+F4 hides Ansible to a Windows
+notification-area icon. Recognition, global dictation shortcuts, downloads, and
+meetings keep running. Click the icon to reopen the window. Right-click it for
+**Open Ansible** or **Exit**. **Exit** stops active capture and recognition and
+joins owned work. Closing the window never starts recording. If the icon cannot
+be created, the window stays visible and Ansible reports an error. Later close
+attempts retry tray creation. Windows may put the icon in the hidden-icons
+overflow.
+
+Recognition runs on the device. Successful dictation transcripts persist locally
+as text and metadata. Meeting transcripts save automatically on this device.
+The app never saves or uploads audio. Optional meeting transcript cleanup can
+send finalized text to GitHub Copilot CLI or the OpenAI API after you enable it
+in **Settings > Transcript cleanup** and a meeting ends successfully. Text you copy or insert is subject to the
 clipboard and destination app's storage policies. Model downloads require network access.
+
+Local diagnostics are off by default. You can enable them in Settings to save
+bounded operational metadata for recognition, delivery, meetings, capture,
+downloads, and storage on this device. They are separate from usage statistics
+and saved transcripts. See [local data and diagnostics](docs/user-guide.md#local-data-and-privacy).
 
 ## Build and run
 
@@ -110,7 +126,9 @@ options and checks.
   Teams names use visible accessibility evidence matched to confident local
   timing anchors; unsupported windows retain editable speaker labels. Optional
   Nemotron CPU timing refinement needs its installed weights and additional memory.
-  Copilot wording cleanup requires an installed, authenticated CLI and keeps originals.
+  Transcript cleanup is off until enabled in Settings. Copilot CLI uses the
+  installed authenticated CLI account. OpenAI API uses a Credential Locker key
+  and OpenAI model IDs. There is no provider fallback. Originals are kept.
 
 - Windows x64 only. ARM64 and NPU support are separate work.
 - File transcription accepts WAV only, up to five minutes, 100 MiB on disk,
