@@ -10,8 +10,8 @@
                 <ResourceDictionary Source="HomeStyles.xaml" />
             </ResourceDictionary.MergedDictionaries>
             <Style x:Key="InsightNumberStyle" TargetType="TextBlock" BasedOn="{StaticResource MetricValueTextBlockStyle}">
-                <Setter Property="FontFamily" Value="Consolas" />
-                <Setter Property="FontSize" Value="22" />
+                <Setter Property="FontFamily" Value="{StaticResource InsightNumeralFontFamily}" />
+                <Setter Property="FontSize" Value="{StaticResource InsightNumeralFontSize}" />
                 <Setter Property="TextTrimming" Value="CharacterEllipsis" />
             </Style>
             <DataTemplate x:Key="PrimaryModelTemplate" x:DataType="local:HomeModelViewModel">
@@ -59,8 +59,8 @@
                     <StackPanel Spacing="4">
                         <TextBlock Text="WORDS DICTATED" Style="{StaticResource HomeMetricLabelStyle}" CharacterSpacing="100" />
                         <Viewbox Stretch="Uniform" StretchDirection="DownOnly" HorizontalAlignment="Left" MaxHeight="76">
-                            <TextBlock x:Name="HomeWordsText" Text="--" FontFamily="Consolas"
-                                       FontSize="56" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                            <TextBlock x:Name="HomeWordsText" Text="--" FontFamily="{StaticResource InsightNumeralFontFamily}"
+                                       FontSize="{StaticResource InsightHeroNumeralFontSize}" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                        AutomationProperties.Name="All-time words dictated" />
                         </Viewbox>
                         <TextBlock Text="All time · on this device" Style="{StaticResource HomeCardMetaStyle}" />
@@ -110,8 +110,8 @@
                                           IsHitTestVisible="False">
                                         <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="4">
                                             <Viewbox MaxWidth="116" MaxHeight="40" StretchDirection="DownOnly">
-                                                <TextBlock x:Name="ActivityTotalText" Text="--" FontFamily="Consolas"
-                                                           FontSize="32" FontWeight="SemiBold" />
+                                                <TextBlock x:Name="ActivityTotalText"                                                 Text="--" FontFamily="{StaticResource InsightNumeralFontFamily}"
+                                                                                                           FontSize="{StaticResource InsightTotalNumeralFontSize}" FontWeight="SemiBold" />
                                             </Viewbox>
                                             <TextBlock x:Name="ActivityUnitText" Text="dictations" HorizontalAlignment="Center"
                                                        Style="{StaticResource HomeMetricLabelStyle}" />

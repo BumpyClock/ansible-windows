@@ -413,6 +413,10 @@
     <x:Double x:Key="HomeSectionGap">24</x:Double>
     <x:Double x:Key="SectionHeaderGap">10</x:Double>
     <x:Double x:Key="HomeSectionTitleFontSize">28</x:Double>
+    <FontFamily x:Key="InsightNumeralFontFamily">Consolas</FontFamily>
+    <x:Double x:Key="InsightNumeralFontSize">22</x:Double>
+    <x:Double x:Key="InsightTotalNumeralFontSize">32</x:Double>
+    <x:Double x:Key="InsightHeroNumeralFontSize">56</x:Double>
     <x:Double x:Key="HomeSectionHeaderMinHeight">36</x:Double>
     <x:Double x:Key="NavLabelGap">12</x:Double>
     <Thickness x:Key="CardBorderThickness">1</Thickness>
