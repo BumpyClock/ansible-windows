@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Channels;
@@ -23,6 +24,7 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
     private string? _loadedId;
     private bool _languageOption;
     private bool _streamStartAttempted;
+    private bool _streamConsumed;
     private bool _disposed;
 
     public NativeAudioEngine(string libraryPath, string catalogPath, string modelsDirectory, int threads = 4, int memoryHeadroomMB = 512,
@@ -39,7 +41,9 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
         _headroom = memoryHeadroomMB;
         _deviceProbePath = deviceProbePath is null ? null : Path.GetFullPath(deviceProbePath);
         _benchmarkSamplePath = benchmarkSamplePath is null ? null : Path.GetFullPath(benchmarkSamplePath);
-        _benchmarkCachePath = benchmarkCachePath is null ? null : Path.GetFullPath(benchmarkCachePath);
+        _deviceQualifier = new AutoDeviceQualifier(
+            benchmarkCachePath is null ? null : Path.GetFullPath(benchmarkCachePath),
+            (request, token) => DeviceBenchmark.RunAsync(_deviceProbePath!, request, token));
     }
 
     public string ModelsDirectory { get; }
@@ -117,10 +121,8 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
         var result = await RunExclusiveAsync(() =>
         {
             var bytes = NativeMemory.ValidateAudio(audio, cancellationToken);
-            var selected = ResolveBackend(model, "offline", 0, bytes, options, cancellationToken);
-            return NativeAutoRecovery.Run(options.Backend == NativeBackend.Auto, selected, cancellationToken,
-                backend => RunOffline(model, audio, backend, cancellationToken),
-                error => RejectSelectedGpu(model, "offline", 0, error));
+            return RunWithDevice(model, "offline", 0, bytes, options, cancellationToken,
+                backend => RunOffline(model, audio, backend, cancellationToken));
         }, cancellationToken);
         progress?.Report(new TranscriptUpdate(result.DisplayText, true, result.SpeechText));
         return result;
@@ -176,25 +178,15 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
     {
         // Kroko hotwords change decoder cost, so qualification must use the same decoder mode.
         options = ValidateOptions(model, model.Family == "kroko_asr" ? options : options with { CustomDictionary = "" });
-        return RunExclusiveAsync(() =>
-        {
-            var selected = ResolveBackend(model, mode, history, NativeMemory.MaximumStreamFrames * sizeof(float), options, cancellationToken);
-            bool Prepare() => NativeOperation.Run(() =>
+        return RunExclusiveAsync(() => RunWithDevice(model, mode, history,
+            NativeMemory.MaximumStreamFrames * sizeof(float), options, cancellationToken,
+            selected => NativeOperation.Run(() =>
             {
                 if (history > 0 && ModelSelectionPolicy.RequiresCompanion(model))
                     EnsurePairedSession(model, selected, cancellationToken);
                 else EnsureSession(model, mode, NativeMemory.MaximumStreamFrames * sizeof(float), selected, cancellationToken, history);
                 return true;
-            }, success => { if (!success) ReleaseModel(); });
-            try { return Prepare(); }
-            catch (NativeExecutionException error) when (options.Backend == NativeBackend.Auto &&
-                selected.Backend == NativeBackend.Vulkan && !cancellationToken.IsCancellationRequested && error.CanRetry)
-            {
-                RejectSelectedGpu(model, mode, history, error);
-                selected = selected with { Backend = NativeBackend.Cpu };
-                return Prepare();
-            }
-        }, cancellationToken);
+            }, success => { if (!success) ReleaseModel(); })), cancellationToken);
     }
 
     public Task UnloadAsync(CancellationToken cancellationToken) =>
@@ -388,6 +380,29 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
     }
 
     private void EnsureSession(AudioModel model, string mode, long decodedBytes, RecognitionOptions options, CancellationToken token, int historySteps = 0)
+    {
+        var diagnostics = options.Diagnostics;
+        if (diagnostics is null)
+        {
+            EnsureSessionCore(model, mode, decodedBytes, options, token, historySteps);
+            return;
+        }
+        var started = Stopwatch.GetTimestamp();
+        var reused = _session is not null &&
+            _sessionKey == new SessionKey(model.Id, mode, options.Backend, options.DeviceIndex, historySteps);
+        try
+        {
+            EnsureSessionCore(model, mode, decodedBytes, options, token, historySteps);
+            diagnostics.Write(NativeDiagnosticStage.Session, model, started, options.Backend, reused);
+        }
+        catch (Exception error)
+        {
+            diagnostics.Write(NativeDiagnosticStage.Session, model, started, error: error);
+            throw;
+        }
+    }
+
+    private void EnsureSessionCore(AudioModel model, string mode, long decodedBytes, RecognitionOptions options, CancellationToken token, int historySteps)
     {
         token.ThrowIfCancellationRequested();
         if (_registry is null || _inventory is null)

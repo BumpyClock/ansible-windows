@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using System.Diagnostics;
 
 namespace Ansible.Core;
 
@@ -6,39 +7,56 @@ public sealed partial class NativeAudioEngine
 {
     private readonly string? _deviceProbePath;
     private readonly string? _benchmarkSamplePath;
-    private readonly string? _benchmarkCachePath;
-    private readonly Dictionary<string, DeviceBenchmarkSelection> _deviceSelections = [];
-    private readonly Dictionary<(string Id, string Mode, int History), string> _selectionKeys = [];
-    private readonly DeviceBenchmarkIdentity _benchmarkIdentity = new();
-    private bool _streamConsumed;
-    private string? _deviceCacheWarning;
-    private double? _benchmarkSampleMilliseconds;
+    private readonly AutoDeviceQualifier _deviceQualifier;
     public string DeviceSelectionSummary { get; private set; } = "";
     public DeviceComparisonSnapshot? DeviceComparison { get; private set; }
 
-    private RecognitionOptions ResolveBackend(AudioModel model, string mode, int history, long decodedBytes,
-        RecognitionOptions options, CancellationToken token)
+    private T RunWithDevice<T>(AudioModel model, string mode, int history, long decodedBytes,
+        RecognitionOptions options, CancellationToken token, Func<RecognitionOptions, T> execute, Func<bool>? consumed = null)
     {
         // A new selection is in progress until a complete benchmark result is available.
         DeviceComparison = null;
-        try { return ResolveBackendCore(model, mode, history, decodedBytes, options, token); }
-        catch (Exception error) when (options.Backend == NativeBackend.Auto)
+        var diagnostics = options.Diagnostics;
+        var started = diagnostics is null ? 0 : Stopwatch.GetTimestamp();
+        if (diagnostics is not null) diagnostics.SelectionSource = null;
+        QualifiedDevice? device = null;
+        var selected = options;
+        try
         {
-            DeviceComparison = null;
-            DeviceSelectionSummary = $"Auto qualification did not select a device: {error.Message}";
+            if (options.Backend == NativeBackend.Auto)
+            {
+                device = QualifyDevice(model, mode, history, decodedBytes, options, token);
+                selected = options with { Backend = device.Backend };
+            }
+            else
+            {
+                if (diagnostics is not null) diagnostics.SelectionSource = NativeDiagnosticSource.Manual;
+                DeviceSelectionSummary = $"Manual {options.Backend}, device {options.DeviceIndex}; no automatic benchmark or fallback.";
+            }
+            diagnostics?.Write(NativeDiagnosticStage.Selection, model, started, selected.Backend);
+        }
+        catch (Exception error)
+        {
+            diagnostics?.Write(NativeDiagnosticStage.Selection, model, started, error: error);
+            if (options.Backend == NativeBackend.Auto)
+            {
+                DeviceComparison = null;
+                DeviceSelectionSummary = $"Auto qualification did not select a device: {error.Message}";
+            }
             throw;
         }
+        if (device is null) return execute(selected);
+        return NativeAutoRecovery.Run(true, selected, token, execute, error =>
+        {
+            diagnostics?.Write(NativeDiagnosticStage.Fallback, model, Stopwatch.GetTimestamp(), error: error);
+            try { _deviceQualifier.RejectGpu(device, error); }
+            finally { PublishDeviceQualification(diagnostics); }
+        }, consumed);
     }
 
-    private RecognitionOptions ResolveBackendCore(AudioModel model, string mode, int history, long decodedBytes,
+    private QualifiedDevice QualifyDevice(AudioModel model, string mode, int history, long decodedBytes,
         RecognitionOptions options, CancellationToken token)
     {
-        if (options.Backend != NativeBackend.Auto)
-        {
-            DeviceComparison = null;
-            DeviceSelectionSummary = $"Manual {options.Backend}, device {options.DeviceIndex}; no automatic benchmark or fallback.";
-            return options;
-        }
         token.ThrowIfCancellationRequested();
         if (_deviceProbePath is null || !File.Exists(_deviceProbePath) || _benchmarkSamplePath is null || !File.Exists(_benchmarkSamplePath))
             throw new FileNotFoundException("Auto requires the packaged Ansible.DeviceProbe.exe and public validation-sample.wav.");
@@ -60,83 +78,33 @@ public sealed partial class NativeAudioEngine
         var request = new DeviceBenchmarkRequest(_libraryPath, _catalogPath, ModelsDirectory, _benchmarkSamplePath,
             model.Id, NativeBackend.Cpu, options.DeviceIndex, _threads, _headroom, mode, history,
             UseDictionary: model.Family == "kroko_asr" && options.CustomDictionary.Length > 0);
-        var key = DeviceBenchmark.Key(request, modelIdentity, token, _benchmarkIdentity);
-        _selectionKeys[(model.Id, mode, history)] = key;
-        if (!_deviceSelections.TryGetValue(key, out var selection))
+        try
         {
-            selection = DeviceBenchmark.ReadCache(_benchmarkCachePath).LastOrDefault(value => value.Key == key);
-            if (selection is null)
+            return _deviceQualifier.Qualify(new(request, modelIdentity, model.Family), () =>
             {
                 // No resident execution weights coexist with either owned subprocess.
                 ReleaseModel();
                 NativeMemory.CheckBudget(modelBytes, decodedBytes, _headroom);
-                DeviceSelectionSummary = $"Qualifying {model.Id} {mode} on CPU and Vulkan with the public sample.";
-                selection = DeviceBenchmark.QualifyAsync(key, model.Family, mode,
-                    backend => DeviceBenchmark.RunAsync(_deviceProbePath, request with { Backend = backend }, token), token)
-                    .GetAwaiter().GetResult();
-                token.ThrowIfCancellationRequested();
-                _deviceCacheWarning = DeviceBenchmark.TryUpdateCache(_benchmarkCachePath, key, selection);
-            }
-            _deviceSelections[key] = selection;
+            }, token);
         }
-        DeviceSelectionSummary = selection.Summary + (_benchmarkCachePath is null ? " Persistence disabled; this session only." : "") +
-            (_deviceCacheWarning is null ? "" : " " + _deviceCacheWarning);
-        DeviceComparison = ToDeviceComparison(selection);
-        token.ThrowIfCancellationRequested();
-        if (history > 0)
-        {
-            var factor = DeviceBenchmark.RequireMeetingRealTime(selection, BenchmarkSampleMilliseconds(token), model.Id);
-            DeviceSelectionSummary += $" Meeting pace {factor:F2}x real time.";
-        }
-        return options with { Backend = selection.Backend };
+        finally { PublishDeviceQualification(options.Diagnostics); }
     }
 
-    private double BenchmarkSampleMilliseconds(CancellationToken token)
+    private void PublishDeviceQualification(NativeDiagnosticContext? diagnostics)
     {
-        if (_benchmarkSampleMilliseconds is { } cached) return cached;
-        var audio = new AudioInputReader().ReadRecordingAsync(_benchmarkSamplePath!, token).GetAwaiter().GetResult();
-        var milliseconds = audio.Samples.Length / (double)audio.Channels / audio.SampleRate * 1000;
-        _benchmarkSampleMilliseconds = milliseconds;
-        return milliseconds;
+        var status = _deviceQualifier.Current;
+        DeviceSelectionSummary = status.Summary;
+        DeviceComparison = status.Comparison;
+        if (diagnostics is not null) diagnostics.SelectionSource = status.Source;
     }
-
-    private void RejectSelectedGpu(AudioModel model, string mode, int history, NativeExecutionException error)
-    {
-        DeviceComparison = null;
-        var key = _selectionKeys[(model.Id, mode, history)];
-        var prior = _deviceSelections[key];
-        if (!prior.Cpu.Working)
-        {
-            _deviceSelections.Remove(key);
-            _deviceCacheWarning = DeviceBenchmark.TryUpdateCache(_benchmarkCachePath, key, null);
-            DeviceSelectionSummary = $"Vulkan recognition failed; no qualified CPU fallback is available. {_deviceCacheWarning}";
-        }
-        var selection = DeviceBenchmark.CpuFallback(prior, error);
-        _deviceSelections[key] = selection;
-        DeviceSelectionSummary = selection.Summary + " GPU failure reported; CPU is selected for the next attempt.";
-        _deviceCacheWarning = DeviceBenchmark.TryUpdateCache(_benchmarkCachePath, key, selection);
-        if (_deviceCacheWarning is not null) DeviceSelectionSummary += " " + _deviceCacheWarning;
-        DeviceComparison = ToDeviceComparison(selection);
-        // A CPU that only qualified as the slower device may still be too slow for a live meeting.
-        if (history > 0) DeviceBenchmark.RequireMeetingRealTime(selection, BenchmarkSampleMilliseconds(CancellationToken.None), model.Id);
-    }
-
-    private static DeviceComparisonSnapshot ToDeviceComparison(DeviceBenchmarkSelection selection) => new(
-        selection.Cpu.Working ? selection.Cpu.Milliseconds : null,
-        selection.Gpu.Working ? selection.Gpu.Milliseconds : null,
-        selection.Backend,
-        selection.MeasuredAt,
-        selection.Cpu.Error,
-        selection.Gpu.Error);
 
     private StreamOutcome RunAutoStream(AudioModel model, ChannelReader<byte[]> audio, RecognitionOptions options,
         IProgress<TranscriptUpdate>? progress, CancellationToken token, Action? onReady, int history = 0)
     {
-        var selected = ResolveBackend(model, "streaming", history, NativeMemory.MaximumStreamFrames * sizeof(float), options, token);
         _streamConsumed = false;
-        return NativeAutoRecovery.Run(options.Backend == NativeBackend.Auto, selected, token,
+        return RunWithDevice(model, "streaming", history, NativeMemory.MaximumStreamFrames * sizeof(float), options, token,
             backend => NativeOperation.Run(() => StreamCore(model, audio, backend, progress, token, onReady,
                 history == 0 ? NativeMemory.MaximumStreamFrames : 16000L * 120 * 60, history), CleanupStream),
-            error => RejectSelectedGpu(model, "streaming", history, error), () => _streamConsumed);
+            () => _streamConsumed);
     }
 }
