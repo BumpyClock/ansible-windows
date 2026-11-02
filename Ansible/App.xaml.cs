@@ -30,7 +30,7 @@ public partial class App : Application
                 directory => new NativeAudioEngine(paths.NativeLibrary, paths.ModelCatalog, directory,
                     deviceProbePath: paths.DeviceProbe, benchmarkSamplePath: paths.PublicSample,
                     benchmarkCachePath: paths.DeviceBenchmarks),
-                new PermissionCheckedAudioCaptureFactory(new WaveInCaptureFactory(), microphonePermission), new AudioInputReader(), new UsageStore(paths.Usage), paths.ModelsDirectory,
+                new PermissionCheckedAudioCaptureFactory(new WaveInCaptureFactory(diagnostics), microphonePermission), new AudioInputReader(), new UsageStore(paths.Usage), paths.ModelsDirectory,
                 settingsStore: new AppSettingsStore(paths.Settings), diagnostics: diagnostics);
             launchGeneration = diagnostics.CurrentGeneration;
             if (launchGeneration is not null) launchStarted = Stopwatch.GetTimestamp();

@@ -73,9 +73,9 @@ try {
     if (-not $resourceMap) { throw "The package resource index has no map for '$($identity.Name)'." }
     foreach ($xaml in @(
         "App.xbf", "DesignTokens.xbf", "NavigationStyles.xbf", "AppMark.xbf", "PageCanvas.xbf", "DeviceComparisonView.xbf",
-        "SettingsRow.xbf", "HomeHistoryView.xbf", "HomeInsightsView.xbf",
+        "SettingsRow.xbf", "Badge.xbf", "HomeHistoryView.xbf", "HomeInsightsView.xbf",
         "MainWindow.xbf", "FloatingDictationWindow.xbf", "MainPage.xbf",
-        "DictationPage.xbf", "ModelManagementPage.xbf", "ModelCard.xbf",
+        "DictationPage.xbf", "WelcomePage.xbf", "ShortcutIllustration.xbf", "ModelManagementPage.xbf", "ModelCard.xbf",
         "MeetingsPage.xbf", "MeetingWindow.xbf", "CustomWordsPage.xbf"
     )) {
         # MSIX embeds compiled XAML in the PRI instead of shipping loose .xbf files.

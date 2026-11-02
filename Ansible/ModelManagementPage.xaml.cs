@@ -12,6 +12,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
     private readonly AppPaths _paths;
     private readonly Func<nint> _windowHandle;
     private readonly HttpClient _http;
+    private readonly LocalDiagnosticLog _diagnostics;
     private readonly Func<Task> _transcribeFile;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly List<ModelCard> _cardList = [];
@@ -29,13 +30,14 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
     private string? _error;
 
     internal ModelManagementPage(DictationSession session, AppPaths paths, Func<nint> windowHandle,
-        HttpClient http, Func<Task> transcribeFile)
+        HttpClient http, Func<Task> transcribeFile, LocalDiagnosticLog diagnostics)
     {
         InitializeComponent();
         _session = session;
         _paths = paths;
         _windowHandle = windowHandle;
         _http = http;
+        _diagnostics = diagnostics;
         _transcribeFile = transcribeFile;
         Loaded += PageLoaded;
         Unloaded += (_, _) =>
@@ -61,7 +63,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         {
             var catalog = await NativeModelCatalog.LoadAsync(_paths.ModelCatalog, _lifetime.Token);
             var families = await NativeAudioEngine.GetSupportedFamiliesAsync(_paths.NativeLibrary, _lifetime.Token);
-            var candidate = new ModelDownloadManager(catalog, families, _session.State.ModelsDirectory, _http);
+            var candidate = new ModelDownloadManager(catalog, families, _session.State.ModelsDirectory, _http, _diagnostics);
             try
             {
                 if (_cardList.Count == 0)
