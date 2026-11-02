@@ -71,30 +71,30 @@ internal static unsafe partial class WindowsTextTarget
         PasteShortcut pasteShortcut, CancellationToken cancellationToken, Func<bool> stillCurrent)
     {
         if (string.IsNullOrWhiteSpace(text))
-            return TextDeliveryOutcome.Rejected("The recognition result contains no speech text. Use Copy transcript if needed.");
+            return TextDeliveryOutcome.Rejected("The recognition result contains no speech text. Use Copy transcript if needed.", TextDeliveryReason.NoSpeech);
         // Never mask physical modifiers with synthetic releases. Deferral is safe only before delivery.
         for (var attempt = 0; attempt < 8 && !ShortcutModifiersReleased(); attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (!stillCurrent())
-                return TextDeliveryOutcome.Rejected("Another operation started before the text could be sent. Use Copy transcript instead.");
+                return TextDeliveryOutcome.Rejected("Another operation started before the text could be sent. Use Copy transcript instead.", TextDeliveryReason.Superseded);
             Thread.Sleep(25);
         }
         if (!InsertionKeysReleased(method, ShortcutModifiersReleased(), PasteTriggerReleased(pasteShortcut)))
-            return TextDeliveryOutcome.Deferred("The shortcut keys are still held; typing resumes when they are released.");
+            return TextDeliveryOutcome.Deferred("The shortcut keys are still held; typing resumes when they are released.", TextDeliveryReason.ModifiersHeld);
         TextSnapshot? before = null;
         TextDeliveryOutcome? Recheck()
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (!stillCurrent())
-                return TextDeliveryOutcome.Rejected("Another operation started before the text could be sent. Use Copy transcript instead.");
+                return TextDeliveryOutcome.Rejected("Another operation started before the text could be sent. Use Copy transcript instead.", TextDeliveryReason.Superseded);
             if (!TryRecheckTarget(target, out var reason))
-                return TextDeliveryOutcome.Rejected($"{reason} Use Copy transcript instead.");
+                return TextDeliveryOutcome.Rejected($"{reason} Use Copy transcript instead.", TextDeliveryReason.TargetInvalid);
             cancellationToken.ThrowIfCancellationRequested();
             if (!stillCurrent())
-                return TextDeliveryOutcome.Rejected("Another operation started before the text could be sent. Use Copy transcript instead.");
+                return TextDeliveryOutcome.Rejected("Another operation started before the text could be sent. Use Copy transcript instead.", TextDeliveryReason.Superseded);
             if (!InsertionKeysReleased(method, ShortcutModifiersReleased(), PasteTriggerReleased(pasteShortcut)))
-                return TextDeliveryOutcome.Deferred("The shortcut keys are still held; typing resumes when they are released.");
+                return TextDeliveryOutcome.Deferred("The shortcut keys are still held; typing resumes when they are released.", TextDeliveryReason.ModifiersHeld);
             return null;
         }
 
@@ -131,20 +131,20 @@ internal static unsafe partial class WindowsTextTarget
             try { veto = index == 0 ? prepareSend() : recheck(); }
             catch (OperationCanceledException) when (index > 0)
             {
-                return TextDeliveryOutcome.Partial("Typing was cancelled after some text was sent. Check the field; no text will be replayed.");
+                return TextDeliveryOutcome.Partial("Typing was cancelled after some text was sent. Check the field; no text will be replayed.", TextDeliveryReason.CancelledAfterInput);
             }
             catch (COMException) when (index > 0)
             {
-                return TextDeliveryOutcome.Partial("Typing stopped because the original field could no longer be checked. Some text was sent; check the field. No text will be replayed.");
+                return TextDeliveryOutcome.Partial("Typing stopped because the original field could no longer be checked. Some text was sent; check the field. No text will be replayed.", TextDeliveryReason.TargetUnavailableAfterInput);
             }
             if (veto is { } outcome)
             {
                 return index == 0 ? outcome : TextDeliveryOutcome.Partial(
-                    $"Typing stopped after {index} of {text.Length} characters. {outcome.Message}");
+                    $"Typing stopped after {index} of {text.Length} characters. {outcome.Message}", outcome.Reason);
             }
             if (SendUnicode(text, index, count) is { } failure)
                 return index > 0 && failure.Status == TextDeliveryStatus.Rejected
-                    ? TextDeliveryOutcome.Partial($"Typing stopped after {index} characters. {failure.Message}") : failure;
+                    ? TextDeliveryOutcome.Partial($"Typing stopped after {index} characters. {failure.Message}", failure.Reason) : failure;
             index += count;
             if (index < text.Length) { Thread.Sleep(gapMilliseconds); }
         }
@@ -167,10 +167,10 @@ internal static unsafe partial class WindowsTextTarget
         var sent = Math.Min(send(input), (uint)input.Length);
         if (sent == input.Length) { return null; }
         if (sent == 0)
-            return TextDeliveryOutcome.Rejected("Windows did not queue any typing events. Use Copy transcript instead.");
+            return TextDeliveryOutcome.Rejected("Windows did not queue any typing events. Use Copy transcript instead.", TextDeliveryReason.InputNotQueued);
         if ((sent & 1) != 0 && !ReleaseOwnedKeys([input[sent]], send))
-            return TextDeliveryOutcome.CleanupFailed("Typing stopped with an unreleased injected Unicode key. Some text may have been inserted; check the field. No text will be replayed.");
-        return TextDeliveryOutcome.Partial($"Windows queued {sent} of {input.Length} typing events. Some text may have been inserted; check the field. No text will be replayed.");
+            return TextDeliveryOutcome.CleanupFailed("Typing stopped with an unreleased injected Unicode key. Some text may have been inserted; check the field. No text will be replayed.", TextDeliveryReason.KeyReleaseFailed);
+        return TextDeliveryOutcome.Partial($"Windows queued {sent} of {input.Length} typing events. Some text may have been inserted; check the field. No text will be replayed.", TextDeliveryReason.InputPartial);
     }
 
     private static bool ShortcutModifiersReleased()

@@ -34,7 +34,7 @@ internal static unsafe partial class WindowsTextTarget
                 {
                     if (prepareSend() is { } veto) { return veto; }
                     if (GetClipboardOwner() != window || GetClipboardSequenceNumber() != sequence)
-                        return TextDeliveryOutcome.Rejected("Another app changed the clipboard before insertion. No paste shortcut was sent. Use Copy transcript instead.");
+                        return TextDeliveryOutcome.Rejected("Another app changed the clipboard before insertion. No paste shortcut was sent. Use Copy transcript instead.", TextDeliveryReason.ClipboardChanged);
                     return SendPasteChord(shortcut, NativeSend, Thread.Sleep,
                         () => cancellationToken.IsCancellationRequested || !stillCurrent());
                 });
@@ -78,21 +78,21 @@ internal static unsafe partial class WindowsTextTarget
             while (!OpenClipboard(window))
             {
                 if (clock.ElapsedMilliseconds >= 1000)
-                    return TextDeliveryOutcome.Rejected("Another app is using the clipboard. No paste shortcut was sent. Try again, or choose Type characters in Settings.");
+                    return TextDeliveryOutcome.Rejected("Another app is using the clipboard. No paste shortcut was sent. Try again, or choose Type characters in Settings.", TextDeliveryReason.ClipboardBusy);
                 Thread.Sleep(10);
             }
             TextDeliveryOutcome? failure = null;
             try
             {
                 if (!EmptyClipboard())
-                    failure = TextDeliveryOutcome.Rejected($"Windows could not prepare the clipboard (error {Marshal.GetLastPInvokeError()}). No paste shortcut was sent.");
+                    failure = TextDeliveryOutcome.Rejected($"Windows could not prepare the clipboard (error {Marshal.GetLastPInvokeError()}). No paste shortcut was sent.", TextDeliveryReason.ClipboardPreparationFailed);
                 else
                 {
                     for (var index = 0; index < formats.Length; index++)
                     {
                         if (SetClipboardData(formats[index], handles[index]) == 0)
                         {
-                            failure = TextDeliveryOutcome.Rejected($"Windows could not publish the dictated text and clipboard privacy formats (error {Marshal.GetLastPInvokeError()}). The previous clipboard content was replaced, but no paste shortcut was sent. Use Copy transcript instead.");
+                            failure = TextDeliveryOutcome.Rejected($"Windows could not publish the dictated text and clipboard privacy formats (error {Marshal.GetLastPInvokeError()}). The previous clipboard content was replaced, but no paste shortcut was sent. Use Copy transcript instead.", TextDeliveryReason.ClipboardPublishFailed);
                             break;
                         }
                         handles[index] = 0;
@@ -102,7 +102,7 @@ internal static unsafe partial class WindowsTextTarget
             finally
             {
                 if (!CloseClipboard())
-                    failure = TextDeliveryOutcome.Rejected($"Windows could not close the clipboard (error {Marshal.GetLastPInvokeError()}). No paste shortcut was sent. Use Copy transcript instead.");
+                    failure = TextDeliveryOutcome.Rejected($"Windows could not close the clipboard (error {Marshal.GetLastPInvokeError()}). No paste shortcut was sent. Use Copy transcript instead.", TextDeliveryReason.ClipboardCloseFailed);
             }
             return failure;
         }

@@ -6,7 +6,7 @@ namespace Ansible.Tests;
 
 public sealed partial class DictationSessionTests
 {
-    private static readonly DictationShortcut PlainShortcut = DictationShortcut.Default;
+    private static readonly DictationShortcut PlainShortcut = new(0, 0x78);
     private static readonly DictationShortcut ModifierShortcut = new(0x0002, 0x20);
 
     [Fact]
@@ -115,16 +115,19 @@ public sealed partial class DictationSessionTests
             { Kind: NoticeKind.Warning, Title: "Text sent; unverified", Message: "Paste was sent." });
     });
 
-    [Fact]
-    public Task HeldModifierShortcutDefersInsertionUntilRelease() => UiThread.RunAsync(async () =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public Task HeldModifierShortcutDefersInsertionUntilRelease(bool modifierOnly) => UiThread.RunAsync(async () =>
     {
+        var shortcut = modifierOnly ? DictationShortcut.Default : ModifierShortcut;
         await using var harness = new ShortcutHarness(new AppSettings { PushToTalk = false });
         await harness.InitializeAsync();
 
-        await harness.Shortcut.PressedAsync(ModifierShortcut);
+        await harness.Shortcut.PressedAsync(shortcut);
         await WaitForStateAsync(harness.Session, DictationPhase.Recording);
         await harness.Shortcut.ReleasedAsync();
-        await harness.Shortcut.PressedAsync(ModifierShortcut);
+        await harness.Shortcut.PressedAsync(shortcut);
         await harness.CompletedAsync();
         await Task.Delay(150);
         Assert.Empty(harness.Inspector.Target.Inserts);
