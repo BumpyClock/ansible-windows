@@ -137,6 +137,12 @@ public sealed class DictationSession
     public void SetUsageEnabled(bool enabled) =>
         ChangeSettings(state => state with { Settings = state.Settings with { CollectUsage = enabled } },
             new(NoticeKind.Success, "Settings saved", "Local usage collection was updated.", NoticeArea.Settings));
+    public void CompleteWelcome() =>
+        ChangeSettings(state => state with { Settings = state.Settings with { WelcomeCompleted = true } },
+            new(NoticeKind.Success, "Welcome complete", "Your shortcut is ready to use.", NoticeArea.Dictation));
+    public void SetMeetingCleanup(MeetingCleanupSettings settings) =>
+        ChangeSettings(state => state with { Settings = state.Settings with { MeetingCleanup = settings } },
+            new(NoticeKind.Success, "Settings saved", "Transcript cleanup settings apply to the next meeting.", NoticeArea.Settings));
     public void SetLocalDiagnosticsEnabled(bool enabled) =>
         ChangeSettings(state => state with { Settings = state.Settings with { LocalDiagnostics = enabled } },
             new(NoticeKind.Success, "Settings saved", "Local diagnostics collection was updated.", NoticeArea.Settings));

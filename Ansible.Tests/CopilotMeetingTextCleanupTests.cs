@@ -27,6 +27,7 @@ public sealed class CopilotMeetingTextCleanupTests : IDisposable
             Assert.False(File.Exists(Path.Combine(start.WorkingDirectory, canaryName)));
             _output.WriteLine("Synthetic tool canary absent");
             _output.WriteLine($"CLI exit: {result.ExitCode}");
+            if (result.ExitCode != 0) _output.WriteLine(CopilotMeetingTextCleanup.FailureMessage(result.Error));
             using var lines = new StringReader(result.Output);
             while (lines.ReadLine() is { } line)
             {
@@ -88,7 +89,10 @@ public sealed class CopilotMeetingTextCleanupTests : IDisposable
             Assert.Contains("--available-tools=__ansible_transcript_cleanup_no_tools__", start.ArgumentList);
             Assert.Contains("--no-custom-instructions", start.ArgumentList);
             Assert.Contains("--disable-builtin-mcps", start.ArgumentList);
-            Assert.Contains("--no-remote-export", start.ArgumentList);
+            Assert.Contains("--sync-session", start.ArgumentList);
+            Assert.Contains("off", start.ArgumentList);
+            Assert.DoesNotContain("--no-remote", start.ArgumentList);
+            Assert.DoesNotContain("--no-remote-export", start.ArgumentList);
             Assert.Contains("custom-model", start.ArgumentList);
             Assert.Contains("low", start.ArgumentList);
             Assert.True(start.RedirectStandardInput);
@@ -145,6 +149,18 @@ public sealed class CopilotMeetingTextCleanupTests : IDisposable
         Assert.Contains("copilot login", authError.Message);
         Assert.DoesNotContain("secret", authError.Message);
         Assert.Empty(Directory.GetDirectories(_scratch));
+    }
+
+    [Theory]
+    [InlineData("error: --no-remote was removed. PRIVATE", "incompatible")]
+    [InlineData("error: --no-remote-export was renamed. PRIVATE", "incompatible")]
+    [InlineData("authentication failed PRIVATE", "copilot login")]
+    [InlineData("unsupported model PRIVATE", "selected model")]
+    public void ProcessFailuresHaveSanitizedActionableGuidance(string stderr, string expected)
+    {
+        var message = CopilotMeetingTextCleanup.FailureMessage(stderr);
+        Assert.Contains(expected, message);
+        Assert.DoesNotContain("PRIVATE", message);
     }
 
     [Fact]

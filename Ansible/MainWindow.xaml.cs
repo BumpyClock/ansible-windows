@@ -72,7 +72,7 @@ public sealed partial class MainWindow : Window
         _meetingStore = new MeetingStore(Path.Combine(Path.GetDirectoryName(paths.Settings)!, "meetings"));
         _meetingDiagnostics = diagnostics;
         _meetings = new MeetingsPage(session, _meetingStore, OpenMeetingAsync, () => WinRT.Interop.WindowNative.GetWindowHandle(this));
-        _history = new HomeDictationHistory(session);
+        _history = new HomeDictationHistory(session, Path.Combine(Path.GetDirectoryName(paths.Settings)!, "dictation-history.json"), diagnostics);
         _shortcut = new ShortcutDictation(session, new WindowsShortcutTargetInspector(WinRT.Interop.WindowNative.GetWindowHandle(this)),
             diagnostics, (operationId, status) => _history.RecordDelivery(operationId, status), anchor =>
             {
@@ -141,6 +141,7 @@ public sealed partial class MainWindow : Window
             token.ThrowIfCancellationRequested();
             _permissionCheckComplete = true;
             RenderMicrophonePermission();
+            await _history.InitializeAsync();
             await _session.InitializeAsync();
             token.ThrowIfCancellationRequested();
             if (_closed || _closing) { return; }
@@ -668,9 +669,9 @@ public sealed partial class MainWindow : Window
             foreach (var meeting in meetings) await meeting.session.DisposeAsync();
             foreach (var meeting in _meetingWindows.ToArray()) meeting.window.Close();
             await Task.WhenAll(_session.CloseAsync(), _models.DisposeAsync().AsTask(), _dictation.FinishBackgroundWorkAsync());
-            _history.Dispose();
             await _shortcut.JoinAsync();
             if (_floating is not null) { await _floating.ClosePreviewAsync(); }
+            await _history.DisposeAsync();
             await _meetingDiagnostics.DisposeAsync();
             _allowClose = true;
             Close();

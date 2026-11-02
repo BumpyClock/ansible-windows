@@ -13,12 +13,16 @@ public sealed class AppSettingsStore(string path) : IAppSettingsStore
         using var document = JsonDocument.Parse(File.ReadAllText(Path));
         var settings = JsonSerializer.Deserialize(document.RootElement, AppSettingsJsonContext.Default.AppSettings)
             ?? throw new InvalidDataException("The app settings file does not contain a settings document.");
+        if (!document.RootElement.TryGetProperty(nameof(AppSettings.WelcomeCompleted), out _))
+            settings = settings with { WelcomeCompleted = true };
         if (!document.RootElement.TryGetProperty(nameof(AppSettings.AutoDetectMeetings), out _))
             settings = settings with { AutoDetectMeetings = true };
         if (!document.RootElement.TryGetProperty(nameof(AppSettings.Backend), out _))
             settings = settings with { Backend = NativeBackend.Auto };
         if (!document.RootElement.TryGetProperty(nameof(AppSettings.OverlayFollowsCaret), out _))
             settings = settings with { OverlayFollowsCaret = true };
+        if (!document.RootElement.TryGetProperty(nameof(AppSettings.MeetingCleanup), out _))
+            settings = settings with { MeetingCleanup = new() };
         settings.Validate();
         return settings;
     }
