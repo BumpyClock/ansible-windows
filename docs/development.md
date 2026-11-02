@@ -391,13 +391,18 @@ without the companion fails Start rather than switching models. Capture privacy 
 setting that can change during a meeting. Pause gates the same channel
 reader; it does not reset the native stream. Capture writes 16 kHz mono PCM16
 into bounded queues. `MeetingPacketClock` maps each packet start. When the
-native device counter advances by the previous PCM sample count, the next
-start continues from that length. Native-rate counters that do not match the
-PCM count, and unavailable zero counters, keep the previous timestamp mapping.
-Genuine device-counter gaps remain gaps. An 80-sample (5 ms) QPC snap remains
-only as fallback. QPC correlation can move by more than five milliseconds
-while native frames remain contiguous. This must not become an artificial
-overlap or gap. `MeetingCaptureDiagnostics` and
+native device counter advances by exactly the previous PCM sample count,
+the packet continues from the expected position regardless of its QPC
+timestamp. The first packet uses its QPC timestamp. Later packets without a
+matching counter also use their QPC timestamp, but snap to the expected
+position within 80 samples (5 ms). Zero and non-matching counters use this
+fallback. A start more than 80 samples later remains a gap. An earlier start
+outside the snap range is rejected as an overlap. A nonzero counter that
+moves backward from a nonzero previous value is also rejected. These errors
+fail microphone capture. The same errors on an output drop that endpoint
+instead. QPC correlation can move by more than five milliseconds while
+native frames remain contiguous. The matching-counter rule keeps this from
+becoming an artificial overlap or gap. `MeetingCaptureDiagnostics` and
 `Windows\MeetingCaptureMetrics` publish source health at about 1 Hz. Capture
 and downstream summaries log about every five seconds, plus Starting,
 Recording, Failed, Stopped, and final pipeline events. Capture stats and
@@ -461,7 +466,8 @@ removes the app copy. Cancellation or export failure preserves the source.
 `IMeetingCaptureFactory.StartAsync` returns one `IMeetingCapture` combining
 `IAudioCapture`, `IMeetingAudioSourceMetadata`, and `IMeetingCaptureDiagnostics`.
 `MeetingSession` does not probe optional capture capabilities at runtime.
-Positions are capture-relative 16 kHz samples, with zero at microphone start.
+Positions are capture-relative 16 kHz samples, with zero at the capture
+origin, a clock reading taken just before the microphone starts.
 Each capture after resume restarts at zero; the consumer owns meeting offsets.
 `Activity` fires on the capture thread before each packet enters `Audio`.
 Packets normally contain 640 samples; the last drain packet can be shorter.
