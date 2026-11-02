@@ -22,6 +22,7 @@
     <Compile Include="..\Ansible\HomeDictationHistory.cs" Link="HomeDictationHistory.cs" />
     <Compile Include="..\Ansible\HomeHistoryProjection.cs" Link="HomeHistoryProjection.cs" />
     <Compile Include="..\Ansible\HomeInsightsProjection.cs" Link="HomeInsightsProjection.cs" />
+    <Compile Include="..\Ansible\MeetingTranscriptProjection.cs" Link="MeetingTranscriptProjection.cs" />
     <Compile Include="..\Ansible.Probe\StreamingProbe.cs" Link="StreamingProbe.cs" />
     <Compile Include="..\Ansible\AppPaths.cs" Link="AppPaths.cs" />
     <Compile Include="..\Ansible\WindowsTextTarget.cs" Link="WindowsTextTarget.cs" />

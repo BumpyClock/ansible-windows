@@ -6,11 +6,18 @@ namespace Ansible.Core;
 
 public sealed record MeetingReadFailure(Guid Id, string Message);
 
-public sealed record MeetingListResult(IReadOnlyList<MeetingDocument> Documents, IReadOnlyList<MeetingReadFailure> Failures);
+public sealed record MeetingSummary(Guid Id, string Title, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, MeetingStatus Status)
+{
+    internal static MeetingSummary From(MeetingDocument document) =>
+        new(document.Id, document.Title, document.CreatedAt, document.UpdatedAt, document.Status);
+}
+
+public sealed record MeetingListResult(IReadOnlyList<MeetingSummary> Summaries, IReadOnlyList<MeetingReadFailure> Failures);
 
 public sealed class MeetingStore(string directory)
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly Dictionary<Guid, (NativeModelIntegrity.FileIdentity Identity, MeetingSummary Summary)> _summaries = [];
     public string DirectoryPath { get; } = Path.GetFullPath(directory);
 
     public async Task SaveAsync(MeetingDocument document, CancellationToken cancellationToken = default)
@@ -24,6 +31,11 @@ public sealed class MeetingStore(string directory)
     public async Task<MeetingDocument> LoadAsync(Guid id, CancellationToken cancellationToken = default)
     {
         await using var file = new FileStream(GetPath(id), FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+        return await ReadDocumentAsync(file, id, cancellationToken);
+    }
+
+    private static async Task<MeetingDocument> ReadDocumentAsync(FileStream file, Guid id, CancellationToken cancellationToken)
+    {
         var document = await JsonSerializer.DeserializeAsync(file, MeetingJsonContext.Default.MeetingDocument, cancellationToken)
             ?? throw new InvalidDataException("The meeting transcript is empty.");
         document.Validate();
@@ -33,31 +45,53 @@ public sealed class MeetingStore(string directory)
 
     public async Task<MeetingListResult> ListAsync(CancellationToken cancellationToken = default)
     {
+        await _gate.WaitAsync(cancellationToken);
+        try { return await ListCoreAsync(cancellationToken); }
+        finally { _gate.Release(); }
+    }
+
+    private async Task<MeetingListResult> ListCoreAsync(CancellationToken cancellationToken)
+    {
         cancellationToken.ThrowIfCancellationRequested();
         string[] paths;
         try { paths = Directory.GetFiles(DirectoryPath, "*.json"); }
-        catch (DirectoryNotFoundException) { return new([], []); }
-        var documents = new List<MeetingDocument>();
+        catch (DirectoryNotFoundException) { _summaries.Clear(); return new([], []); }
+        var summaries = new List<MeetingSummary>();
+        var seen = new HashSet<Guid>();
         var failures = new List<MeetingReadFailure>();
         foreach (var path in paths)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (!Guid.TryParseExact(Path.GetFileNameWithoutExtension(path), "N", out var id)) continue;
-            try { documents.Add(await LoadAsync(id, cancellationToken)); }
-            catch (Exception error) when (error is InvalidDataException or JsonException or IOException or UnauthorizedAccessException)
+            seen.Add(id);
+            try
             {
+                await using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+                var identity = NativeModelIntegrity.ReadIdentity(file);
+                if (!_summaries.TryGetValue(id, out var cached) || cached.Identity != identity)
+                {
+                    var document = await ReadDocumentAsync(file, id, cancellationToken);
+                    cached = (identity, MeetingSummary.From(document));
+                    _summaries[id] = cached;
+                }
+                summaries.Add(cached.Summary);
+            }
+            catch (Exception error) when (error is InvalidDataException or JsonException or IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+            {
+                _summaries.Remove(id);
                 failures.Add(new(id, error is InvalidDataException or JsonException
                     ? "The saved meeting transcript has an unsupported or invalid format."
                     : "The saved meeting transcript could not be read."));
             }
         }
-        return new(documents.OrderByDescending(document => document.CreatedAt).ToArray(), failures);
+        foreach (var id in _summaries.Keys.Where(id => !seen.Contains(id)).ToArray()) _summaries.Remove(id);
+        return new(summaries.OrderByDescending(summary => summary.CreatedAt).ToArray(), failures);
     }
 
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
         await _gate.WaitAsync(cancellationToken);
-        try { File.Delete(GetPath(id)); }
+        try { File.Delete(GetPath(id)); _summaries.Remove(id); }
         finally { _gate.Release(); }
     }
 
@@ -66,11 +100,12 @@ public sealed class MeetingStore(string directory)
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            var result = await ListAsync(cancellationToken);
-            foreach (var document in result.Documents)
+            var result = await ListCoreAsync(cancellationToken);
+            foreach (var summary in result.Summaries)
             {
-                if (document.Status is MeetingStatus.Starting or MeetingStatus.Recording or MeetingStatus.Paused or MeetingStatus.Finishing)
+                if (summary.Status is MeetingStatus.Starting or MeetingStatus.Recording or MeetingStatus.Paused or MeetingStatus.Finishing)
                 {
+                    var document = await LoadAsync(summary.Id, cancellationToken);
                     var now = DateTimeOffset.UtcNow;
                     await SaveCoreAsync(document with { Status = MeetingStatus.Interrupted,
                         UpdatedAt = now > document.UpdatedAt ? now : document.UpdatedAt }, cancellationToken);
@@ -107,6 +142,7 @@ public sealed class MeetingStore(string directory)
             }
             cancellationToken.ThrowIfCancellationRequested();
             File.Delete(sourcePath);
+            _summaries.Remove(id);
         }
         finally
         {
@@ -194,7 +230,11 @@ public sealed class MeetingStore(string directory)
                 await file.FlushAsync(cancellationToken);
                 file.Flush(flushToDisk: true);
             }
+            NativeModelIntegrity.FileIdentity identity;
+            using (var saved = new FileStream(temporaryPath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete))
+                identity = NativeModelIntegrity.ReadIdentity(saved);
             File.Move(temporaryPath, path, overwrite: true);
+            _summaries[document.Id] = (identity, MeetingSummary.From(document));
         }
         finally { if (File.Exists(temporaryPath)) File.Delete(temporaryPath); }
     }

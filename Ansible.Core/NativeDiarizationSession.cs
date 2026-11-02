@@ -25,6 +25,8 @@ internal sealed class NativeDiarizationSession : IDisposable
     private readonly List<SpeakerActivity> _activities = [];
     private readonly HashSet<SpeakerActivity> _seenActivities = [];
     private IReadOnlyList<MeetingTimedToken> _tokens = [];
+    private NemotronSpeakerAttribution _attribution = new();
+    private bool _updatePending;
     private readonly bool _wholeWords;
     private readonly TokenTimingModel _timing;
 
@@ -100,6 +102,8 @@ internal sealed class NativeDiarizationSession : IDisposable
         _activities.Clear();
         _seenActivities.Clear();
         _tokens = [];
+        _attribution = new();
+        _updatePending = false;
         _processedSamples = 0;
         _finished = false;
         using var request = new NativeAudioHandle(NativeAudioApi.RequestCreate(), NativeHandleKind.Request);
@@ -112,7 +116,7 @@ internal sealed class NativeDiarizationSession : IDisposable
         token.ThrowIfCancellationRequested();
     }
 
-    public unsafe void Push(float* samples, int frames, long offset, IProgress<TranscriptUpdate>? progress, CancellationToken token)
+    public unsafe void Push(float* samples, int frames, long offset, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
         if (!_started || _finished) throw new InvalidOperationException("Start speaker diarization before pushing audio.");
@@ -134,7 +138,7 @@ internal sealed class NativeDiarizationSession : IDisposable
             if (++events > NemotronSpeakerAttribution.MaximumActivities)
                 throw new InvalidDataException("The live diarizer returned too many queued events.");
         }
-        if (changed && _tokens.Count > 0) Publish(false, progress, token);
+        _updatePending |= changed;
     }
 
     private bool AppendEvent(nint pointer, CancellationToken token)
@@ -151,6 +155,7 @@ internal sealed class NativeDiarizationSession : IDisposable
         var count = NativeAudioApi.SpeakerTurnCount(result);
         if (count > NemotronSpeakerAttribution.MaximumActivities)
             throw new InvalidDataException("The live diarizer returned too many speaker turns.");
+        var previousCount = _activities.Count;
         for (nuint index = 0; index < count; index++)
         {
             token.ThrowIfCancellationRequested();
@@ -166,10 +171,10 @@ internal sealed class NativeDiarizationSession : IDisposable
             _seenActivities.Add(activity);
             _activities.Add(activity);
         }
-        return count > 0;
+        return _activities.Count != previousCount;
     }
 
-    public void ReadAsr(nint result, long processedSamples, IProgress<TranscriptUpdate>? progress, CancellationToken token)
+    public void ReadAsr(nint result, long processedSamples, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
         if (processedSamples != _processedSamples)
@@ -177,15 +182,15 @@ internal sealed class NativeDiarizationSession : IDisposable
         var count = NativeAudioApi.WordCount(result);
         if (count == 0) return;
         // The native timestamp patch publishes the entire ASR token history, including a revisable tail.
-        ReadTokens(result, count, token);
-        Publish(false, progress, token);
+        _updatePending |= ReadTokens(result, count, token);
     }
 
-    private void ReadTokens(nint result, nuint count, CancellationToken token)
+    private bool ReadTokens(nint result, nuint count, CancellationToken token)
     {
         if (count > NemotronSpeakerAttribution.MaximumTokens)
             throw new InvalidDataException("Meeting recognition returned too many token timestamps.");
         var tokens = new MeetingTimedToken[(int)count];
+        var changed = tokens.Length != _tokens.Count;
         var remaining = NemotronSpeakerAttribution.MaximumTextCharacters;
         for (nuint index = 0; index < count; index++)
         {
@@ -197,9 +202,17 @@ internal sealed class NativeDiarizationSession : IDisposable
             if (_wholeWords && index > 0) piece = " " + piece;
             remaining -= piece.Length;
             if (remaining < 0) throw new InvalidDataException("Meeting speech exceeds the supported text limit.");
-            tokens[(int)index] = new(piece, start, end);
+            var previous = (int)index < _tokens.Count ? _tokens[(int)index] : null;
+            if (previous is not null && previous.Text == piece && previous.StartSample == start && previous.EndSample == end)
+                tokens[(int)index] = previous;
+            else
+            {
+                tokens[(int)index] = new(piece, start, end);
+                changed = true;
+            }
         }
-        _tokens = tokens;
+        if (changed) _tokens = tokens;
+        return changed;
     }
 
     private static unsafe string ReadUtf8(nint pointer, int maximumCharacters)
@@ -235,7 +248,7 @@ internal sealed class NativeDiarizationSession : IDisposable
         if (samples != _processedSamples)
             throw new InvalidDataException("Speech and speaker audio must share cumulative sample positions.");
         ReadTokens(result, NativeAudioApi.WordCount(result), token);
-        var update = NemotronSpeakerAttribution.Create(_tokens, _activities, samples, true, _timing, token);
+        var update = _attribution.Create(_tokens, _activities, samples, true, _timing, token);
         if (!string.Equals(update.SpeechText, speech.Trim(), StringComparison.Ordinal))
             throw new InvalidDataException("Speech and timestamp text disagree. The meeting cannot assign speakers safely.");
         token.ThrowIfCancellationRequested();
@@ -243,8 +256,13 @@ internal sealed class NativeDiarizationSession : IDisposable
         return update with { Text = speech, SpeechText = speech };
     }
 
-    private void Publish(bool final, IProgress<TranscriptUpdate>? progress, CancellationToken token) =>
-        progress?.Report(NemotronSpeakerAttribution.Create(_tokens, _activities, _processedSamples, final, _timing, token));
+    // Publish once after both speaker and ASR events for the same audio chunk have been drained.
+    public void PublishPending(IProgress<TranscriptUpdate>? progress, CancellationToken token)
+    {
+        if (!_updatePending || _tokens.Count == 0) return;
+        _updatePending = false;
+        progress?.Report(_attribution.Create(_tokens, _activities, _processedSamples, false, _timing, token));
+    }
 
     public void Reset()
     {
@@ -254,6 +272,8 @@ internal sealed class NativeDiarizationSession : IDisposable
         _finished = false;
         _processedSamples = 0;
         _tokens = [];
+        _attribution = new();
+        _updatePending = false;
         _activities.Clear();
         _seenActivities.Clear();
     }
@@ -268,6 +288,8 @@ internal sealed class NativeDiarizationSession : IDisposable
         _lease = null;
         _started = false;
         _tokens = [];
+        _attribution = new();
+        _updatePending = false;
         _activities.Clear();
         _seenActivities.Clear();
     }

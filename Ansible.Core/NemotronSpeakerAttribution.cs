@@ -13,8 +13,10 @@ public enum TokenTimingModel
     WordSpan
 }
 
-public static class NemotronSpeakerAttribution
+public sealed class NemotronSpeakerAttribution
 {
+    private SpeakerActivity[] _activities = [];
+    private ActivityTimeline? _timeline;
     private const long SampleRate = 16000;
     private const string UnknownSpeaker = "Unknown speaker";
     internal const long MaximumSamples = SampleRate * 120 * 60;
@@ -30,7 +32,7 @@ public static class NemotronSpeakerAttribution
     // Diarizer activity is reported in 80 ms frames; a gap of up to two frames is one run of speech.
     internal const long MaximumRunGapSamples = 2 * 1280;
 
-    public static TranscriptUpdate Create(IReadOnlyList<MeetingTimedToken> tokens,
+    public TranscriptUpdate Create(IReadOnlyList<MeetingTimedToken> tokens,
         IReadOnlyList<SpeakerActivity> activities, long processedSamples, bool isFinal,
         TokenTimingModel timing = TokenTimingModel.EmissionFrame, CancellationToken cancellationToken = default)
     {
@@ -44,7 +46,12 @@ public static class NemotronSpeakerAttribution
         if (activities.Count > MaximumActivities)
             throw new ArgumentOutOfRangeException(nameof(activities));
 
-        var words = new List<Word>();
+        var timeline = Timeline(activities, processedSamples, cancellationToken);
+        var turns = new List<MeetingTurn>();
+        var turnText = new StringBuilder();
+        var turnSpeaker = UnknownSpeaker;
+        long turnStart = 0, turnEnd = 0;
+        var turnQuality = MeetingTimingQuality.Unknown;
         var speech = new StringBuilder();
         var wordText = new StringBuilder();
         long previousStart = 0;
@@ -84,32 +91,6 @@ public static class NemotronSpeakerAttribution
         }
         FinishWord();
 
-        var timeline = new ActivityTimeline(activities, processedSamples, cancellationToken);
-        var turns = new List<MeetingTurn>();
-        var turnText = new StringBuilder();
-        var turnSpeaker = UnknownSpeaker;
-        long turnStart = 0, turnEnd = 0;
-        var turnQuality = MeetingTimingQuality.Unknown;
-        foreach (var word in words)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var quality = word.HasNativeTiming && word.End > word.Start
-                ? MeetingTimingQuality.Aligned : MeetingTimingQuality.Unknown;
-            var speaker = quality == MeetingTimingQuality.Aligned
-                ? timeline.GetSpeaker(word.Start, word.End, timing) : UnknownSpeaker;
-            if (turnText.Length > 0 && (speaker != turnSpeaker || quality != turnQuality ||
-                word.Start - turnEnd > SampleRate || Math.Max(turnEnd, word.End) - turnStart > 10 * SampleRate))
-                FinishTurn();
-            if (turnText.Length == 0)
-            {
-                turnSpeaker = speaker;
-                turnStart = word.Start;
-                turnEnd = word.End;
-                turnQuality = quality;
-            }
-            turnEnd = Math.Max(turnEnd, word.End);
-            turnText.Append(word.Text);
-        }
         FinishTurn();
         if (!isFinal && turns.Count > 0)
             turns[^1] = turns[^1] with { IsProvisional = true };
@@ -124,11 +105,25 @@ public static class NemotronSpeakerAttribution
         void FinishWord()
         {
             if (wordText.Length == 0) return;
-            var text = wordText.ToString();
-            if (!string.IsNullOrWhiteSpace(text))
+            if (every.HasContent)
             {
-                var span = lexical.HasContent ? lexical : every;
-                words.Add(new(text, span.Start, span.End, span.HasNativeTiming));
+                var word = lexical.HasContent ? lexical : every;
+                var quality = word.HasNativeTiming && word.End > word.Start
+                    ? MeetingTimingQuality.Aligned : MeetingTimingQuality.Unknown;
+                var speaker = quality == MeetingTimingQuality.Aligned
+                    ? timeline.GetSpeaker(word.Start, word.End, timing) : UnknownSpeaker;
+                if (turnText.Length > 0 && (speaker != turnSpeaker || quality != turnQuality ||
+                    word.Start - turnEnd > SampleRate || Math.Max(turnEnd, word.End) - turnStart > 10 * SampleRate))
+                    FinishTurn();
+                if (turnText.Length == 0)
+                {
+                    turnSpeaker = speaker;
+                    turnStart = word.Start;
+                    turnEnd = word.End;
+                    turnQuality = quality;
+                }
+                turnEnd = Math.Max(turnEnd, word.End);
+                turnText.Append(wordText);
             }
             wordText.Clear();
             lexical.Reset();
@@ -142,6 +137,27 @@ public static class NemotronSpeakerAttribution
                 turnText.ToString().Trim()) { TimingQuality = turnQuality });
             turnText.Clear();
         }
+    }
+
+    // Activities are revisable, including the final snapshot. Compare their values, not list identity.
+    private ActivityTimeline Timeline(IReadOnlyList<SpeakerActivity> activities, long processedSamples, CancellationToken token)
+    {
+        var unchanged = _timeline is not null && activities.Count == _activities.Length;
+        for (var i = 0; unchanged && i < activities.Count; i++)
+        {
+            token.ThrowIfCancellationRequested();
+            unchanged = activities[i] == _activities[i];
+        }
+        if (unchanged)
+        {
+            if (_timeline!.EndSample > processedSamples)
+                throw new ArgumentException("Speaker activities exceed the processed audio.", nameof(activities));
+            return _timeline;
+        }
+        var snapshot = activities.ToArray();
+        var timeline = new ActivityTimeline(snapshot, processedSamples, token);
+        _activities = snapshot;
+        return _timeline = timeline;
     }
 
     internal static int GetSpeakerIndex(SpeakerActivity activity, long processedSamples)
@@ -161,8 +177,6 @@ public static class NemotronSpeakerAttribution
             if (char.IsLetterOrDigit(character)) return true;
         return false;
     }
-
-    private sealed record Word(string Text, long Start, long End, bool HasNativeTiming);
 
     private sealed class WordSpan
     {
@@ -196,6 +210,7 @@ public static class NemotronSpeakerAttribution
         private readonly int[] _masks;
         private readonly long[,] _coverage;
         private readonly int _count;
+        public long EndSample { get; private set; }
 
         public ActivityTimeline(IReadOnlyList<SpeakerActivity> activities, long processedSamples,
             CancellationToken cancellationToken)
@@ -206,6 +221,7 @@ public static class NemotronSpeakerAttribution
                 cancellationToken.ThrowIfCancellationRequested();
                 var activity = activities[i];
                 var speaker = GetSpeakerIndex(activity, processedSamples);
+                EndSample = Math.Max(EndSample, activity.EndSample);
                 events[2 * i] = new(activity.StartSample, speaker, 1);
                 events[2 * i + 1] = new(activity.EndSample, speaker, -1);
             }

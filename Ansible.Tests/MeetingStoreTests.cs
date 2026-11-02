@@ -30,7 +30,7 @@ public sealed class MeetingStoreTests : IDisposable
         Assert.Single(Directory.GetFiles(_directory));
         await store.DeleteAsync(meeting.Id);
         await store.DeleteAsync(meeting.Id);
-        Assert.Empty((await store.ListAsync()).Documents);
+        Assert.Empty((await store.ListAsync()).Summaries);
     }
 
     [Fact]
@@ -43,7 +43,7 @@ public sealed class MeetingStoreTests : IDisposable
         await store.SaveAsync(old);
         await store.SaveAsync(recent);
         await File.WriteAllTextAsync(Path.Combine(_directory, "unfinished.tmp"), "partial data");
-        Assert.Equal(new[] { recent.Id, old.Id }, (await store.ListAsync()).Documents.Select(document => document.Id));
+        Assert.Equal(new[] { recent.Id, old.Id }, (await store.ListAsync()).Summaries.Select(document => document.Id));
     }
 
     [Fact]
@@ -95,7 +95,7 @@ public sealed class MeetingStoreTests : IDisposable
         Assert.Equal("Alex", loaded.GetSpeakerName("speaker_0"));
         Assert.Equal("Saved speech", Assert.Single(loaded.Turns).Text);
         await store.MarkInterruptedSessionsAsync();
-        var recovered = Assert.Single((await store.ListAsync()).Documents);
+        var recovered = await store.LoadAsync(Assert.Single((await store.ListAsync()).Summaries).Id);
         Assert.Equal(MeetingStatus.Interrupted, recovered.Status);
         Assert.Equal(loaded.Turns, recovered.Turns);
         Assert.Equal("Alex", recovered.GetSpeakerName("speaker_0"));
@@ -147,7 +147,7 @@ public sealed class MeetingStoreTests : IDisposable
         await File.WriteAllTextAsync(Path.Combine(_directory, malformedId.ToString("N") + ".json"), "private speech: malformed JSON");
 
         var listed = await store.ListAsync();
-        Assert.Equal(healthy.Id, Assert.Single(listed.Documents).Id);
+        Assert.Equal(healthy.Id, Assert.Single(listed.Summaries).Id);
         Assert.Equal(new[] { invalidId, malformedId }.Order(), listed.Failures.Select(failure => failure.Id).Order());
         Assert.All(listed.Failures, failure => Assert.DoesNotContain("private speech", failure.Message));
         var failures = await store.MarkInterruptedSessionsAsync();
@@ -168,7 +168,7 @@ public sealed class MeetingStoreTests : IDisposable
         await store.SaveAsync(locked);
         using var handle = new FileStream(Path.Combine(_directory, locked.Id.ToString("N") + ".json"), FileMode.Open, FileAccess.Read, FileShare.None);
         var result = await store.ListAsync();
-        Assert.Equal(healthy.Id, Assert.Single(result.Documents).Id);
+        Assert.Equal(healthy.Id, Assert.Single(result.Summaries).Id);
         Assert.Equal(locked.Id, Assert.Single(result.Failures).Id);
     }
 
@@ -268,6 +268,36 @@ public sealed class MeetingStoreTests : IDisposable
         Assert.Equal(meeting.Turns, reverted.Turns);
         await Assert.ThrowsAsync<ArgumentException>(() => store.ApplyCleanupAsync(meeting.Id, []));
         Assert.Equal(meeting.Turns, (await store.LoadAsync(meeting.Id)).Turns);
+    }
+
+    [Fact]
+    public async Task SummaryCacheInvalidatesReplacedChangedDeletedAndCorruptFiles()
+    {
+        var store = new MeetingStore(_directory);
+        var meeting = new MeetingDocument { Title = "Original", Status = MeetingStatus.Completed,
+            Turns = [new("speaker_0", 0, 1, "Full speech stays out of summaries")] };
+        await store.SaveAsync(meeting);
+        var summary = Assert.Single((await store.ListAsync()).Summaries);
+        Assert.Equal("Original", summary.Title);
+        Assert.DoesNotContain(typeof(MeetingSummary).GetProperties(), property => property.PropertyType == typeof(IReadOnlyList<MeetingTurn>));
+        var path = Path.Combine(_directory, meeting.Id.ToString("N") + ".json");
+        var originalTime = File.GetLastWriteTimeUtc(path);
+        var json = await File.ReadAllTextAsync(path);
+        var replacement = path + ".replacement";
+        await File.WriteAllTextAsync(replacement, json.Replace("Original", "Replaced"));
+        File.SetLastWriteTimeUtc(replacement, originalTime);
+        File.Move(replacement, path, overwrite: true);
+        Assert.Equal("Replaced", Assert.Single((await store.ListAsync()).Summaries).Title);
+        await File.WriteAllTextAsync(path, json.Replace("Original", "Modified title"));
+        Assert.Equal("Modified title", Assert.Single((await store.ListAsync()).Summaries).Title);
+        await File.WriteAllTextAsync(path, "invalid");
+        var corrupt = await store.ListAsync();
+        Assert.Empty(corrupt.Summaries);
+        Assert.Equal(meeting.Id, Assert.Single(corrupt.Failures).Id);
+        File.Delete(path);
+        var deleted = await store.ListAsync();
+        Assert.Empty(deleted.Summaries);
+        Assert.Empty(deleted.Failures);
     }
 
     public void Dispose()

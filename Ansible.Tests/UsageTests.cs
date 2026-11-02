@@ -11,7 +11,6 @@ public sealed class UsageTests
         var summary = UsageSummary.Create([], new DateOnly(2026, 10, 2), TimeZoneInfo.Utc);
         Assert.Null(summary.WordsPerMinute);
         Assert.Equal(0, summary.Sessions);
-        Assert.Equal(0, summary.TotalWords);
         Assert.Empty(summary.Activity);
         Assert.Empty(summary.Models);
     }
@@ -28,13 +27,13 @@ public sealed class UsageTests
         var summary = UsageSummary.Create(entries, new DateOnly(2026, 10, 2), TimeZoneInfo.Utc);
         Assert.Equal(60, summary.WordsPerMinute);
         Assert.Equal(90, summary.DictatedWords);
-        Assert.Equal(1000, summary.FileWords);
-        Assert.Equal(1090, summary.TotalWords);
         Assert.Equal(2, summary.DictationSessions);
         Assert.Equal(1, summary.FileSessions);
+        Assert.Equal(3, summary.Sessions);
         Assert.Equal(2, summary.CurrentStreak);
-        Assert.Equal(2, summary.LongestStreak);
         Assert.Equal(2, summary.Models[0].Sessions);
+        Assert.Equal(1, summary.Models.Single(model => model.ModelId == "vibevoice").Sessions);
+        Assert.Equal(1, summary.Activity[new DateOnly(2026, 10, 1)]);
         Assert.Equal(2, summary.Activity[new DateOnly(2026, 10, 2)]);
     }
 
@@ -109,14 +108,13 @@ public sealed class UsageTests
     }
 
     [Fact]
-    public void UnknownSpeechContentDoesNotBecomeZeroPaceOrAnnotatedWords()
+    public void UnknownSpeechContentIsExcludedFromPaceAndRecordingTime()
     {
         var entry = Entry(2, "vibevoice", UsageSource.Dictation, 0, 30) with { Words = null };
         var summary = UsageSummary.Create([entry], new DateOnly(2026, 10, 2), TimeZoneInfo.Utc);
         Assert.Equal(1, summary.DictationSessions);
-        Assert.Equal(1, summary.UnknownWordSessions);
         Assert.Null(summary.WordsPerMinute);
-        Assert.Equal(0, summary.TotalWords);
+        Assert.Equal(0, summary.RecordingSeconds);
     }
 
     [Fact]
@@ -127,7 +125,6 @@ public sealed class UsageTests
         var nextDay = UsageSummary.Create(entries, new DateOnly(2026, 10, 3), TimeZoneInfo.Utc);
         Assert.Equal(1, beforeMidnight.CurrentStreak);
         Assert.Equal(0, nextDay.CurrentStreak);
-        Assert.Equal(beforeMidnight.TotalWords, nextDay.TotalWords);
         Assert.Equal(beforeMidnight.Sessions, nextDay.Sessions);
     }
 

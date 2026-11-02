@@ -72,7 +72,7 @@ internal sealed partial class NativeModelIntegrity
         }
     }
 
-    private static FileIdentity ReadIdentity(FileStream stream)
+    internal static FileIdentity ReadIdentity(FileStream stream)
     {
         if (!OperatingSystem.IsWindows())
             throw new PlatformNotSupportedException("Model identity verification requires Windows file identity.");
@@ -85,7 +85,7 @@ internal sealed partial class NativeModelIntegrity
     }
 
     private sealed record VerifiedIdentity(FileIdentity Identity, string Sha256);
-    private readonly record struct FileIdentity(
+    internal readonly record struct FileIdentity(
         uint Volume, uint IndexHigh, uint IndexLow, long Bytes, long WriteTime, long CreationTime);
 
     [StructLayout(LayoutKind.Sequential)]

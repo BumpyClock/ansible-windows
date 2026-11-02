@@ -57,7 +57,7 @@ public sealed class FinalTextDelivery(
                 if (delivery.Status != TextDeliveryStatus.Deferred)
                 {
                     Delivery = delivery;
-                    Sent = delivery.Status is TextDeliveryStatus.Sent or TextDeliveryStatus.Verified or TextDeliveryStatus.CleanupFailed;
+                    Sent = delivery.Status is TextDeliveryStatus.Sent or TextDeliveryStatus.Verified;
                     if (delivery.Status is TextDeliveryStatus.Rejected or TextDeliveryStatus.Partial or TextDeliveryStatus.CleanupFailed)
                         Error = delivery.Message;
                     return outcome;

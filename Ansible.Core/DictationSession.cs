@@ -24,8 +24,8 @@ public sealed class DictationSession
     private CancellationTokenSource _engineWorkCancellation = new();
     private ITimer? _idleTimer;
     private long _idleGeneration;
-    private Operation? _operation;
-    private Operation? _recovery;
+    private SessionOperation? _operation;
+    private SessionOperation? _recovery;
     private Task? _closeTask;
     private bool _closing;
     private long _version;
@@ -82,20 +82,22 @@ public sealed class DictationSession
         {
             lock (_gate)
             {
-                return _operation?.StartedAt is { } start ? _time.GetElapsedTime(start) : _lastElapsed;
+                return (_operation as RecognitionOperation)?.StartedAt is { } start ? _time.GetElapsedTime(start) : _lastElapsed;
             }
         }
     }
 
     public Task<SessionOutcome> InitializeAsync() =>
-        Begin(SessionActivity.Connecting, State.ModelsDirectory, true);
+        Admit(() => new ConnectionOperation(_state.ModelsDirectory, true, _initialSettingsWarning, _timeout, _time));
     public Task<SessionOutcome> ConnectAsync(string directory) =>
-        Begin(SessionActivity.Connecting, directory, false);
-    public Task<SessionOutcome> StartDictationAsync(
-        IProgress<TranscriptUpdate>? transcriptUpdates = null) =>
-        Begin(SessionActivity.Dictation, transcriptUpdates: transcriptUpdates);
-    public Task<SessionOutcome> ReplayAsync(string path) => Begin(SessionActivity.Replay, path);
-    public Task<SessionOutcome> TranscribeFileAsync(string path) => Begin(SessionActivity.File, path);
+        Admit(() => new ConnectionOperation(directory, false, null, _timeout, _time));
+    public Task<SessionOutcome> StartDictationAsync() =>
+        Admit(() => new DictationOperation(RecognitionInputs(requiresMicrophone: true),
+            _state.Settings.MicrophoneBoostDecibels, _timeout, _time));
+    public Task<SessionOutcome> ReplayAsync(string path) =>
+        Admit(() => new ReplayOperation(RecognitionInputs(requiresMicrophone: true), path, _timeout, _time));
+    public Task<SessionOutcome> TranscribeFileAsync(string path) =>
+        Admit(() => new FileOperation(RecognitionInputs(requiresMicrophone: false), path, _timeout, _time));
     public async Task ReserveMeetingAsync()
     {
         SessionSnapshot state;
@@ -157,7 +159,7 @@ public sealed class DictationSession
         Func<CancellationToken, Task> maintenance, string? directory = null)
     {
         ArgumentNullException.ThrowIfNull(maintenance);
-        return Begin(SessionActivity.ModelMaintenance, directory ?? State.ModelsDirectory, maintenance: maintenance);
+        return Admit(() => new ModelMaintenanceOperation(directory ?? _state.ModelsDirectory, maintenance, _timeout, _time));
     }
 
     public void SelectModel(int index)
@@ -276,54 +278,38 @@ public sealed class DictationSession
     public void ReportUiError(Exception error, NoticeArea area = NoticeArea.Dictation) =>
         Notify(NoticeKind.Error, "Operation failed", error.Message, area);
 
-    private Task<SessionOutcome> Begin(
-        SessionActivity activity, string? path = null, bool initializeUsage = false,
-        Func<CancellationToken, Task>? maintenance = null,
-        IProgress<TranscriptUpdate>? transcriptUpdates = null)
+    // Requires _gate. Recognition keeps the admitted engine and model for its entire lifetime.
+    private RecognitionInput RecognitionInputs(bool requiresMicrophone)
     {
-        Operation operation;
+        var model = _state.SelectedModel;
+        if (_engine is null || model is null || requiresMicrophone && !model.SupportsMicrophone)
+            throw new InvalidOperationException("Choose an installed model that supports this recognition mode.");
+        if (CustomVocabulary.ModelCompatibilityError(model, _state.Settings.CustomDictionary) is { } dictionaryError)
+            throw new InvalidDataException(dictionaryError);
+        return new(_engine, model, new RecognitionOptions(_state.Language,
+            model.SupportsCustomDictionary ? _state.Settings.CustomDictionary : "", _state.Settings.Backend));
+    }
+
+    private Task<SessionOutcome> Admit(Func<SessionOperation> create)
+    {
+        SessionOperation operation;
         SessionSnapshot state;
         lock (_gate)
         {
             RequireIdle();
-            var model = _state.SelectedModel;
-            if (activity is SessionActivity.Dictation or SessionActivity.Replay or SessionActivity.File)
-            {
-                if (_engine is null || model is null ||
-                    activity is SessionActivity.Dictation or SessionActivity.Replay && !model.SupportsMicrophone)
-                {
-                    throw new InvalidOperationException("Choose an installed model that supports this recognition mode.");
-                }
-                if (CustomVocabulary.ModelCompatibilityError(model, _state.Settings.CustomDictionary) is { } dictionaryError)
-                    throw new InvalidDataException(dictionaryError);
-            }
-            var options = new RecognitionOptions(_state.Language,
-                model?.SupportsCustomDictionary == true ? _state.Settings.CustomDictionary : "", _state.Settings.Backend);
-            operation = new Operation(activity, model, options, path, initializeUsage, _timeout, _time)
-            {
-                MicrophoneBoostDecibels = _state.Settings.MicrophoneBoostDecibels
-            };
-            operation.SettingsWarning = initializeUsage ? _initialSettingsWarning : null;
-            operation.Maintenance = maintenance;
-            operation.TranscriptUpdates = transcriptUpdates;
+            operation = create();
             _operation = operation;
             _lastElapsed = TimeSpan.Zero;
             StopIdleTimer();
+            var recognition = operation is RecognitionOperation;
             state = SetState(_state with
             {
-                Activity = activity,
+                Activity = operation.Activity,
                 OperationId = operation.Id,
-                Phase = activity switch
-                {
-                    SessionActivity.Connecting => DictationPhase.Connecting,
-                    SessionActivity.File => DictationPhase.Transcribing,
-                    SessionActivity.ModelMaintenance => DictationPhase.MaintainingModels,
-                    _ => DictationPhase.Preparing
-                },
-                Transcript = activity is SessionActivity.Connecting or SessionActivity.ModelMaintenance ? _state.Transcript : "",
-                TranscriptOperationId = activity is SessionActivity.Connecting or SessionActivity.ModelMaintenance
-                    ? _state.TranscriptOperationId : null,
-                Result = activity is SessionActivity.Connecting or SessionActivity.ModelMaintenance ? _state.Result : null,
+                Phase = operation.InitialPhase,
+                Transcript = recognition ? "" : _state.Transcript,
+                TranscriptOperationId = recognition ? null : _state.TranscriptOperationId,
+                Result = recognition ? null : _state.Result,
                 Notice = new(NoticeKind.Information, "Preparing operation",
                     "New work is admitted only when the current session has released its resources.")
             });
@@ -333,26 +319,14 @@ public sealed class DictationSession
         return operation.Completion.Task;
     }
 
-    private async Task ExecuteAsync(Operation operation)
+    private async Task ExecuteAsync(SessionOperation operation)
     {
         var errors = new List<Exception>();
         var kind = SessionOutcomeKind.Completed;
         try
         {
             operation.Token.ThrowIfCancellationRequested();
-            switch (operation.Activity)
-            {
-                case SessionActivity.Connecting: await ConnectCoreAsync(operation); break;
-                case SessionActivity.ModelMaintenance: await MaintainModelsCoreAsync(operation); break;
-                case SessionActivity.File: await RecognizeFileAsync(operation); break;
-                default: await RecognizeLiveAsync(operation); break;
-            }
-        }
-        catch (CaptureOwnershipException error)
-        {
-            operation.Capture = error.Capture;
-            errors.Add(error);
-            kind = SessionOutcomeKind.Failed;
+            await operation.ExecuteAsync(this);
         }
         catch (OperationCanceledException) when (operation.Token.IsCancellationRequested)
         {
@@ -364,17 +338,19 @@ public sealed class DictationSession
             kind = SessionOutcomeKind.Failed;
         }
 
-        await ReleaseOperationAsync(operation, errors);
-        if (operation.CommandError is not null) { AddError(errors, operation.CommandError); }
+        await operation.ReleaseAsync(this, errors);
+        var recognition = operation as RecognitionOperation;
+        var connection = operation as ModelOperation;
+        if (recognition is DictationOperation { CommandError: { } commandError }) { AddError(errors, commandError); }
         if (errors.Count != 0) { kind = SessionOutcomeKind.Failed; }
-        var elapsed = operation.StartedAt is { } start ? _time.GetElapsedTime(start) : TimeSpan.Zero;
+        var elapsed = recognition?.StartedAt is { } start ? _time.GetElapsedTime(start) : TimeSpan.Zero;
         var errorResult = errors.Count switch
         {
             0 => null,
             1 => errors[0],
             _ => new AggregateException("Recognition and cleanup reported failures.", errors)
         };
-        var outcome = new SessionOutcome(kind, operation.Result, errorResult);
+        var outcome = new SessionOutcome(kind, recognition?.Result, errorResult);
         DictationCompletion? completion = null;
         SessionSnapshot state;
         lock (_gate)
@@ -384,7 +360,7 @@ public sealed class DictationSession
                 throw new InvalidOperationException("The operation owner changed before terminal publication.");
             }
             _lastElapsed = elapsed;
-            if (operation.Capture?.IsReleased == false || operation.Candidate is not null || operation.Previous is not null)
+            if (operation.HasRetainedResources)
             {
                 _recovery = operation;
             }
@@ -394,19 +370,18 @@ public sealed class DictationSession
                 SessionOutcomeKind.Cancelled => new SessionNotice(NoticeKind.Information, "Cancelled", "Partial text is retained; this attempt is not counted."),
                 SessionOutcomeKind.TimedOut => new(NoticeKind.Warning, "Timed out", "The operation exceeded its deadline and is not counted."),
                 SessionOutcomeKind.Failed => new(NoticeKind.Error, "Operation failed", errorResult?.Message ?? "The operation failed."),
-                _ when operation.Result is not null => new(NoticeKind.Success, "Transcript ready", "Recognition completed and owned resources were released."),
-                _ when operation.SettingsWarning is not null => operation.SettingsWarning,
-                _ when operation.Activity is SessionActivity.Connecting or SessionActivity.ModelMaintenance && _engine is null =>
+                _ when recognition?.Result is not null => new(NoticeKind.Success, "Transcript ready", "Recognition completed and owned resources were released."),
+                _ when connection?.SettingsWarning is not null => connection.SettingsWarning,
+                _ when connection is not null && _engine is null =>
                     new(NoticeKind.Information, "No models installed", "Open Models to download verified weights. Recognition stays disconnected."),
-                _ when operation.Activity is SessionActivity.Connecting or SessionActivity.ModelMaintenance =>
+                _ when connection is not null =>
                     new(NoticeKind.Success, "Native backend ready", $"{_state.Models.Count} installed models; one resident model at a time."),
                 _ => new(NoticeKind.Success, "Operation complete", "Owned resources were released.")
             };
-            if (operation.Activity is SessionActivity.Connecting or SessionActivity.ModelMaintenance &&
-                !ReferenceEquals(notice, operation.SettingsWarning))
+            if (connection is not null && !ReferenceEquals(notice, connection.SettingsWarning))
                 notice = notice with { Area = NoticeArea.Models | NoticeArea.Dictation };
-            var usageWarning = kind == SessionOutcomeKind.Completed && operation.Result is not null
-                ? QueueUsage(operation, elapsed) : null;
+            var usageWarning = kind == SessionOutcomeKind.Completed && recognition?.Result is not null
+                ? QueueUsage(recognition, elapsed) : null;
             var completedAt = _time.GetUtcNow();
             state = SetState(_state with
             {
@@ -416,10 +391,10 @@ public sealed class DictationSession
                     "Native resources remain owned. Close the app to retry release; new work is blocked.", NoticeArea.Application) : notice,
                 UsageError = usageWarning ?? _state.UsageError
             });
-            if (_recovery is null && kind == SessionOutcomeKind.Completed && operation.Activity == SessionActivity.Dictation &&
-                operation.Result is { } result && operation.Model is { } model)
+            if (_recovery is null && kind == SessionOutcomeKind.Completed && recognition is DictationOperation &&
+                recognition.Result is { } result)
             {
-                completion = new DictationCompletion(operation.Id, model.Id, result, completedAt, elapsed);
+                completion = new DictationCompletion(operation.Id, recognition.Input.Model.Id, result, completedAt, elapsed);
             }
             if (_recovery is null) { KeepEngineWarm(); }
         }
@@ -455,7 +430,7 @@ public sealed class DictationSession
         }
     }
 
-    private async Task ConnectCoreAsync(Operation operation)
+    private async Task ConnectCoreAsync(ModelOperation operation)
     {
         if (operation.InitializeUsage)
         {
@@ -470,7 +445,7 @@ public sealed class DictationSession
             }
         }
         operation.Token.ThrowIfCancellationRequested();
-        var candidate = _engineFactory(operation.Path!);
+        var candidate = _engineFactory(operation.Directory);
         operation.Candidate = candidate;
         IReadOnlyList<AudioModel> models = (await candidate.ConnectAsync(operation.Token))
             .Where(model => model.Task is null or "asr").ToArray();
@@ -535,7 +510,7 @@ public sealed class DictationSession
         Publish(state);
     }
 
-    private async Task MaintainModelsCoreAsync(Operation operation)
+    private async Task MaintainModelsCoreAsync(ModelMaintenanceOperation operation)
     {
         await StopEngineWorkAsync();
         SessionSnapshot state;
@@ -547,7 +522,7 @@ public sealed class DictationSession
             state = SetState(_state with
             {
                 Models = [], SelectedIndex = -1, BackendVersion = "",
-                ModelsDirectory = Path.GetFullPath(operation.Path!),
+                ModelsDirectory = Path.GetFullPath(operation.Directory),
                 Notice = new(NoticeKind.Information, "Maintaining models",
                     "Releasing the resident model before changing installed files.")
             });
@@ -559,87 +534,100 @@ public sealed class DictationSession
             operation.Previous = null;
         }
         operation.Token.ThrowIfCancellationRequested();
-        await operation.Maintenance!(operation.Token);
+        await operation.Maintenance(operation.Token);
         operation.Token.ThrowIfCancellationRequested();
         await ConnectCoreAsync(operation);
     }
 
-    private async Task RecognizeFileAsync(Operation operation)
+    private async Task RecognizeFileAsync(FileOperation operation)
     {
-        var recording = await _input.ReadRecordingAsync(operation.Path!, operation.Token);
+        var recording = await _input.ReadRecordingAsync(operation.Path, operation.Token);
         operation.Token.ThrowIfCancellationRequested();
         operation.StartedAt = _time.GetTimestamp();
-        operation.Result = await _engine!.TranscribeAsync(
-            operation.Model!, recording, operation.Options, Progress(operation), operation.Token);
+        operation.Result = await operation.Input.Engine.TranscribeAsync(
+            operation.Input.Model, recording, operation.Input.Options, Progress(operation), operation.Token);
         operation.Token.ThrowIfCancellationRequested();
         UpdateResult(operation);
     }
 
-    private async Task RecognizeLiveAsync(Operation operation)
+    private Task StartStream(StreamingOperation operation)
     {
-        byte[]? replay = null;
-        if (operation.Activity == SessionActivity.Replay)
-        {
-            replay = await _input.ReadReplayAsync(operation.Path!, operation.Token);
-        }
         operation.Token.ThrowIfCancellationRequested();
-        operation.Pipe = Channel.CreateBounded<byte[]>(16);
         var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        operation.Inference = _engine!.StreamAsync(operation.Model!, operation.Pipe.Reader, operation.Options,
-            Progress(operation),
-            operation.Token, () => ready.TrySetResult());
-        if (replay is null)
+        operation.Inference = operation.Input.Engine.StreamAsync(operation.Input.Model, operation.Pipe.Reader,
+            operation.Input.Options, Progress(operation), operation.Token, () => ready.TrySetResult());
+        return ready.Task;
+    }
+
+    private async Task RecognizeDictationAsync(DictationOperation operation)
+    {
+        var ready = StartStream(operation);
+        // Open the microphone while the model loads. Until the stream reads, speech waits in the capture's
+        // bounded backlog, which stops recording at its five-minute limit rather than dropping samples.
+        try
         {
-            // Open the microphone while the model loads. Until the stream reads, speech waits in the capture's
-            // bounded backlog, which stops recording at its five-minute limit rather than dropping samples.
             operation.Capture = await _captureFactory.StartAsync(operation.Token, operation.MicrophoneBoostDecibels);
-            RefreshCaptureState(operation);
-            operation.Token.ThrowIfCancellationRequested();
-            lock (_gate) { EnsureCurrent(operation); }
-            operation.LevelHandler = value => PublishLevel(operation, value);
-            operation.Capture.LevelChanged += operation.LevelHandler;
-            operation.Producer = ForwardAsync(operation.Capture.Audio, operation.Pipe.Writer, operation.Token);
-            operation.StartedAt = _time.GetTimestamp();
-            var loading = !ready.Task.IsCompleted;
-            UpdateCurrent(operation, state => state with
-            {
-                Phase = DictationPhase.Recording,
-                Notice = loading
-                    ? new(NoticeKind.Information, "Listening", "The model is loading. Speech is kept and recognized when it is ready. Audio stays local.")
-                    : new(NoticeKind.Information, "Listening", "Audio stays local. Finish when you are done.")
-            });
-            await WaitForStreamAsync(operation, ready.Task);
-            if (loading)
-            {
-                SessionSnapshot? loaded = null;
-                lock (_gate)
-                {
-                    EnsureCurrent(operation);
-                    if (_state.Phase == DictationPhase.Recording)
-                        loaded = SetState(_state with { Notice = new(NoticeKind.Information, "Listening", "Audio stays local. Finish when you are done.") });
-                }
-                if (loaded is not null) { Publish(loaded); }
-            }
         }
-        else
+        catch (CaptureOwnershipException error)
         {
-            await WaitForStreamAsync(operation, ready.Task);
-            operation.Producer = ReplayAsync(operation, replay);
-            operation.StartedAt = _time.GetTimestamp();
-            UpdateCurrent(operation, state => state with
-            {
-                Phase = DictationPhase.Recording,
-                Notice = new(NoticeKind.Information, "Live verification", "A WAV recording feeds microphone-style recognition; no microphone is open.")
-            });
+            operation.Capture = error.Capture;
+            throw;
         }
-        operation.Result = await operation.Inference;
+        RefreshCaptureState(operation);
+        operation.Token.ThrowIfCancellationRequested();
+        lock (_gate) { EnsureCurrent(operation); }
+        operation.LevelHandler = value => PublishLevel(operation, value);
+        operation.Capture.LevelChanged += operation.LevelHandler;
+        operation.Producer = ForwardAsync(operation.Capture.Audio, operation.Pipe.Writer, operation.Token);
+        operation.StartedAt = _time.GetTimestamp();
+        var loading = !ready.IsCompleted;
+        UpdateCurrent(operation, state => state with
+        {
+            Phase = DictationPhase.Recording,
+            Notice = loading
+                ? new(NoticeKind.Information, "Listening", "The model is loading. Speech is kept and recognized when it is ready. Audio stays local.")
+                : new(NoticeKind.Information, "Listening", "Audio stays local. Finish when you are done.")
+        });
+        await WaitForStreamAsync(operation, ready);
+        if (loading)
+        {
+            SessionSnapshot? loaded = null;
+            lock (_gate)
+            {
+                EnsureCurrent(operation);
+                if (_state.Phase == DictationPhase.Recording)
+                    loaded = SetState(_state with { Notice = new(NoticeKind.Information, "Listening", "Audio stays local. Finish when you are done.") });
+            }
+            if (loaded is not null) { Publish(loaded); }
+        }
+        await CompleteStreamAsync(operation);
+        operation.RecordingSeconds = operation.Capture.CapturedSeconds;
+    }
+
+    private async Task RecognizeReplayAsync(ReplayOperation operation)
+    {
+        var replay = await _input.ReadReplayAsync(operation.Path, operation.Token);
+        var ready = StartStream(operation);
+        await WaitForStreamAsync(operation, ready);
+        operation.Producer = ReplayAsync(operation, replay);
+        operation.StartedAt = _time.GetTimestamp();
+        UpdateCurrent(operation, state => state with
+        {
+            Phase = DictationPhase.Recording,
+            Notice = new(NoticeKind.Information, "Live verification", "A WAV recording feeds microphone-style recognition; no microphone is open.")
+        });
+        await CompleteStreamAsync(operation);
+    }
+
+    private async Task CompleteStreamAsync(StreamingOperation operation)
+    {
+        operation.Result = await operation.Inference!;
         operation.Token.ThrowIfCancellationRequested();
         await operation.Producer!;
-        operation.RecordingSeconds = operation.Capture?.CapturedSeconds ?? 0;
         UpdateResult(operation);
     }
 
-    private async Task WaitForStreamAsync(Operation operation, Task ready)
+    private async Task WaitForStreamAsync(StreamingOperation operation, Task ready)
     {
         if (await Task.WhenAny(ready, operation.Inference!) == operation.Inference && !ready.IsCompletedSuccessfully)
         {
@@ -748,46 +736,15 @@ public sealed class DictationSession
         }
     }
 
-    private async Task ReleaseOperationAsync(Operation operation, List<Exception> errors)
-    {
-        Task? stop;
-        lock (_gate)
-        {
-            operation.ControlsSealed = true;
-            stop = operation.StopWork;
-        }
-        operation.Cancellation.Cancel();
-        operation.Pipe?.Writer.TryComplete();
-        await ObserveAsync(stop, operation.Token, errors);
-        if (operation.Capture is not null)
-        {
-            if (operation.LevelHandler is not null) { operation.Capture.LevelChanged -= operation.LevelHandler; }
-            try { await operation.Capture.DisposeAsync(); RefreshCaptureState(operation); }
-            catch (Exception error) { AddError(errors, error); }
-        }
-        await ObserveAsync(operation.Producer, operation.Token, errors);
-        await ObserveAsync(operation.Inference, operation.Token, errors);
-        if (operation.Candidate is not null)
-        {
-            try { await operation.Candidate.DisposeAsync(); operation.Candidate = null; }
-            catch (Exception error) { AddError(errors, error); }
-        }
-        if (operation.Previous is not null)
-        {
-            try { await operation.Previous.DisposeAsync(); operation.Previous = null; }
-            catch (Exception error) { AddError(errors, error); }
-        }
-    }
-
     // Admission and terminal publication share _gate; disk work never delays completion or final delivery.
-    private string? QueueUsage(Operation operation, TimeSpan elapsed)
+    private string? QueueUsage(RecognitionOperation operation, TimeSpan elapsed)
     {
         if (!_state.Settings.CollectUsage || _state.Usage is null) { return null; }
         var entry = new UsageEntry
         {
-            Id = operation.Id, CompletedAt = _time.GetUtcNow(), ModelId = operation.Model!.Id,
+            Id = operation.Id, CompletedAt = _time.GetUtcNow(), ModelId = operation.Input.Model.Id,
             Source = operation.Activity == SessionActivity.Dictation ? UsageSource.Dictation : UsageSource.File,
-            Words = operation.Result!.SpokenWords, RecordingSeconds = operation.RecordingSeconds,
+            Words = operation.Result!.SpokenWords, RecordingSeconds = (operation as DictationOperation)?.RecordingSeconds ?? 0,
             ElapsedSeconds = elapsed.TotalSeconds
         };
         return _pendingUsage.Writer.TryWrite(entry) ? null :
@@ -836,12 +793,12 @@ public sealed class DictationSession
 
     public async Task FinishAsync()
     {
-        Operation? operation;
+        DictationOperation? operation;
         SessionSnapshot state;
         lock (_gate)
         {
-            operation = _operation;
-            if (_closing || operation?.Activity != SessionActivity.Dictation || !_state.CanFinish) { return; }
+            operation = _operation as DictationOperation;
+            if (_closing || operation is null || !_state.CanFinish) { return; }
             state = SetState(_state with
             {
                 Phase = DictationPhase.Finishing,
@@ -854,7 +811,7 @@ public sealed class DictationSession
 
     public async Task CancelAsync()
     {
-        Operation? operation;
+        SessionOperation? operation;
         SessionSnapshot? state = null;
         lock (_gate)
         {
@@ -870,12 +827,12 @@ public sealed class DictationSession
         }
         operation?.RequestCancellation();
         if (state is not null) { Publish(state); }
-        if (operation is not null) { await StopCaptureAsync(operation); }
+        if (operation is DictationOperation dictation) { await StopCaptureAsync(dictation); }
     }
 
     public Task CloseAsync()
     {
-        Operation? operation;
+        SessionOperation? operation;
         SessionSnapshot? state = null;
         Task close;
         lock (_gate)
@@ -899,33 +856,19 @@ public sealed class DictationSession
     {
         try
         {
-            Operation? operation;
+            SessionOperation? operation;
             lock (_gate) { operation = _operation; }
             if (operation is not null)
             {
-                _ = StopCaptureAsync(operation);
+                if (operation is DictationOperation dictation) { _ = StopCaptureAsync(dictation); }
                 await operation.Work!;
             }
             await _usageWork;
-            Operation? recovery;
+            SessionOperation? recovery;
             lock (_gate) { recovery = _recovery; }
-            if (recovery?.Capture is not null)
-            {
-                await recovery.Capture.DisposeAsync();
-                if (!recovery.Capture.IsReleased) { throw new InvalidOperationException("Capture resources remain owned after release."); }
-            }
-            if (recovery?.Candidate is not null)
-            {
-                await recovery.Candidate.DisposeAsync();
-                recovery.Candidate = null;
-            }
-            if (recovery?.Previous is not null)
-            {
-                await recovery.Previous.DisposeAsync();
-                recovery.Previous = null;
-            }
             if (recovery is not null)
             {
+                await recovery.ReleaseRetainedAsync(this);
                 recovery.Dispose();
                 lock (_gate) { _recovery = null; }
             }
@@ -960,7 +903,7 @@ public sealed class DictationSession
         catch (Exception error) { AddError(errors, error); }
     }
 
-    private Task StopCaptureAsync(Operation operation)
+    private Task StopCaptureAsync(DictationOperation operation)
     {
         TaskCompletionSource completion;
         lock (_gate)
@@ -975,7 +918,7 @@ public sealed class DictationSession
         return completion.Task;
     }
 
-    private async Task CompleteStopAsync(Operation operation, TaskCompletionSource completion)
+    private async Task CompleteStopAsync(DictationOperation operation, TaskCompletionSource completion)
     {
         try
         {
@@ -996,7 +939,7 @@ public sealed class DictationSession
         }
     }
 
-    private void RefreshCaptureState(Operation operation)
+    private void RefreshCaptureState(DictationOperation operation)
     {
         SessionSnapshot state;
         lock (_gate)
@@ -1023,7 +966,7 @@ public sealed class DictationSession
         finally { output.TryComplete(failure); }
     }
 
-    private async Task ReplayAsync(Operation operation, byte[] pcm)
+    private async Task ReplayAsync(StreamingOperation operation, byte[] pcm)
     {
         Exception? failure = null;
         try
@@ -1031,17 +974,17 @@ public sealed class DictationSession
             for (var offset = 0; offset < pcm.Length; offset += 1280)
             {
                 var bytes = pcm.AsSpan(offset, Math.Min(1280, pcm.Length - offset)).ToArray();
-                await operation.Pipe!.Writer.WriteAsync(bytes, operation.Token);
+                await operation.Pipe.Writer.WriteAsync(bytes, operation.Token);
                 PublishLevel(operation, AudioMeter.Pcm16Level(bytes));
                 await Task.Delay(TimeSpan.FromMilliseconds(40), _time, operation.Token);
             }
             UpdateCurrent(operation, state => state with { Phase = DictationPhase.Finishing });
         }
         catch (Exception error) { failure = error; throw; }
-        finally { operation.Pipe!.Writer.TryComplete(failure); }
+        finally { operation.Pipe.Writer.TryComplete(failure); }
     }
 
-    private IProgress<TranscriptUpdate> Progress(Operation operation) => new InlineProgress<TranscriptUpdate>(update =>
+    private IProgress<TranscriptUpdate> Progress(RecognitionOperation operation) => new InlineProgress<TranscriptUpdate>(update =>
     {
         lock (_gate)
         {
@@ -1049,17 +992,12 @@ public sealed class DictationSession
             operation.HasFinal = update.IsFinal;
         }
         UpdateCurrent(operation, state => state with { Transcript = update.Text });
-        bool report;
-        lock (_gate)
-            report = !update.IsFinal && ReferenceEquals(_operation, operation) &&
-                !_closing && !operation.Token.IsCancellationRequested;
-        if (report) { operation.TranscriptUpdates?.Report(update); }
     });
 
-    private void UpdateResult(Operation operation) =>
+    private void UpdateResult(RecognitionOperation operation) =>
         UpdateCurrent(operation, state => state with { Transcript = operation.Result!.DisplayText, Result = operation.Result });
 
-    private void PublishLevel(Operation operation, double level)
+    private void PublishLevel(StreamingOperation operation, double level)
     {
         lock (_gate)
         {
@@ -1068,7 +1006,7 @@ public sealed class DictationSession
         AudioLevelChanged?.Invoke(level);
     }
 
-    private void UpdateCurrent(Operation operation, Func<SessionSnapshot, SessionSnapshot> update)
+    private void UpdateCurrent(SessionOperation operation, Func<SessionSnapshot, SessionSnapshot> update)
     {
         SessionSnapshot state;
         lock (_gate)
@@ -1089,14 +1027,7 @@ public sealed class DictationSession
         Publish(state);
     }
 
-    private void UpdateFacts(Func<SessionSnapshot, SessionSnapshot> update)
-    {
-        SessionSnapshot state;
-        lock (_gate) { state = SetState(update(_state)); }
-        Publish(state);
-    }
-
-    private void EnsureCurrent(Operation operation)
+    private void EnsureCurrent(SessionOperation operation)
     {
         operation.Token.ThrowIfCancellationRequested();
         if (_closing || !ReferenceEquals(_operation, operation)) { throw new OperationCanceledException(operation.Token); }
@@ -1114,7 +1045,7 @@ public sealed class DictationSession
     private SessionSnapshot SetState(SessionSnapshot state) => _state = state with
     {
         Version = ++_version,
-        IsCaptureOpen = (_operation ?? _recovery) is { Capture.IsReleased: false } owner &&
+        IsCaptureOpen = (_operation ?? _recovery) is DictationOperation { Capture.IsReleased: false } owner &&
             owner.StopWork?.IsCompletedSuccessfully != true,
         DeviceSelectionSummary = _engine?.DeviceSelectionSummary ?? "",
         DeviceComparison = _engine?.DeviceComparison
@@ -1126,49 +1057,23 @@ public sealed class DictationSession
         public void Report(T value) => report(value);
     }
 
-    private sealed class Operation : IDisposable
+    private abstract class SessionOperation(TimeSpan timeout, TimeProvider time) : IDisposable
     {
         private readonly object _cancellationGate = new();
         private bool _disposed;
         private int _cancellationRequested;
-        public Operation(
-            SessionActivity activity, AudioModel? model, RecognitionOptions options, string? path,
-            bool initializeUsage, TimeSpan timeout, TimeProvider time)
-        {
-            Activity = activity; Model = model; Options = options; Path = path;
-            InitializeUsage = initializeUsage;
-            Cancellation = new CancellationTokenSource(timeout, time);
-        }
-
         public Guid Id { get; } = Guid.NewGuid();
-        public SessionActivity Activity { get; }
-        public AudioModel? Model { get; }
-        public RecognitionOptions Options { get; }
-        public string? Path { get; }
-        public bool InitializeUsage { get; }
-        public SessionNotice? SettingsWarning { get; set; }
-        public Func<CancellationToken, Task>? Maintenance { get; set; }
-        public IProgress<TranscriptUpdate>? TranscriptUpdates { get; set; }
-        public CancellationTokenSource Cancellation { get; }
+        public abstract SessionActivity Activity { get; }
+        public abstract DictationPhase InitialPhase { get; }
+        public abstract bool HasRetainedResources { get; }
+        public CancellationTokenSource Cancellation { get; } = new(timeout, time);
         public CancellationToken Token => Cancellation.Token;
         public bool CancellationRequested => Volatile.Read(ref _cancellationRequested) != 0;
         public TaskCompletionSource<SessionOutcome> Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public Task? Work { get; set; }
-        public IRecognitionEngine? Candidate { get; set; }
-        public IRecognitionEngine? Previous { get; set; }
-        public IAudioCapture? Capture { get; set; }
-        public int MicrophoneBoostDecibels { get; init; }
-        public Action<double>? LevelHandler { get; set; }
-        public Channel<byte[]>? Pipe { get; set; }
-        public Task? Producer { get; set; }
-        public Task? StopWork { get; set; }
-        public bool ControlsSealed { get; set; }
-        public Task<RecognitionResult>? Inference { get; set; }
-        public RecognitionResult? Result { get; set; }
-        public bool HasFinal { get; set; }
-        public long? StartedAt { get; set; }
-        public double RecordingSeconds { get; set; }
-        public Exception? CommandError { get; set; }
+        public abstract Task ExecuteAsync(DictationSession session);
+        public abstract Task ReleaseAsync(DictationSession session, List<Exception> errors);
+        public abstract Task ReleaseRetainedAsync(DictationSession session);
         public void RequestCancellation()
         {
             lock (_cancellationGate)
@@ -1187,5 +1092,155 @@ public sealed class DictationSession
                 _disposed = true;
             }
         }
+    }
+
+    // Replacement owns both sides of the transaction until each engine is either committed or released.
+    private abstract class ModelOperation(string directory, TimeSpan timeout, TimeProvider time)
+        : SessionOperation(timeout, time)
+    {
+        public string Directory { get; } = directory;
+        public virtual bool InitializeUsage => false;
+        public SessionNotice? SettingsWarning { get; set; }
+        public IRecognitionEngine? Candidate { get; set; }
+        public IRecognitionEngine? Previous { get; set; }
+        public override bool HasRetainedResources => Candidate is not null || Previous is not null;
+        public override async Task ReleaseAsync(DictationSession session, List<Exception> errors)
+        {
+            Cancellation.Cancel();
+            if (Candidate is not null)
+            {
+                try { await Candidate.DisposeAsync(); Candidate = null; }
+                catch (Exception error) { AddError(errors, error); }
+            }
+            if (Previous is not null)
+            {
+                try { await Previous.DisposeAsync(); Previous = null; }
+                catch (Exception error) { AddError(errors, error); }
+            }
+        }
+        public override async Task ReleaseRetainedAsync(DictationSession session)
+        {
+            if (Candidate is not null) { await Candidate.DisposeAsync(); Candidate = null; }
+            if (Previous is not null) { await Previous.DisposeAsync(); Previous = null; }
+        }
+    }
+
+    private sealed class ConnectionOperation : ModelOperation
+    {
+        public ConnectionOperation(string directory, bool initializeUsage, SessionNotice? settingsWarning,
+            TimeSpan timeout, TimeProvider time) : base(directory, timeout, time)
+        {
+            InitializeUsage = initializeUsage;
+            SettingsWarning = settingsWarning;
+        }
+        public override bool InitializeUsage { get; }
+        public override SessionActivity Activity => SessionActivity.Connecting;
+        public override DictationPhase InitialPhase => DictationPhase.Connecting;
+        public override Task ExecuteAsync(DictationSession session) => session.ConnectCoreAsync(this);
+    }
+
+    private sealed class ModelMaintenanceOperation(string directory, Func<CancellationToken, Task> maintenance,
+        TimeSpan timeout, TimeProvider time) : ModelOperation(directory, timeout, time)
+    {
+        public Func<CancellationToken, Task> Maintenance { get; } = maintenance;
+        public override SessionActivity Activity => SessionActivity.ModelMaintenance;
+        public override DictationPhase InitialPhase => DictationPhase.MaintainingModels;
+        public override Task ExecuteAsync(DictationSession session) => session.MaintainModelsCoreAsync(this);
+    }
+
+    private sealed record RecognitionInput(IRecognitionEngine Engine, AudioModel Model, RecognitionOptions Options);
+
+    private abstract class RecognitionOperation(RecognitionInput input, TimeSpan timeout, TimeProvider time)
+        : SessionOperation(timeout, time)
+    {
+        public RecognitionInput Input { get; } = input;
+        public RecognitionResult? Result { get; set; }
+        public bool HasFinal { get; set; }
+        public long? StartedAt { get; set; }
+        public override bool HasRetainedResources => false;
+        public override Task ReleaseAsync(DictationSession session, List<Exception> errors)
+        {
+            Cancellation.Cancel();
+            return Task.CompletedTask;
+        }
+        public override Task ReleaseRetainedAsync(DictationSession session) => Task.CompletedTask;
+    }
+
+    private sealed class FileOperation(RecognitionInput input, string path, TimeSpan timeout, TimeProvider time)
+        : RecognitionOperation(input, timeout, time)
+    {
+        public string Path { get; } = path;
+        public override SessionActivity Activity => SessionActivity.File;
+        public override DictationPhase InitialPhase => DictationPhase.Transcribing;
+        public override Task ExecuteAsync(DictationSession session) => session.RecognizeFileAsync(this);
+    }
+
+    // Streaming owns every task that can access its bounded audio pipe.
+    private abstract class StreamingOperation(RecognitionInput input, TimeSpan timeout, TimeProvider time)
+        : RecognitionOperation(input, timeout, time)
+    {
+        public Channel<byte[]> Pipe { get; } = Channel.CreateBounded<byte[]>(16);
+        public Task? Producer { get; set; }
+        public Task<RecognitionResult>? Inference { get; set; }
+        public override DictationPhase InitialPhase => DictationPhase.Preparing;
+        public override async Task ReleaseAsync(DictationSession session, List<Exception> errors)
+        {
+            Cancellation.Cancel();
+            Pipe.Writer.TryComplete();
+            await JoinStreamAsync(errors);
+        }
+        protected async Task JoinStreamAsync(List<Exception> errors)
+        {
+            await ObserveAsync(Producer, Token, errors);
+            await ObserveAsync(Inference, Token, errors);
+        }
+    }
+
+    private sealed class DictationOperation(RecognitionInput input, int microphoneBoostDecibels,
+        TimeSpan timeout, TimeProvider time) : StreamingOperation(input, timeout, time)
+    {
+        public int MicrophoneBoostDecibels { get; } = microphoneBoostDecibels;
+        public IAudioCapture? Capture { get; set; }
+        public Action<double>? LevelHandler { get; set; }
+        public Task? StopWork { get; set; }
+        public bool ControlsSealed { get; set; }
+        public Exception? CommandError { get; set; }
+        public double RecordingSeconds { get; set; }
+        public override bool HasRetainedResources => Capture?.IsReleased == false;
+        public override SessionActivity Activity => SessionActivity.Dictation;
+        public override Task ExecuteAsync(DictationSession session) => session.RecognizeDictationAsync(this);
+        public override async Task ReleaseAsync(DictationSession session, List<Exception> errors)
+        {
+            Task? stop;
+            lock (session._gate)
+            {
+                ControlsSealed = true;
+                stop = StopWork;
+            }
+            Cancellation.Cancel();
+            Pipe.Writer.TryComplete();
+            await ObserveAsync(stop, Token, errors);
+            if (Capture is not null)
+            {
+                if (LevelHandler is not null) { Capture.LevelChanged -= LevelHandler; }
+                try { await Capture.DisposeAsync(); session.RefreshCaptureState(this); }
+                catch (Exception error) { AddError(errors, error); }
+            }
+            await JoinStreamAsync(errors);
+        }
+        public override async Task ReleaseRetainedAsync(DictationSession session)
+        {
+            if (Capture is null) { return; }
+            await Capture.DisposeAsync();
+            if (!Capture.IsReleased) { throw new InvalidOperationException("Capture resources remain owned after release."); }
+        }
+    }
+
+    private sealed class ReplayOperation(RecognitionInput input, string path, TimeSpan timeout, TimeProvider time)
+        : StreamingOperation(input, timeout, time)
+    {
+        public string Path { get; } = path;
+        public override SessionActivity Activity => SessionActivity.Replay;
+        public override Task ExecuteAsync(DictationSession session) => session.RecognizeReplayAsync(this);
     }
 }

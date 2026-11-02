@@ -134,7 +134,7 @@ public sealed class FinalTextDeliveryTests
     [InlineData(TextDeliveryStatus.Sent, true, false)]
     [InlineData(TextDeliveryStatus.Verified, true, false)]
     [InlineData(TextDeliveryStatus.Partial, false, true)]
-    [InlineData(TextDeliveryStatus.CleanupFailed, true, true)]
+    [InlineData(TextDeliveryStatus.CleanupFailed, false, true)]
     [InlineData(TextDeliveryStatus.Rejected, false, true)]
     public async Task PreservesDeliveryEvidenceAndNeverReplaysAnUncertainSend(
         TextDeliveryStatus status, bool sent, bool failed)

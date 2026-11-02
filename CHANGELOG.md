@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- Report failed injected-key release as unverified insertion, including when Windows
+  queued only a modifier. Keep the warning and never replay uncertain input.
+- Reuse verified runtime hashes for Auto selection while checking file identity,
+  dependency membership and hardware changes. Device qualification uses the median
+  of three warm runs and includes incremental speaker-attribution work.
+- Virtualize meeting transcripts and saved-meeting rows. Update changed transcript
+  properties without rebuilding unchanged rows or forcing layout.
+- Save live meeting updates through one bounded background writer. Pause, finish
+  and close wait for durable saves. Failed cleanup preserves completed originals
+  for retry. Closing retains ownership until the writer has joined.
+- Keep only validated meeting summaries in the history cache. Load full transcripts
+  on open, avoid hidden-history refreshes, and recover interrupted meetings without
+  delaying dictation initialization.
+- Reuse unchanged speaker-activity indexes and publish once per audio chunk.
+  Build turns directly without allocating an intermediate object for every word.
+- Separate dictation, replay, file and model-replacement resource ownership.
+  Remove the unused preview callback, analytics aggregates, interface members,
+  and custom design resources.
 - Share page titles, subtitles, responsive action placement, and content bounds
   through `PageCanvas`. Remove page-specific header grids and breakpoint logic.
 - Resolve hover and pressed colors through themed XAML resources so controls

@@ -5,7 +5,7 @@ using System.Text.Json;
 
 namespace Ansible.Core;
 
-public sealed class CopilotMeetingTextCleanup : IMeetingTextCleanup
+public sealed class CopilotMeetingTextCleanup
 {
     private const int MaximumInputCharacters = 1000000;
     private const int BatchCharacters = 12000;

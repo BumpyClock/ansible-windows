@@ -8,6 +8,120 @@ public sealed class MeetingSessionTests : IDisposable
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "Ansible-meeting-session-" + Guid.NewGuid().ToString("N"));
     private static readonly MeetingCaptureRequest Request = new(MeetingPlaybackSource.SystemAudio);
 
+    [Fact]
+    public async Task RecognitionKeepsPublishingWhileDiskIsBlockedAndEndAwaitsLatestEdits()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var store = new MeetingStore(_directory);
+        var blocked = 0;
+        var engine = new Engine();
+        var capture = new CaptureFactory();
+        await using var session = new MeetingSession(() => engine, capture, store, () => new(),
+            writeMeeting: async document =>
+            {
+                if (document.Turns.Count > 0 && Interlocked.Exchange(ref blocked, 1) == 0)
+                { entered.SetResult(); await release.Task; }
+                await store.SaveAsync(document);
+            });
+        await session.StartAsync(Request);
+        capture.Captures[0].Send(3200);
+        await WaitUntilAsync(() => engine.ReadBytes == 3200);
+        Task? rename = null;
+        Task? end = null;
+        try
+        {
+            await Task.Run(() => engine.Report("Speaker 0: First")).WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await Task.Run(() => engine.Report("Speaker 0: Latest speech")).WaitAsync(TimeSpan.FromSeconds(5));
+            rename = session.RenameAsync("Latest title");
+            Assert.False(rename.IsCompleted);
+            end = session.EndAsync();
+            Assert.False(end.IsCompleted);
+            Assert.Equal("Latest speech", Assert.Single(session.Document!.Turns).Text);
+        }
+        finally { release.TrySetResult(); }
+        await rename!.WaitAsync(TimeSpan.FromSeconds(5));
+        await end!.WaitAsync(TimeSpan.FromSeconds(5));
+        var saved = await store.LoadAsync(session.Document!.Id);
+        Assert.Equal("Latest title", saved.Title);
+        Assert.Equal("Latest speech", Assert.Single(saved.Turns).Text);
+        Assert.Equal(MeetingStatus.Completed, saved.Status);
+    }
+
+    [Fact]
+    public async Task StorageFailureStopsCaptureSurfacesErrorAndRetainsRecoverableSpeech()
+    {
+        var store = new MeetingStore(_directory);
+        var engine = new Engine();
+        var capture = new CaptureFactory();
+        var failed = 0;
+        await using var session = new MeetingSession(() => engine, capture, store, () => new(),
+            writeMeeting: document =>
+            {
+                if (document.Turns.Count > 0 && Interlocked.Exchange(ref failed, 1) == 0)
+                    throw new IOException("Disk unavailable");
+                return store.SaveAsync(document);
+            });
+        await session.StartAsync(Request);
+        capture.Captures[0].Send(3200);
+        await WaitUntilAsync(() => engine.ReadBytes == 3200);
+        engine.Report("Speaker 0: Preserve this speech");
+        await WaitUntilAsync(() => !session.IsActive);
+        await session.EndAsync();
+        Assert.Equal(MeetingSessionPhase.Failed, session.State.Phase);
+        Assert.Contains("Disk unavailable", session.State.Error);
+        Assert.True(capture.Captures[0].IsReleased);
+        var saved = await store.LoadAsync(session.Document!.Id);
+        Assert.Equal("Preserve this speech", Assert.Single(saved.Turns).Text);
+        Assert.Equal(MeetingStatus.Failed, saved.Status);
+    }
+
+    [Fact]
+    public async Task CleanupPublishesOnlyAfterDurableSaveAndFailureKeepsOriginalSpeech()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var store = new MeetingStore(_directory);
+        var cleanupAttempts = 0;
+        var engine = new Engine();
+        var captures = new CaptureFactory();
+        await using var session = new MeetingSession(() => engine, captures, store, () => new(),
+            writeMeeting: async document =>
+            {
+                if (document.Turns.Any(turn => turn.OriginalText is not null) && Interlocked.Increment(ref cleanupAttempts) == 1)
+                {
+                    entered.TrySetResult();
+                    await release.Task;
+                    throw new IOException("Cleanup save failed");
+                }
+                await store.SaveAsync(document);
+            });
+        await session.StartAsync(Request);
+        captures.Captures[0].Send(3200);
+        await WaitUntilAsync(() => engine.ReadBytes == 3200);
+        engine.Report("Speaker 0: Original speech");
+        await session.EndAsync();
+        var cleanup = session.ApplyCleanupAsync(["Cleaned speech."]);
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.False(cleanup.IsCompleted);
+            Assert.Equal("Original speech", Assert.Single(session.Document!.Turns).Text);
+        }
+        finally { release.TrySetResult(); }
+        await Assert.ThrowsAsync<IOException>(() => cleanup.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Equal("Original speech", Assert.Single(session.Document!.Turns).Text);
+        Assert.Null(session.Document.Turns[0].OriginalText);
+        Assert.Equal(MeetingStatus.Completed, session.Document.Status);
+        Assert.Equal("Original speech", Assert.Single((await store.LoadAsync(session.Document.Id)).Turns).Text);
+        await session.ApplyCleanupAsync(["Cleaned speech."]);
+        Assert.Equal(MeetingStatus.Completed, session.Document.Status);
+        Assert.Equal("Cleaned speech.", Assert.Single(session.Document.Turns).Text);
+        Assert.Equal("Original speech", session.Document.Turns[0].OriginalText);
+        Assert.Equal("Cleaned speech.", Assert.Single((await store.LoadAsync(session.Document.Id)).Turns).Text);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -449,6 +563,49 @@ public sealed class MeetingSessionTests : IDisposable
         await disposal;
         await Assert.ThrowsAsync<ObjectDisposedException>(() => restart);
         Assert.Single(captures.Captures);
+        Assert.False(session.IsActive);
+    }
+
+    [Fact]
+    public async Task ConcurrentDisposalWaitsForTheFirstTeardownInsteadOfReachingTheClosedWriter()
+    {
+        for (var round = 0; round < 30; round++)
+        {
+            var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var session = new MeetingSession(() => new Engine(), new CaptureFactory(), new(_directory), () => new(),
+                writeMeeting: async document =>
+                {
+                    if (document.Status != MeetingStatus.Completed) return;
+                    entered.TrySetResult();
+                    await release.Task;
+                });
+            await session.StartAsync(Request);
+
+            var first = session.DisposeAsync().AsTask();
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            var second = session.DisposeAsync().AsTask();
+            release.SetResult();
+
+            var failure = await Record.ExceptionAsync(() => Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(5)));
+            Assert.True(failure is null, $"Round {round}: {failure}");
+            Assert.False(session.IsActive);
+        }
+    }
+
+    [Fact]
+    public async Task DisposalThatFailedToSaveIsRetriedByTheNextCallInsteadOfRepeatingTheFailure()
+    {
+        var completedWrites = 0;
+        await using var session = new MeetingSession(() => new Engine(), new CaptureFactory(), new(_directory), () => new(),
+            writeMeeting: document => document.Status == MeetingStatus.Completed && Interlocked.Increment(ref completedWrites) == 1
+                ? Task.FromException(new IOException("Disk unavailable"))
+                : Task.CompletedTask);
+        await session.StartAsync(Request);
+
+        await Assert.ThrowsAsync<IOException>(() => session.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5)));
+        await session.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+
         Assert.False(session.IsActive);
     }
 

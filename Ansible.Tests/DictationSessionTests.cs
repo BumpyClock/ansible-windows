@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Threading.Channels;
 using Ansible.Core;
 
@@ -1333,6 +1334,62 @@ public sealed partial class DictationSessionTests : IDisposable
     }
 
     [Fact]
+    public async Task FailedReplacementConnectionPreservesTheCurrentEngineAndTranscript()
+    {
+        var previous = new FakeEngine();
+        var candidate = new FakeEngine
+        {
+            Connecting = _ => throw new IOException("replacement could not connect")
+        };
+        var engines = new Queue<IRecognitionEngine>([previous, candidate]);
+        var session = new DictationSession(_ => engines.Dequeue(), new FakeCaptureFactory(),
+            new FakeInput(), new FakeUsageStore(), "models", new FakeSettingsStore());
+        await session.InitializeAsync();
+        await session.TranscribeFileAsync("sample.wav");
+        var transcript = session.State.Result;
+
+        var outcome = await session.ConnectAsync("replacement");
+
+        Assert.Equal(SessionOutcomeKind.Failed, outcome.Kind);
+        Assert.Equal(DictationPhase.Ready, session.State.Phase);
+        Assert.Equal(transcript, session.State.Result);
+        Assert.Equal(0, previous.Disposals);
+        Assert.Equal(1, candidate.Disposals);
+        Assert.Equal(SessionOutcomeKind.Completed, (await session.TranscribeFileAsync("sample.wav")).Kind);
+        Assert.Null(candidate.LastAudio);
+        await session.CloseAsync();
+        Assert.Equal(1, previous.Disposals);
+    }
+
+    [Fact]
+    public async Task FailedReplacementReleaseRemainsOwnedAcrossFailedCloseAndRetry()
+    {
+        var previous = new FakeEngine();
+        var candidate = new FakeEngine
+        {
+            Connecting = _ => throw new IOException("replacement could not connect"),
+            FailDisposal = true
+        };
+        var engines = new Queue<IRecognitionEngine>([previous, candidate]);
+        var session = new DictationSession(_ => engines.Dequeue(), new FakeCaptureFactory(),
+            new FakeInput(), new FakeUsageStore(), "models", new FakeSettingsStore());
+        await session.InitializeAsync();
+
+        Assert.Equal(SessionOutcomeKind.Failed, (await session.ConnectAsync("replacement")).Kind);
+        Assert.Equal(DictationPhase.RecoveryRequired, session.State.Phase);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => session.StartDictationAsync());
+        await Assert.ThrowsAsync<IOException>(() => session.CloseAsync());
+        Assert.Equal(0, previous.Disposals);
+        Assert.Equal(2, candidate.Disposals);
+
+        candidate.FailDisposal = false;
+        await session.CloseAsync();
+        Assert.Equal(DictationPhase.Closed, session.State.Phase);
+        Assert.Equal(3, candidate.Disposals);
+        Assert.Equal(1, previous.Disposals);
+    }
+
+    [Fact]
     public async Task ReconnectionCleanupFailureClearsTheDetachedSelection()
     {
         var previous = new FakeEngine { FailDisposal = true };
@@ -1414,52 +1471,63 @@ public sealed partial class DictationSessionTests : IDisposable
             usage ?? new FakeUsageStore(), "models", settingsStore: settings ?? new FakeSettingsStore());
 
     [Fact]
-    public async Task RecognitionUpdatesAreDeliveredBeforeCaptureEndsWithoutWaitingForSilence()
+    public async Task RecognitionPreviewsPublishBeforeCaptureEndsAndCompletionWaitsForFinalResult()
     {
         var source = new FakeCapture();
-        var updates = new List<TranscriptUpdate>();
+        var updates = new ConcurrentQueue<SessionSnapshot>();
+        var completions = new ConcurrentQueue<DictationCompletion>();
         var engine = new FakeEngine();
         var session = Create(engine, new FakeCaptureFactory { Starting = _ => Task.FromResult<IAudioCapture>(source) });
         await session.InitializeAsync();
-        var recording = session.StartDictationAsync(new TestProgress(updates.Add));
+        session.StateChanged += updates.Enqueue;
+        session.DictationCompleted += completions.Enqueue;
+        var recording = session.StartDictationAsync();
         await WaitForStateAsync(session, DictationPhase.Recording);
         engine.LastProgress!.Report(new("Speaker 0: hello", false, "hello"));
         Assert.False(recording.IsCompleted);
-        Assert.Equal("hello", Assert.Single(updates).SpeechText);
+        Assert.Contains(updates, state => state.Transcript == "Speaker 0: hello");
+        Assert.Empty(completions);
         Assert.Equal("Speaker 0: hello", session.State.Transcript);
         engine.LastProgress.Report(new("Speaker 0: hello world", false, "hello world"));
-        Assert.Equal(2, updates.Count);
+        Assert.Contains(updates, state => state.Transcript == "Speaker 0: hello world");
         engine.LastProgress.Report(new("final display", true, "final speech"));
-        Assert.Equal(2, updates.Count);
+        Assert.Equal("final display", session.State.Transcript);
+        Assert.Empty(completions);
+        engine.LastProgress.Report(new("late preview", false, "late speech"));
+        Assert.Equal("final display", session.State.Transcript);
         await session.FinishAsync();
         var outcome = await recording;
         Assert.Equal(SessionOutcomeKind.Completed, outcome.Kind);
         Assert.Equal("hello world", outcome.Result!.SpeechText);
+        Assert.Equal(outcome.Result, Assert.Single(completions).Result);
         Assert.Equal(1, engine.StreamStarts);
         await session.CloseAsync();
     }
 
     [Fact]
-    public async Task LateOrCancelledTranscriptUpdatesCannotReachLiveDelivery()
+    public async Task LateOrCancelledTranscriptUpdatesCannotPublishStateOrCompleteDictation()
     {
         var source = new FakeCapture();
-        var updates = new List<TranscriptUpdate>();
+        var updates = new ConcurrentQueue<SessionSnapshot>();
+        var completions = new ConcurrentQueue<DictationCompletion>();
         var engine = new FakeEngine();
         var session = Create(engine, new FakeCaptureFactory { Starting = _ => Task.FromResult<IAudioCapture>(source) });
         await session.InitializeAsync();
-        var recording = session.StartDictationAsync(new TestProgress(updates.Add));
+        session.StateChanged += updates.Enqueue;
+        session.DictationCompleted += completions.Enqueue;
+        var recording = session.StartDictationAsync();
         await WaitForStateAsync(session, DictationPhase.Recording);
         await session.CancelAsync();
         Assert.Equal(SessionOutcomeKind.Cancelled, (await recording).Kind);
+        var terminal = session.State;
+        updates.Clear();
         engine.LastProgress!.Report(new("stale speech", false, "stale speech"));
-        Assert.Empty(updates);
+        Assert.DoesNotContain(updates, state => state.Transcript == "stale speech");
+        Assert.Equal(terminal.Transcript, session.State.Transcript);
+        Assert.Equal(terminal.Result, session.State.Result);
+        Assert.Empty(completions);
         Assert.True(source.IsReleased);
         await session.CloseAsync();
-    }
-
-    private sealed class TestProgress(Action<TranscriptUpdate> report) : IProgress<TranscriptUpdate>
-    {
-        public void Report(TranscriptUpdate value) => report(value);
     }
 
     private static Task WaitForStateAsync(DictationSession session, DictationPhase phase)

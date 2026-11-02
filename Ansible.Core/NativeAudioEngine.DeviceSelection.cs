@@ -9,6 +9,7 @@ public sealed partial class NativeAudioEngine
     private readonly string? _benchmarkCachePath;
     private readonly Dictionary<string, DeviceBenchmarkSelection> _deviceSelections = [];
     private readonly Dictionary<(string Id, string Mode, int History), string> _selectionKeys = [];
+    private readonly DeviceBenchmarkIdentity _benchmarkIdentity = new();
     private bool _streamConsumed;
     private string? _deviceCacheWarning;
     private double? _benchmarkSampleMilliseconds;
@@ -59,7 +60,7 @@ public sealed partial class NativeAudioEngine
         var request = new DeviceBenchmarkRequest(_libraryPath, _catalogPath, ModelsDirectory, _benchmarkSamplePath,
             model.Id, NativeBackend.Cpu, options.DeviceIndex, _threads, _headroom, mode, history,
             UseDictionary: model.Family == "kroko_asr" && options.CustomDictionary.Length > 0);
-        var key = DeviceBenchmark.Key(request, modelIdentity, token);
+        var key = DeviceBenchmark.Key(request, modelIdentity, token, _benchmarkIdentity);
         _selectionKeys[(model.Id, mode, history)] = key;
         if (!_deviceSelections.TryGetValue(key, out var selection))
         {
