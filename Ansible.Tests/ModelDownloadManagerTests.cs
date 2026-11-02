@@ -29,7 +29,7 @@ public sealed class ModelDownloadManagerTests : IDisposable
         await log.DisposeAsync();
         var lines = await File.ReadAllLinesAsync(Path.Combine(log.DirectoryPath, "local-diagnostics.jsonl"));
         Assert.Equal(3, lines.Length);
-        Assert.DoesNotContain(_directory, string.Join("", lines));
+        Assert.DoesNotContain(Path.GetFileName(_directory), string.Join("", lines));
         Assert.DoesNotContain("test/models", string.Join("", lines));
         var entries = lines.Select(line => System.Text.Json.JsonDocument.Parse(line)).ToArray();
         try
@@ -97,7 +97,7 @@ public sealed class ModelDownloadManagerTests : IDisposable
         Assert.Equal(Weights[..4], File.ReadAllBytes(path + ".partial"));
         Assert.Equal(metadata, File.ReadAllText(path + ".partial.json"));
         Assert.False(File.Exists(path));
-        Assert.DoesNotContain(_directory, lines[0]);
+        Assert.DoesNotContain(Path.GetFileName(_directory), lines[0]);
         Assert.DoesNotContain("test/models", lines[0]);
     }
 
