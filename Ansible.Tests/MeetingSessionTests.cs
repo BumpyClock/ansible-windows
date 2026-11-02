@@ -585,9 +585,17 @@ public sealed class MeetingSessionTests : IDisposable
             var first = session.DisposeAsync().AsTask();
             await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
             var second = session.DisposeAsync().AsTask();
-            release.SetResult();
+            Exception? failure;
+            try
+            {
+                Assert.False(second.IsCompleted, $"Round {round}: second disposal returned before the first teardown finished.");
+            }
+            finally
+            {
+                release.SetResult();
+            }
 
-            var failure = await Record.ExceptionAsync(() => Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(5)));
+            failure = await Record.ExceptionAsync(() => Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(5)));
             Assert.True(failure is null, $"Round {round}: {failure}");
             Assert.False(session.IsActive);
         }
