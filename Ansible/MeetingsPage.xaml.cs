@@ -1,4 +1,5 @@
 using Ansible.Core;
+using System.Diagnostics;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Windows.Storage.Pickers;
@@ -9,6 +10,7 @@ public sealed partial class MeetingsPage : Page
 {
     private readonly DictationSession _session;
     private readonly MeetingStore _store;
+    private readonly LocalDiagnosticLog _diagnostics;
     private readonly Func<MeetingDocument?, Task> _openMeeting;
     private readonly Func<nint> _windowHandle;
     private CancellationTokenSource _shutdown = new();
@@ -19,11 +21,13 @@ public sealed partial class MeetingsPage : Page
     private IReadOnlyList<MeetingReadFailure> _displayedFailures = [];
     private UiSessionObserver? _observer;
 
-    internal MeetingsPage(DictationSession session, MeetingStore store, Func<MeetingDocument?, Task> openMeeting, Func<nint> windowHandle)
+    internal MeetingsPage(DictationSession session, MeetingStore store, Func<MeetingDocument?, Task> openMeeting,
+        Func<nint> windowHandle, LocalDiagnosticLog diagnostics)
     {
         InitializeComponent();
         _session = session;
         _store = store;
+        _diagnostics = diagnostics;
         _openMeeting = openMeeting;
         _windowHandle = windowHandle;
         Loaded += async (_, _) =>
@@ -135,10 +139,24 @@ public sealed partial class MeetingsPage : Page
 
     private async Task OpenAsync(Guid? id)
     {
+        var generation = id is null ? null : _diagnostics.CurrentGeneration;
+        var started = generation is null ? 0 : Stopwatch.GetTimestamp();
+        Exception? loadFailure = null;
         try
         {
             var token = _shutdown.Token;
-            var document = id is { } savedId ? await Task.Run(() => _store.LoadAsync(savedId, token), token) : null;
+            MeetingDocument? document;
+            try { document = id is { } savedId ? await Task.Run(() => _store.LoadAsync(savedId, token), token) : null; }
+            catch (Exception error) { loadFailure = error; throw; }
+            finally
+            {
+                if (generation is { } value)
+                    _diagnostics.Write(new StorageDiagnostic(DateTimeOffset.UtcNow, StorageDiagnosticCategory.Meeting,
+                        StorageDiagnosticStage.Load,
+                        loadFailure is OperationCanceledException ? DiagnosticOutcome.Cancelled :
+                        loadFailure is null ? DiagnosticOutcome.Completed : DiagnosticOutcome.Failed,
+                        Stopwatch.GetElapsedTime(started).TotalMilliseconds, loadFailure?.HResult), value);
+            }
             token.ThrowIfCancellationRequested();
             await _openMeeting(document);
         }

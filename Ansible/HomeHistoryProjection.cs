@@ -46,7 +46,8 @@ internal sealed record HomeHistoryViewModel(
     bool HasHistory,
     bool HasMatches,
     bool OversizedCurrentResult,
-    IReadOnlySet<Guid> AllOperationIds);
+    IReadOnlySet<Guid> AllOperationIds,
+    string? StorageError = null);
 
 internal static class HomeHistoryProjection
 {
@@ -55,7 +56,8 @@ internal static class HomeHistoryProjection
         string query,
         bool oversizedCurrentResult,
         Func<string, string?> modelName,
-        DateTime today)
+        DateTime today,
+        string? storageError = null)
     {
         var filtered = query.Length == 0
             ? all
@@ -69,7 +71,7 @@ internal static class HomeHistoryProjection
                     item.ModelId.Length > 0 ? modelName(item.ModelId) : null)).ToList()))
             .ToList();
         return new HomeHistoryViewModel(groups, todayCount, all.Count > 0, filtered.Count > 0, oversizedCurrentResult,
-            all.Select(item => item.OperationId).ToHashSet());
+            all.Select(item => item.OperationId).ToHashSet(), storageError);
     }
 
     private static string GroupLabel(DateOnly date, DateOnly today)

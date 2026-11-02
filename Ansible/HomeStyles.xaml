@@ -18,11 +18,4 @@
         <Setter Property="TextTrimming" Value="CharacterEllipsis" />
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
-    <!-- Chips on the base take the card fill; AppControlBrush disappears against the light base. -->
-    <Style x:Key="HomeBaseCountChipStyle" TargetType="Border" BasedOn="{StaticResource HistoryCountStyle}">
-        <Setter Property="Background" Value="{ThemeResource AppCardBrush}" />
-    </Style>
-    <Style x:Key="HomeBaseStreakChipStyle" TargetType="Border" BasedOn="{StaticResource HomeActivityStreakStyle}">
-        <Setter Property="Background" Value="{ThemeResource AppCardBrush}" />
-    </Style>
 </ResourceDictionary>
