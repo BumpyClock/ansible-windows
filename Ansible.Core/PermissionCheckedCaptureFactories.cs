@@ -20,7 +20,7 @@ public sealed class PermissionCheckedMeetingCaptureFactory(IMeetingCaptureFactor
     private readonly IMeetingCaptureFactory _inner = inner ?? throw new ArgumentNullException(nameof(inner));
     private readonly MicrophonePermissionPreflight _permission = permission ?? throw new ArgumentNullException(nameof(permission));
 
-    public Task<IAudioCapture> StartAsync(MeetingCaptureRequest request, CancellationToken cancellationToken)
+    public Task<IMeetingCapture> StartAsync(MeetingCaptureRequest request, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         _permission.RequireAccess();

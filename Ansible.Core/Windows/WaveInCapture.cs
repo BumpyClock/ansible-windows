@@ -1,11 +1,13 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading.Channels;
 
 namespace Ansible.Core.Windows;
 
-internal sealed class WaveInCapture(IWaveInApi api, MicrophoneBoost boost) : IAudioCapture
+internal sealed class WaveInCapture(IWaveInApi api, MicrophoneBoost boost, bool diagnosticsEnabled = false)
+    : IAudioCapture, IMicrophoneCaptureDiagnostics
 {
     internal const int PacketBytes = 1280;
     internal const int PacketCapacity = 7500;
@@ -18,6 +20,7 @@ internal sealed class WaveInCapture(IWaveInApi api, MicrophoneBoost boost) : IAu
     private readonly Channel<byte[]> _audio = Channel.CreateBounded<byte[]>(
         new BoundedChannelOptions(PacketCapacity) { SingleReader = true, SingleWriter = true, AllowSynchronousContinuations = false });
     private readonly List<CaptureBuffer> _buffers = [];
+    private readonly bool _diagnosticsEnabled = diagnosticsEnabled;
     private GCHandle _instance;
     private nint _device;
     private bool _stopping;
@@ -28,6 +31,12 @@ internal sealed class WaveInCapture(IWaveInApi api, MicrophoneBoost boost) : IAu
     private int _activeCallbacks;
     private int _initializeStarted;
     private long _capturedBytes;
+    private long _diagnosticPackets;
+    private long _lastCallbackAt;
+    private long _maximumCallbackGapTicks;
+    private int _backlogHighWater;
+    private int _overflowed;
+    private int _stopFailed;
 
     public ChannelReader<byte[]> Audio => _audio.Reader;
     public double CapturedSeconds => Interlocked.Read(ref _capturedBytes) / 32000.0;
@@ -87,10 +96,23 @@ internal sealed class WaveInCapture(IWaveInApi api, MicrophoneBoost boost) : IAu
         Interlocked.Increment(ref capture._activeCallbacks);
         try
         {
+            if (capture._diagnosticsEnabled)
+            {
+                var now = Stopwatch.GetTimestamp();
+                var previous = Interlocked.Exchange(ref capture._lastCallbackAt, now);
+                if (previous != 0)
+                {
+                    var gap = now - previous;
+                    long old;
+                    do { old = Interlocked.Read(ref capture._maximumCallbackGapTicks); }
+                    while (gap > old && Interlocked.CompareExchange(ref capture._maximumCallbackGapTicks, gap, old) != old);
+                }
+            }
             // The callback only posts pointers. Driver calls and header reads belong to the pump.
             if (!capture._returnedBuffers.Writer.TryWrite((nint)header) &&
                 !Volatile.Read(ref capture._stopping))
             {
+                if (capture._diagnosticsEnabled) Volatile.Write(ref capture._overflowed, 1);
                 capture._returnedBuffers.Writer.TryComplete(
                     new IOException("The microphone returned-buffer queue overflowed."));
             }
@@ -118,6 +140,7 @@ internal sealed class WaveInCapture(IWaveInApi api, MicrophoneBoost boost) : IAu
                 {
                     if (Interlocked.Read(ref _capturedBytes) + header.BytesRecorded > MaximumCapturedBytes)
                     {
+                        if (_diagnosticsEnabled) Volatile.Write(ref _overflowed, 1);
                         throw new IOException("The five-minute microphone recording limit was reached.");
                     }
                     var bytes = new byte[checked((int)header.BytesRecorded)];
@@ -125,9 +148,15 @@ internal sealed class WaveInCapture(IWaveInApi api, MicrophoneBoost boost) : IAu
                     boost.Apply(bytes);
                     if (!_audio.Writer.TryWrite(bytes))
                     {
+                        if (_diagnosticsEnabled) Volatile.Write(ref _overflowed, 1);
                         throw new IOException("The bounded five-minute audio backlog is full. Recording stopped without dropping samples.");
                     }
                     Interlocked.Add(ref _capturedBytes, bytes.Length);
+                    if (_diagnosticsEnabled)
+                    {
+                        Interlocked.Increment(ref _diagnosticPackets);
+                        _backlogHighWater = Math.Max(_backlogHighWater, _audio.Reader.Count);
+                    }
                     LevelChanged?.Invoke(AudioMeter.Pcm16Level(bytes));
                 }
                 lock (_gate)
@@ -223,6 +252,7 @@ internal sealed class WaveInCapture(IWaveInApi api, MicrophoneBoost boost) : IAu
         }
         if (failures.Count > 0)
         {
+            if (_diagnosticsEnabled) Volatile.Write(ref _stopFailed, 1);
             var error = new AggregateException("Microphone stop or cleanup failed.", failures);
             _audio.Writer.TryComplete(error);
             throw error;
@@ -253,6 +283,15 @@ internal sealed class WaveInCapture(IWaveInApi api, MicrophoneBoost boost) : IAu
     }
 
     public ValueTask DisposeAsync() => new(StopAsync());
+
+    MicrophoneCaptureDiagnostic IMicrophoneCaptureDiagnostics.Snapshot(Guid operationId)
+    {
+        var gap = Interlocked.Read(ref _maximumCallbackGapTicks);
+        return new(operationId, DateTimeOffset.UtcNow, Interlocked.Read(ref _diagnosticPackets),
+            Interlocked.Read(ref _capturedBytes) / 2,
+            gap == 0 ? null : gap * 1000.0 / Stopwatch.Frequency, Volatile.Read(ref _backlogHighWater),
+            Volatile.Read(ref _overflowed) != 0, Volatile.Read(ref _stopFailed) != 0, IsReleased);
+    }
 
     private sealed class CaptureBuffer(nint header, nint data)
     {
