@@ -81,9 +81,9 @@ try
     await using var engine = new NativeAudioEngine(args[0], args[2], args[1], threads: 4, memoryHeadroomMB: 512,
         deviceProbePath: deviceProbe, benchmarkSamplePath: args[3], benchmarkCachePath: benchmarkCache);
     var connectedModels = await engine.ConnectAsync(timeout.Token);
-    if (modelId is not null && connectedModels.Any(model => model.Id == modelId && model.Task == "diar"))
+    if (modelId is not null && connectedModels.Any(model => model.Id == modelId && ModelSelectionPolicy.IsDiarizationTask(model.Task)))
         throw new NotSupportedException($"Model '{modelId}' is a diarization companion, not an ASR model; ASR transcription is unsupported.");
-    var models = connectedModels.Where(model => model.Task != "diar").ToArray();
+    var models = ModelSelectionPolicy.DictationModels(connectedModels);
     var model = modelId is not null
         ? models.FirstOrDefault(model => model.Id == modelId) ??
             throw new ArgumentException($"Model '{modelId}' is not installed in the native catalog.")

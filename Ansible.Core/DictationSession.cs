@@ -287,7 +287,7 @@ public sealed class DictationSession
         if (CustomVocabulary.ModelCompatibilityError(model, _state.Settings.CustomDictionary) is { } dictionaryError)
             throw new InvalidDataException(dictionaryError);
         return new(_engine, model, new RecognitionOptions(_state.Language,
-            model.SupportsCustomDictionary ? _state.Settings.CustomDictionary : "", _state.Settings.Backend));
+            ModelSelectionPolicy.EffectiveDictionary(model, _state.Settings.CustomDictionary), _state.Settings.Backend));
     }
 
     private Task<SessionOutcome> Admit(Func<SessionOperation> create)
@@ -447,8 +447,7 @@ public sealed class DictationSession
         operation.Token.ThrowIfCancellationRequested();
         var candidate = _engineFactory(operation.Directory);
         operation.Candidate = candidate;
-        IReadOnlyList<AudioModel> models = (await candidate.ConnectAsync(operation.Token))
-            .Where(model => model.Task is null or "asr").ToArray();
+        var models = ModelSelectionPolicy.DictationModels(await candidate.ConnectAsync(operation.Token));
         operation.Token.ThrowIfCancellationRequested();
         var modelsDirectory = candidate.ModelsDirectory;
         var backendVersion = candidate.Version;
@@ -487,11 +486,8 @@ public sealed class DictationSession
                 settings = settings with { ModelsDirectory = Path.GetFullPath(modelsDirectory) };
                 operation.SettingsWarning = SaveSettings(settings, NoticeArea.Models);
             }
-            var preferredId = settings.ModelId;
-            var selectedIndex = models.ToList().FindIndex(model => model.Id == preferredId);
-            if (preferredId is null)
-                selectedIndex = models.ToList().FindIndex(model => model.Id == AudioModelDefaults.RecognitionModelId);
-            if (preferredId is not null && selectedIndex < 0)
+            var choice = ModelSelectionPolicy.ChooseDictationModel(models, settings.ModelId);
+            if (choice.MissingSavedModelId is { } preferredId)
             {
                 operation.SettingsWarning ??= new(NoticeKind.Warning, "Saved model unavailable",
                     models.Count == 0
@@ -503,7 +499,7 @@ public sealed class DictationSession
             state = SetState(_state with
             {
                 Models = Array.AsReadOnly(models.ToArray()),
-                SelectedIndex = models.Count == 0 ? -1 : Math.Max(0, selectedIndex),
+                SelectedIndex = choice.SelectedIndex,
                 ModelsDirectory = modelsDirectory, BackendVersion = backendVersion, Settings = settings
             });
         }

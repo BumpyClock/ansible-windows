@@ -75,7 +75,7 @@ public sealed partial class NativeAudioEngine
         RunExclusiveAsync(() => NativeOperation.Run(() =>
         {
             var decodedBytes = NativeMemory.ValidateAudio(audio, CancellationToken.None);
-            if (history > 0 && UsesDiarization(model))
+            if (history > 0 && ModelSelectionPolicy.RequiresCompanion(model))
                 EnsurePairedSession(model, options, CancellationToken.None);
             else EnsureSession(model, mode, decodedBytes, options, CancellationToken.None, history);
             RecognitionResult Recognize()
@@ -102,7 +102,7 @@ public sealed partial class NativeAudioEngine
                 var updates = new BenchmarkProgress();
                 var result = StreamCore(model, channel.Reader, options, updates, CancellationToken.None, null,
                     history == 0 ? NativeMemory.MaximumStreamFrames : 16000L * 120 * 60, history).Result;
-                if (history > 0 && UsesDiarization(model) &&
+                if (history > 0 && ModelSelectionPolicy.RequiresCompanion(model) &&
                     (_diarization?.HasSpeakerActivity != true || updates.Count == 0))
                     throw new InvalidDataException("The public sample produced no live speaker updates during paired qualification.");
                 return result;

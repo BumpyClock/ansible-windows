@@ -48,6 +48,7 @@ Use the current source to determine implemented UI behavior.
 
 - `Ansible\` contains the WinUI app, XAML views, floating window, and Windows microphone integration.
 - `Ansible.Core\DictationSession.cs` owns the shared operation lifecycle, including startup, recognition, preferences, cancellation and shutdown.
+- `Ansible.Core\ModelSelectionPolicy.cs` owns dictation and meeting model eligibility, the default model preference, meeting candidate order, and the diarization companion requirement. It is pure and table-tested.
 - `Ansible.Core\RecognitionContracts.cs` defines testable engine, audio and storage boundaries. `SessionState.cs` defines immutable UI snapshots and terminal outcomes.
 - `Ansible.Core\` contains native interop, verified model admission, shared audio input parsing, speech-content normalization, and per-user usage storage.
 - `Ansible.Core\Windows\` owns Windows capture bindings and retained-resource teardown. `WaveInCaptureFactory.cs` composes the native capture adapter.
