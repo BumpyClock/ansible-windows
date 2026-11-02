@@ -29,11 +29,14 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
     private bool _closed;
     private string? _error;
 
+    private readonly AppNotices _notices;
+
     internal ModelManagementPage(DictationSession session, AppPaths paths, Func<nint> windowHandle,
-        HttpClient http, Func<Task> transcribeFile, LocalDiagnosticLog diagnostics)
+        HttpClient http, Func<Task> transcribeFile, LocalDiagnosticLog diagnostics, AppNotices notices)
     {
         InitializeComponent();
         _session = session;
+        _notices = notices;
         _paths = paths;
         _windowHandle = windowHandle;
         _http = http;

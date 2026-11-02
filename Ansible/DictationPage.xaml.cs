@@ -35,10 +35,13 @@ public sealed partial class DictationPage : Page
     // Removing the current transcript's history row must not bring it back as the separate transcript card.
     private Guid? _removedTranscriptOperationId;
 
-    internal DictationPage(DictationSession session, AppPaths paths, Func<nint> windowHandle, HomeDictationHistory history)
+    private readonly AppNotices _notices;
+
+    internal DictationPage(DictationSession session, AppPaths paths, Func<nint> windowHandle, HomeDictationHistory history, AppNotices notices)
     {
         InitializeComponent();
         _session = session;
+        _notices = notices;
         _paths = paths;
         _windowHandle = windowHandle;
         _history = history ?? throw new ArgumentNullException(nameof(history));

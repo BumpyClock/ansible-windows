@@ -23,9 +23,12 @@ public sealed partial class CustomWordsPage : Page
     private string? _editingWord;
     private bool _editorOpen;
 
-    internal CustomWordsPage(DictationSession session, Action openModels)
+    private readonly AppNotices _notices;
+
+    internal CustomWordsPage(DictationSession session, Action openModels, AppNotices notices)
     {
         _session = session;
+        _notices = notices;
         _openModels = openModels;
         _state = session.State;
         InitializeComponent();

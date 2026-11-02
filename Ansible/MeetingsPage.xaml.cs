@@ -21,11 +21,14 @@ public sealed partial class MeetingsPage : Page
     private IReadOnlyList<MeetingReadFailure> _displayedFailures = [];
     private UiSessionObserver? _observer;
 
+    private readonly AppNotices _notices;
+
     internal MeetingsPage(DictationSession session, MeetingStore store, Func<MeetingDocument?, Task> openMeeting,
-        Func<nint> windowHandle, LocalDiagnosticLog diagnostics)
+        Func<nint> windowHandle, LocalDiagnosticLog diagnostics, AppNotices notices)
     {
         InitializeComponent();
         _session = session;
+        _notices = notices;
         _store = store;
         _diagnostics = diagnostics;
         _openMeeting = openMeeting;

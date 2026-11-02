@@ -11,7 +11,6 @@ public sealed partial class PageCanvas : UserControl
         nameof(Title), typeof(string), typeof(PageCanvas), new PropertyMetadata("", HeaderChanged));
     public static readonly DependencyProperty SubtitleProperty = DependencyProperty.Register(
         nameof(Subtitle), typeof(string), typeof(PageCanvas), new PropertyMetadata("", HeaderChanged));
-    private bool _scrollable = true;
 
     public PageCanvas()
     {
@@ -29,11 +28,8 @@ public sealed partial class PageCanvas : UserControl
         set => BodyHost.Content = value;
     }
 
-    public bool Scrollable
-    {
-        get => _scrollable;
-        set { _scrollable = value; UpdateLayoutBounds(); }
-    }
+    /// <summary>The page's only scroller. Page content flows inside it; views must not add nested vertical scrollers.</summary>
+    public ScrollViewer Scroller => Viewport;
 
     public double ContentWidth => Math.Max(0, ContentHost.ActualWidth - ContentHost.Padding.Left - ContentHost.Padding.Right);
 
@@ -80,12 +76,7 @@ public sealed partial class PageCanvas : UserControl
         var width = Math.Min(Viewport.ActualWidth, (double)resources["PageContentMaxWidth"]);
         ContentHost.Padding = (Thickness)resources[width < (double)resources["CompactPageThreshold"]
             ? "CompactPagePadding" : "PagePadding"];
-        var boundedPageHeight = Math.Max(Viewport.ActualHeight, (double)resources["BoundedPageMinHeight"]);
-        var canScroll = _scrollable || boundedPageHeight > Viewport.ActualHeight;
-        Viewport.VerticalScrollBarVisibility = canScroll ? ScrollBarVisibility.Auto : ScrollBarVisibility.Disabled;
-        Viewport.VerticalScrollMode = canScroll ? ScrollMode.Auto : ScrollMode.Disabled;
-        // Full-page flows retain bottom padding. Bounded lists receive a finite viewport and own their scrolling.
-        ContentHost.Height = _scrollable ? double.NaN : boundedPageHeight;
-        ContentHost.MinHeight = _scrollable ? Viewport.ActualHeight : 0;
+        // The page flows in one scroller; content fills at least the viewport so footers sit at the bottom.
+        ContentHost.MinHeight = Viewport.ActualHeight;
     }
 }

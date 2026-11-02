@@ -390,7 +390,6 @@
         All app colors, dimensions, and styles live in this dictionary.
     -->
     <x:Double x:Key="PageContentMaxWidth">1440</x:Double>
-    <x:Double x:Key="BoundedPageMinHeight">620</x:Double>
     <Thickness x:Key="PagePadding">36,24,40,40</Thickness>
     <Thickness x:Key="CompactPagePadding">18</Thickness>
     <x:Double x:Key="CompactPageThreshold">800</x:Double>

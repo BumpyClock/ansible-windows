@@ -26,6 +26,7 @@ public sealed partial class MainWindow : Window
     private readonly AppPaths _paths;
     private readonly List<(MeetingSession session, MeetingWindow window, Guid? savedId)> _meetingWindows = [];
     private readonly UiSessionObserver _observer;
+    private readonly AppNotices _notices = new();
     private GlobalDictationHotkey? _hotkey;
     private SystemTrayIcon? _tray;
     private DictationShortcut _configuredHotkey = DictationShortcut.Default;
@@ -64,7 +65,7 @@ public sealed partial class MainWindow : Window
         _meetingStore = new MeetingStore(Path.Combine(Path.GetDirectoryName(paths.Settings)!, "meetings"));
         _meetingDiagnostics = diagnostics;
         _meetingCleanup = new(diagnostics);
-        _meetings = new MeetingsPage(session, _meetingStore, OpenMeetingAsync, () => WinRT.Interop.WindowNative.GetWindowHandle(this), diagnostics);
+        _meetings = new MeetingsPage(session, _meetingStore, OpenMeetingAsync, () => WinRT.Interop.WindowNative.GetWindowHandle(this), diagnostics, _notices);
         _history = new HomeDictationHistory(session, Path.Combine(Path.GetDirectoryName(paths.Settings)!, "dictation-history.json"), diagnostics);
         _shortcut = new ShortcutDictation(session,
             new WelcomeShortcutTargetInspector(DispatcherQueue, CurrentWelcome,
@@ -80,13 +81,13 @@ public sealed partial class MainWindow : Window
             (title, message) => _session.Notify(NoticeKind.Warning, title, message, NoticeArea.Meetings));
         _suggestions.Changed += RenderMeetingSuggestion;
         _welcome = new WelcomePage(session, CompleteWelcome, () => Navigate("models"), () => _shortcut.IsBusy);
-        _dictation = new DictationPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this), _history);
+        _dictation = new DictationPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this), _history, _notices);
         _dictation.ShortcutLessonRequested += OpenShortcutLesson;
         _settings = new MainPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this),
-            ChangeHotkey, ChangeDictationMode, CaptureShortcut, diagnostics);
+            ChangeHotkey, ChangeDictationMode, CaptureShortcut, diagnostics, _notices);
         _models = new ModelManagementPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this), modelDownloads,
-            () => { Navigate("dictation"); return _dictation.TranscribeFileAsync(); }, diagnostics);
-        _customWords = new CustomWordsPage(session, () => Navigate("models"));
+            () => { Navigate("dictation"); return _dictation.TranscribeFileAsync(); }, diagnostics, _notices);
+        _customWords = new CustomWordsPage(session, () => Navigate("models"), _notices);
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));

@@ -26,13 +26,16 @@ public sealed partial class MainPage : Page
     private bool _rendering;
     private MeetingCleanupSettings? _renderedCleanupSettings;
 
+    private readonly AppNotices _notices;
+
     internal MainPage(DictationSession session, AppPaths paths, Func<nint> windowHandle,
         Action<DictationShortcut> changeHotkey, Action<bool> changeMode, Action<bool> captureShortcut,
-        LocalDiagnosticLog diagnostics)
+        LocalDiagnosticLog diagnostics, AppNotices notices)
     {
         _rendering = true;
         InitializeComponent();
         _session = session;
+        _notices = notices;
         _changeHotkey = changeHotkey;
         _changeMode = changeMode;
         _captureShortcut = captureShortcut;
