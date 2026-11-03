@@ -2,7 +2,7 @@ namespace Ansible.Core;
 
 internal sealed record QualificationInput(DeviceBenchmarkRequest Request, string ModelFingerprint, string ModelName);
 
-internal sealed record QualifiedDevice(DeviceBenchmarkSelection Selection, string ModelId, string ModelName, string Mode,
+internal sealed record QualifiedDevice(DeviceBenchmarkSelection Selection, string ModelId, string ModelName, string Purpose,
     double? SampleMilliseconds)
 {
     public NativeBackend Backend => Selection.Backend;
@@ -46,7 +46,7 @@ internal sealed class AutoDeviceQualifier(
                     _cacheWarning = DeviceBenchmark.TryUpdateCache(cachePath, key, selection);
                 }
                 else Current = new(Source: NativeDiagnosticSource.DiskCache);
-                device = new(selection, request.ModelId, input.ModelName, request.Mode,
+                device = new(selection, request.ModelId, input.ModelName, Purpose(request),
                     request.History > 0 ? ReadSampleMilliseconds(request.Sample, token) : null);
                 _devices[key] = device;
             }
@@ -112,10 +112,14 @@ internal sealed class AutoDeviceQualifier(
         return audio.Samples.Length / (double)audio.Channels / audio.SampleRate * 1000;
     }
 
+    // Dictation and meetings both stream, but history makes them separate qualifications.
+    private static string Purpose(DeviceBenchmarkRequest request) =>
+        request.Mode == "offline" ? "WAV file" : request.History > 0 ? "meeting" : "dictation";
+
     private static DeviceComparisonSnapshot Comparison(QualifiedDevice device)
     {
         var selection = device.Selection;
-        return new(device.ModelName, device.Mode,
+        return new(device.ModelName, device.Purpose,
             selection.Cpu.Working ? selection.Cpu.Milliseconds : null,
             selection.Gpu.Working ? selection.Gpu.Milliseconds : null,
             selection.Backend, selection.MeasuredAt, selection.Cpu.Error, selection.Gpu.Error);

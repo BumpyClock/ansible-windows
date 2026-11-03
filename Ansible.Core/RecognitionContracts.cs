@@ -14,10 +14,10 @@ public enum NativeBackend
     Auto = 2
 }
 
-// Each model and mode qualifies separately; ModelName and Mode say which comparison this is.
+// Each model and purpose qualifies separately; ModelName and Purpose say which comparison this is.
 public sealed record DeviceComparisonSnapshot(
     string ModelName,
-    string Mode,
+    string Purpose,
     double? CpuMilliseconds,
     double? GpuMilliseconds,
     NativeBackend RecommendedBackend,

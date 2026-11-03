@@ -470,7 +470,7 @@ public sealed partial class DictationSessionTests : IDisposable
     [Fact]
     public async Task PreloadPublishesMeasuredDeviceComparisonInANewSnapshot()
     {
-        var comparison = new DeviceComparisonSnapshot("Test model", "streaming", 100, 80,NativeBackend.Vulkan, DateTimeOffset.UtcNow);
+        var comparison = new DeviceComparisonSnapshot("Test model", "dictation", 100, 80,NativeBackend.Vulkan, DateTimeOffset.UtcNow);
         var engine = new FakeEngine { PreparedDeviceComparison = comparison };
         var session = Create(engine);
 
