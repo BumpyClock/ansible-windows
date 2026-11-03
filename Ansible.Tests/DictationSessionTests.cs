@@ -482,6 +482,136 @@ public sealed partial class DictationSessionTests : IDisposable
     }
 
     [Fact]
+    public async Task BenchmarkMeasuresAutoWithDictationOptionsAndPublishesProgressAndResult()
+    {
+        var measured = new DeviceComparisonSnapshot(120, 70, NativeBackend.Vulkan, DateTimeOffset.UtcNow);
+        var engine = new FakeEngine
+        {
+            BenchmarkedComparison = measured,
+            Benchmarking = (progress, _) =>
+            {
+                progress!.Report(NativeBackend.Cpu);
+                progress.Report(NativeBackend.Vulkan);
+                return Task.CompletedTask;
+            }
+        };
+        var updates = new ConcurrentQueue<SessionSnapshot>();
+        var session = Create(engine);
+        await session.InitializeAsync();
+        session.SetBackend(NativeBackend.Cpu);
+        session.SetLanguage("en");
+        session.StateChanged += updates.Enqueue;
+
+        var outcome = await session.BenchmarkDevicesAsync();
+
+        Assert.Equal(SessionOutcomeKind.Completed, outcome.Kind);
+        Assert.Equal(1, engine.Benchmarks);
+        Assert.Equal(NativeBackend.Auto, engine.BenchmarkOptions!.Backend);
+        Assert.Equal("en", engine.BenchmarkOptions.Language);
+        Assert.Equal([NativeBackend.Cpu, NativeBackend.Vulkan], updates
+            .Where(state => state.IsBenchmarking && state.BenchmarkingBackend is not null)
+            .Select(state => state.BenchmarkingBackend!.Value).Distinct());
+        Assert.Equal(DictationPhase.Ready, session.State.Phase);
+        Assert.Null(session.State.BenchmarkingBackend);
+        Assert.Equal(measured, session.State.DeviceComparison);
+        Assert.False(session.State.Notice.ShouldDisplay);
+        Assert.Equal(NativeBackend.Cpu, session.State.Settings.Backend);
+        await session.CloseAsync();
+    }
+
+    [Fact]
+    public async Task BenchmarkRejectsConcurrentDictationAndCancelKeepsThePreviousComparison()
+    {
+        var previous = new DeviceComparisonSnapshot(100, 80, NativeBackend.Vulkan, DateTimeOffset.UtcNow);
+        var probing = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var engine = new FakeEngine
+        {
+            PreparedDeviceComparison = previous,
+            BenchmarkedComparison = new(1, 1, NativeBackend.Cpu, DateTimeOffset.UtcNow),
+            Benchmarking = async (progress, token) =>
+            {
+                progress!.Report(NativeBackend.Cpu);
+                probing.TrySetResult();
+                await Task.Delay(Timeout.InfiniteTimeSpan, token);
+            }
+        };
+        var capture = new FakeCaptureFactory();
+        var session = Create(engine, capture);
+        await session.InitializeAsync();
+        await WaitUntilAsync(() => session.State.DeviceComparison == previous);
+
+        var benchmark = session.BenchmarkDevicesAsync();
+        await probing.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.True(session.State.IsBenchmarking);
+        Assert.Equal(NativeBackend.Cpu, session.State.BenchmarkingBackend);
+        Assert.False(session.State.CanStart);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => session.StartDictationAsync());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => session.BenchmarkDevicesAsync());
+        Assert.Equal(0, capture.Starts);
+        Assert.Equal(0, engine.StreamStarts);
+
+        await session.CancelAsync();
+        var outcome = await benchmark.WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.Equal(SessionOutcomeKind.Cancelled, outcome.Kind);
+        Assert.Equal(DictationPhase.Ready, session.State.Phase);
+        Assert.Null(session.State.BenchmarkingBackend);
+        Assert.Equal(previous, session.State.DeviceComparison);
+        Assert.False(session.State.Notice.ShouldDisplay);
+        await session.CloseAsync();
+    }
+
+    [Fact]
+    public async Task BenchmarkFailureShowsAStableSettingsError()
+    {
+        var engine = new FakeEngine
+        {
+            Benchmarking = (_, _) => Task.FromException(new InvalidOperationException("Neither device passed qualification."))
+        };
+        var session = Create(engine);
+        await session.InitializeAsync();
+
+        var outcome = await session.BenchmarkDevicesAsync();
+
+        Assert.Equal(SessionOutcomeKind.Failed, outcome.Kind);
+        var notice = session.State.Notice;
+        Assert.Equal("Device benchmark failed", notice.Title);
+        Assert.Equal("Neither device passed qualification.", notice.Message);
+        Assert.True(notice.ShouldDisplayOn(NoticeArea.Settings));
+        Assert.False(notice.ShouldDisplayOn(NoticeArea.Dictation));
+        Assert.Equal(DictationPhase.Ready, session.State.Phase);
+        await session.CloseAsync();
+    }
+
+    [Fact]
+    public async Task CloseCancelsAndJoinsARunningBenchmark()
+    {
+        var cancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var engine = new FakeEngine
+        {
+            Benchmarking = async (_, token) =>
+            {
+                started.TrySetResult();
+                try { await Task.Delay(Timeout.InfiniteTimeSpan, token); }
+                finally { cancelled.TrySetResult(); }
+            }
+        };
+        var session = Create(engine);
+        await session.InitializeAsync();
+        var benchmark = session.BenchmarkDevicesAsync();
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        await session.CloseAsync().WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.True(cancelled.Task.IsCompleted);
+        Assert.Equal(SessionOutcomeKind.Cancelled, (await benchmark).Kind);
+        Assert.Equal(DictationPhase.Closed, session.State.Phase);
+        Assert.Equal(1, engine.Disposals);
+    }
+
+    [Fact]
     public async Task IdleModelUnloadsAfterInactivityAndDictationRestartsTheCountdown()
     {
         var clock = new ManualTime();
@@ -1617,8 +1747,20 @@ public sealed partial class DictationSessionTests : IDisposable
             PreparedOptions = options;
             PrepareCalled.TrySetResult();
             if (Preparing is not null) { await Preparing(token); }
-            DeviceSelectionSummary = PreparedDeviceSummary;
-            DeviceComparison = PreparedDeviceComparison;
+            if (PreparedDeviceSummary.Length > 0) DeviceSelectionSummary = PreparedDeviceSummary;
+            if (PreparedDeviceComparison is not null) DeviceComparison = PreparedDeviceComparison;
+        }
+        public int Benchmarks;
+        public RecognitionOptions? BenchmarkOptions;
+        public DeviceComparisonSnapshot? BenchmarkedComparison { get; init; }
+        public Func<IProgress<NativeBackend>?, CancellationToken, Task>? Benchmarking { get; init; }
+        public async Task BenchmarkDevicesAsync(AudioModel model, RecognitionOptions options,
+            IProgress<NativeBackend>? progress, CancellationToken token)
+        {
+            Interlocked.Increment(ref Benchmarks);
+            BenchmarkOptions = options;
+            if (Benchmarking is not null) { await Benchmarking(progress, token); }
+            DeviceComparison = BenchmarkedComparison;
         }
         public Task UnloadAsync(CancellationToken token)
         {

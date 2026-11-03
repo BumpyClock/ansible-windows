@@ -3,10 +3,10 @@ namespace Ansible.Core;
 public enum DictationPhase
 {
     Disconnected, Connecting, Ready, Preparing, Recording, Finishing,
-    Transcribing, Cancelling, MaintainingModels, RecoveryRequired, Closing, Closed
+    Transcribing, Cancelling, MaintainingModels, Benchmarking, RecoveryRequired, Closing, Closed
 }
 
-public enum SessionActivity { None, Connecting, Dictation, Replay, File, ModelMaintenance }
+public enum SessionActivity { None, Connecting, Dictation, Replay, File, ModelMaintenance, DeviceBenchmark }
 public enum NoticeKind { Information, Success, Warning, Error }
 [Flags]
 public enum NoticeArea
@@ -52,6 +52,8 @@ public sealed record SessionSnapshot
     public required string BackendVersion { get; init; }
     public string DeviceSelectionSummary { get; init; } = "";
     public DeviceComparisonSnapshot? DeviceComparison { get; init; }
+    /// <summary>The device whose isolated probe is running during a requested benchmark.</summary>
+    public NativeBackend? BenchmarkingBackend { get; init; }
     public AppSettings Settings { get; init; } = new();
     public string Language => Settings.Language;
     public required string Transcript { get; init; }
@@ -64,6 +66,7 @@ public sealed record SessionSnapshot
     public bool IsIdle => !MeetingActive && Phase is DictationPhase.Ready or DictationPhase.Disconnected;
     public bool IsReplay => Activity == SessionActivity.Replay;
     public bool CanStart => !MeetingActive && Phase == DictationPhase.Ready && SelectedModel?.SupportsMicrophone == true;
+    public bool IsBenchmarking => Activity == SessionActivity.DeviceBenchmark && Phase == DictationPhase.Benchmarking;
     public bool CanFinish => Phase == DictationPhase.Recording && Activity == SessionActivity.Dictation;
     public bool CanCancel => Phase is DictationPhase.Preparing or DictationPhase.Recording or DictationPhase.Finishing or DictationPhase.Transcribing;
     public bool IsLiveOperation => Activity is SessionActivity.Dictation or SessionActivity.Replay &&

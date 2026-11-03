@@ -22,16 +22,17 @@ internal sealed class AutoDeviceQualifier(
 
     public QualificationStatus Current { get; private set; } = new();
 
-    public QualifiedDevice Qualify(QualificationInput input, Action prepareProbe, CancellationToken token)
+    // A refresh skips both cache tiers and replaces them only after a complete new measurement.
+    public QualifiedDevice Qualify(QualificationInput input, Action prepareProbe, CancellationToken token, bool refresh = false)
     {
         Current = new();
         try
         {
             var request = input.Request;
             var key = DeviceBenchmark.Key(request, input.ModelFingerprint, token, _identity);
-            if (!_devices.TryGetValue(key, out var device))
+            if (refresh || !_devices.TryGetValue(key, out var device))
             {
-                var selection = DeviceBenchmark.ReadCache(cachePath).LastOrDefault(value => value.Key == key);
+                var selection = refresh ? null : DeviceBenchmark.ReadCache(cachePath).LastOrDefault(value => value.Key == key);
                 if (selection is null)
                 {
                     Current = new($"Qualifying {request.ModelId} {request.Mode} on CPU and Vulkan with the public sample.",

@@ -8,14 +8,14 @@ public sealed partial class NativeAudioEngine
     private readonly string? _deviceProbePath;
     private readonly string? _benchmarkSamplePath;
     private readonly AutoDeviceQualifier _deviceQualifier;
+    // Set only while the exclusive gate runs a requested benchmark.
+    private IProgress<NativeBackend>? _benchmarkProgress;
     public string DeviceSelectionSummary { get; private set; } = "";
     public DeviceComparisonSnapshot? DeviceComparison { get; private set; }
 
     private T RunWithDevice<T>(AudioModel model, string mode, int history, long decodedBytes,
         RecognitionOptions options, CancellationToken token, Func<RecognitionOptions, T> execute, Func<bool>? consumed = null)
     {
-        // A new selection is in progress until a complete benchmark result is available.
-        DeviceComparison = null;
         var diagnostics = options.Diagnostics;
         var started = diagnostics is null ? 0 : Stopwatch.GetTimestamp();
         if (diagnostics is not null) diagnostics.SelectionSource = null;
@@ -25,6 +25,9 @@ public sealed partial class NativeAudioEngine
         {
             if (options.Backend == NativeBackend.Auto)
             {
+                // A new selection is in progress until a complete benchmark result is available.
+                // Manual processors leave the last measurement visible; it still describes what Auto would choose.
+                DeviceComparison = null;
                 device = QualifyDevice(model, mode, history, decodedBytes, options, token);
                 selected = options with { Backend = device.Backend };
             }
@@ -54,8 +57,35 @@ public sealed partial class NativeAudioEngine
         }, consumed);
     }
 
+    public Task BenchmarkDevicesAsync(AudioModel model, RecognitionOptions options,
+        IProgress<NativeBackend>? progress, CancellationToken cancellationToken)
+    {
+        // Measure exactly what dictation qualifies: its mode, no meeting history, and the Kroko decoder mode.
+        options = ValidateOptions(model, model.Family == "kroko_asr" ? options : options with { CustomDictionary = "" })
+            with { Backend = NativeBackend.Auto };
+        var mode = model.Mode == "offline" ? "offline" : "streaming";
+        return RunExclusiveAsync(() =>
+        {
+            var (summary, comparison) = (DeviceSelectionSummary, DeviceComparison);
+            _benchmarkProgress = progress;
+            try
+            {
+                QualifyDevice(model, mode, 0, NativeMemory.MaximumStreamFrames * sizeof(float), options,
+                    cancellationToken, refresh: true);
+                return true;
+            }
+            catch
+            {
+                // A cancelled or failed run leaves both cache tiers unchanged, so keep showing their result.
+                (DeviceSelectionSummary, DeviceComparison) = (summary, comparison);
+                throw;
+            }
+            finally { _benchmarkProgress = null; }
+        }, cancellationToken);
+    }
+
     private QualifiedDevice QualifyDevice(AudioModel model, string mode, int history, long decodedBytes,
-        RecognitionOptions options, CancellationToken token)
+        RecognitionOptions options, CancellationToken token, bool refresh = false)
     {
         token.ThrowIfCancellationRequested();
         if (_deviceProbePath is null || !File.Exists(_deviceProbePath) || _benchmarkSamplePath is null || !File.Exists(_benchmarkSamplePath))
@@ -85,7 +115,7 @@ public sealed partial class NativeAudioEngine
                 // No resident execution weights coexist with either owned subprocess.
                 ReleaseModel();
                 NativeMemory.CheckBudget(modelBytes, decodedBytes, _headroom);
-            }, token);
+            }, token, refresh);
         }
         finally { PublishDeviceQualification(options.Diagnostics); }
     }
