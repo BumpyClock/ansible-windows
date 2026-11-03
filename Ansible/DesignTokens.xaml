@@ -37,7 +37,6 @@
             <Color x:Key="BrandAccentSoftColor">#E9F797</Color>
             <Color x:Key="BrandAccentForegroundLightColor">#526719</Color>
             <Color x:Key="BrandAccentForegroundDarkColor">#D3EB62</Color>
-            <Color x:Key="AppSegmentSelectedColor">#BCC7D4</Color>
             <Color x:Key="AppSelectedTextColor">#1C2636</Color>
             <Color x:Key="AppBrandVoiceDetailColor">#DFE5EB</Color>
             <Color x:Key="AppBrandReplyDetailColor">#4A5F1C</Color>
@@ -93,7 +92,6 @@
             <SolidColorBrush x:Key="AppTrackBrush" Color="{StaticResource AppTrackColor}" />
             <SolidColorBrush x:Key="AppTagBrush" Color="{StaticResource AppTagColor}" />
             <SolidColorBrush x:Key="AppTagBackgroundBrush" Color="{StaticResource AppTagBackgroundColor}" />
-            <SolidColorBrush x:Key="AppSegmentSelectedBrush" Color="{StaticResource AppSegmentSelectedColor}" />
             <SolidColorBrush x:Key="AppSelectedTextBrush" Color="{StaticResource AppSelectedTextColor}" />
             <SolidColorBrush x:Key="AppAccentBrush" Color="{StaticResource BrandAccentColor}" />
             <SolidColorBrush x:Key="AppOnAccentBrush" Color="{StaticResource BrandOnAccentColor}" />
@@ -183,7 +181,6 @@
             <Color x:Key="BrandAccentSoftColor">#E9F797</Color>
             <Color x:Key="BrandAccentForegroundLightColor">#526719</Color>
             <Color x:Key="BrandAccentForegroundDarkColor">#D3EB62</Color>
-            <Color x:Key="AppSegmentSelectedColor">#34373B</Color>
             <Color x:Key="AppSelectedTextColor">#F1F3F4</Color>
             <Color x:Key="AppBrandVoiceDetailColor">#DFE5EB</Color>
             <Color x:Key="AppBrandReplyDetailColor">#4A5F1C</Color>
@@ -238,7 +235,6 @@
             <SolidColorBrush x:Key="AppTrackBrush" Color="{StaticResource AppTrackColor}" />
             <SolidColorBrush x:Key="AppTagBrush" Color="{StaticResource AppTagColor}" />
             <SolidColorBrush x:Key="AppTagBackgroundBrush" Color="{StaticResource AppTagBackgroundColor}" />
-            <SolidColorBrush x:Key="AppSegmentSelectedBrush" Color="{StaticResource AppSegmentSelectedColor}" />
             <SolidColorBrush x:Key="AppSelectedTextBrush" Color="{StaticResource AppSelectedTextColor}" />
             <SolidColorBrush x:Key="AppAccentBrush" Color="{StaticResource BrandAccentColor}" />
             <SolidColorBrush x:Key="AppOnAccentBrush" Color="{StaticResource BrandOnAccentColor}" />
@@ -315,7 +311,6 @@
             <SolidColorBrush x:Key="AppTrackBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
             <SolidColorBrush x:Key="AppTagBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="AppTagBackgroundBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
-            <SolidColorBrush x:Key="AppSegmentSelectedBrush" Color="{ThemeResource SystemColorHighlightColor}" />
             <SolidColorBrush x:Key="AppSelectedTextBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
             <SolidColorBrush x:Key="AppAccentBrush" Color="{ThemeResource SystemColorHighlightColor}" />
             <SolidColorBrush x:Key="AppOnAccentBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
@@ -435,22 +430,15 @@
     <CornerRadius x:Key="ContentPanelCornerRadius">8</CornerRadius>
     <Thickness x:Key="TitleBarPageTitleMargin">40,0,12,0</Thickness>
     <Thickness x:Key="CompactTitleBarPageTitleMargin">20,0,12,0</Thickness>
-    <Thickness x:Key="SettingsSegmentPadding">14,0</Thickness>
-    <CornerRadius x:Key="SettingsSegmentCornerRadius">8</CornerRadius>
     <x:Double x:Key="BenchmarkBarHeight">8</x:Double>
     <x:Double x:Key="BenchmarkValueMaxWidth">160</x:Double>
     <CornerRadius x:Key="BenchmarkBarCornerRadius">4</CornerRadius>
-    <Thickness x:Key="SettingsSegmentTrackPadding">2</Thickness>
-    <CornerRadius x:Key="SettingsSegmentTrackCornerRadius">11</CornerRadius>
-    <x:Double x:Key="SettingsSegmentGap">2</x:Double>
-    <x:Double x:Key="SettingsSegmentMinHeight">32</x:Double>
     <x:Double x:Key="SettingsRowRowSpacing">12</x:Double>
     <x:Double x:Key="SettingsRowDescriptionSpacing">5</x:Double>
     <x:Double x:Key="SettingsRowDescriptionMaxWidth">620</x:Double>
     <x:Double x:Key="SettingsSelectWidth">320</x:Double>
     <x:Double x:Key="SettingsNumberWidth">132</x:Double>
     <x:Double x:Key="SettingsLanguageWidth">180</x:Double>
-    <x:Double x:Key="SettingsProcessorWidth">305</x:Double>
     <x:Double x:Key="SettingsWideMinWidth">700</x:Double>
     <Thickness x:Key="SettingsRowPadding">0,20</Thickness>
     <Thickness x:Key="SettingsBenchmarkMargin">0,0,0,20</Thickness>
@@ -699,13 +687,6 @@
     <Style x:Key="SettingsCardStyle" TargetType="Border" BasedOn="{StaticResource CardStyle}">
         <Setter Property="Padding" Value="{StaticResource SettingsCardPadding}" />
     </Style>
-    <Style x:Key="SettingsSegmentTrackStyle" TargetType="Border">
-        <Setter Property="Background" Value="{ThemeResource AppBackgroundBrush}" />
-        <Setter Property="BorderBrush" Value="{ThemeResource AppBorderBrush}" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="{StaticResource SettingsSegmentTrackCornerRadius}" />
-        <Setter Property="Padding" Value="{StaticResource SettingsSegmentTrackPadding}" />
-    </Style>
     <Style x:Key="MetricCardStyle" TargetType="Border" BasedOn="{StaticResource CardStyle}">
         <Setter Property="Padding" Value="{StaticResource HomeMetricCardPadding}" />
     </Style>
@@ -735,98 +716,6 @@
         <Setter Property="Foreground" Value="{ThemeResource AppSecondaryTextBrush}" />
     </Style>
 
-    <Style x:Key="SegmentedListBoxStyle" TargetType="ListBox">
-        <Setter Property="Background" Value="Transparent" />
-        <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="Padding" Value="0" />
-        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-        <Setter Property="ItemsPanel">
-            <Setter.Value>
-                <ItemsPanelTemplate>
-                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource SettingsSegmentGap}" />
-                </ItemsPanelTemplate>
-            </Setter.Value>
-        </Setter>
-        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
-        <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled" />
-        <Setter Property="ScrollViewer.HorizontalScrollMode" Value="Disabled" />
-        <Setter Property="ScrollViewer.VerticalScrollMode" Value="Disabled" />
-    </Style>
-    <Style x:Key="SegmentedListBoxItemStyle" TargetType="ListBoxItem">
-        <Setter Property="HorizontalContentAlignment" Value="Center" />
-        <Setter Property="MinWidth" Value="0" />
-        <Setter Property="UseSystemFocusVisuals" Value="True" />
-        <Setter Property="FocusVisualPrimaryBrush" Value="{ThemeResource AppAccentBrush}" />
-        <Setter Property="VerticalContentAlignment" Value="Center" />
-        <Setter Property="MinHeight" Value="{StaticResource SettingsSegmentMinHeight}" />
-        <Setter Property="Padding" Value="{StaticResource SettingsSegmentPadding}" />
-        <Setter Property="Foreground" Value="{ThemeResource AppTextBrush}" />
-        <Setter Property="Background" Value="Transparent" />
-        <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="ListBoxItem">
-                    <Grid x:Name="RootGrid" Control.IsTemplateFocusTarget="True">
-                        <Border x:Name="SelectedBackground" Background="{ThemeResource AppSegmentSelectedBrush}"
-                                CornerRadius="{StaticResource SettingsSegmentCornerRadius}" Opacity="0" />
-                        <Border x:Name="HoverOverlay" Background="{ThemeResource AppHoverBrush}"
-                                CornerRadius="{StaticResource SettingsSegmentCornerRadius}" Opacity="0" />
-                        <ContentPresenter x:Name="ContentPresenter" Content="{TemplateBinding Content}"
-                                          ContentTemplate="{TemplateBinding ContentTemplate}"
-                                          FontSize="{TemplateBinding FontSize}"
-                                          FontWeight="{TemplateBinding FontWeight}"
-                                          Foreground="{TemplateBinding Foreground}"
-                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                                          Padding="{TemplateBinding Padding}" />
-                        <VisualStateManager.VisualStateGroups>
-                            <VisualStateGroup x:Name="CommonStates">
-                                <VisualState x:Name="Normal" />
-                                <VisualState x:Name="PointerOver">
-                                    <Storyboard>
-                                        <DoubleAnimation Storyboard.TargetName="HoverOverlay" Storyboard.TargetProperty="Opacity" To="1" Duration="0" />
-                                    </Storyboard>
-                                </VisualState>
-                                <VisualState x:Name="Selected">
-                                    <VisualState.Setters>
-                                        <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource AppSelectedTextBrush}" />
-                                    </VisualState.Setters>
-                                    <Storyboard>
-                                        <DoubleAnimation Storyboard.TargetName="SelectedBackground" Storyboard.TargetProperty="Opacity" To="1" Duration="0" />
-                                    </Storyboard>
-                                </VisualState>
-                                <VisualState x:Name="SelectedUnfocused">
-                                    <VisualState.Setters>
-                                        <Setter Target="SelectedBackground.Opacity" Value="1" />
-                                        <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource AppSelectedTextBrush}" />
-                                    </VisualState.Setters>
-                                </VisualState>
-                                <VisualState x:Name="SelectedPointerOver">
-                                    <VisualState.Setters>
-                                        <Setter Target="SelectedBackground.Opacity" Value="1" />
-                                        <Setter Target="HoverOverlay.Opacity" Value="1" />
-                                        <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource AppSelectedTextBrush}" />
-                                    </VisualState.Setters>
-                                </VisualState>
-                                <VisualState x:Name="SelectedPressed">
-                                    <VisualState.Setters>
-                                        <Setter Target="SelectedBackground.Opacity" Value="1" />
-                                        <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource AppSelectedTextBrush}" />
-                                    </VisualState.Setters>
-                                </VisualState>
-                                <VisualState x:Name="Pressed" />
-                                <VisualState x:Name="Disabled">
-                                    <VisualState.Setters>
-                                        <Setter Target="RootGrid.Opacity" Value="0.55" />
-                                    </VisualState.Setters>
-                                </VisualState>
-                            </VisualStateGroup>
-                        </VisualStateManager.VisualStateGroups>
-                    </Grid>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
-    </Style>
 
     <Style x:Key="ActivityEmptyCellStyle" TargetType="Border">
         <Setter Property="Background" Value="{ThemeResource InactiveChartBrush}" />

@@ -14,14 +14,6 @@
             <Setter Property="MaxWidth" Value="{StaticResource SettingsRowDescriptionMaxWidth}" />
             <Setter Property="HorizontalAlignment" Value="Left" />
         </Style>
-        <!-- The template keeps a fixed 12 DIP column for the empty On/Off content; the negative margin aligns the switch with the other row controls. -->
-        <Style x:Key="SettingsToggleStyle" TargetType="ToggleSwitch">
-            <Setter Property="OnContent" Value="" />
-            <Setter Property="OffContent" Value="" />
-            <Setter Property="MinWidth" Value="0" />
-            <Setter Property="Margin" Value="0,0,-12,0" />
-            <Setter Property="VerticalAlignment" Value="Center" />
-        </Style>
         <Style x:Key="SettingsInlineNoticeStyle" TargetType="Border">
             <Setter Property="Padding" Value="{StaticResource SettingsInlineNoticePadding}" />
             <Setter Property="CornerRadius" Value="{StaticResource SettingsInlineNoticeCornerRadius}" />
@@ -52,19 +44,15 @@
 
                         <local:SettingsRow Title="Activation"
                                            Description="Hold the shortcut while you speak, or press once to start and again to stop."
-                                           ShowDivider="False" CompactAlignment="Left">
-                            <Border x:Name="PushToTalkTrack"
-                                    Style="{StaticResource SettingsSegmentTrackStyle}">
-                                <ListBox x:Name="PushToTalkChoice"
-                                         Style="{StaticResource SegmentedListBoxStyle}"
-                                         ItemContainerStyle="{StaticResource SegmentedListBoxItemStyle}"
-                                         AutomationProperties.AutomationId="PushToTalkToggle"
-                                         AutomationProperties.Name="Activation"
-                                         SelectionChanged="DictationModeChanged">
-                                    <x:String>Hold to talk</x:String>
-                                    <x:String>Press to start and stop</x:String>
-                                </ListBox>
-                            </Border>
+                                           ShowDivider="False"
+                                           WideWidth="{StaticResource SettingsFieldWidth}">
+                            <ComboBox x:Name="PushToTalkChoice"
+                                      AutomationProperties.AutomationId="PushToTalkToggle"
+                                      AutomationProperties.Name="Activation"
+                                      SelectionChanged="DictationModeChanged">
+                                <x:String>Hold to talk</x:String>
+                                <x:String>Press to start and stop</x:String>
+                            </ComboBox>
                         </local:SettingsRow>
 
                         <local:SettingsRow Title="Shortcut">
@@ -118,25 +106,21 @@
                         <local:SettingsRow Title="Show overlay at the text cursor"
                                            Description="Falls back to the bottom of the screen when Windows cannot report the cursor position."
                                            CompactAlignment="Left">
-                            <ToggleSwitch x:Name="OverlayFollowsCaretToggle" Style="{StaticResource SettingsToggleStyle}"
+                            <ToggleSwitch x:Name="OverlayFollowsCaretToggle"
                                           AutomationProperties.AutomationId="OverlayFollowsCaretToggle"
                                           AutomationProperties.Name="Show overlay at the text cursor"
                                           Toggled="OverlayFollowsCaretToggled" />
                         </local:SettingsRow>
 
-                        <local:SettingsRow x:Name="InsertionRow" Title="Text insertion" CompactAlignment="Left">
-                            <Border x:Name="InsertionTrack"
-                                    Style="{StaticResource SettingsSegmentTrackStyle}">
-                                <ListBox x:Name="InsertionChoice"
-                                         Style="{StaticResource SegmentedListBoxStyle}"
-                                         ItemContainerStyle="{StaticResource SegmentedListBoxItemStyle}"
-                                         AutomationProperties.AutomationId="InsertionChoice"
-                                         AutomationProperties.Name="Text insertion"
-                                         SelectionChanged="InsertionMethodChanged">
-                                    <x:String>Paste text</x:String>
-                                    <x:String>Type characters</x:String>
-                                </ListBox>
-                            </Border>
+                        <local:SettingsRow x:Name="InsertionRow" Title="Text insertion"
+                                           WideWidth="{StaticResource SettingsFieldWidth}">
+                            <ComboBox x:Name="InsertionChoice"
+                                      AutomationProperties.AutomationId="InsertionChoice"
+                                      AutomationProperties.Name="Text insertion"
+                                      SelectionChanged="InsertionMethodChanged">
+                                <x:String>Paste text</x:String>
+                                <x:String>Type characters</x:String>
+                            </ComboBox>
                         </local:SettingsRow>
 
                         <local:SettingsRow x:Name="PasteShortcutRow" IsChild="True"
@@ -204,25 +188,16 @@
                         <local:SettingsRow x:Name="BackendRow"
                                            Title="Processor"
                                            Description="Auto compares CPU and GPU using a bundled speech sample, then remembers the faster working device for each model. Audio stays local."
-                                           CompactAlignment="Left"
-                                           WideWidth="{StaticResource SettingsProcessorWidth}">
-                            <Border x:Name="BackendTrack"
-                                    Style="{StaticResource SettingsSegmentTrackStyle}">
-                                <ListBox x:Name="BackendChoice"
-                                         Style="{StaticResource SegmentedListBoxStyle}"
-                                         ItemContainerStyle="{StaticResource SegmentedListBoxItemStyle}"
-                                         AutomationProperties.Name="Processor"
-                                         AutomationProperties.AutomationId="BackendChoice"
-                                         SelectionChanged="BackendChanged">
-                                    <x:String>Auto (recommended)</x:String>
-                                    <x:String>CPU</x:String>
-                                    <x:String>Vulkan</x:String>
-                                </ListBox>
-                            </Border>
+                                           WideWidth="{StaticResource SettingsFieldWidth}">
+                            <ComboBox x:Name="BackendChoice"
+                                      AutomationProperties.Name="Processor"
+                                      AutomationProperties.AutomationId="BackendChoice"
+                                      SelectionChanged="BackendChanged">
+                                <x:String>Auto (recommended)</x:String>
+                                <x:String>CPU</x:String>
+                                <x:String>Vulkan</x:String>
+                            </ComboBox>
                         </local:SettingsRow>
-
-                        <!-- Shown only when Vulkan is selected for a model with the known native crash. -->
-                        <local:NoticeBar x:Name="VulkanWarning" Visibility="Collapsed" Margin="0,0,0,20" />
 
                         <local:DeviceComparisonView x:Name="DeviceComparison" Margin="{StaticResource SettingsBenchmarkMargin}" />
                     </StackPanel>
@@ -235,7 +210,7 @@
                     <local:SettingsRow Title="Suggest notes when Teams uses the microphone"
                                        Description="Checks app activity without recording audio. You must click Start to capture a meeting. Calendar access is not used."
                                        ShowDivider="False" CompactAlignment="Left">
-                        <ToggleSwitch x:Name="AutoDetectMeetingsToggle" Style="{StaticResource SettingsToggleStyle}"
+                        <ToggleSwitch x:Name="AutoDetectMeetingsToggle"
                                       AutomationProperties.AutomationId="AutoDetectMeetingsChoice"
                                       AutomationProperties.Name="Suggest notes when Teams uses the microphone"
                                       Toggled="AutoDetectMeetingsChanged" />
@@ -312,7 +287,7 @@
                             <local:SettingsRow Title="Clean up automatically"
                                                Description="Off until you turn it on. Manual cleanup stays available on each meeting."
                                                CompactAlignment="Left">
-                                <ToggleSwitch x:Name="AutomaticCleanupToggle" Style="{StaticResource SettingsToggleStyle}"
+                                <ToggleSwitch x:Name="AutomaticCleanupToggle"
                                               AutomationProperties.Name="Automatic transcript cleanup"
                                               Toggled="AutomaticCleanupToggled" />
                             </local:SettingsRow>
@@ -347,7 +322,7 @@
                         <local:SettingsRow Title="Hide overlay and meeting windows from capture"
                                            Description="Applies to supported Windows screenshots and screen sharing. The main window stays visible. Some recorders can still capture protected windows."
                                            ShowDivider="False" CompactAlignment="Left">
-                            <ToggleSwitch x:Name="HideFromCaptureToggle" Style="{StaticResource SettingsToggleStyle}"
+                            <ToggleSwitch x:Name="HideFromCaptureToggle"
                                           AutomationProperties.AutomationId="HideFromCaptureChoice"
                                           AutomationProperties.Name="Hide overlay and meeting windows from capture"
                                           Toggled="HideFromCaptureChanged" />
@@ -356,7 +331,7 @@
                         <local:SettingsRow x:Name="UsageRow" Title="Usage statistics"
                                            Description="Records session counts only. Never audio or text."
                                            CompactAlignment="Left">
-                            <ToggleSwitch x:Name="UsageToggle" Style="{StaticResource SettingsToggleStyle}"
+                            <ToggleSwitch x:Name="UsageToggle"
                                           AutomationProperties.AutomationId="UsageToggle"
                                           AutomationProperties.Name="Usage statistics"
                                           Toggled="UsageToggled" />
@@ -365,7 +340,7 @@
                         <local:SettingsRow x:Name="DiagnosticsRow" Title="Local diagnostics"
                                            Description="Operational metadata stays on this device. No audio or transcript text is recorded."
                                            CompactAlignment="Left">
-                            <ToggleSwitch x:Name="DiagnosticsToggle" Style="{StaticResource SettingsToggleStyle}"
+                            <ToggleSwitch x:Name="DiagnosticsToggle"
                                           AutomationProperties.AutomationId="DiagnosticsToggle"
                                           AutomationProperties.Name="Local diagnostics"
                                           Toggled="DiagnosticsToggled" />

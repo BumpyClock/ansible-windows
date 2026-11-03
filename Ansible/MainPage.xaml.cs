@@ -107,11 +107,6 @@ public sealed partial class MainPage : Page
                     ? "Auto compares CPU and GPU using a bundled speech sample, then remembers the faster working device for each model. The first preparation takes longer. Audio stays local."
                     : $"Last device comparison: {_state.DeviceSelectionSummary}"
                 : "Manual selection applies to the next recognition. Choose Auto to compare devices and recover from a failed GPU qualification.";
-            var vulkanCrash = _state.Settings.Backend == NativeBackend.Vulkan && _state.SelectedModel?.Family == "nemotron_asr";
-            if (vulkanCrash)
-                VulkanWarning.Show(new NoticeContent(NoticeSeverity.Warning, "Nemotron GPU streaming has a known native crash in this build.",
-                    "Choose Auto or CPU for dictation and replay.", IsClosable: false));
-            VulkanWarning.Visibility = vulkanCrash ? Visibility.Visible : Visibility.Collapsed;
             // The comparison and device line only explain Auto and Vulkan; a manual CPU choice has nothing to compare.
             DeviceComparison.Visibility = _state.Settings.Backend == NativeBackend.Cpu ? Visibility.Collapsed : Visibility.Visible;
             DeviceComparison.Comparison = _state.DeviceComparison;
