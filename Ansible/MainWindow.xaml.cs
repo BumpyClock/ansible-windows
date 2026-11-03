@@ -24,7 +24,7 @@ public sealed partial class MainWindow : Window
     private const string ShortcutNoticeKey = "shortcut";
     private const string ShortcutRegistrationNoticeKey = "shortcut-registration";
     private const string ShortcutLessonNoticeKey = "shortcut-lesson";
-    private const string CapturePrivacyNoticeKey = "capture-privacy";
+    internal const string CapturePrivacyNoticeKey = "capture-privacy";
     private const string TrayErrorNoticeKey = "tray-error";
     private const string ShutdownErrorNoticeKey = "shutdown-error";
     private readonly DictationSession _session;
@@ -58,6 +58,7 @@ public sealed partial class MainWindow : Window
     // Caret of the shortcut destination, read once at press time. Null for in-app dictation or an unknown caret.
     private CaretBounds? _overlayAnchor;
     private bool? _capturePrivacy;
+    private PageCanvas? _noticeCanvas;
     private readonly MeetingSuggestions _suggestions;
     private readonly MicrophonePermissionPreflight _microphonePermission;
     private CancellationTokenSource _startupCancellation = new();
@@ -75,6 +76,7 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
         Notices.Attach(_notices);
+        Notices.CoveredHeightChanged += (_, _) => { if (_noticeCanvas is not null) _noticeCanvas.BottomInset = Notices.CoveredHeight; };
         _session = session;
         _microphonePermission = microphonePermission;
         _paths = paths;
@@ -351,7 +353,11 @@ public sealed partial class MainWindow : Window
         if (ReferenceEquals(MainContent.Content, page.Page)) return;
         MainContent.Content = page.Page;
         foreach (var item in _pages.Sidebar) item.SetSelected(ReferenceEquals(item.Nav, page.Nav));
-        Notices.ShowPage(page.Area, page.Canvas);
+        // Floating notices cover the bottom of the current page, so only that page reserves room for them.
+        if (_noticeCanvas is not null) _noticeCanvas.BottomInset = 0;
+        _noticeCanvas = page.Canvas;
+        Notices.ShowPage(page.Area);
+        _noticeCanvas.BottomInset = Notices.CoveredHeight;
         AppTitleBar.ShowPage(page.Title, page.Canvas);
     }
 

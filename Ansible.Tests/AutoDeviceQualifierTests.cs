@@ -18,7 +18,7 @@ public sealed class AutoDeviceQualifierTests
         Assert.Equal(NativeDiagnosticSource.Qualification, qualifier.Current.Source);
         Assert.Equal(ticket.Selection, Assert.Single(DeviceBenchmark.ReadCache(fixture.Cache)));
         Assert.Equal(ticket.Selection.MeasuredAt, qualifier.Current.Comparison!.MeasuredAt);
-        Assert.Equal(("Model", "WAV file"), (qualifier.Current.Comparison.ModelName, qualifier.Current.Comparison.Purpose));
+        Assert.Equal(("Model", DeviceComparisonKind.WholeRecording), (qualifier.Current.Comparison.ModelName, qualifier.Current.Comparison.Kind));
         Assert.Contains("median of three", qualifier.Current.Summary);
     }
 
@@ -275,7 +275,7 @@ public sealed class AutoDeviceQualifierTests
         fixture.Result = backend => new(backend, backend == NativeBackend.Cpu ? 600 : 100, null);
         var qualifier = fixture.Create();
         var ticket = fixture.Qualify(qualifier, fixture.MeetingInput);
-        Assert.Equal("meeting", qualifier.Current.Comparison!.Purpose);
+        Assert.Equal(DeviceComparisonKind.Meeting, qualifier.Current.Comparison!.Kind);
         var attempts = 0;
 
         var error = Assert.Throws<MeetingRealTimeException>(() =>

@@ -148,12 +148,16 @@ public sealed partial class CustomWordsPage : Page
 
     private void AddFromField()
     {
-        if (!_state.IsIdle || !CanAdd(SearchBox.Text)) return;
+        // Enter submits even when Add is disabled, so a rejected word explains itself instead of doing nothing.
+        if (!_state.IsIdle || string.IsNullOrWhiteSpace(SearchBox.Text)) return;
+        var before = _session.State.Settings.CustomDictionary;
         if (!ApplyEdit(new CustomVocabulary.Edit.Add(SearchBox.Text, SingleEntry: true), _state.SelectedModel, out var error))
         {
             ShowFieldError(error);
             return;
         }
+        // A duplicate changes nothing; its existing row already shows in the filtered list.
+        if (_session.State.Settings.CustomDictionary == before) return;
         var entry = CustomVocabulary.Normalize(SearchBox.Text);
         ShowFieldError("");
         SearchBox.Text = "";

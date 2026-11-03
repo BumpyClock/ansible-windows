@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using Ansible.Core;
 using Microsoft.UI;
 using Microsoft.UI.System;
@@ -85,6 +86,10 @@ public sealed partial class MeetingWindow : Window
         InitializeComponent();
         Root.RequestedTheme = theme;
         Notices.Attach(_notices);
+        // Notices float over the transcript's bottom edge; padding past them keeps the last lines reachable.
+        var transcriptPadding = TranscriptRows.Padding;
+        Notices.CoveredHeightChanged += (_, _) => TranscriptRows.Padding =
+            transcriptPadding with { Bottom = transcriptPadding.Bottom + Notices.CoveredHeight };
         TranscriptRows.ItemsSource = _transcript.Rows;
         _session = session;
         _store = store;
@@ -121,7 +126,8 @@ public sealed partial class MeetingWindow : Window
             _session.StateChanged += SessionChanged;
             Render(_session.State);
         }
-        MeetingDate.Text = (_document?.CreatedAt ?? DateTimeOffset.Now).ToLocalTime().ToString("dddd, MMMM d · h:mm tt");
+        var created = (_document?.CreatedAt ?? DateTimeOffset.Now).ToLocalTime();
+        MeetingDate.Text = $"{created.ToString("dddd, MMMM d", CultureInfo.CurrentCulture)} · {created.ToString("t", CultureInfo.CurrentCulture)}";
         CaptureSetup.Visibility = _savedMeeting ? Visibility.Collapsed : Visibility.Visible;
         StartButton.Visibility = _savedMeeting ? Visibility.Collapsed : Visibility.Visible;
         if (_savedMeeting) PrivacyText.Text = "Saved on this device. No audio recording is stored.";

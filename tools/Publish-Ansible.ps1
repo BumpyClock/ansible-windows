@@ -72,7 +72,8 @@ try {
     $resourceMap = $resources.PriInfo.ResourceMap | Where-Object name -EQ $identity.Name
     if (-not $resourceMap) { throw "The package resource index has no map for '$($identity.Name)'." }
     # Every XAML file in the app compiles to an embedded .xbf; the list comes from source so it cannot drift.
-    $compiledXaml = Get-ChildItem -LiteralPath (Join-Path $root "Ansible") -Filter *.xaml | ForEach-Object { "$($_.BaseName).xbf" }
+    $compiledXaml = @(Get-ChildItem -LiteralPath (Join-Path $root "Ansible") -Filter *.xaml | ForEach-Object { "$($_.BaseName).xbf" })
+    if ($compiledXaml.Count -eq 0) { throw "No app XAML files were found to verify in the package." }
     foreach ($xaml in $compiledXaml) {
         # MSIX embeds compiled XAML in the PRI instead of shipping loose .xbf files.
         if (-not $resourceMap.SelectSingleNode(".//NamedResource[@name='$xaml']/Candidate[@type='EmbeddedData']")) {

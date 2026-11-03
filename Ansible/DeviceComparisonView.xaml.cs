@@ -69,8 +69,14 @@ public sealed partial class DeviceComparisonView : UserControl
         VisualStateManager.GoToState(this, leader, false);
 
         var recommended = comparison!.RecommendedBackend;
-        // Each model and purpose keeps its own result, so the panel names the one it shows.
-        ComparisonTitleText.Text = $"Last device comparison: {comparison.ModelName}, {comparison.Purpose}";
+        // Each model and kind keeps its own result, so the panel names the one it shows.
+        var kind = comparison.Kind switch
+        {
+            DeviceComparisonKind.Meeting => "meeting",
+            DeviceComparisonKind.WholeRecording => "whole recording",
+            _ => "streaming"
+        };
+        ComparisonTitleText.Text = $"Last device comparison: {comparison.ModelName}, {kind}";
         RecommendationBadge.Text = $"Auto chose {(recommended == NativeBackend.Cpu ? "CPU" : "Vulkan")}";
         ComparisonDetailsText.Text = $"Public sample measured {comparison.MeasuredAt.ToUniversalTime():yyyy-MM-dd HH:mm:ss'Z'}. " +
             "Loading and warmup excluded. Other models and uses are compared separately.";

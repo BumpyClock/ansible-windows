@@ -14,10 +14,16 @@ public enum NativeBackend
     Auto = 2
 }
 
-// Each model and purpose qualifies separately; ModelName and Purpose say which comparison this is.
+/// <summary>
+/// The recognition shape a device comparison measured. Offline models recognize a whole recording, which serves both
+/// microphone dictation and WAV files; meetings stream with speaker history.
+/// </summary>
+public enum DeviceComparisonKind { Streaming, Meeting, WholeRecording }
+
+// Each model and kind qualifies separately; ModelName and Kind say which comparison this is.
 public sealed record DeviceComparisonSnapshot(
     string ModelName,
-    string Purpose,
+    DeviceComparisonKind Kind,
     double? CpuMilliseconds,
     double? GpuMilliseconds,
     NativeBackend RecommendedBackend,

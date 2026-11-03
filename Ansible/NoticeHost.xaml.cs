@@ -14,7 +14,8 @@ namespace Ansible;
 
 /// <summary>
 /// Renders the window's AppNotices that apply to the current page as floating NoticeBars, most severe first.
-/// Owns auto-dismiss timers and reserves bottom padding on the current page so its last rows stay reachable.
+/// Owns auto-dismiss timers. Reports the height it covers so each window can pad its own scroller and keep its last
+/// rows reachable.
 /// </summary>
 public sealed partial class NoticeHost : UserControl
 {
@@ -25,20 +26,25 @@ public sealed partial class NoticeHost : UserControl
     private DismissTimer? _timer;
     private readonly UISettings _uiSettings = new();
     private AppNotices? _notices;
-    private PageCanvas? _canvas;
     private NoticeArea? _area;
     private bool _expanded;
     private bool _pointerInside;
     private bool _focusInside;
     private int _visibleCount;
+    private double _coveredHeight;
 
     public NoticeHost()
     {
         InitializeComponent();
         MoreButton.Shadow = new ThemeShadow();
         MoreButton.Translation = new Vector3(0, 0, 16);
-        SizeChanged += (_, _) => ReserveSpace();
+        SizeChanged += (_, _) => UpdateCoveredHeight();
     }
+
+    /// <summary>The height the notices cover at the bottom of the content; 0 while none show.</summary>
+    public double CoveredHeight => _coveredHeight;
+
+    public event EventHandler? CoveredHeightChanged;
 
     public void Attach(AppNotices notices)
     {
@@ -48,17 +54,11 @@ public sealed partial class NoticeHost : UserControl
     }
 
     /// <summary>
-    /// Shows the notices for a page area and reserves space on that page's canvas. A null area shows every notice.
-    /// Navigation collapses an expanded list.
+    /// Shows the notices for a page area. A null area shows every notice. Navigation collapses an expanded list.
     /// </summary>
-    public void ShowPage(NoticeArea? area, PageCanvas? canvas)
+    public void ShowPage(NoticeArea? area)
     {
         _area = area;
-        if (!ReferenceEquals(_canvas, canvas))
-        {
-            if (_canvas is not null) _canvas.BottomInset = 0;
-            _canvas = canvas;
-        }
         _expanded = false;
         Render();
     }
@@ -81,17 +81,14 @@ public sealed partial class NoticeHost : UserControl
         for (var index = 0; index < keys.Count; index++)
         {
             var key = keys[index];
-            // A notice that changes rank leaves and re-enters: its old element has already played its exit motion.
-            if (_bars.TryGetValue(key, out var wrapper) && Bars.Children.IndexOf(wrapper) != index)
-            {
-                Bars.Children.Remove(wrapper);
-                wrapper = null;
-            }
-            if (wrapper is null)
+            if (!_bars.TryGetValue(key, out var wrapper))
             {
                 _bars[key] = wrapper = CreateBar(key);
                 Bars.Children.Insert(index, wrapper);
             }
+            // A notice that changes rank moves in place, keeping its element, focus, and announcement state.
+            else if (Bars.Children.IndexOf(wrapper) is var current && current != index)
+                Bars.Children.Move((uint)current, (uint)index);
             var bar = (NoticeBar)wrapper.Children[0];
             if (index < shown.Count) bar.Show(shown[index].Content);
             else bar.ShowConfirmation(_notices.Confirmation!);
@@ -100,7 +97,7 @@ public sealed partial class NoticeHost : UserControl
         if (_visibleCount == 0) _pointerInside = false;
         _focusInside = ContainsFocus();
         UpdateTimer();
-        ReserveSpace();
+        UpdateCoveredHeight();
     }
 
     private Grid CreateBar(string key)
@@ -152,9 +149,12 @@ public sealed partial class NoticeHost : UserControl
         ElementCompositionPreview.SetImplicitHideAnimation(element, hide);
     }
 
-    private void ReserveSpace()
+    private void UpdateCoveredHeight()
     {
-        if (_canvas is not null) _canvas.BottomInset = _visibleCount > 0 ? ActualHeight : 0;
+        var height = _visibleCount > 0 ? ActualHeight : 0;
+        if (height == _coveredHeight) return;
+        _coveredHeight = height;
+        CoveredHeightChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void MoreClicked(object sender, RoutedEventArgs args)

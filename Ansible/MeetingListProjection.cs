@@ -8,7 +8,7 @@ public sealed record MeetingDayHeader(string Label);
 public sealed record MeetingHistoryRow(MeetingSummary Summary)
 {
     public string Title => Summary.Title;
-    public string Time => Summary.CreatedAt.ToLocalTime().ToString("h:mm tt", CultureInfo.CurrentCulture);
+    public string Time => Summary.CreatedAt.ToLocalTime().ToString("t", CultureInfo.CurrentCulture);
     public bool IsFailed => Summary.Status == MeetingStatus.Failed;
 }
 

@@ -392,8 +392,8 @@ driver, mode and history, device, threads, and headroom. Malformed cache content
 is ignored; Auto qualifies the devices again.
 When both devices work
 and GPU is within five percent of CPU, Auto selects GPU. Settings shows the last
-comparison, including its model and use (dictation, meeting, or WAV file), the selected processor, and device
-timings, after a qualification runs. Each model and use keeps its own result, so
+comparison, including its model and kind (streaming, meeting, or whole recording), the selected processor, and device
+timings, after a qualification runs. Each model and kind keeps its own result, so
 one model can use GPU while another uses CPU. The last device result stays in place when you change the
 choice; it updates when recognition next prepares a model.
 

@@ -176,7 +176,8 @@ public sealed partial class FloatingDictationWindow : Window
         QueueLayout();
     }
 
-    private void ShowCapturePrivacyFailure(Exception error) => _notices.Set(NoticeKey,
+    // One key for the condition across windows, so the main window clears it after the next successful apply.
+    private void ShowCapturePrivacyFailure(Exception error) => _notices.Set(MainWindow.CapturePrivacyNoticeKey,
         new NoticeContent(NoticeSeverity.Warning, "Screen capture privacy unavailable", error.Message), NoticeArea.Application);
 
     internal void ApplyCapturePrivacy(bool enabled)
