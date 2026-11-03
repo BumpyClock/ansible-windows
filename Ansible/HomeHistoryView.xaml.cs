@@ -22,6 +22,7 @@ public sealed partial class HomeHistoryView : UserControl
     private readonly Dictionary<Guid, HistoryRowView> _rows = [];
     private readonly Dictionary<string, Grid> _groupHeaders = new(StringComparer.Ordinal);
     private HistoryRowView? _copiedRow;
+    private SolidColorBrush? _restFill;
     private TransitionCollection? _transitions;
     private long _transitionGeneration;
     private bool _narrow;
@@ -254,6 +255,7 @@ public sealed partial class HomeHistoryView : UserControl
         row.Root.GotFocus += (_, _) => { row.Focused = true; UpdateRowState(row); };
         row.Root.LostFocus += (_, _) => { row.Focused = false; UpdateRowState(row); };
         ApplyRowLayout(row, _narrow);
+        UpdateRowState(row);
         return row;
     }
 
@@ -267,9 +269,19 @@ public sealed partial class HomeHistoryView : UserControl
         var active = row.Hovered || row.MenuOpen;
         // High Contrast hover is the system highlight, which would hide window-text transcript. Keep rows plain there.
         var highContrast = _accessibility.HighContrast;
-        if (active && !highContrast) { row.Root.Background = HoverFillAnchor.Background; }
-        else { row.Root.ClearValue(Border.BackgroundProperty); }
+        if (highContrast) { row.Root.ClearValue(Border.BackgroundProperty); }
+        else { row.Root.Background = active ? HoverFillAnchor.Background : RestFill(); }
         row.Actions.Opacity = active || row.Focused || highContrast || row.NeedsCopy ? 1 : ActionsRestOpacity;
+    }
+
+    // The hover fill at zero alpha. The brush fade interpolates every channel, so resting on Transparent
+    // (white at zero alpha) would pass through translucent white on the way in and out.
+    private SolidColorBrush RestFill()
+    {
+        var hover = ((SolidColorBrush)HoverFillAnchor.Background).Color;
+        if (_restFill?.Color is not { A: 0 } rest || rest.R != hover.R || rest.G != hover.G || rest.B != hover.B)
+            _restFill = new SolidColorBrush(Windows.UI.Color.FromArgb(0, hover.R, hover.G, hover.B));
+        return _restFill;
     }
 
     private static void ApplyRowLayout(HistoryRowView row, bool narrow)
