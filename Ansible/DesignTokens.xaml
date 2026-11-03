@@ -21,7 +21,6 @@
             <Color x:Key="AppTrackColor">#BCC7D4</Color>
             <Color x:Key="AppActivityColor">#E0E6ED</Color>
             <Color x:Key="AppTagColor">#805214</Color>
-            <Color x:Key="AppTagBackgroundColor">#FFF2CB</Color>
 
             <Color x:Key="SystemAccentColor">#D3EB62</Color>
             <Color x:Key="SystemAccentColorLight1">#E0F08C</Color>
@@ -91,7 +90,6 @@
             <SolidColorBrush x:Key="AppKeyBorderBrush" Color="{StaticResource AppKeyBorderColor}" />
             <SolidColorBrush x:Key="AppTrackBrush" Color="{StaticResource AppTrackColor}" />
             <SolidColorBrush x:Key="AppTagBrush" Color="{StaticResource AppTagColor}" />
-            <SolidColorBrush x:Key="AppTagBackgroundBrush" Color="{StaticResource AppTagBackgroundColor}" />
             <SolidColorBrush x:Key="AppSelectedTextBrush" Color="{StaticResource AppSelectedTextColor}" />
             <SolidColorBrush x:Key="AppAccentBrush" Color="{StaticResource BrandAccentColor}" />
             <SolidColorBrush x:Key="AppOnAccentBrush" Color="{StaticResource BrandOnAccentColor}" />
@@ -165,7 +163,6 @@
             <Color x:Key="AppTrackColor">#5A5E64</Color>
             <Color x:Key="AppActivityColor">#2A3443</Color>
             <Color x:Key="AppTagColor">#E8B450</Color>
-            <Color x:Key="AppTagBackgroundColor">#1FE8B450</Color>
 
             <Color x:Key="SystemAccentColor">#D3EB62</Color>
             <Color x:Key="SystemAccentColorLight1">#E9F797</Color>
@@ -234,7 +231,6 @@
             <SolidColorBrush x:Key="AppKeyBorderBrush" Color="{StaticResource AppKeyBorderColor}" />
             <SolidColorBrush x:Key="AppTrackBrush" Color="{StaticResource AppTrackColor}" />
             <SolidColorBrush x:Key="AppTagBrush" Color="{StaticResource AppTagColor}" />
-            <SolidColorBrush x:Key="AppTagBackgroundBrush" Color="{StaticResource AppTagBackgroundColor}" />
             <SolidColorBrush x:Key="AppSelectedTextBrush" Color="{StaticResource AppSelectedTextColor}" />
             <SolidColorBrush x:Key="AppAccentBrush" Color="{StaticResource BrandAccentColor}" />
             <SolidColorBrush x:Key="AppOnAccentBrush" Color="{StaticResource BrandOnAccentColor}" />
@@ -310,7 +306,6 @@
             <SolidColorBrush x:Key="AppKeyBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="AppTrackBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
             <SolidColorBrush x:Key="AppTagBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
-            <SolidColorBrush x:Key="AppTagBackgroundBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
             <SolidColorBrush x:Key="AppSelectedTextBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
             <SolidColorBrush x:Key="AppAccentBrush" Color="{ThemeResource SystemColorHighlightColor}" />
             <SolidColorBrush x:Key="AppOnAccentBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
@@ -520,10 +515,6 @@
     <x:Double x:Key="HistoryMetaFontSize">12</x:Double>
     <x:Double x:Key="HistoryMetaGap">8</x:Double>
     <x:Double x:Key="HistoryGroupLabelFontSize">11.5</x:Double>
-    <x:Double x:Key="HistoryTagFontSize">11.5</x:Double>
-    <Thickness x:Key="HistoryTagPadding">8,2</Thickness>
-    <CornerRadius x:Key="HistoryTagCornerRadius">20</CornerRadius>
-    <x:Double x:Key="HistoryTagIconSize">11</x:Double>
     <x:Double x:Key="IconButtonSize">32</x:Double>
     <x:Double x:Key="IconButtonGlyphSize">16</x:Double>
     <x:Double x:Key="HistoryActionGap">2</x:Double>
@@ -777,18 +768,6 @@
         <Setter Property="FontSize" Value="{StaticResource HistoryGroupLabelFontSize}" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Foreground" Value="{ThemeResource AppMutedTextBrush}" />
-    </Style>
-    <Style x:Key="HistoryTagStyle" TargetType="Border">
-        <Setter Property="Background" Value="{ThemeResource AppTagBackgroundBrush}" />
-        <Setter Property="CornerRadius" Value="{StaticResource HistoryTagCornerRadius}" />
-        <Setter Property="Padding" Value="{StaticResource HistoryTagPadding}" />
-        <Setter Property="VerticalAlignment" Value="Center" />
-    </Style>
-    <Style x:Key="HistoryTagTextStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
-        <Setter Property="FontSize" Value="{StaticResource HistoryTagFontSize}" />
-        <Setter Property="FontWeight" Value="Medium" />
-        <Setter Property="Foreground" Value="{ThemeResource AppTagBrush}" />
-        <Setter Property="TextWrapping" Value="NoWrap" />
     </Style>
     <!-- Transparent at rest. The default Button template resolves hover and pressed fills
          from the theme dictionaries above, including the platform High Contrast pairing. -->

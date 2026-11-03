@@ -8,32 +8,24 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="HomeStyles.xaml" />
             </ResourceDictionary.MergedDictionaries>
-            <!-- Insertion tags. Verified insertion uses the accent; every other outcome keeps the amber HistoryTagStyle. -->
-            <Style x:Key="HistoryInsertedTagStyle" TargetType="Border" BasedOn="{StaticResource HistoryTagStyle}">
-                <Setter Property="Background" Value="{ThemeResource AccentSoftBrush}" />
+            <!-- Insertion status reads as row metadata: an icon and a word, no pill. Colour carries the outcome:
+                 an accent check when the field confirmed it, muted when unverified, amber when the text did not arrive. -->
+            <Style x:Key="HistoryTagTextStyle" TargetType="TextBlock" BasedOn="{StaticResource HistoryMetaTextStyle}">
+                <Setter Property="TextWrapping" Value="NoWrap" />
             </Style>
-            <Style x:Key="HistoryInsertedTagTextStyle" TargetType="TextBlock" BasedOn="{StaticResource HistoryTagTextStyle}">
-                <Setter Property="Foreground" Value="{ThemeResource AccentForegroundBrush}" />
+            <Style x:Key="HistoryNotInsertedTagTextStyle" TargetType="TextBlock" BasedOn="{StaticResource HistoryTagTextStyle}">
+                <Setter Property="Foreground" Value="{ThemeResource AppTagBrush}" />
             </Style>
             <Style x:Key="HistoryTagIconStyle" TargetType="FontIcon">
-                <Setter Property="FontSize" Value="{StaticResource HistoryTagIconSize}" />
-                <Setter Property="Foreground" Value="{ThemeResource AppTagBrush}" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="Foreground" Value="{ThemeResource AppMutedTextBrush}" />
                 <Setter Property="VerticalAlignment" Value="Center" />
             </Style>
             <Style x:Key="HistoryInsertedTagIconStyle" TargetType="FontIcon" BasedOn="{StaticResource HistoryTagIconStyle}">
                 <Setter Property="Foreground" Value="{ThemeResource AccentForegroundBrush}" />
             </Style>
-            <!-- "Not verified" is quiet meta text: no pill, same muted colour as the row metadata. -->
-            <Style x:Key="HistoryUnverifiedTagStyle" TargetType="Border">
-                <Setter Property="Background" Value="Transparent" />
-                <Setter Property="Padding" Value="0" />
-                <Setter Property="VerticalAlignment" Value="Center" />
-            </Style>
-            <Style x:Key="HistoryUnverifiedTagTextStyle" TargetType="TextBlock" BasedOn="{StaticResource HistoryMetaTextStyle}" />
-            <Style x:Key="HistoryUnverifiedTagIconStyle" TargetType="FontIcon">
-                <Setter Property="FontSize" Value="12" />
-                <Setter Property="Foreground" Value="{ThemeResource AppMutedTextBrush}" />
-                <Setter Property="VerticalAlignment" Value="Center" />
+            <Style x:Key="HistoryNotInsertedTagIconStyle" TargetType="FontIcon" BasedOn="{StaticResource HistoryTagIconStyle}">
+                <Setter Property="Foreground" Value="{ThemeResource AppTagBrush}" />
             </Style>
             <Style x:Key="HistoryCopyIconStyle" TargetType="FontIcon">
                 <Setter Property="FontSize" Value="{StaticResource IconButtonGlyphSize}" />

@@ -190,14 +190,14 @@ public sealed partial class HomeHistoryView : UserControl
         var tagContent = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
         tagContent.Children.Add(row.TagIcon);
         tagContent.Children.Add(row.TagText);
-        row.TagPill = new Border { Child = tagContent, Visibility = Visibility.Collapsed };
+        row.TagHost = new Border { Child = tagContent, VerticalAlignment = VerticalAlignment.Center, Visibility = Visibility.Collapsed };
         // A left-aligned star column lets the meta line trim before it pushes the tag out of the row.
         var metaLine = new Grid { ColumnSpacing = (double)resources["HistoryMetaGap"], HorizontalAlignment = HorizontalAlignment.Left };
         metaLine.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         metaLine.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         metaLine.Children.Add(row.Meta);
-        Grid.SetColumn(row.TagPill, 1);
-        metaLine.Children.Add(row.TagPill);
+        Grid.SetColumn(row.TagHost, 1);
+        metaLine.Children.Add(row.TagHost);
         row.Body = new StackPanel { Spacing = 6 };
         row.Body.Children.Add(row.Transcript);
         row.Body.Children.Add(metaLine);
@@ -282,26 +282,25 @@ public sealed partial class HomeHistoryView : UserControl
         UpdateRowState(row);
         if (tag is null)
         {
-            row.TagPill.Visibility = Visibility.Collapsed;
+            row.TagHost.Visibility = Visibility.Collapsed;
             return;
         }
-        var (pill, text, icon) = tag.Tone switch
+        var (text, icon) = tag.Tone switch
         {
-            HomeHistoryTagTone.Inserted => ("HistoryInsertedTagStyle", "HistoryInsertedTagTextStyle", "HistoryInsertedTagIconStyle"),
-            HomeHistoryTagTone.Unverified => ("HistoryUnverifiedTagStyle", "HistoryUnverifiedTagTextStyle", "HistoryUnverifiedTagIconStyle"),
-            HomeHistoryTagTone.NotInserted => ("HistoryTagStyle", "HistoryTagTextStyle", "HistoryTagIconStyle"),
+            HomeHistoryTagTone.Inserted => ("HistoryTagTextStyle", "HistoryInsertedTagIconStyle"),
+            HomeHistoryTagTone.Unverified => ("HistoryTagTextStyle", "HistoryTagIconStyle"),
+            HomeHistoryTagTone.NotInserted => ("HistoryNotInsertedTagTextStyle", "HistoryNotInsertedTagIconStyle"),
             _ => throw new ArgumentOutOfRangeException(nameof(tag))
         };
-        SetStyle(row.TagPill, pill);
         SetStyle(row.TagText, text);
         SetStyle(row.TagIcon, icon);
         row.TagIcon.Glyph = tag.Glyph;
         row.TagText.Text = tag.Label;
-        ToolTipService.SetToolTip(row.TagPill, tag.Meaning);
+        ToolTipService.SetToolTip(row.TagHost, tag.Meaning);
         // Border has no automation peer, so the readable tag text carries the name and meaning.
         AutomationProperties.SetName(row.TagText, $"Insertion: {tag.Label}");
         AutomationProperties.SetHelpText(row.TagText, tag.Meaning);
-        row.TagPill.Visibility = Visibility.Visible;
+        row.TagHost.Visibility = Visibility.Visible;
     }
 
     private void Remove(HistoryRowView row)
@@ -391,7 +390,7 @@ public sealed partial class HomeHistoryView : UserControl
         public StackPanel Body = null!;
         public TextBlock Transcript = null!;
         public TextBlock Meta = null!;
-        public Border TagPill = null!;
+        public Border TagHost = null!;
         public FontIcon TagIcon = null!;
         public TextBlock TagText = null!;
         public StackPanel Actions = null!;
