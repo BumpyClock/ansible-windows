@@ -7,10 +7,10 @@ using Path = Microsoft.UI.Xaml.Shapes.Path;
 namespace Ansible;
 
 /// <summary>
-/// One page of the main window: the page, the sidebar entry that marks it current, the notice area it shows
-/// (null shows every notice), and the name the title bar shows once its heading scrolls out.
+/// One page of the main window: the page, the sidebar entry that marks it current, the notice area it shows,
+/// and the name the title bar shows once its heading scrolls out.
 /// </summary>
-internal sealed record ShellPage(Page Page, Button Nav, Path Indicator, NoticeArea? Area, string Title)
+internal sealed record ShellPage(Page Page, Button Nav, Path Indicator, NoticeArea Area, string Title)
 {
     /// <summary>A sidebar page. Its title is the sidebar entry's accessible name, so XAML stays the one source.</summary>
     public static ShellPage InSidebar(Page page, Button nav, Path indicator, NoticeArea area) =>
@@ -29,9 +29,9 @@ internal sealed record ShellPage(Page Page, Button Nav, Path Indicator, NoticeAr
     }
 }
 
-/// <summary>The main window's pages. Welcome has no sidebar entry of its own; it marks Home current.</summary>
+/// <summary>The main window's pages.</summary>
 internal sealed record ShellPages(
-    ShellPage Home, ShellPage Welcome, ShellPage Meetings, ShellPage Models, ShellPage Dictionary, ShellPage Settings)
+    ShellPage Home, ShellPage Meetings, ShellPage Models, ShellPage Dictionary, ShellPage Settings)
 {
     /// <summary>The sidebar pages, in sidebar order.</summary>
     public IReadOnlyList<ShellPage> Sidebar { get; } = [Home, Meetings, Models, Dictionary, Settings];

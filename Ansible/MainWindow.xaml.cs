@@ -29,7 +29,7 @@ public sealed partial class MainWindow : Window
     private const string ShutdownErrorNoticeKey = "shutdown-error";
     private readonly DictationSession _session;
     private readonly DictationPage _dictation;
-    private readonly WelcomePage _welcome;
+    private readonly WelcomeDialog _welcome;
     private readonly HomeDictationHistory _history;
     private readonly MainPage _settings;
     private readonly ModelManagementPage _models;
@@ -98,7 +98,7 @@ public sealed partial class MainWindow : Window
                 new NoticeContent(NoticeSeverity.Warning, title, message), NoticeArea.Meetings));
         _suggestions.Changed += RenderMeetingSuggestion;
         // Page callbacks run after _pages is assigned below.
-        _welcome = new WelcomePage(session, CompleteWelcome, () => Navigate(_pages!.Models), () => _shortcut.IsBusy, _notices);
+        _welcome = new WelcomeDialog(session, () => _shortcut.IsBusy, _notices);
         _dictation = new DictationPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this), _history, _notices);
         _settings = new MainPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this),
             ChangeHotkey, ChangeDictationMode, CaptureShortcut, diagnostics, _notices);
@@ -108,7 +108,6 @@ public sealed partial class MainWindow : Window
         _customWords = new CustomWordsPage(session, () => Navigate(_pages!.Models), _notices);
         _pages = new ShellPages(
             Home: ShellPage.InSidebar(_dictation, DictationNav, DictationIndicator, NoticeArea.Dictation),
-            Welcome: new ShellPage(_welcome, DictationNav, DictationIndicator, Area: null, Title: ""),
             Meetings: ShellPage.InSidebar(_meetings, MeetingsNav, MeetingsIndicator, NoticeArea.Meetings),
             Models: ShellPage.InSidebar(_models, ModelsNav, ModelsIndicator, NoticeArea.Models),
             Dictionary: ShellPage.InSidebar(_customWords, CustomWordsNav, CustomWordsIndicator, NoticeArea.Dictionary),
@@ -202,7 +201,7 @@ public sealed partial class MainWindow : Window
                 _notices.Set(ShortcutRegistrationNoticeKey, new NoticeContent(NoticeSeverity.Error, "Shortcut unavailable", error.Message),
                     NoticeArea.Settings | NoticeArea.Dictation);
             }
-            if (!_session.State.Settings.WelcomeCompleted) Navigate(_pages.Welcome);
+            if (!_session.State.Settings.WelcomeCompleted) ShowWelcome();
             else if (_session.State.Phase == DictationPhase.Disconnected && _session.State.Models.Count == 0) Navigate(_pages.Models);
             _suggestions.Start();
             LogApplication(ApplicationDiagnosticStage.Startup, DiagnosticOutcome.Completed, startupGeneration, startupStarted);
@@ -348,7 +347,6 @@ public sealed partial class MainWindow : Window
             _dismissedMicrophonePermissionStatus = null;
             RenderMicrophonePermission();
         }
-        if (page == _pages.Home && _launchReady && !_session.State.Settings.WelcomeCompleted) page = _pages.Welcome;
         // Reselecting the current page keeps its state and scroll position.
         if (ReferenceEquals(MainContent.Content, page.Page)) return;
         MainContent.Content = page.Page;
@@ -369,10 +367,10 @@ public sealed partial class MainWindow : Window
 
     // A window hidden to the tray or minimized is not showing the lesson, so it must not hold the global shortcut.
     // AppWindow.IsVisible stays true for a minimized window, so the presenter state is checked separately.
-    private WelcomePage? CurrentWelcome() =>
+    private WelcomeDialog? CurrentWelcome() =>
         !_closed && AppWindow.IsVisible
         && AppWindow.Presenter is not OverlappedPresenter { State: OverlappedPresenterState.Minimized }
-        && ReferenceEquals(MainContent.Content, _welcome) ? _welcome : null;
+        && _welcome.IsShowing ? _welcome : null;
 
     private void OpenShortcutLesson()
     {
@@ -383,8 +381,23 @@ public sealed partial class MainWindow : Window
             return;
         }
         _notices.Set(ShortcutLessonNoticeKey, null);
-        _welcome.RestartLesson();
-        Navigate(_pages.Welcome);
+        ShowWelcome();
+    }
+
+    // The lesson opens over whichever page is current. Only one ContentDialog may be open per XamlRoot.
+    private async void ShowWelcome()
+    {
+        if (_closing || _closed || _welcome.IsShowing) return;
+        WelcomeExit exit;
+        try { exit = await _welcome.ShowLessonAsync(MainContent.XamlRoot); }
+        catch (Exception error)
+        {
+            _notices.SetError(WelcomeDialog.NoticeKey, error, NoticeArea.Application);
+            return;
+        }
+        if (_closing || _closed) return;
+        if (exit == WelcomeExit.ModelsRequested) Navigate(_pages.Models);
+        else if (exit == WelcomeExit.Finished) CompleteWelcome();
     }
 
     private void CompleteWelcome()
@@ -393,9 +406,8 @@ public sealed partial class MainWindow : Window
         {
             if (!_session.State.IsIdle || _shortcut.IsBusy) return;
             _session.CompleteWelcome();
-            Navigate(_pages.Home);
         }
-        catch (Exception error) { _notices.SetError(WelcomePage.NoticeKey, error); }
+        catch (Exception error) { _notices.SetError(WelcomeDialog.NoticeKey, error, NoticeArea.Application); }
     }
 
     private async Task OpenMeetingAsync(MeetingDocument? document)
@@ -574,6 +586,8 @@ public sealed partial class MainWindow : Window
     {
         try
         {
+            // The caps follow the chord on every step, before the lesson decides whether it may dictate.
+            if (_welcome.IsShowing) _welcome.ShowShortcutHeld(pressed);
             if (pressed && CurrentWelcome() is { AcceptsShortcut: false }) return;
             if (pressed) { await _shortcut.PressedAsync(_configuredHotkey); }
             else { await _shortcut.ReleasedAsync(); }
@@ -626,6 +640,8 @@ public sealed partial class MainWindow : Window
         if (_closing) { return; }
         _closing = true;
         MainContent.IsEnabled = false;
+        // The dialog sits in the popup layer, outside MainContent, so it is closed rather than disabled.
+        _welcome.Dismiss();
         _notices.Set(ShutdownErrorNoticeKey, null);
         _shortcut.BeginShutdown();
         _suggestions.BeginShutdown();

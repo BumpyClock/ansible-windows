@@ -80,8 +80,8 @@ public sealed class AppNotices
         Set(key, new NoticeContent(NoticeSeverity.Error, "Operation failed", error.Message), area);
 
     /// <summary>
-    /// The notices for a page area, most severe first and in posting order within a severity. A null area is a
-    /// page outside the navigation, such as Welcome, and shows every notice. Collapsed shows CollapsedLimit.
+    /// The notices for a page area, most severe first and in posting order within a severity. A null area shows
+    /// every notice. Collapsed shows CollapsedLimit.
     /// </summary>
     public NoticeStack Arrange(NoticeArea? area, bool expanded)
     {

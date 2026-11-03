@@ -4,22 +4,29 @@ See the [README](../README.md#build-and-run) to build and launch the app.
 
 ## First launch
 
-A new install opens a three-step welcome lesson. An existing `settings.json`
-that has no welcome flag is treated as already complete, so current installs
-are not forced through it. **Skip for now** and finishing the lesson both save
-completion in settings.
+A new install opens a three-step welcome lesson in a dialog over Home. An
+existing `settings.json` that has no welcome flag is treated as already
+complete, so current installs are not forced through it. **Skip for now** (top
+right, or Escape) and **Done** both save completion in settings.
 
 1. Intro. Speak into a focused field. Recognition stays on this device.
-2. Shortcut. An original Windows keyboard illustration highlights your chord
-   and animates those keys. If Windows animations are off, the keys stay still.
+2. Shortcut. Keycaps for your chord press down while you hold those keys and
+   spring back on release. Pressing them here only lights the keys; nothing
+   records.
 3. Practice. Click the practice field, then use the shortcut. Final words go
-   only into that field, not the clipboard or another app. A successful
+   only into that field, not the clipboard or another app. The scene's
+   waveform pill follows the real microphone level while listening, and a
+   check mark pops in when a dictation lands in the field. A successful
    practice still stores in local dictation history.
 
+With Windows animations off, the keys change colour without moving, steps
+switch without sliding, and the check mark appears without a bounce.
+
 Practice needs microphone permission and an installed microphone-capable model.
-**Set up a speech model** opens Speech models. Returning to Home resumes the
-lesson until you finish or skip. **Settings > Shortcut > Practice** replays it
-from the first step. Change the chord there too.
+**Set up a speech model** closes the lesson without completing it and opens
+Speech models. The lesson opens again at the next launch until you finish or
+skip. **Settings > Shortcut > Practice** replays it from the first step. Change
+the chord there too.
 
 ## Close to the notification area
 
