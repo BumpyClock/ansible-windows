@@ -21,6 +21,7 @@ public sealed partial class NativeAudioEngine
         if (diagnostics is not null) diagnostics.SelectionSource = null;
         QualifiedDevice? device = null;
         var selected = options;
+        var (priorSummary, priorComparison) = (DeviceSelectionSummary, DeviceComparison);
         try
         {
             if (options.Backend == NativeBackend.Auto)
@@ -41,7 +42,10 @@ public sealed partial class NativeAudioEngine
         catch (Exception error)
         {
             diagnostics?.Write(NativeDiagnosticStage.Selection, model, started, error: error);
-            if (options.Backend == NativeBackend.Auto)
+            // A cancelled qualification measured nothing, so the last comparison still stands.
+            if (options.Backend == NativeBackend.Auto && error is OperationCanceledException)
+                (DeviceSelectionSummary, DeviceComparison) = (priorSummary, priorComparison);
+            else if (options.Backend == NativeBackend.Auto)
             {
                 DeviceComparison = null;
                 DeviceSelectionSummary = $"Auto qualification did not select a device: {error.Message}";

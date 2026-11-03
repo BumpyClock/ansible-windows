@@ -791,7 +791,10 @@ public sealed class DictationSession
         if (_closing || _state.MeetingActive || _engine is null || _operation is not null || _recovery is not null) { return; }
         if (_state.SelectedModel is { SupportsMicrophone: true } model)
         {
-            var options = new RecognitionOptions(_state.Language, "", _state.Settings.Backend);
+            // Kroko hotwords change the decoder and its qualification key, so preload with dictation's vocabulary.
+            var dictionary = CustomVocabulary.ModelCompatibilityError(model, _state.Settings.CustomDictionary) is null
+                ? ModelSelectionPolicy.EffectiveDictionary(model, _state.Settings.CustomDictionary) : "";
+            var options = new RecognitionOptions(_state.Language, dictionary, _state.Settings.Backend);
             if (_diagnostics?.CurrentGeneration is { } generation)
                 options = options with { Diagnostics = new(_diagnostics, generation, Guid.NewGuid(), options.Backend,
                     backgroundPreload: true) };

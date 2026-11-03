@@ -520,6 +520,25 @@ public sealed partial class DictationSessionTests : IDisposable
     }
 
     [Fact]
+    public async Task PreloadAndBenchmarkUseDictationVocabularySoTheyShareOneQualification()
+    {
+        var supported = Model with { Id = "kroko", Family = "kroko_asr", SupportsCustomDictionary = true };
+        var engine = new FakeEngine { Connecting = _ => Task.FromResult<IReadOnlyList<AudioModel>>([supported]) };
+        var session = Create(engine);
+        await session.InitializeAsync();
+        session.SetCustomDictionary("Contoso");
+        await WaitUntilAsync(() => engine.PreparedOptions?.CustomDictionary == "Contoso");
+        var prepares = engine.Prepares;
+
+        await session.BenchmarkDevicesAsync();
+        await WaitUntilAsync(() => engine.Prepares > prepares);
+
+        Assert.Equal("Contoso", engine.BenchmarkOptions!.CustomDictionary);
+        Assert.Equal("Contoso", engine.PreparedOptions!.CustomDictionary);
+        await session.CloseAsync();
+    }
+
+    [Fact]
     public async Task BenchmarkRejectsConcurrentDictationAndCancelKeepsThePreviousComparison()
     {
         var previous = new DeviceComparisonSnapshot(100, 80, NativeBackend.Vulkan, DateTimeOffset.UtcNow);
