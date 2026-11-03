@@ -386,7 +386,8 @@ is ignored; Auto qualifies the devices again.
 When both devices work
 and GPU is within five percent of CPU, Auto selects GPU. Settings shows the last
 comparison, including the selected processor and device timings, after a
-qualification runs.
+qualification runs. The last device result stays in place when you change the
+choice; it updates when recognition next prepares a model.
 
 A GPU worker crash or timeout disqualifies GPU; a successful CPU result is used.
 Shared validation, integrity, memory, protocol, or ownership errors abort
@@ -413,7 +414,7 @@ memory to load and decode. Keep the guard enabled.
 Open **Settings > Transcript cleanup**. Choose **Copilot CLI** or **OpenAI API**.
 Each provider has its own model and reasoning effort. Fields save as you change
 them. Automatic cleanup stays off until you turn on **Clean up automatically**
-and confirm with **Turn on**. That confirmation is the opt-in to send meeting
+and confirm with **Turn on** in the dialog. That confirmation is the opt-in to send meeting
 text to the cloud. Enabling OpenAI automatic cleanup
 requires a saved API key and an OpenAI API model ID. No OpenAI model is guessed.
 Enabling it authorizes sending each new completed meeting transcript to the

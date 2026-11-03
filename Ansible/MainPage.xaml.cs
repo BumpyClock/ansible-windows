@@ -102,13 +102,8 @@ public sealed partial class MainPage : Page
                 NativeBackend.Vulkan => 2,
                 _ => throw new InvalidDataException("The recognition processor setting is invalid.")
             };
-            BackendRow.Description = _state.Settings.Backend == NativeBackend.Auto
-                ? string.IsNullOrEmpty(_state.DeviceSelectionSummary)
-                    ? "Auto compares CPU and GPU using a bundled speech sample, then remembers the faster working device for each model. The first preparation takes longer. Audio stays local."
-                    : $"Last device comparison: {_state.DeviceSelectionSummary}"
-                : "Manual selection applies to the next recognition. Choose Auto to compare devices and recover from a failed GPU qualification.";
-            // The comparison and device line only explain Auto and Vulkan; a manual CPU choice has nothing to compare.
-            DeviceComparison.Visibility = _state.Settings.Backend == NativeBackend.Cpu ? Visibility.Collapsed : Visibility.Visible;
+            // The description and the device result do not depend on the choice, so changing it does not reflow the page.
+            // The result describes the last model load and changes only when recognition prepares again.
             DeviceComparison.Comparison = _state.DeviceComparison;
             DeviceComparison.Summary = _state.DeviceSelectionSummary;
             if (LanguageBox.FocusState == FocusState.Unfocused) { LanguageBox.Text = _state.Language; }
@@ -168,7 +163,6 @@ public sealed partial class MainPage : Page
         OpenAICleanupModelBox.Text = settings.OpenAIModel;
         OpenAICleanupEffortChoice.SelectedItem = settings.OpenAIReasoningEffort;
         AutomaticCleanupToggle.IsOn = settings.Automatic;
-        if (settings.Automatic) AutomaticCleanupConfirm.Visibility = Visibility.Collapsed;
         RenderCleanupProvider();
         RenderKeyStatus();
     }
@@ -205,7 +199,6 @@ public sealed partial class MainPage : Page
         CleanupProviderRow.Description = copilot
             ? "Uses the installed Copilot CLI and its signed-in account. Run copilot login if needed. No OpenAI API key is used. No fallback to another service or account."
             : "Sends text directly to the OpenAI Responses API. Requires an OpenAI API model with structured outputs and separate API billing. Copilot model names are not automatically mapped. No fallback to another service or account.";
-        AutomaticCleanupConfirmTitle.Text = $"Send each new completed meeting transcript to {(copilot ? "Copilot CLI" : "OpenAI API")} without asking again?";
     }
 
     private void RenderKeyStatus()
@@ -266,31 +259,39 @@ public sealed partial class MainPage : Page
         }
     }
 
-    private void AutomaticCleanupToggled(object sender, RoutedEventArgs args)
+    private async void AutomaticCleanupToggled(object sender, RoutedEventArgs args)
     {
         if (_rendering || AutomaticCleanupToggle.IsOn == _session.State.Settings.MeetingCleanup.Automatic) return;
         if (!AutomaticCleanupToggle.IsOn)
         {
-            AutomaticCleanupConfirm.Visibility = Visibility.Collapsed;
             SaveCleanupSettings(automatic: false);
             return;
         }
-        // The opt-in is saved only after the confirmation below, so the switch stays off until then. The Toggled
-        // event this raises finds the switch equal to the saved value and returns at the guard above.
-        AutomaticCleanupToggle.IsOn = false;
-        AutomaticCleanupConfirm.Visibility = Visibility.Visible;
-        AutomaticCleanupConfirmButton.Focus(FocusState.Programmatic);
-    }
-
-    private void AutomaticCleanupConfirmClicked(object sender, RoutedEventArgs args)
-    {
-        AutomaticCleanupConfirm.Visibility = Visibility.Collapsed;
-        if (SaveCleanupSettings(automatic: true) && _session.State.Settings.MeetingCleanup.Automatic)
+        // Enabling sends meeting text without another prompt, so the opt-in is saved only after this confirmation.
+        var service = CleanupProviderChoice.SelectedIndex == 0 ? "Copilot CLI" : "OpenAI API";
+        var dialog = new ContentDialog
+        {
+            Title = $"Send each new completed meeting transcript to {service} without asking again?",
+            Content = new TextBlock
+            {
+                Text = "Enabling this authorizes sending each new completed meeting transcript to the selected provider without another confirmation. Applies to meetings started after saving. Saved meetings are not uploaded automatically.",
+                TextWrapping = TextWrapping.Wrap,
+            },
+            PrimaryButtonText = "Turn on",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = XamlRoot,
+        };
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary &&
+            SaveCleanupSettings(automatic: true) && _session.State.Settings.MeetingCleanup.Automatic)
+        {
             _notices.Confirm("Automatic cleanup is on for new meetings.");
+            return;
+        }
+        // Cancelled or not saved: the switch returns to the saved value. The Toggled event this raises finds
+        // them equal and returns at the guard above.
+        AutomaticCleanupToggle.IsOn = _session.State.Settings.MeetingCleanup.Automatic;
     }
-
-    private void AutomaticCleanupCancelClicked(object sender, RoutedEventArgs args) =>
-        AutomaticCleanupConfirm.Visibility = Visibility.Collapsed;
 
     private void BackendChanged(object sender, SelectionChangedEventArgs args)
     {
