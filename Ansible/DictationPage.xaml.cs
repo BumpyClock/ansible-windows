@@ -35,6 +35,9 @@ public sealed partial class DictationPage : Page
     private bool _disposed;
     // Removing the current transcript's history row must not bring it back as the separate transcript card.
     private Guid? _removedTranscriptOperationId;
+    // While the page scrolls, the history header and the wide insights rail stay on screen.
+    private readonly StickyPin _historyHeaderPin;
+    private StickyPin? _railPin;
 
     private readonly AppNotices _notices;
 
@@ -62,6 +65,7 @@ public sealed partial class DictationPage : Page
         HistoryView.QueryChanged += HistoryQueryChanged;
         HistoryView.CopyRequested += CopyHistoryItem;
         HistoryView.RemoveRequested += RemoveHistoryItem;
+        _historyHeaderPin = HistoryView.PinHeader(HomeViewport);
         HistoryChanged();
         _observer = new UiSessionObserver(session, DispatcherQueue, state =>
         {
@@ -90,6 +94,9 @@ public sealed partial class DictationPage : Page
         HistoryView.QueryChanged -= HistoryQueryChanged;
         HistoryView.CopyRequested -= CopyHistoryItem;
         HistoryView.RemoveRequested -= RemoveHistoryItem;
+        _historyHeaderPin.Dispose();
+        _railPin?.Dispose();
+        _railPin = null;
         _observer?.Dispose();
         _observer = null;
         _clock.Stop();
@@ -267,10 +274,18 @@ public sealed partial class DictationPage : Page
         Grid.SetColumnSpan(ShortcutButtons, stackedHelper ? 2 : 1);
         ShortcutButtons.HorizontalAlignment = stackedHelper ? HorizontalAlignment.Right : HorizontalAlignment.Left;
     }
-    // Wide: history beside a fixed insights rail. Narrow: the insights cards become a strip above history.
+    // Wide: history beside a fixed insights rail that sticks beside the history header. Narrow: the insights cards
+    // become a strip above history that scrolls away.
     private void HomeColumnsSizeChanged(object sender, SizeChangedEventArgs args)
     {
         var stacked = args.NewSize.Width < (double)Resources["HomeRailStackThreshold"];
+        if (stacked) { _railPin?.Dispose(); _railPin = null; }
+        else if (!_disposed)
+        {
+            // The rail top lines up with the stuck header's content and keeps the same gap above the visible bottom.
+            var gap = HistoryView.StuckContentTop;
+            _railPin ??= HomeViewport.Pin(HomeInsightsColumn, HistoryView, gap, gap);
+        }
         if (HomeInsightsColumn.Strip == stacked && HomeColumns.ColumnDefinitions.Count == (stacked ? 1 : 2)) return;
         HomeInsightsColumn.Strip = stacked;
         HomeColumns.ColumnDefinitions.Clear();

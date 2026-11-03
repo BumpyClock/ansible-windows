@@ -1,5 +1,7 @@
+using Microsoft.UI.Composition;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Markup;
 using Windows.Foundation;
 
@@ -15,10 +17,22 @@ public sealed partial class PageCanvas : UserControl
 
     private double _bottomInset;
 
+    private readonly List<StickyPin> _pins = [];
+    private CompositionPropertySet? _scrollProperties;
+
     public PageCanvas()
     {
         InitializeComponent();
-        Loaded += (_, _) => { UpdateLayoutBounds(); UpdateHeader(); UpdateHeadingScrolledOut(); };
+        Loaded += (_, _) =>
+        {
+            UpdateLayoutBounds();
+            UpdateHeader();
+            UpdateHeadingScrolledOut();
+            // Cached pages leave and rejoin the window; restart the pins rather than trust animations across that.
+            foreach (var pin in _pins) pin.Stop();
+            UpdatePins();
+        };
+        ContentHost.BringIntoViewRequested += ContentBringIntoViewRequested;
     }
 
     /// <summary>True while the page title has scrolled above the viewport. The window title bar then shows the page.</summary>
@@ -48,10 +62,35 @@ public sealed partial class PageCanvas : UserControl
         set => BodyHost.Content = value;
     }
 
-    /// <summary>The page's only scroller. Page content flows inside it; views must not add nested vertical scrollers.</summary>
+    /// <summary>
+    /// The page's only scroller. Page content flows inside it; views must not add nested vertical scrollers. Use
+    /// <see cref="Pin"/> to keep content on screen while the page scrolls.
+    /// </summary>
     public ScrollViewer Scroller => Viewport;
 
-    public double ContentWidth => Math.Max(0, ContentHost.ActualWidth - ContentHost.Padding.Left - ContentHost.Padding.Right);
+    /// <summary>
+    /// Keeps <paramref name="element"/> on screen while the page scrolls, without a second scroller. See
+    /// <see cref="StickyPin"/> for the rules. The element should draw above what scrolls under it (Canvas.ZIndex), and
+    /// <paramref name="indicator"/>, when given, fades in only while the element is stuck.
+    /// </summary>
+    internal StickyPin Pin(FrameworkElement element, FrameworkElement bounds, double top = 0, double bottom = 0, UIElement? indicator = null)
+    {
+        var pin = new StickyPin(this, element, bounds, top, bottom, indicator);
+        _pins.Add(pin);
+        // Sizes and positions anywhere above the pin move it, so every layout pass rechecks the pins.
+        if (_pins.Count == 1) Viewport.LayoutUpdated += ViewportLayoutUpdated;
+        UpdatePins();
+        return pin;
+    }
+
+    internal void Unpin(StickyPin pin)
+    {
+        if (!_pins.Remove(pin)) return;
+        pin.Stop();
+        if (_pins.Count == 0) Viewport.LayoutUpdated -= ViewportLayoutUpdated;
+    }
+
+    public double ContentWidth =>Math.Max(0, ContentHost.ActualWidth - ContentHost.Padding.Left - ContentHost.Padding.Right);
 
     /// <summary>
     /// The header action the window title bar repeats once the heading scrolls out. Pages with one declare it
@@ -118,6 +157,28 @@ public sealed partial class PageCanvas : UserControl
         HeaderActionsPanel.HorizontalAlignment = stacked || !hasHeading ? HorizontalAlignment.Left : HorizontalAlignment.Right;
         HeaderActionsPanel.Orientation = ContentWidth < (double)Application.Current.Resources["NarrowActionsThreshold"]
             ? Orientation.Vertical : Orientation.Horizontal;
+    }
+
+    private void ViewportLayoutUpdated(object? sender, object args) => UpdatePins();
+
+    private void UpdatePins()
+    {
+        if (!IsLoaded || _pins.Count == 0) return;
+        _scrollProperties ??= ElementCompositionPreview.GetScrollViewerManipulationPropertySet(Viewport);
+        // Floating notices cover the bottom inset, so a tall pinned element stops above them.
+        var visibleHeight = Viewport.ActualHeight - _bottomInset;
+        foreach (var pin in _pins) pin.Update(_scrollProperties, ContentHost, visibleHeight);
+    }
+
+    // Focus inside a stuck element asks the scroller to reveal its layout position, which has scrolled away; the
+    // scroller would jump back to it. Where the element is drawn fully visible, nothing needs to scroll.
+    private void ContentBringIntoViewRequested(UIElement sender, BringIntoViewRequestedEventArgs args)
+    {
+        if (args.Handled || args.TargetElement is not { } target) return;
+        var pin = _pins.FirstOrDefault(candidate => candidate.Contains(target));
+        if (pin is null || !pin.IsStuck(Viewport.VerticalOffset)) return;
+        var drawn = target.TransformToVisual(Viewport).TransformBounds(args.TargetRect);
+        if (drawn.Top >= 0 && drawn.Bottom <= Viewport.ActualHeight - _bottomInset) args.Handled = true;
     }
 
     private void UpdateLayoutBounds()

@@ -72,7 +72,8 @@
                 </Grid.ColumnDefinitions>
 
                 <local:HomeHistoryView x:Name="HistoryView" Grid.Column="0" />
-                <local:HomeInsightsView x:Name="HomeInsightsColumn" Grid.Column="1" VerticalAlignment="Top" />
+                <!-- As a rail it sticks beside the history header while the page scrolls (HomeColumnsSizeChanged). -->
+                <local:HomeInsightsView x:Name="HomeInsightsColumn" Grid.Column="1" VerticalAlignment="Top" Canvas.ZIndex="1" />
             </Grid>
             <!-- A result that is not in saved history (WAV, oversized) sits above history so a long list cannot bury it. -->
             <Border x:Name="TranscriptCard" Margin="{StaticResource PageSectionBottomMargin}" Style="{StaticResource CardStyle}" MinHeight="160" Visibility="Collapsed">

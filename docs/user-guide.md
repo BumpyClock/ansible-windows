@@ -63,7 +63,7 @@ arrived. The app never retries that uncertain input automatically. In-app
 dictations have no tag. History reloads after restart. It keeps at most 100
 successful dictations within a 500,000-character text budget. Large entries can
 make fewer than 100 fit. An entry larger than that budget stays in the
-current-result area only. Search covers every retained entry. WAV results stay
+current-result area only. Search covers every retained entry. While you scroll Home, the History header and search box stay at the top, and on wide windows the insights cards stay beside the list. WAV results stay
 outside dictation history and remain in the separate transcript area. Audio is
 never saved. Prior session-only transcripts from earlier app versions cannot be
 recovered.

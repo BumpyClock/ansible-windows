@@ -50,7 +50,12 @@
         </Grid.RowDefinitions>
         <!-- Rows are built in code; this anchor supplies the hover fill resolved for this element's theme. -->
         <Border x:Name="HoverFillAnchor" Visibility="Collapsed" Background="{ThemeResource AppCardBrush}" />
-        <Grid x:Name="HistoryHeaderGrid" Style="{StaticResource HomeSectionHeaderStyle}" Padding="0" SizeChanged="HistoryHeaderSizeChanged">
+        <!-- The header sticks to the top of the page scroller (PinHeader). Its opaque surface fill reaches past the
+             row hover fill on both sides and adds breathing room above and below while stuck; matching negative
+             margins keep the layout where it was. It draws above the rows that scroll under it. -->
+        <Grid x:Name="HistoryHeaderGrid" Style="{StaticResource HomeSectionHeaderStyle}" Margin="-12,-12,-12,-10"
+              Padding="12,12,12,10" Background="{ThemeResource AppSurfaceBrush}" Canvas.ZIndex="1"
+              SizeChanged="HistoryHeaderSizeChanged">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
@@ -77,6 +82,9 @@
                     HorizontalAlignment="Right" VerticalAlignment="Center" IsHitTestVisible="False">
                 <TextBlock Text="Ctrl K" Style="{StaticResource SearchKeycapTextStyle}" />
             </Border>
+            <!-- A hairline under the stuck header. The pin fades it in only while rows pass underneath. -->
+            <Border x:Name="HistoryHeaderDivider" Grid.ColumnSpan="4" Grid.RowSpan="2" Margin="-12,0,-12,-10"
+                    Style="{StaticResource HistoryDividerStyle}" VerticalAlignment="Bottom" IsHitTestVisible="False" />
         </Grid>
         <!-- History flows in the page scroller. No card, no fixed height, no nested scroller. -->
         <StackPanel x:Name="HistoryContent" Grid.Row="1">

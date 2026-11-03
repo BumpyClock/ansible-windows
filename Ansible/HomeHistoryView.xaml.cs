@@ -40,6 +40,22 @@ public sealed partial class HomeHistoryView : UserControl
         InitializeComponent();
         _copiedTimer.Tick += (_, _) => RestoreCopied();
         Unloaded += (_, _) => RestoreCopied();
+        HistoryContent.BringIntoViewRequested += HistoryContentBringIntoViewRequested;
+    }
+
+    /// <summary>Where content beside history should stick so its top lines up with the stuck header's content.</summary>
+    internal double StuckContentTop => HistoryHeaderGrid.Padding.Top;
+
+    /// <summary>Sticks the header row (title, count, search) to the top of the page while the rows scroll under it.</summary>
+    internal StickyPin PinHeader(PageCanvas canvas) => canvas.Pin(HistoryHeaderGrid, this, indicator: HistoryHeaderDivider);
+
+    // A row revealed by keyboard focus must land below the stuck header, not under it.
+    private void HistoryContentBringIntoViewRequested(UIElement sender, BringIntoViewRequestedEventArgs args)
+    {
+        var rect = args.TargetRect;
+        if (rect.IsEmpty) return;
+        var header = HistoryHeaderGrid.ActualHeight;
+        args.TargetRect = new Windows.Foundation.Rect(rect.X, rect.Y - header, rect.Width, rect.Height + header);
     }
 
     /// <summary>
