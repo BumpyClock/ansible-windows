@@ -128,13 +128,16 @@ public sealed partial class CustomWordsPage : Page
     private void SaveEdit(DictionaryWordRow row)
     {
         if (!_state.IsIdle) return;
+        var renamed = CustomVocabulary.Normalize(row.EditedWord);
         if (!ApplyEdit(new CustomVocabulary.Edit.Replace(row.Word, row.EditedWord), _state.SelectedModel, out var error))
         {
             ShowFieldError(error);
             return;
         }
-        if (_editingRow == row) EndEdit(row);
-        else ShowFieldError("");
+        if (_editingRow == row) { EndEdit(row); return; }
+        // A rename replaces the row, which takes the focused editor with it. Keep focus on the renamed word.
+        ShowFieldError("");
+        FocusRow(_rows.IndexOf(_rows.FirstOrDefault(model => model.Word == renamed)!));
     }
 
     private void AddWordClicked(object sender, RoutedEventArgs args) => AddFromField();
@@ -201,11 +204,17 @@ public sealed partial class CustomWordsPage : Page
         var index = row.Model is { } model ? _rows.IndexOf(model) : -1;
         if (!ApplyEdit(new CustomVocabulary.Edit.Remove(word), _state.SelectedModel, out _)) return;
         _notices.Confirm($"Removed \"{word}\".", new NoticeAction("Undo", () => RestoreWord(word)));
-        if (_rows.Count == 0) { SearchBox.Focus(FocusState.Programmatic); return; }
+        FocusRow(Math.Min(Math.Max(index, 0), _rows.Count - 1));
+    }
+
+    // Focuses the row at index, or the search field when there is no such row.
+    private void FocusRow(int index)
+    {
+        if (index < 0 || index >= _rows.Count) { SearchBox.Focus(FocusState.Programmatic); return; }
         WordsList.UpdateLayout();
-        var next = WordsList.ContainerFromIndex(Math.Min(Math.Max(index, 0), _rows.Count - 1));
-        if (next is not null && FocusManager.FindFirstFocusableElement(next) is Control control)
+        if (WordsList.ContainerFromIndex(index) is { } container && FocusManager.FindFirstFocusableElement(container) is Control control)
             control.Focus(FocusState.Programmatic);
+        else SearchBox.Focus(FocusState.Programmatic);
     }
 
     // Undo keeps newer words and restores saved vocabulary even if the current model cannot use it.

@@ -39,16 +39,20 @@ internal static class DeviceBenchmark
     internal static readonly TimeSpan DeviceDeadline = TimeSpan.FromMinutes(5);
     private const int OutputLimit = 65536;
 
+    /// <param name="paceLimitMilliseconds">For meetings, the slowest measurement that keeps pace. A device that
+    /// keeps pace wins over a near-tie GPU that does not.</param>
     internal static async Task<DeviceBenchmarkSelection> QualifyAsync(string key,
-        Func<NativeBackend, Task<DeviceBenchmarkResult>> probe, CancellationToken token)
+        Func<NativeBackend, Task<DeviceBenchmarkResult>> probe, CancellationToken token, double? paceLimitMilliseconds = null)
     {
         var cpu = await probe(NativeBackend.Cpu).ConfigureAwait(false);
         if (cpu.Fatal) throw new InvalidDataException($"CPU device qualification failed: {cpu.Error}");
         token.ThrowIfCancellationRequested();
         var gpu = await probe(NativeBackend.Vulkan).ConfigureAwait(false);
         token.ThrowIfCancellationRequested();
-        return Select(key, cpu, gpu);
+        return Select(key, cpu, gpu, paceLimitMilliseconds);
     }
+
+    internal static double PaceLimitMilliseconds(double audioMilliseconds) => audioMilliseconds * MaximumMeetingRealTimeFactor;
 
     internal static double RequireMeetingRealTime(DeviceBenchmarkSelection selection, double audioMilliseconds, string modelId)
     {
@@ -87,7 +91,8 @@ internal static class DeviceBenchmark
         }
     }
 
-    internal static DeviceBenchmarkSelection Select(string key, DeviceBenchmarkResult cpu, DeviceBenchmarkResult gpu)
+    internal static DeviceBenchmarkSelection Select(string key, DeviceBenchmarkResult cpu, DeviceBenchmarkResult gpu,
+        double? paceLimitMilliseconds = null)
     {
         if (cpu.Backend != NativeBackend.Cpu || gpu.Backend != NativeBackend.Vulkan)
             throw new InvalidDataException("Benchmark device identity does not match the requested backend.");
@@ -96,8 +101,11 @@ internal static class DeviceBenchmark
         if (!cpu.Working && !gpu.Working)
             throw new InvalidOperationException($"Neither device passed qualification. CPU: {cpu.Error}; Vulkan: {gpu.Error}");
         // Differences below five percent are not enough evidence to override the GPU preference.
-        var backend = gpu.Working && (!cpu.Working || gpu.Milliseconds <= cpu.Milliseconds * 1.05)
-            ? NativeBackend.Vulkan : NativeBackend.Cpu;
+        var preferGpu = gpu.Working && (!cpu.Working || gpu.Milliseconds <= cpu.Milliseconds * 1.05);
+        // A near tie is not a reason to pick the device that misses a meeting's pace when the other keeps it.
+        if (preferGpu && cpu.Working && paceLimitMilliseconds is { } limit && gpu.Milliseconds > limit && cpu.Milliseconds <= limit)
+            preferGpu = false;
+        var backend = preferGpu ? NativeBackend.Vulkan : NativeBackend.Cpu;
         return new(key, cpu, gpu, backend, DateTimeOffset.UtcNow);
     }
 

@@ -278,7 +278,7 @@ public sealed partial class DictationPage : Page
     // become a strip above history that scrolls away.
     private void HomeColumnsSizeChanged(object sender, SizeChangedEventArgs args)
     {
-        var stacked = args.NewSize.Width < (double)Resources["HomeRailStackThreshold"];
+        var stacked = args.NewSize.Width < (double)Application.Current.Resources["HomeRailStackThreshold"];
         if (stacked) { _railPin?.Dispose(); _railPin = null; }
         else if (!_disposed)
         {
@@ -291,7 +291,7 @@ public sealed partial class DictationPage : Page
         HomeColumns.ColumnDefinitions.Clear();
         HomeColumns.RowDefinitions.Clear();
         HomeColumns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        if (!stacked) HomeColumns.ColumnDefinitions.Add(new ColumnDefinition { Width = (GridLength)Resources["HomeRailColumnWidth"] });
+        if (!stacked) HomeColumns.ColumnDefinitions.Add(new ColumnDefinition { Width = (GridLength)Application.Current.Resources["HomeRailColumnWidth"] });
         HomeColumns.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         if (stacked) HomeColumns.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         Grid.SetColumn(HomeInsightsColumn, stacked ? 0 : 1);

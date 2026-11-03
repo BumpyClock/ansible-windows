@@ -391,7 +391,8 @@ longer. Results are cached for model, native, and sample hashes, hardware and
 driver, mode and history, device, threads, and headroom. Malformed cache content
 is ignored; Auto qualifies the devices again.
 When both devices work
-and GPU is within five percent of CPU, Auto selects GPU. Settings shows the last
+and GPU is within five percent of CPU, Auto selects GPU, except that a meeting
+prefers the device that keeps half real time when only one of them does. Settings shows the last
 comparison, including its model and kind (streaming, meeting, or whole recording), the selected processor, and device
 timings, after a qualification runs. Each model and kind keeps its own result, so
 one model can use GPU while another uses CPU. The last device result stays in place when you change the
@@ -426,7 +427,9 @@ and confirm with **Turn on** in the dialog. That confirmation is the opt-in to s
 text to the cloud. Enabling OpenAI automatic cleanup
 requires a saved API key and an OpenAI API model ID. No OpenAI model is guessed.
 Enabling it authorizes sending each new completed meeting transcript to the
-selected provider. No extra confirmation appears per meeting.
+selected provider. No extra confirmation appears per meeting. Choosing a
+different provider turns automatic cleanup off; turn it on again to confirm the
+new provider.
 
 The selected provider is used alone. There is no fallback to the other provider
 or another account. Audio is never uploaded. Only finalized local text is sent,

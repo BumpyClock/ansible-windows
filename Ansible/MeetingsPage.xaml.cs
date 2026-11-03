@@ -23,6 +23,7 @@ public sealed partial class MeetingsPage : Page
     private IReadOnlyList<MeetingReadFailure> _displayedFailures = [];
     private readonly List<Button> _exportButtons = [];
     private bool _rendered;
+    private DateOnly _displayedDate;
 
     internal MeetingsPage(MeetingStore store, Func<MeetingDocument?, Task> openMeeting,
         Func<nint> windowHandle, LocalDiagnosticLog diagnostics, AppNotices notices)
@@ -53,12 +54,16 @@ public sealed partial class MeetingsPage : Page
             if (_shutdown.IsCancellationRequested) return;
             _notices.Set(ErrorNoticeKey, null);
             var summaries = result.Summaries;
-            if (_rendered && _displayedSummaries.SequenceEqual(summaries) && _displayedFailures.SequenceEqual(result.Failures)) return;
+            // Day headings are relative, so a new local date re-renders even when no meeting changed.
+            var today = DateOnly.FromDateTime(DateTime.Today);
+            if (_rendered && _displayedDate == today && _displayedSummaries.SequenceEqual(summaries) &&
+                _displayedFailures.SequenceEqual(result.Failures)) return;
             _rendered = true;
+            _displayedDate = today;
             _displayedSummaries = summaries;
             _displayedFailures = result.Failures;
             // WinRT rejects arrays of managed records as ItemsSource; a List<object> marshals as a bindable vector.
-            MeetingGroups.ItemsSource = MeetingList.Create(summaries, DateOnly.FromDateTime(DateTime.Today));
+            MeetingGroups.ItemsSource = MeetingList.Create(summaries, today);
             UnreadableMeetings.Children.Clear();
             _exportButtons.Clear();
             foreach (var failure in result.Failures)

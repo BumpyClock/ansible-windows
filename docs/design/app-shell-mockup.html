@@ -166,6 +166,9 @@ h2.sec { font-family: "Segoe UI Variable Display", "Segoe UI", sans-serif; font-
 .greeting-actions { display: flex; align-items: center; gap: var(--s3); color: var(--text-2); }
 .greeting-actions .keys { display: inline-flex; align-items: center; gap: 4px; }
 .day { position: sticky; top: 0; z-index: 2; background: var(--surface); }
+/* Home pins the History header; day labels stick below it. */
+.home-grid .sec-head { position: sticky; top: 0; z-index: 3; height: var(--hist-head, 56px); margin-bottom: 0; background: var(--surface); }
+.home-grid .day { top: var(--hist-head, 56px); }
 .hrow { display: grid; grid-template-columns: 72px minmax(0,1fr) auto; gap: var(--s4); padding: var(--s3) var(--s3); margin: 0 calc(-1 * var(--s3)); border-radius: 10px; transition: background .12s; }
 .hrow:hover, .hrow:focus-within { background: var(--card); }
 .hrow time { color: var(--text-3); font-size: 13px; padding-top: 2px; }
@@ -290,7 +293,9 @@ body.annotate .changes { display: block; }
 @media (max-width: 900px) {
   .mock { left: auto; right: 12px; bottom: 12px; }
   :root { --nav-w: 64px; }
-  .nav a span, .brand span { display: none; }
+  .brand span { display: none; }
+  /* Compact links keep their text for assistive technology. */
+  .nav a span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .wrap { padding-left: 20px; padding-right: 20px; }
   .titlebar { padding-left: 20px; }
   .page-head { flex-wrap: wrap; }
@@ -739,14 +744,14 @@ document.addEventListener('click', e => {
   if (more) { const box = more.closest('.model').querySelector('.more'); box.hidden = !box.hidden; more.setAttribute('aria-expanded', !box.hidden); }
   const dl = e.target.closest('[data-dl]');
   if (dl) {
-    const acts = dl.parentElement; let p = 0;
+    const acts = dl.parentElement; let p = 0, done;
     acts.innerHTML = `<div class="progress"><div class="bar"><i></i></div><span class="num">Downloading 0%</span></div><button class="btn subtle">Cancel</button>`;
     const bar = acts.querySelector('.bar i'), lbl = acts.querySelector('.progress span');
     const t = setInterval(() => {
       p = Math.min(100, p + 7); bar.style.width = p + '%'; lbl.textContent = p < 100 ? `Downloading ${p}%` : 'Verifying checksum';
-      if (p >= 100) { clearInterval(t); setTimeout(() => { const m = models.find(x => x.id === dl.dataset.dl); m.state = 'installed'; m.group = 'Installed'; renderModels(); toast(`${m.name} is installed.`); }, 700); }
+      if (p >= 100) { clearInterval(t); done = setTimeout(() => { const m = models.find(x => x.id === dl.dataset.dl); m.state = 'installed'; m.group = 'Installed'; renderModels(); toast(`${m.name} is installed.`); }, 700); }
     }, 180);
-    acts.querySelector('.btn').onclick = () => { clearInterval(t); renderModels(); };
+    acts.querySelector('.btn').onclick = () => { clearInterval(t); clearTimeout(done); renderModels(); };
   }
   const use = e.target.closest('[data-use]');
   if (use) {
@@ -927,8 +932,17 @@ $('#noticeHost').addEventListener('keydown', e => {
   const el = e.target.closest('[data-nid]'); if (e.key !== 'Escape' || !el) return;
   const n = live.find(x => x.id === +el.dataset.nid); if (n?.closable) dismiss(n.id);
 });
-['pointerenter', 'focusin'].forEach(t => $('#noticeHost').addEventListener(t, () => live.forEach(n => n.timer && pauseTimer(n))));
-['pointerleave', 'focusout'].forEach(t => $('#noticeHost').addEventListener(t, e => { if (!$('#noticeHost').contains(e.relatedTarget)) live.forEach(n => n.timer && armTimer(n)); }));
+// Confirmations pause while the pointer or focus is inside, and resume only once both have left.
+let pointerIn = false, focusIn = false;
+function holdChanged(pointer, focus) {
+  const was = pointerIn || focusIn; pointerIn = pointer; focusIn = focus;
+  const now = pointerIn || focusIn; if (now === was) return;
+  live.forEach(n => n.timer && (now ? pauseTimer(n) : armTimer(n)));
+}
+$('#noticeHost').addEventListener('pointerenter', () => holdChanged(true, focusIn));
+$('#noticeHost').addEventListener('pointerleave', () => holdChanged(false, focusIn));
+$('#noticeHost').addEventListener('focusin', () => holdChanged(pointerIn, true));
+$('#noticeHost').addEventListener('focusout', e => { if (!$('#noticeHost').contains(e.relatedTarget)) holdChanged(pointerIn, false); });
 new ResizeObserver(renderNoticeSpace).observe($('#noticeHost'));
 
 /* ---------- Mock controls ---------- */

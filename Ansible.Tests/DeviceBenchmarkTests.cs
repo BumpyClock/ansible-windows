@@ -28,6 +28,17 @@ public sealed class DeviceBenchmarkTests
     }
 
     [Theory]
+    [InlineData(4900, 5100, NativeBackend.Cpu)]     // near tie, only CPU keeps a meeting's pace
+    [InlineData(4800, 4900, NativeBackend.Vulkan)]  // near tie, both keep pace
+    [InlineData(5200, 5300, NativeBackend.Vulkan)]  // near tie, neither keeps pace; the gate rejects it later
+    public void MeetingPaceOutranksTheGpuNearTiePreference(double cpu, double gpu, NativeBackend expected)
+    {
+        var limit = DeviceBenchmark.PaceLimitMilliseconds(10000);
+        var result = DeviceBenchmark.Select("key", new(NativeBackend.Cpu, cpu, null), new(NativeBackend.Vulkan, gpu, null), limit);
+        Assert.Equal(expected, result.Backend);
+    }
+
+    [Theory]
     [InlineData(true, NativeBackend.Vulkan)]
     [InlineData(false, NativeBackend.Cpu)]
     public void SelectsOnlyWorkingDeviceAndReportsOtherFailure(bool cpuFailed, NativeBackend expected)

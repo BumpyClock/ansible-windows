@@ -171,7 +171,12 @@ public sealed partial class MainPage : Page
     {
         if (CopilotCleanupFields is null) return;
         RenderCleanupProvider();
-        if (!_rendering) SaveCleanupSettings();
+        if (_rendering) return;
+        // Consent names one provider, so a new provider turns automatic cleanup off until the user confirms it.
+        var wasAutomatic = _session.State.Settings.MeetingCleanup.Automatic;
+        if (!SaveCleanupSettings(automatic: false) || !wasAutomatic) return;
+        AutomaticCleanupToggle.IsOn = false;
+        _notices.Confirm("Automatic cleanup is off. Turn it on again to send meetings to the new provider.");
     }
 
     private void CleanupEffortChanged(object sender, SelectionChangedEventArgs args)
@@ -226,7 +231,7 @@ public sealed partial class MainPage : Page
         RenderKeyStatus();
     }
 
-    // Cleanup fields save as they change. The saved opt-in changes only through the confirmed toggle.
+    // Cleanup fields save as they change. The saved opt-in turns on only through the confirmed toggle.
     private bool SaveCleanupSettings(bool? automatic = null)
     {
         try

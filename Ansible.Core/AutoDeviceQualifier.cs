@@ -32,6 +32,7 @@ internal sealed class AutoDeviceQualifier(
             var key = DeviceBenchmark.Key(request, input.ModelFingerprint, token, _identity);
             if (!_devices.TryGetValue(key, out var device))
             {
+                var sampleMilliseconds = request.History > 0 ? ReadSampleMilliseconds(request.Sample, token) : (double?)null;
                 var selection = DeviceBenchmark.ReadCache(cachePath).LastOrDefault(value => value.Key == key);
                 if (selection is null)
                 {
@@ -41,13 +42,13 @@ internal sealed class AutoDeviceQualifier(
                     prepareProbe();
                     token.ThrowIfCancellationRequested();
                     selection = DeviceBenchmark.QualifyAsync(key,
-                        backend => probe(request with { Backend = backend }, token), token).GetAwaiter().GetResult();
+                        backend => probe(request with { Backend = backend }, token), token,
+                        sampleMilliseconds is { } sample ? DeviceBenchmark.PaceLimitMilliseconds(sample) : null).GetAwaiter().GetResult();
                     token.ThrowIfCancellationRequested();
                     _cacheWarning = DeviceBenchmark.TryUpdateCache(cachePath, key, selection);
                 }
                 else Current = new(Source: NativeDiagnosticSource.DiskCache);
-                device = new(selection, request.ModelId, input.ModelName, Kind(request),
-                    request.History > 0 ? ReadSampleMilliseconds(request.Sample, token) : null);
+                device = new(selection, request.ModelId, input.ModelName, Kind(request), sampleMilliseconds);
                 _devices[key] = device;
             }
             else Current = new(Source: NativeDiagnosticSource.MemoryCache);
