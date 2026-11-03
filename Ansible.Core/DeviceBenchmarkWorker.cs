@@ -65,7 +65,11 @@ public static partial class DeviceBenchmarkWorker
     internal static DeviceBenchmarkResult ClassifyFailure(NativeBackend backend, Exception error)
     {
         var message = error.Message.Length <= 4096 ? error.Message : error.Message[..4096];
-        return new(backend, null, message, error is not NativeExecutionException { IsQualificationFatal: false });
+        // A GPU that runs out of its own memory cannot run this model, so only that device is disqualified and Auto
+        // can use a qualified CPU. Host memory and every other fatal class still abort qualification.
+        var fatal = error is not NativeExecutionException native ||
+            native.IsQualificationFatal && !(backend == NativeBackend.Vulkan && native.IsDeviceMemoryFailure);
+        return new(backend, null, message, fatal);
     }
 }
 

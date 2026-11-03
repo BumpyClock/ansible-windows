@@ -67,11 +67,13 @@ dotnet run --project .\Ansible.Probe -- `
 Auto example. Build the app first so the worker exists. Use the public sample as
 the positional WAV; Auto uses that file for isolated qualification. Use the
 `Debug` worker folder after a Debug app build. Auto probes CPU, then GPU;
-compared times exclude load and warmup. Each device has a five-minute deadline
-that includes load, warmup, recognition, and teardown. The CLI also has a
+compared times exclude load and warmup. CPU has a 150-second deadline and GPU a
+two-minute deadline, so both fit inside the app's five-minute recognition
+operation; each includes load, warmup, recognition, and teardown. The CLI also has a
 three-minute timeout for each recognition operation, so it can cancel qualification before
 a device deadline. A GPU worker crash or
-timeout disqualifies GPU only. Shared validation, integrity, memory, protocol,
+timeout, or GPU device-memory exhaustion (`VK_ERROR_OUT_OF_DEVICE_MEMORY`),
+disqualifies GPU only. Shared validation, integrity, host memory, protocol,
 or ownership errors abort calibration and do not write a device cache entry:
 
 ```powershell

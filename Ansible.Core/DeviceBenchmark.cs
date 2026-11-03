@@ -36,7 +36,11 @@ internal static class DeviceBenchmark
     // Live meetings run for up to two hours behind a 30-second backlog; half real time leaves room for
     // capture, the first uncached update and slower passages. Paired Nemotron measured 0.31x on a 4-thread CPU.
     internal const double MaximumMeetingRealTimeFactor = 0.5;
-    internal static readonly TimeSpan DeviceDeadline = TimeSpan.FromMinutes(5);
+    // Both probes run inside one five-minute recognition operation. Their deadlines leave room for preparation, so a
+    // hung probe ends as that device's failure and the other device's result is cached, rather than the operation
+    // timing out with nothing cached.
+    internal static TimeSpan DeviceDeadline(NativeBackend backend) =>
+        backend == NativeBackend.Vulkan ? TimeSpan.FromMinutes(2) : TimeSpan.FromSeconds(150);
     private const int OutputLimit = 65536;
 
     /// <param name="paceLimitMilliseconds">For meetings, the slowest measurement that keeps pace. A device that
@@ -206,7 +210,7 @@ internal static class DeviceBenchmark
         var stdout = DrainAsync(process.StandardOutput);
         var stderr = DrainAsync(process.StandardError);
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
-        deadline.CancelAfter(timeout ?? DeviceDeadline);
+        deadline.CancelAfter(timeout ?? DeviceDeadline(backend));
         var timedOut = false;
         try { await process.WaitForExitAsync(deadline.Token).ConfigureAwait(false); }
         catch (OperationCanceledException)

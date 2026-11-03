@@ -383,7 +383,8 @@ Auto. An explicit saved CPU or GPU choice is kept until you change it. Auto
 runs CPU, then GPU, sequentially in an isolated `Ansible.DeviceProbe` process
 against the bundled public speech sample. It does not use microphone, meeting,
 or other user audio, and it does not save that audio. Compared times exclude
-loading and warmup and use the median of three runs. Each device has a five-minute deadline that includes load,
+loading and warmup and use the median of three runs. CPU has 150 seconds and GPU two minutes, so both fit inside
+the five-minute recognition operation. Each deadline includes load,
 warmup, recognition, and teardown. Cancelling stops the worker, then joins and
 drains it. Auto measures the mode required for the next work: offline WAV, live
 dictation, or meeting history. The first preparation for a model and mode takes
@@ -398,8 +399,9 @@ timings, after a qualification runs. Each model and kind keeps its own result, s
 one model can use GPU while another uses CPU. The last device result stays in place when you change the
 choice; it updates when recognition next prepares a model.
 
-A GPU worker crash or timeout disqualifies GPU; a successful CPU result is used.
-Shared validation, integrity, memory, protocol, or ownership errors abort
+A GPU worker crash, timeout, or running out of GPU memory disqualifies GPU; a
+successful CPU result is used.
+Shared validation, integrity, host memory, protocol, or ownership errors abort
 calibration and do not write a device result to the cache. If neither device
 works, the app shows an error. Auto does not replay consumed live audio. A
 failed live operation reports the error, and the next attempt may use CPU.

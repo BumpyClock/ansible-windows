@@ -124,7 +124,6 @@ public sealed class DeviceBenchmarkTests
     [InlineData("vocos CUDA graph alloc failed")]
     [InlineData("Nemotron ASR decoder failed to create graph allocator")]
     [InlineData("Nemotron ASR decoder failed to create joint graph allocator")]
-    [InlineData("Qwen3 ASR prefill graph does not fit in device memory at this size")]
     public void GenericRuntimeAllocationFailureAbortsQualificationAndCannotBlacklistGpu(string message)
     {
         var failure = new NativeExecutionException(message, "process a dictation audio chunk", (int)NativeStatus.Runtime);
@@ -140,6 +139,28 @@ public sealed class DeviceBenchmarkTests
                 _ => { attempts++; throw failure; }, _ => Assert.Fail("allocation failure must not poison device selection"))));
         Assert.Equal(1, attempts);
     }
+
+    [Theory]
+    [InlineData("Qwen3 ASR prefill graph does not fit in device memory at this size")]
+    [InlineData("vkAllocateMemory failed: VK_ERROR_OUT_OF_DEVICE_MEMORY")]
+    public void GpuMemoryExhaustionDisqualifiesOnlyTheGpu(string message)
+    {
+        var failure = new NativeExecutionException(message, "process a dictation audio chunk", (int)NativeStatus.Runtime);
+        Assert.True(failure.IsDeviceMemoryFailure);
+        var gpu = DeviceBenchmarkWorker.ClassifyFailure(NativeBackend.Vulkan, failure);
+        Assert.False(gpu.Fatal);
+        Assert.Equal(NativeBackend.Cpu, DeviceBenchmark.Select("device-memory", new(NativeBackend.Cpu, 100, null), gpu).Backend);
+        // The same message from the CPU worker is not a GPU limit, and host exhaustion stays fatal on any device.
+        Assert.True(DeviceBenchmarkWorker.ClassifyFailure(NativeBackend.Cpu, failure).Fatal);
+        var host = new NativeExecutionException("VK_ERROR_OUT_OF_DEVICE_MEMORY after VK_ERROR_OUT_OF_HOST_MEMORY",
+            "process a dictation audio chunk", (int)NativeStatus.Runtime);
+        Assert.True(DeviceBenchmarkWorker.ClassifyFailure(NativeBackend.Vulkan, host).Fatal);
+    }
+
+    [Fact]
+    public void BothProbeDeadlinesFitInsideOneRecognitionOperation() =>
+        Assert.True(DeviceBenchmark.DeviceDeadline(NativeBackend.Cpu) + DeviceBenchmark.DeviceDeadline(NativeBackend.Vulkan) <
+            TimeSpan.FromMinutes(5));
 
     [Fact]
     public void ConsumedStreamingFailureDoesNotReplayAndUpdatesNextDevice()
