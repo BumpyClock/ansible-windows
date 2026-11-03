@@ -91,6 +91,7 @@ public sealed partial class MainPage : Page
                     : "Manual selection applies to the next recognition. Choose Auto to compare devices and recover from a failed GPU qualification.";
             DeviceComparison.Comparison = _state.DeviceComparison;
             DeviceComparison.Summary = _state.DeviceSelectionSummary;
+            RenderBenchmark();
             if (LanguageBox.FocusState == FocusState.Unfocused) { LanguageBox.Text = _state.Language; }
             RenderNotice();
             UsageToggle.IsOn = _state.Settings.CollectUsage;
@@ -119,6 +120,42 @@ public sealed partial class MainPage : Page
             RenderCleanupSettings();
         }
         finally { _rendering = false; }
+    }
+
+    private void RenderBenchmark()
+    {
+        // Activity stays set after the terminal snapshot; only these phases mean the benchmark still owns the session.
+        var running = _state.Activity == SessionActivity.DeviceBenchmark &&
+            _state.Phase is DictationPhase.Benchmarking or DictationPhase.Cancelling;
+        var model = _state.SelectedModel;
+        var status = running
+            ? _state.Phase == DictationPhase.Cancelling ? "Cancelling the benchmark."
+                : _state.BenchmarkingBackend switch
+                {
+                    NativeBackend.Cpu => "Measuring CPU with the bundled public sample.",
+                    NativeBackend.Vulkan => "Measuring Vulkan with the bundled public sample.",
+                    _ => "Preparing the benchmark."
+                }
+            : model is null ? "Install a dictation model to benchmark CPU and Vulkan."
+            : _state.CanStart ? $"Measure CPU and Vulkan again for {model.DisplayName ?? model.Id}."
+            : "Benchmarking is available when no other work is running.";
+        BenchmarkStatusText.Text = status;
+        ToolTipService.SetToolTip(BenchmarkStatusText, status);
+        BenchmarkProgress.IsActive = running;
+        BenchmarkButton.Content = running ? "Cancel" : "Run benchmark";
+        BenchmarkButton.IsEnabled = running ? _state.IsBenchmarking : _state.CanStart;
+        AutomationProperties.SetName(BenchmarkButton, running ? "Cancel device benchmark" : "Run device benchmark");
+    }
+
+    private async void BenchmarkClicked(object sender, RoutedEventArgs args)
+    {
+        try
+        {
+            if (_state.IsBenchmarking) { await _session.CancelAsync(); return; }
+            // Failures and timeouts arrive as a Settings notice from the terminal snapshot.
+            await _session.BenchmarkDevicesAsync();
+        }
+        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); }
     }
 
     private void RenderInsertion(bool idle)

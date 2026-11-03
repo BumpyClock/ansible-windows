@@ -165,7 +165,7 @@ public sealed partial class FloatingDictationWindow : Window
             PaintWaveform();
         }
         if (_state.Phase is DictationPhase.Connecting or DictationPhase.Closed ||
-            _state.Activity is SessionActivity.File or SessionActivity.ModelMaintenance)
+            _state.Activity is SessionActivity.File or SessionActivity.ModelMaintenance or SessionActivity.DeviceBenchmark)
         {
             HidePreview();
         }
