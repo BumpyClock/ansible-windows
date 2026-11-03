@@ -69,9 +69,11 @@ public sealed partial class DeviceComparisonView : UserControl
         VisualStateManager.GoToState(this, leader, false);
 
         var recommended = comparison!.RecommendedBackend;
-        RecommendationText.Text = $"Auto chose {(recommended == NativeBackend.Cpu ? "CPU" : "Vulkan")}";
+        // Each model and mode keeps its own result, so the panel names the one it shows.
+        ComparisonTitleText.Text = $"Last device comparison: {comparison.ModelName}, {comparison.Mode}";
+        RecommendationBadge.Text = $"Auto chose {(recommended == NativeBackend.Cpu ? "CPU" : "Vulkan")}";
         ComparisonDetailsText.Text = $"Public sample measured {comparison.MeasuredAt.ToUniversalTime():yyyy-MM-dd HH:mm:ss'Z'}. " +
-            "Loading and warmup excluded. Compared automatically for this model.";
+            "Loading and warmup excluded. Other models and modes are compared separately.";
     }
 
     private static string FormatMilliseconds(double milliseconds) =>

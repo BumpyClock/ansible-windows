@@ -392,8 +392,9 @@ driver, mode and history, device, threads, and headroom. Malformed cache content
 is ignored; Auto qualifies the devices again.
 When both devices work
 and GPU is within five percent of CPU, Auto selects GPU. Settings shows the last
-comparison, including the selected processor and device timings, after a
-qualification runs. The last device result stays in place when you change the
+comparison, including its model and mode, the selected processor, and device
+timings, after a qualification runs. Each model and mode keeps its own result, so
+one model can use GPU while another uses CPU. The last device result stays in place when you change the
 choice; it updates when recognition next prepares a model.
 
 A GPU worker crash or timeout disqualifies GPU; a successful CPU result is used.

@@ -17,6 +17,8 @@
   press with the real keys, and the practice step reacts only to real dictation.
 - Qualify Nemotron on Vulkan like every other model instead of skipping the GPU.
   The qualification cache key changes, so every model qualifies again once.
+- Name the model and mode in the Settings device comparison, because each model
+  keeps its own CPU or GPU result. The "Auto chose" label uses the shared badge.
 - Show history insertion status as a quiet icon and word instead of a pill. Rows
   no longer flash white when the pointer moves between them.
 - Check every app XAML file for its compiled resource in the published package.

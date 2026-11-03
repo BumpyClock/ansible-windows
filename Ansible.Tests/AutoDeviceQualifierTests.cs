@@ -18,6 +18,7 @@ public sealed class AutoDeviceQualifierTests
         Assert.Equal(NativeDiagnosticSource.Qualification, qualifier.Current.Source);
         Assert.Equal(ticket.Selection, Assert.Single(DeviceBenchmark.ReadCache(fixture.Cache)));
         Assert.Equal(ticket.Selection.MeasuredAt, qualifier.Current.Comparison!.MeasuredAt);
+        Assert.Equal(("Model", "offline"), (qualifier.Current.Comparison.ModelName, qualifier.Current.Comparison.Mode));
         Assert.Contains("median of three", qualifier.Current.Summary);
     }
 
@@ -415,7 +416,7 @@ public sealed class AutoDeviceQualifierTests
             var library = Path.Combine(Directory, "native.dll");
             File.WriteAllText(library, "native");
             Input = new(new(library, "catalog", "models", Path.Combine(Directory, "sample.wav"),
-                "model", NativeBackend.Cpu, 0, 4, 512, "offline", 0), "model fingerprint");
+                "model", NativeBackend.Cpu, 0, 4, 512, "offline", 0), "model fingerprint", "Model");
             WriteSample(1);
         }
 

@@ -455,10 +455,6 @@
     <x:Double x:Key="BenchmarkLabelFontSize">13</x:Double>
     <x:Double x:Key="BenchmarkFootnoteFontSize">12</x:Double>
     <x:Double x:Key="BenchmarkFootnoteLineHeight">18</x:Double>
-    <Thickness x:Key="BenchmarkTagPadding">10,3</Thickness>
-    <CornerRadius x:Key="BenchmarkTagCornerRadius">20</CornerRadius>
-    <x:Double x:Key="BenchmarkTagFontSize">12</x:Double>
-    <x:Double x:Key="BenchmarkTagGap">5</x:Double>
     <x:Double x:Key="NavItemGap">4</x:Double>
     <x:Double x:Key="BrandSize">32</x:Double>
     <x:Double x:Key="TitleBarHeight">48</x:Double>
