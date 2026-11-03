@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add **Run benchmark** to Settings > Processor. It measures CPU and Vulkan again
+  for the selected dictation model, bypasses cached results, and replaces the
+  result Auto uses. It shows which device is being measured, supports Cancel, and
+  blocks other recognition while it runs. A manual processor choice no longer
+  hides the last comparison.
 - Report failed injected-key release as unverified insertion, including when Windows
   queued only a modifier. Keep the warning and never replay uncertain input.
 - Reuse verified runtime hashes for Auto selection while checking file identity,

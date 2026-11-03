@@ -375,6 +375,19 @@ and GPU is within five percent of CPU, Auto selects GPU. Settings shows the last
 comparison, including the selected processor and device timings, after a
 qualification runs.
 
+**Run benchmark** below the processor choice measures CPU and GPU again for the
+selected dictation model, whatever the processor setting is. It ignores cached
+results and uses the dictation mode, language hint, and, for Kroko, the
+vocabulary decoder mode. Use it after plugging in, updating a graphics driver,
+or switching models. The status line names the device being measured, and the
+button becomes **Cancel** while it runs. A run takes about 20 to 30 seconds per
+model on a recent laptop. Dictation, replay, WAV transcription, and meetings
+cannot start until it finishes or is cancelled. A complete run replaces the
+cached result that Auto uses for that model. A cancelled, failed, or timed-out
+run keeps the previous result and comparison; errors appear on Settings.
+Nemotron dictation does not run its GPU probe because Nemotron Vulkan streaming
+is unsafe in this build; the comparison shows that reason instead of a GPU time.
+
 A GPU worker crash or timeout disqualifies GPU; a successful CPU result is used.
 Shared validation, integrity, memory, protocol, or ownership errors abort
 calibration and do not write a device result to the cache. If neither device
