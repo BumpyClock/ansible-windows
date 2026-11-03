@@ -21,7 +21,6 @@
             <Color x:Key="AppTrackColor">#BCC7D4</Color>
             <Color x:Key="AppActivityColor">#E0E6ED</Color>
             <Color x:Key="AppTagColor">#805214</Color>
-            <Color x:Key="AppTagBackgroundColor">#FFF2CB</Color>
 
             <Color x:Key="SystemAccentColor">#D3EB62</Color>
             <Color x:Key="SystemAccentColorLight1">#E0F08C</Color>
@@ -37,7 +36,6 @@
             <Color x:Key="BrandAccentSoftColor">#E9F797</Color>
             <Color x:Key="BrandAccentForegroundLightColor">#526719</Color>
             <Color x:Key="BrandAccentForegroundDarkColor">#D3EB62</Color>
-            <Color x:Key="AppSegmentSelectedColor">#BCC7D4</Color>
             <Color x:Key="AppSelectedTextColor">#1C2636</Color>
             <Color x:Key="AppBrandVoiceDetailColor">#DFE5EB</Color>
             <Color x:Key="AppBrandReplyDetailColor">#4A5F1C</Color>
@@ -92,8 +90,6 @@
             <SolidColorBrush x:Key="AppKeyBorderBrush" Color="{StaticResource AppKeyBorderColor}" />
             <SolidColorBrush x:Key="AppTrackBrush" Color="{StaticResource AppTrackColor}" />
             <SolidColorBrush x:Key="AppTagBrush" Color="{StaticResource AppTagColor}" />
-            <SolidColorBrush x:Key="AppTagBackgroundBrush" Color="{StaticResource AppTagBackgroundColor}" />
-            <SolidColorBrush x:Key="AppSegmentSelectedBrush" Color="{StaticResource AppSegmentSelectedColor}" />
             <SolidColorBrush x:Key="AppSelectedTextBrush" Color="{StaticResource AppSelectedTextColor}" />
             <SolidColorBrush x:Key="AppAccentBrush" Color="{StaticResource BrandAccentColor}" />
             <SolidColorBrush x:Key="AppOnAccentBrush" Color="{StaticResource BrandOnAccentColor}" />
@@ -167,7 +163,6 @@
             <Color x:Key="AppTrackColor">#5A5E64</Color>
             <Color x:Key="AppActivityColor">#2A3443</Color>
             <Color x:Key="AppTagColor">#E8B450</Color>
-            <Color x:Key="AppTagBackgroundColor">#1FE8B450</Color>
 
             <Color x:Key="SystemAccentColor">#D3EB62</Color>
             <Color x:Key="SystemAccentColorLight1">#E9F797</Color>
@@ -183,7 +178,6 @@
             <Color x:Key="BrandAccentSoftColor">#E9F797</Color>
             <Color x:Key="BrandAccentForegroundLightColor">#526719</Color>
             <Color x:Key="BrandAccentForegroundDarkColor">#D3EB62</Color>
-            <Color x:Key="AppSegmentSelectedColor">#34373B</Color>
             <Color x:Key="AppSelectedTextColor">#F1F3F4</Color>
             <Color x:Key="AppBrandVoiceDetailColor">#DFE5EB</Color>
             <Color x:Key="AppBrandReplyDetailColor">#4A5F1C</Color>
@@ -237,8 +231,6 @@
             <SolidColorBrush x:Key="AppKeyBorderBrush" Color="{StaticResource AppKeyBorderColor}" />
             <SolidColorBrush x:Key="AppTrackBrush" Color="{StaticResource AppTrackColor}" />
             <SolidColorBrush x:Key="AppTagBrush" Color="{StaticResource AppTagColor}" />
-            <SolidColorBrush x:Key="AppTagBackgroundBrush" Color="{StaticResource AppTagBackgroundColor}" />
-            <SolidColorBrush x:Key="AppSegmentSelectedBrush" Color="{StaticResource AppSegmentSelectedColor}" />
             <SolidColorBrush x:Key="AppSelectedTextBrush" Color="{StaticResource AppSelectedTextColor}" />
             <SolidColorBrush x:Key="AppAccentBrush" Color="{StaticResource BrandAccentColor}" />
             <SolidColorBrush x:Key="AppOnAccentBrush" Color="{StaticResource BrandOnAccentColor}" />
@@ -314,8 +306,6 @@
             <SolidColorBrush x:Key="AppKeyBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="AppTrackBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
             <SolidColorBrush x:Key="AppTagBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
-            <SolidColorBrush x:Key="AppTagBackgroundBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
-            <SolidColorBrush x:Key="AppSegmentSelectedBrush" Color="{ThemeResource SystemColorHighlightColor}" />
             <SolidColorBrush x:Key="AppSelectedTextBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
             <SolidColorBrush x:Key="AppAccentBrush" Color="{ThemeResource SystemColorHighlightColor}" />
             <SolidColorBrush x:Key="AppOnAccentBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
@@ -390,33 +380,33 @@
         All app colors, dimensions, and styles live in this dictionary.
     -->
     <x:Double x:Key="PageContentMaxWidth">1440</x:Double>
-    <x:Double x:Key="BoundedPageMinHeight">620</x:Double>
     <Thickness x:Key="PagePadding">36,24,40,40</Thickness>
     <Thickness x:Key="CompactPagePadding">18</Thickness>
     <x:Double x:Key="CompactPageThreshold">800</x:Double>
     <x:Double x:Key="NarrowActionsThreshold">400</x:Double>
     <x:Double x:Key="ShortcutStackThreshold">440</x:Double>
     <x:Double x:Key="HistorySearchStackThreshold">520</x:Double>
-    <x:Double x:Key="HomeColumnsStackThreshold">900</x:Double>
-    <GridLength x:Key="HomeInsightsColumnWidth">400</GridLength>
     <GridLength x:Key="HistorySearchColumnWidth">280</GridLength>
     <!-- Two 400 DIP cards plus the 16 DIP gutter keep model names and status readable. -->
-    <x:Double x:Key="ModelTwoColumnThreshold">816</x:Double>
     <Thickness x:Key="PageSectionBottomMargin">0,0,0,20</Thickness>
-    <Thickness x:Key="PageFooterTopMargin">0,20,0,0</Thickness>
     <x:Double x:Key="PageSectionSpacing">28</x:Double>
-    <Thickness x:Key="ApplicationNoticeMargin">16,8,16,16</Thickness>
-    <x:Double x:Key="ApplicationNoticeMaxWidth">460</x:Double>
-    <Thickness x:Key="ApplicationNoticePadding">16,12</Thickness>
+    <!-- Window notices float bottom-centred over the content panel. -->
+    <Thickness x:Key="NoticeHostMargin">24,0,24,16</Thickness>
+    <x:Double x:Key="NoticeHostMaxWidth">680</x:Double>
+    <x:Double x:Key="NoticeHostSpacing">8</x:Double>
     <x:Double x:Key="CardGap">20</x:Double>
-    <x:Double x:Key="HomeCardGap">20</x:Double>
-    <x:Double x:Key="HomeSectionGap">24</x:Double>
     <x:Double x:Key="SectionHeaderGap">10</x:Double>
     <x:Double x:Key="HomeSectionTitleFontSize">28</x:Double>
+    <!-- Home grid: a 320 DIP insights rail beside history, 32 DIP apart. Below 1040 DIP of page content the rail
+         would squeeze history, so the cards move above it as a strip. -->
+    <GridLength x:Key="HomeRailColumnWidth">320</GridLength>
+    <x:Double x:Key="HomeRailStackThreshold">1040</x:Double>
+    <x:Double x:Key="HomeGridGap">32</x:Double>
+    <x:Double x:Key="NavSelectionBarWidth">3</x:Double>
+    <Thickness x:Key="NavSelectionBarMargin">0,12</Thickness>
     <FontFamily x:Key="InsightNumeralFontFamily">Consolas</FontFamily>
     <x:Double x:Key="InsightNumeralFontSize">22</x:Double>
     <x:Double x:Key="InsightTotalNumeralFontSize">32</x:Double>
-    <x:Double x:Key="InsightHeroNumeralFontSize">56</x:Double>
     <x:Double x:Key="HomeSectionHeaderMinHeight">36</x:Double>
     <x:Double x:Key="NavLabelGap">12</x:Double>
     <Thickness x:Key="CardBorderThickness">1</Thickness>
@@ -433,32 +423,26 @@
     <GridLength x:Key="SidebarColumnWidth">248</GridLength>
     <GridLength x:Key="CompactSidebarColumnWidth">72</GridLength>
     <x:Double x:Key="CompactNavigationThreshold">1000</x:Double>
-    <Thickness x:Key="CompactSidebarPadding">8,30,8,18</Thickness>
-    <Thickness x:Key="ShellPadding">0</Thickness>
-    <Thickness x:Key="SidebarPadding">14,30,14,18</Thickness>
-    <Thickness x:Key="SidebarBrandMargin">10,0,10,28</Thickness>
-    <Thickness x:Key="SettingsSegmentPadding">14,0</Thickness>
-    <CornerRadius x:Key="SettingsSegmentCornerRadius">8</CornerRadius>
-    <CornerRadius x:Key="SettingsCheckBoxCornerRadius">6</CornerRadius>
+    <Thickness x:Key="CompactSidebarPadding">8,12,8,12</Thickness>
+    <Thickness x:Key="SidebarPadding">12,12,12,12</Thickness>
+    <!-- The brand sits in the title bar row above the sidebar, aligned with the navigation icons. -->
+    <Thickness x:Key="SidebarBrandMargin">24,0,12,0</Thickness>
+    <!-- The page area is an inset surface panel under the title bar, beside the sidebar. -->
+    <Thickness x:Key="ContentPanelMargin">0,4,4,4</Thickness>
+    <CornerRadius x:Key="ContentPanelCornerRadius">8</CornerRadius>
+    <Thickness x:Key="TitleBarPageTitleMargin">40,0,12,0</Thickness>
+    <Thickness x:Key="CompactTitleBarPageTitleMargin">20,0,12,0</Thickness>
     <x:Double x:Key="BenchmarkBarHeight">8</x:Double>
     <x:Double x:Key="BenchmarkValueMaxWidth">160</x:Double>
     <CornerRadius x:Key="BenchmarkBarCornerRadius">4</CornerRadius>
-    <Thickness x:Key="SettingsSegmentTrackPadding">2</Thickness>
-    <CornerRadius x:Key="SettingsSegmentTrackCornerRadius">11</CornerRadius>
-    <x:Double x:Key="SettingsSegmentGap">2</x:Double>
-    <x:Double x:Key="SettingsSegmentMinHeight">32</x:Double>
     <x:Double x:Key="SettingsRowRowSpacing">12</x:Double>
     <x:Double x:Key="SettingsRowDescriptionSpacing">5</x:Double>
     <x:Double x:Key="SettingsRowDescriptionMaxWidth">620</x:Double>
     <x:Double x:Key="SettingsSelectWidth">320</x:Double>
     <x:Double x:Key="SettingsNumberWidth">132</x:Double>
     <x:Double x:Key="SettingsLanguageWidth">180</x:Double>
-    <x:Double x:Key="SettingsProcessorWidth">305</x:Double>
     <x:Double x:Key="SettingsWideMinWidth">700</x:Double>
-    <Thickness x:Key="SettingsPrivacyCardPadding">24,8,24,24</Thickness>
     <Thickness x:Key="SettingsRowPadding">0,20</Thickness>
-    <Thickness x:Key="SettingsLastOptionPadding">0,20,0,0</Thickness>
-    <Thickness x:Key="SettingsRowBorderThickness">0,0,0,1</Thickness>
     <Thickness x:Key="SettingsBenchmarkMargin">0,0,0,20</Thickness>
     <x:Double x:Key="SettingsRowColumnGap">32</x:Double>
     <x:Double x:Key="SettingsLabelFontSize">14.5</x:Double>
@@ -466,7 +450,6 @@
     <x:Double x:Key="SettingsDescriptionFontSize">13</x:Double>
     <x:Double x:Key="SettingsDescriptionLineHeight">19.5</x:Double>
     <x:Double x:Key="SettingsLinkFontSize">13.5</x:Double>
-    <x:Double x:Key="SettingsOptionGap">10</x:Double>
     <x:Double x:Key="SettingsOptionFontSize">14</x:Double>
     <Thickness x:Key="BenchmarkPanelPadding">24,20</Thickness>
     <CornerRadius x:Key="BenchmarkPanelCornerRadius">12</CornerRadius>
@@ -479,14 +462,9 @@
     <x:Double x:Key="BenchmarkLabelFontSize">13</x:Double>
     <x:Double x:Key="BenchmarkFootnoteFontSize">12</x:Double>
     <x:Double x:Key="BenchmarkFootnoteLineHeight">18</x:Double>
-    <Thickness x:Key="BenchmarkTagPadding">10,3</Thickness>
-    <CornerRadius x:Key="BenchmarkTagCornerRadius">20</CornerRadius>
-    <x:Double x:Key="BenchmarkTagFontSize">12</x:Double>
-    <x:Double x:Key="BenchmarkTagGap">5</x:Double>
-    <Thickness x:Key="SettingsGroupHeaderPadding">4,0</Thickness>
     <x:Double x:Key="NavItemGap">4</x:Double>
     <x:Double x:Key="BrandSize">32</x:Double>
-    <x:Double x:Key="TitleBarHeight">44</x:Double>
+    <x:Double x:Key="TitleBarHeight">48</x:Double>
     <x:Double x:Key="PageTitleFontSize">28</x:Double>
     <x:Double x:Key="MetricValueFontSize">30</x:Double>
     <x:Double x:Key="PageTitleLineHeight">34</x:Double>
@@ -508,8 +486,6 @@
     <Thickness x:Key="SearchKeycapMargin">0,0,8,0</Thickness>
     <Thickness x:Key="KeycapBorderThickness">0,0,0,2</Thickness>
     <CornerRadius x:Key="KeycapCornerRadius">6</CornerRadius>
-    <Thickness x:Key="HistoryHeaderPadding">24,16,24,14</Thickness>
-    <Thickness x:Key="HistoryListPadding">16,12,16,16</Thickness>
     <x:Double x:Key="HomeStatsGap">16</x:Double>
     <x:Double x:Key="HomeMetricColumnGap">12</x:Double>
     <x:Double x:Key="HomeModelRowsGap">8</x:Double>
@@ -542,11 +518,6 @@
     <x:Double x:Key="HistoryMetaFontSize">12</x:Double>
     <x:Double x:Key="HistoryMetaGap">8</x:Double>
     <x:Double x:Key="HistoryGroupLabelFontSize">11.5</x:Double>
-    <Thickness x:Key="HistoryGroupMargin">20,16,16,8</Thickness>
-    <x:Double x:Key="HistoryTagFontSize">11.5</x:Double>
-    <Thickness x:Key="HistoryTagPadding">8,2</Thickness>
-    <CornerRadius x:Key="HistoryTagCornerRadius">20</CornerRadius>
-    <x:Double x:Key="HistoryTagIconSize">11</x:Double>
     <x:Double x:Key="IconButtonSize">32</x:Double>
     <x:Double x:Key="IconButtonGlyphSize">16</x:Double>
     <x:Double x:Key="HistoryActionGap">2</x:Double>
@@ -574,6 +545,12 @@
     <Style x:Key="SubtitleTextBlockStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
         <Setter Property="FontSize" Value="{StaticResource SubtitleFontSize}" />
         <Setter Property="Foreground" Value="{ThemeResource AppSecondaryTextBrush}" />
+    </Style>
+    <!-- A heading for a group of rows within a page section, such as Speech models groups. -->
+    <Style x:Key="GroupHeadingTextBlockStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
+        <Setter Property="FontFamily" Value="Segoe UI Variable Display" />
+        <Setter Property="FontSize" Value="20" />
+        <Setter Property="LineHeight" Value="28" />
     </Style>
     <Style x:Key="TitleTextBlockStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
         <Setter Property="FontSize" Value="{StaticResource PageTitleFontSize}" />
@@ -710,13 +687,6 @@
     <Style x:Key="SettingsCardStyle" TargetType="Border" BasedOn="{StaticResource CardStyle}">
         <Setter Property="Padding" Value="{StaticResource SettingsCardPadding}" />
     </Style>
-    <Style x:Key="SettingsSegmentTrackStyle" TargetType="Border">
-        <Setter Property="Background" Value="{ThemeResource AppBackgroundBrush}" />
-        <Setter Property="BorderBrush" Value="{ThemeResource AppBorderBrush}" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="{StaticResource SettingsSegmentTrackCornerRadius}" />
-        <Setter Property="Padding" Value="{StaticResource SettingsSegmentTrackPadding}" />
-    </Style>
     <Style x:Key="MetricCardStyle" TargetType="Border" BasedOn="{StaticResource CardStyle}">
         <Setter Property="Padding" Value="{StaticResource HomeMetricCardPadding}" />
     </Style>
@@ -746,98 +716,6 @@
         <Setter Property="Foreground" Value="{ThemeResource AppSecondaryTextBrush}" />
     </Style>
 
-    <Style x:Key="SegmentedListBoxStyle" TargetType="ListBox">
-        <Setter Property="Background" Value="Transparent" />
-        <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="Padding" Value="0" />
-        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-        <Setter Property="ItemsPanel">
-            <Setter.Value>
-                <ItemsPanelTemplate>
-                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource SettingsSegmentGap}" />
-                </ItemsPanelTemplate>
-            </Setter.Value>
-        </Setter>
-        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
-        <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled" />
-        <Setter Property="ScrollViewer.HorizontalScrollMode" Value="Disabled" />
-        <Setter Property="ScrollViewer.VerticalScrollMode" Value="Disabled" />
-    </Style>
-    <Style x:Key="SegmentedListBoxItemStyle" TargetType="ListBoxItem">
-        <Setter Property="HorizontalContentAlignment" Value="Center" />
-        <Setter Property="MinWidth" Value="0" />
-        <Setter Property="UseSystemFocusVisuals" Value="True" />
-        <Setter Property="FocusVisualPrimaryBrush" Value="{ThemeResource AppAccentBrush}" />
-        <Setter Property="VerticalContentAlignment" Value="Center" />
-        <Setter Property="MinHeight" Value="{StaticResource SettingsSegmentMinHeight}" />
-        <Setter Property="Padding" Value="{StaticResource SettingsSegmentPadding}" />
-        <Setter Property="Foreground" Value="{ThemeResource AppTextBrush}" />
-        <Setter Property="Background" Value="Transparent" />
-        <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="ListBoxItem">
-                    <Grid x:Name="RootGrid" Control.IsTemplateFocusTarget="True">
-                        <Border x:Name="SelectedBackground" Background="{ThemeResource AppSegmentSelectedBrush}"
-                                CornerRadius="{StaticResource SettingsSegmentCornerRadius}" Opacity="0" />
-                        <Border x:Name="HoverOverlay" Background="{ThemeResource AppHoverBrush}"
-                                CornerRadius="{StaticResource SettingsSegmentCornerRadius}" Opacity="0" />
-                        <ContentPresenter x:Name="ContentPresenter" Content="{TemplateBinding Content}"
-                                          ContentTemplate="{TemplateBinding ContentTemplate}"
-                                          FontSize="{TemplateBinding FontSize}"
-                                          FontWeight="{TemplateBinding FontWeight}"
-                                          Foreground="{TemplateBinding Foreground}"
-                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                                          Padding="{TemplateBinding Padding}" />
-                        <VisualStateManager.VisualStateGroups>
-                            <VisualStateGroup x:Name="CommonStates">
-                                <VisualState x:Name="Normal" />
-                                <VisualState x:Name="PointerOver">
-                                    <Storyboard>
-                                        <DoubleAnimation Storyboard.TargetName="HoverOverlay" Storyboard.TargetProperty="Opacity" To="1" Duration="0" />
-                                    </Storyboard>
-                                </VisualState>
-                                <VisualState x:Name="Selected">
-                                    <VisualState.Setters>
-                                        <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource AppSelectedTextBrush}" />
-                                    </VisualState.Setters>
-                                    <Storyboard>
-                                        <DoubleAnimation Storyboard.TargetName="SelectedBackground" Storyboard.TargetProperty="Opacity" To="1" Duration="0" />
-                                    </Storyboard>
-                                </VisualState>
-                                <VisualState x:Name="SelectedUnfocused">
-                                    <VisualState.Setters>
-                                        <Setter Target="SelectedBackground.Opacity" Value="1" />
-                                        <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource AppSelectedTextBrush}" />
-                                    </VisualState.Setters>
-                                </VisualState>
-                                <VisualState x:Name="SelectedPointerOver">
-                                    <VisualState.Setters>
-                                        <Setter Target="SelectedBackground.Opacity" Value="1" />
-                                        <Setter Target="HoverOverlay.Opacity" Value="1" />
-                                        <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource AppSelectedTextBrush}" />
-                                    </VisualState.Setters>
-                                </VisualState>
-                                <VisualState x:Name="SelectedPressed">
-                                    <VisualState.Setters>
-                                        <Setter Target="SelectedBackground.Opacity" Value="1" />
-                                        <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource AppSelectedTextBrush}" />
-                                    </VisualState.Setters>
-                                </VisualState>
-                                <VisualState x:Name="Pressed" />
-                                <VisualState x:Name="Disabled">
-                                    <VisualState.Setters>
-                                        <Setter Target="RootGrid.Opacity" Value="0.55" />
-                                    </VisualState.Setters>
-                                </VisualState>
-                            </VisualStateGroup>
-                        </VisualStateManager.VisualStateGroups>
-                    </Grid>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
-    </Style>
 
     <Style x:Key="ActivityEmptyCellStyle" TargetType="Border">
         <Setter Property="Background" Value="{ThemeResource InactiveChartBrush}" />
@@ -900,18 +778,6 @@
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Foreground" Value="{ThemeResource AppMutedTextBrush}" />
     </Style>
-    <Style x:Key="HistoryTagStyle" TargetType="Border">
-        <Setter Property="Background" Value="{ThemeResource AppTagBackgroundBrush}" />
-        <Setter Property="CornerRadius" Value="{StaticResource HistoryTagCornerRadius}" />
-        <Setter Property="Padding" Value="{StaticResource HistoryTagPadding}" />
-        <Setter Property="VerticalAlignment" Value="Center" />
-    </Style>
-    <Style x:Key="HistoryTagTextStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
-        <Setter Property="FontSize" Value="{StaticResource HistoryTagFontSize}" />
-        <Setter Property="FontWeight" Value="Medium" />
-        <Setter Property="Foreground" Value="{ThemeResource AppTagBrush}" />
-        <Setter Property="TextWrapping" Value="NoWrap" />
-    </Style>
     <!-- Transparent at rest. The default Button template resolves hover and pressed fills
          from the theme dictionaries above, including the platform High Contrast pairing. -->
     <Style x:Key="IconButtonStyle" TargetType="Button">
@@ -954,4 +820,8 @@
         <Setter Property="Background" Value="{ThemeResource AppControlBrush}" />
         <Setter Property="Foreground" Value="{ThemeResource ActivityMediumBrush}" />
     </Style>
+    <!-- Settings unit -->
+    <Thickness x:Key="SettingsRowDividerThickness">0,1,0,0</Thickness>
+    <Thickness x:Key="SettingsChildRowPadding">28,20,0,20</Thickness>
+    <x:Double x:Key="SettingsFieldWidth">220</x:Double>
 </ResourceDictionary>

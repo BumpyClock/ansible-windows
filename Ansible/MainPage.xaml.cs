@@ -26,13 +26,19 @@ public sealed partial class MainPage : Page
     private bool _rendering;
     private MeetingCleanupSettings? _renderedCleanupSettings;
 
+    private const string ErrorNoticeKey = "settings-error";
+    private readonly AppNotices _notices;
+
+    internal event Action? ShortcutLessonRequested;
+
     internal MainPage(DictationSession session, AppPaths paths, Func<nint> windowHandle,
         Action<DictationShortcut> changeHotkey, Action<bool> changeMode, Action<bool> captureShortcut,
-        LocalDiagnosticLog diagnostics)
+        LocalDiagnosticLog diagnostics, AppNotices notices)
     {
         _rendering = true;
         InitializeComponent();
         _session = session;
+        _notices = notices;
         _changeHotkey = changeHotkey;
         _changeMode = changeMode;
         _captureShortcut = captureShortcut;
@@ -67,6 +73,20 @@ public sealed partial class MainPage : Page
         _diagnosticStatusTimer.Tick += (_, _) => RenderDiagnosticStatus();
     }
 
+    // A failed change replaces the page error. The next change that succeeds clears it.
+    private bool Try(Action change, string title = "Operation failed")
+    {
+        try { change(); }
+        catch (Exception error) { ReportError(error, title); return false; }
+        ClearError();
+        return true;
+    }
+
+    private void ReportError(Exception error, string title = "Operation failed") =>
+        _notices.Set(ErrorNoticeKey, new NoticeContent(NoticeSeverity.Error, title, error.Message), NoticeArea.Settings);
+
+    private void ClearError() => _notices.Set(ErrorNoticeKey, null);
+
     private void Render()
     {
         _rendering = true;
@@ -82,32 +102,27 @@ public sealed partial class MainPage : Page
                 NativeBackend.Vulkan => 2,
                 _ => throw new InvalidDataException("The recognition processor setting is invalid.")
             };
-            BackendRow.Description = _state.Settings.Backend == NativeBackend.Auto
-                ? string.IsNullOrEmpty(_state.DeviceSelectionSummary)
-                    ? "Auto compares CPU and GPU using a bundled speech sample, then remembers the faster working device for each model. The first preparation takes longer. Audio stays local."
-                    : $"Last device comparison: {_state.DeviceSelectionSummary}"
-                : _state.Settings.Backend == NativeBackend.Vulkan && _state.SelectedModel?.Family == "nemotron_asr"
-                    ? "Nemotron GPU streaming has a known native crash in this build. Choose Auto or CPU for dictation and replay."
-                    : "Manual selection applies to the next recognition. Choose Auto to compare devices and recover from a failed GPU qualification.";
+            // The description and the device result do not depend on the choice, so changing it does not reflow the page.
+            // The result describes the last model load and changes only when recognition prepares again.
             DeviceComparison.Comparison = _state.DeviceComparison;
             DeviceComparison.Summary = _state.DeviceSelectionSummary;
             if (LanguageBox.FocusState == FocusState.Unfocused) { LanguageBox.Text = _state.Language; }
-            RenderNotice();
             UsageToggle.IsOn = _state.Settings.CollectUsage;
             DiagnosticsToggle.IsOn = _state.Settings.LocalDiagnostics;
             DiagnosticsToggle.IsEnabled = idle;
             if (_state.Settings.LocalDiagnostics) _diagnosticStatusTimer.Start();
             else _diagnosticStatusTimer.Stop();
             RenderDiagnosticStatus();
-            HideFromCaptureChoice.IsChecked = _state.Settings.HideFromCapture;
-            AutoDetectMeetingsChoice.IsChecked = _state.Settings.AutoDetectMeetings;
+            HideFromCaptureToggle.IsOn = _state.Settings.HideFromCapture;
+            AutoDetectMeetingsToggle.IsOn = _state.Settings.AutoDetectMeetings;
             UsageToggle.IsEnabled = idle;
-            ToolTipService.SetToolTip(UsageRow, $"Stored on this device. Never audio or text. Session dates, model, word counts, and timing. File: {_session.UsagePath}");
+            ToolTipService.SetToolTip(UsageToggle,$"Stored on this device. Never audio or text. Session dates, model, word counts, and timing. File: {_session.UsagePath}");
             AutomationProperties.SetHelpText(UsageToggle, _session.UsagePath);
             if (!_recordingShortcut) { SetShortcutDisplay(_state.Settings.Shortcut.DisplayText); }
             HotkeyCaptureBox.IsEnabled = idle;
             ResetShortcutButton.Visibility = _state.Settings.Shortcut != DictationShortcut.Default ? Visibility.Visible : Visibility.Collapsed;
             ResetShortcutButton.IsEnabled = idle;
+            ChangeShortcutButton.IsEnabled = idle;
             PushToTalkChoice.IsEnabled = idle;
             PushToTalkChoice.SelectedIndex = _state.Settings.PushToTalk ? 0 : 1;
             OverlayFollowsCaretToggle.IsOn = _state.Settings.OverlayFollowsCaret;
@@ -127,8 +142,8 @@ public sealed partial class MainPage : Page
         InsertionChoice.SelectedIndex = typing ? 1 : 0;
         InsertionChoice.IsEnabled = idle;
         InsertionRow.Description = typing
-            ? "Types one character at a time. Use this for apps that block paste."
-            : "Replaces your clipboard with dictated text and sends the selected paste shortcut. The text stays available for apps that paste later. Requests exclusion from clipboard history and cloud sync. Use Type characters to preserve your clipboard.";
+            ? "Types characters at a steady pace and keeps your clipboard. Slower than paste."
+            : "Replaces your clipboard with the dictated text and sends the paste shortcut. The text stays available for apps that paste later. Requests exclusion from clipboard history and cloud sync.";
         PasteShortcutRow.Visibility = typing ? Visibility.Collapsed : Visibility.Visible;
         PasteShortcutChoice.IsEnabled = idle;
         PasteShortcutChoice.SelectedIndex = (int)_state.Settings.PasteShortcut;
@@ -154,132 +169,163 @@ public sealed partial class MainPage : Page
 
     private void CleanupProviderChanged(object sender, SelectionChangedEventArgs args)
     {
-        if (CopilotCleanupFields is not null) RenderCleanupProvider();
+        if (CopilotCleanupFields is null) return;
+        RenderCleanupProvider();
+        if (_rendering) return;
+        // Consent names one provider, so a new provider turns automatic cleanup off until the user confirms it.
+        var wasAutomatic = _session.State.Settings.MeetingCleanup.Automatic;
+        if (!SaveCleanupSettings(automatic: false) || !wasAutomatic) return;
+        AutomaticCleanupToggle.IsOn = false;
+        _notices.Confirm("Automatic cleanup is off. Turn it on again to send meetings to the new provider.");
+    }
+
+    private void CleanupEffortChanged(object sender, SelectionChangedEventArgs args)
+    {
+        if (!_rendering) SaveCleanupSettings();
+    }
+
+    private void CleanupModelCommitted(object sender, RoutedEventArgs args)
+    {
+        if (!_rendering) SaveCleanupSettings();
+    }
+
+    private void CleanupModelKeyDown(object sender, KeyRoutedEventArgs args)
+    {
+        if (args.Key != VirtualKey.Enter) return;
+        args.Handled = true;
+        SaveCleanupSettings();
     }
 
     private void RenderCleanupProvider()
     {
-        CopilotCleanupFields.Visibility = CleanupProviderChoice.SelectedIndex == 0 ? Visibility.Visible : Visibility.Collapsed;
-        OpenAICleanupFields.Visibility = CleanupProviderChoice.SelectedIndex == 1 ? Visibility.Visible : Visibility.Collapsed;
+        var copilot = CleanupProviderChoice.SelectedIndex == 0;
+        CopilotCleanupFields.Visibility = copilot ? Visibility.Visible : Visibility.Collapsed;
+        OpenAICleanupFields.Visibility = copilot ? Visibility.Collapsed : Visibility.Visible;
+        CleanupProviderRow.Description = copilot
+            ? "Uses the installed Copilot CLI and its signed-in account. Run copilot login if needed. No OpenAI API key is used. No fallback to another service or account."
+            : "Sends text directly to the OpenAI Responses API. Requires an OpenAI API model with structured outputs and separate API billing. Copilot model names are not automatically mapped. No fallback to another service or account.";
     }
 
     private void RenderKeyStatus()
     {
         try
         {
-            OpenAIKeyStatus.Text = MeetingCleanupService.HasKey
+            OpenAIKeyRow.Description = MeetingCleanupService.HasKey
                 ? "API key saved in Windows Credential Locker. It is not stored in settings or logs."
                 : "No API key saved. The key is stored in Windows Credential Locker, not settings or logs.";
         }
-        catch (Exception) { OpenAIKeyStatus.Text = "Windows Credential Locker could not be read. Save the key again or check Windows credential access."; }
+        catch (Exception) { OpenAIKeyRow.Description ="Windows Credential Locker could not be read. Save the key again or check Windows credential access."; }
     }
 
     private void SaveOpenAIKeyClicked(object sender, RoutedEventArgs args)
     {
-        try
-        {
-            MeetingCleanupService.SaveKey(OpenAIKeyBox.Password.Trim());
-            OpenAIKeyBox.Password = "";
-            RenderKeyStatus();
-        }
-        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); }
+        if (!Try(() => MeetingCleanupService.SaveKey(OpenAIKeyBox.Password.Trim()))) return;
+        OpenAIKeyBox.Password = "";
+        RenderKeyStatus();
     }
 
     private void RemoveOpenAIKeyClicked(object sender, RoutedEventArgs args)
     {
-        try
-        {
-            MeetingCleanupService.RemoveKey();
-            OpenAIKeyBox.Password = "";
-            RenderKeyStatus();
-        }
-        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); }
+        if (!Try(MeetingCleanupService.RemoveKey)) return;
+        OpenAIKeyBox.Password = "";
+        RenderKeyStatus();
     }
 
-    private void SaveCleanupSettingsClicked(object sender, RoutedEventArgs args)
+    // Cleanup fields save as they change. The saved opt-in turns on only through the confirmed toggle.
+    private bool SaveCleanupSettings(bool? automatic = null)
     {
         try
         {
+            var saved = _session.State.Settings.MeetingCleanup;
             var settings = new MeetingCleanupSettings
             {
                 Provider = (MeetingCleanupProvider)CleanupProviderChoice.SelectedIndex,
-                Automatic = AutomaticCleanupToggle.IsOn,
+                Automatic = automatic ?? saved.Automatic,
                 CopilotModel = CopilotCleanupModelBox.Text.Trim(),
                 CopilotReasoningEffort = (string)CopilotCleanupEffortChoice.SelectedItem,
                 OpenAIModel = OpenAICleanupModelBox.Text.Trim(),
                 OpenAIReasoningEffort = (string)OpenAICleanupEffortChoice.SelectedItem
             };
+            if (settings == saved) return true;
             settings.Validate();
             if (settings.Automatic && settings.Provider == MeetingCleanupProvider.OpenAI && !MeetingCleanupService.HasKey)
                 throw new InvalidOperationException("Save an OpenAI API key before enabling automatic cleanup.");
             _session.SetMeetingCleanup(settings);
-            CleanupSettingsStatus.Text = _session.State.Notice.Kind is NoticeKind.Warning or NoticeKind.Error
-                ? _session.State.Notice.Message
-                : settings.Automatic ? "Saved. New completed meetings will be cleaned up automatically." : "Saved. Automatic cleanup is off.";
+            ClearError();
+            return true;
         }
         catch (Exception error)
         {
-            CleanupSettingsStatus.Text = error.Message;
-            _session.ReportUiError(error, NoticeArea.Settings);
+            ReportError(error);
+            // Show the saved values again so the fields never claim settings that were rejected.
+            _renderedCleanupSettings = null;
+            Render();
+            return false;
         }
     }
 
-    private void RenderNotice()
+    private async void AutomaticCleanupToggled(object sender, RoutedEventArgs args)
     {
-        var notice = _state.Notice;
-        if (!notice.ShouldDisplayOn(NoticeArea.Settings))
+        if (_rendering || AutomaticCleanupToggle.IsOn == _session.State.Settings.MeetingCleanup.Automatic) return;
+        if (!AutomaticCleanupToggle.IsOn)
         {
-            StatusInfo.IsOpen = false;
-            StatusInfo.Visibility = Visibility.Collapsed;
+            SaveCleanupSettings(automatic: false);
             return;
         }
-        StatusInfo.Severity = notice.Kind == NoticeKind.Error ? InfoBarSeverity.Error : InfoBarSeverity.Warning;
-        StatusInfo.Title = notice.Title;
-        StatusInfo.Message = notice.Message;
-        StatusInfo.IsOpen = true;
-        StatusInfo.Visibility = Visibility.Visible;
-    }
-
-    private void StatusInfoClosing(InfoBar sender, InfoBarClosingEventArgs args)
-    {
-        if (args.Reason == InfoBarCloseReason.CloseButton) { _session.DismissNotice(_state.Notice); }
-        sender.Visibility = Visibility.Collapsed;
+        // Enabling sends meeting text without another prompt, so the opt-in is saved only after this confirmation.
+        var service = CleanupProviderChoice.SelectedIndex == 0 ? "Copilot CLI" : "OpenAI API";
+        var dialog = new ContentDialog
+        {
+            Title = $"Send each new completed meeting transcript to {service} without asking again?",
+            Content = new TextBlock
+            {
+                Text = "Enabling this authorizes sending each new completed meeting transcript to the selected provider without another confirmation. Applies to meetings started after saving. Saved meetings are not uploaded automatically.",
+                TextWrapping = TextWrapping.Wrap,
+            },
+            PrimaryButtonText = "Turn on",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = XamlRoot,
+        };
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary &&
+            SaveCleanupSettings(automatic: true) && _session.State.Settings.MeetingCleanup.Automatic)
+        {
+            _notices.Confirm("Automatic cleanup is on for new meetings.");
+            return;
+        }
+        // Cancelled or not saved: the switch returns to the saved value. The Toggled event this raises finds
+        // them equal and returns at the guard above.
+        AutomaticCleanupToggle.IsOn = _session.State.Settings.MeetingCleanup.Automatic;
     }
 
     private void BackendChanged(object sender, SelectionChangedEventArgs args)
     {
         if (_rendering || BackendChoice is null || BackendChoice.SelectedIndex < 0) { return; }
-        try
+        Try(() => _session.SetBackend(BackendChoice.SelectedIndex switch
         {
-            _session.SetBackend(BackendChoice.SelectedIndex switch
-            {
-                0 => NativeBackend.Auto,
-                1 => NativeBackend.Cpu,
-                2 => NativeBackend.Vulkan,
-                _ => throw new InvalidOperationException("Choose a recognition processor.")
-            });
-        }
-        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); }
+            0 => NativeBackend.Auto,
+            1 => NativeBackend.Cpu,
+            2 => NativeBackend.Vulkan,
+            _ => throw new InvalidOperationException("Choose a recognition processor.")
+        }));
     }
 
     private void LanguageChanged(object sender, TextChangedEventArgs args)
     {
         if (_rendering || LanguageBox is null) { return; }
-        try { _session.SetLanguage(LanguageBox.Text); }
-        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); }
+        Try(() => _session.SetLanguage(LanguageBox.Text));
     }
+
     private void UsageToggled(object sender, RoutedEventArgs args)
     {
         if (_rendering) { return; }
-        try { _session.SetUsageEnabled(UsageToggle.IsOn); }
-        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); Render(); }
+        if (!Try(() => _session.SetUsageEnabled(UsageToggle.IsOn))) Render();
     }
 
     private void DiagnosticsToggled(object sender, RoutedEventArgs args)
     {
         if (_rendering || DiagnosticsToggle.IsOn == _session.State.Settings.LocalDiagnostics) return;
-        try { _session.SetLocalDiagnosticsEnabled(DiagnosticsToggle.IsOn); }
-        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); Render(); }
+        if (!Try(() => _session.SetLocalDiagnosticsEnabled(DiagnosticsToggle.IsOn))) Render();
     }
 
     private void RenderDiagnosticStatus()
@@ -293,22 +339,21 @@ public sealed partial class MainPage : Page
     private void OverlayFollowsCaretToggled(object sender, RoutedEventArgs args)
     {
         if (_rendering || OverlayFollowsCaretToggle.IsOn == _session.State.Settings.OverlayFollowsCaret) { return; }
-        try { _session.SetOverlayFollowsCaret(OverlayFollowsCaretToggle.IsOn); }
-        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); Render(); }
+        if (!Try(() => _session.SetOverlayFollowsCaret(OverlayFollowsCaretToggle.IsOn))) Render();
     }
 
     private void HideFromCaptureChanged(object sender, RoutedEventArgs args)
     {
-        if (_rendering || HideFromCaptureChoice.IsChecked is not bool enabled || enabled == _session.State.Settings.HideFromCapture) return;
-        try { _session.SetHideFromCapture(enabled); }
-        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); Render(); }
+        var enabled = HideFromCaptureToggle.IsOn;
+        if (_rendering || enabled == _session.State.Settings.HideFromCapture) return;
+        if (!Try(() => _session.SetHideFromCapture(enabled))) Render();
     }
 
     private void AutoDetectMeetingsChanged(object sender, RoutedEventArgs args)
     {
-        if (_rendering || AutoDetectMeetingsChoice.IsChecked is not bool enabled || enabled == _session.State.Settings.AutoDetectMeetings) return;
-        try { _session.SetAutoDetectMeetings(enabled); }
-        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); Render(); }
+        var enabled = AutoDetectMeetingsToggle.IsOn;
+        if (_rendering || enabled == _session.State.Settings.AutoDetectMeetings) return;
+        if (!Try(() => _session.SetAutoDetectMeetings(enabled))) Render();
     }
 
     private void DictationModeChanged(object sender, SelectionChangedEventArgs args)
@@ -317,8 +362,7 @@ public sealed partial class MainPage : Page
         var pushToTalk = PushToTalkChoice.SelectedIndex == 0;
         // Selection controls can raise SelectionChanged after Render returns; ignore echoes of the current setting.
         if (pushToTalk == _session.State.Settings.PushToTalk) { return; }
-        try { _changeMode(pushToTalk); }
-        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); Render(); }
+        if (!Try(() => _changeMode(pushToTalk))) Render();
     }
 
     private void InsertionMethodChanged(object sender, SelectionChangedEventArgs args)
@@ -326,8 +370,7 @@ public sealed partial class MainPage : Page
         if (_rendering || InsertionChoice.SelectedIndex < 0) { return; }
         var method = InsertionChoice.SelectedIndex == 0 ? TextInsertionMethod.Paste : TextInsertionMethod.Type;
         if (method == _session.State.Settings.InsertionMethod) { return; }
-        try { _session.SetInsertionMethod(method); }
-        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); Render(); }
+        if (!Try(() => _session.SetInsertionMethod(method))) Render();
     }
 
     private void TypingGapChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
@@ -336,8 +379,7 @@ public sealed partial class MainPage : Page
         if (double.IsNaN(args.NewValue)) { Render(); return; }
         var gap = (int)Math.Round(Math.Clamp(args.NewValue, 0, AppSettings.MaxTypingGapMilliseconds));
         if (gap == _session.State.Settings.TypingGapMilliseconds) { return; }
-        try { _session.SetTypingGap(gap); }
-        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); Render(); }
+        if (!Try(() => _session.SetTypingGap(gap))) Render();
     }
 
     private void PasteShortcutChanged(object sender, SelectionChangedEventArgs args)
@@ -345,8 +387,7 @@ public sealed partial class MainPage : Page
         if (_rendering || PasteShortcutChoice.SelectedIndex < 0) { return; }
         var shortcut = (PasteShortcut)PasteShortcutChoice.SelectedIndex;
         if (shortcut == _session.State.Settings.PasteShortcut) { return; }
-        try { _session.SetPasteShortcut(shortcut); }
-        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); Render(); }
+        if (!Try(() => _session.SetPasteShortcut(shortcut))) Render();
     }
 
     private void MicrophoneBoostChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
@@ -355,15 +396,16 @@ public sealed partial class MainPage : Page
         if (double.IsNaN(args.NewValue)) { Render(); return; }
         var boost = (int)Math.Round(Math.Clamp(args.NewValue, 0, MicrophoneBoost.MaxDecibels));
         if (boost == _session.State.Settings.MicrophoneBoostDecibels) { Render(); return; }
-        try { _session.SetMicrophoneBoost(boost); }
-        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); Render(); }
+        if (!Try(() => _session.SetMicrophoneBoost(boost))) Render();
     }
 
-    private void ResetShortcutClicked(object sender, RoutedEventArgs args)
-    {
-        try { _changeHotkey(DictationShortcut.Default); }
-        catch (Exception error) { _session.Notify(NoticeKind.Error, "Shortcut unavailable", error.Message, NoticeArea.Settings); }
-    }
+    private void ChangeShortcutClicked(object sender, RoutedEventArgs args) =>
+        HotkeyCaptureBox.Focus(FocusState.Programmatic);
+
+    private void PracticeShortcutClicked(object sender, RoutedEventArgs args) => ShortcutLessonRequested?.Invoke();
+
+    private void ResetShortcutClicked(object sender, RoutedEventArgs args) =>
+        Try(() => _changeHotkey(DictationShortcut.Default), "Shortcut unavailable");
 
     private void ShortcutGotFocus(object sender, RoutedEventArgs args) => StartShortcutCapture();
 
@@ -379,7 +421,7 @@ public sealed partial class MainPage : Page
             _shortcutPrimarySeen = false;
             SetShortcutDisplay("Press a shortcut; Esc cancels");
         }
-        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); }
+        catch (Exception error) { ReportError(error); }
     }
 
     private void ShortcutKeyDown(object sender, KeyRoutedEventArgs args)
@@ -436,9 +478,8 @@ public sealed partial class MainPage : Page
         }
         else if ((uint)args.Key != shortcut.Key) { return; }
         args.Handled = true;
-        try { _changeHotkey(shortcut); }
-        catch (Exception error) { _session.Notify(NoticeKind.Error, "Shortcut unavailable", error.Message, NoticeArea.Settings); }
-        finally { EndShortcutCapture(); }
+        Try(() => _changeHotkey(shortcut), "Shortcut unavailable");
+        EndShortcutCapture();
     }
 
     private static bool Down(VirtualKey key) =>
@@ -459,7 +500,7 @@ public sealed partial class MainPage : Page
         _pendingShortcut = null;
         _shortcutPrimarySeen = false;
         try { _captureShortcut(false); }
-        catch (Exception error) { _session.Notify(NoticeKind.Error, "Shortcut unavailable", error.Message, NoticeArea.Settings); }
+        catch (Exception error) { ReportError(error, "Shortcut unavailable"); }
         SetShortcutDisplay(_session.State.Settings.Shortcut.DisplayText);
     }
 

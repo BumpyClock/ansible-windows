@@ -8,7 +8,7 @@
              mc:Ignorable="d">
     <UserControl.Content>
         <Grid x:Name="LayoutRoot"
-              Padding="{StaticResource SettingsRowPadding}"
+              BorderBrush="{ThemeResource AppBorderBrush}"
               ColumnSpacing="{StaticResource SettingsRowColumnGap}"
               RowSpacing="{StaticResource SettingsRowRowSpacing}">
         <Grid.RowDefinitions>
@@ -37,11 +37,16 @@
                        Style="{StaticResource CaptionSecondaryStyle}" />
         </StackPanel>
 
-        <ContentPresenter x:Name="ControlPresenter"
-                          Grid.Row="1"
-                          HorizontalAlignment="Stretch"
-                          VerticalAlignment="Center"
-                          Content="{x:Bind ControlContent, Mode=OneWay}" />
+        <!-- A toggle's On/Off label sits before the switch, as in Windows Settings, so every control ends at the right edge. -->
+        <Grid x:Name="ControlPresenter" Grid.Row="1" VerticalAlignment="Center" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="ToggleStateText" Visibility="Collapsed" VerticalAlignment="Center"
+                       AutomationProperties.AccessibilityView="Raw" />
+            <ContentPresenter Grid.Column="1" Content="{x:Bind ControlContent, Mode=OneWay}" />
+        </Grid>
         </Grid>
     </UserControl.Content>
 </UserControl>

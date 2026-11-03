@@ -18,6 +18,7 @@ public sealed class AutoDeviceQualifierTests
         Assert.Equal(NativeDiagnosticSource.Qualification, qualifier.Current.Source);
         Assert.Equal(ticket.Selection, Assert.Single(DeviceBenchmark.ReadCache(fixture.Cache)));
         Assert.Equal(ticket.Selection.MeasuredAt, qualifier.Current.Comparison!.MeasuredAt);
+        Assert.Equal(("Model", DeviceComparisonKind.WholeRecording), (qualifier.Current.Comparison.ModelName, qualifier.Current.Comparison.Kind));
         Assert.Contains("median of three", qualifier.Current.Summary);
     }
 
@@ -274,6 +275,7 @@ public sealed class AutoDeviceQualifierTests
         fixture.Result = backend => new(backend, backend == NativeBackend.Cpu ? 600 : 100, null);
         var qualifier = fixture.Create();
         var ticket = fixture.Qualify(qualifier, fixture.MeetingInput);
+        Assert.Equal(DeviceComparisonKind.Meeting, qualifier.Current.Comparison!.Kind);
         var attempts = 0;
 
         var error = Assert.Throws<MeetingRealTimeException>(() =>
@@ -302,20 +304,6 @@ public sealed class AutoDeviceQualifierTests
         Assert.NotEqual(first.Selection.Key, next.Selection.Key);
         Assert.Equal(2000, next.SampleMilliseconds);
         Assert.Contains("0.25x", qualifier.Current.Summary);
-    }
-
-    [Fact]
-    public void NemotronStreamingNeverProbesVulkan()
-    {
-        using var fixture = new Fixture();
-        var qualifier = fixture.Create();
-        var input = fixture.MeetingInput with { Family = "nemotron_asr" };
-
-        var ticket = fixture.Qualify(qualifier, input);
-
-        Assert.Equal(["identity", "prepare", "Cpu"], fixture.Events);
-        Assert.Equal(NativeBackend.Cpu, ticket.Backend);
-        Assert.Contains("qualification skipped", qualifier.Current.Comparison!.GpuError);
     }
 
     [Theory]
@@ -429,7 +417,7 @@ public sealed class AutoDeviceQualifierTests
             var library = Path.Combine(Directory, "native.dll");
             File.WriteAllText(library, "native");
             Input = new(new(library, "catalog", "models", Path.Combine(Directory, "sample.wav"),
-                "model", NativeBackend.Cpu, 0, 4, 512, "offline", 0), "model fingerprint", "kroko_asr");
+                "model", NativeBackend.Cpu, 0, 4, 512, "offline", 0), "model fingerprint", "Model");
             WriteSample(1);
         }
 

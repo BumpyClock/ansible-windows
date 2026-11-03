@@ -16,7 +16,10 @@ namespace Ansible;
 
 public sealed partial class FloatingDictationWindow : Window
 {
+    /// <summary>The notice key for the preview's failures, shared with the window that opens it.</summary>
+    internal const string NoticeKey = "floating-preview";
     private readonly DictationSession _session;
+    private readonly AppNotices _notices;
     private SessionSnapshot _state;
     private readonly UiSessionObserver _observer;
     private readonly MainWindow _owner;
@@ -39,10 +42,11 @@ public sealed partial class FloatingDictationWindow : Window
     private bool? _capturePrivacy;
     private (int Left, int Top, int Width, int Height) _windowShape;
 
-    internal FloatingDictationWindow(DictationSession session, MainWindow owner)
+    internal FloatingDictationWindow(DictationSession session, MainWindow owner, AppNotices notices)
     {
         InitializeComponent();
         _session = session;
+        _notices = notices;
         _state = session.State;
         _owner = owner;
         PillBorder.Width = FloatingPreviewPresentation.WaveformWidth;
@@ -79,7 +83,7 @@ public sealed partial class FloatingDictationWindow : Window
             try { await Task.WhenAll(_cleanupTasks); }
             catch (Exception error)
             {
-                _session.ReportUiError(new InvalidOperationException("The floating preview could not shut down.", error));
+                _notices.SetError(NoticeKey, new InvalidOperationException("The floating preview could not shut down.", error));
             }
         };
         Render();
@@ -151,7 +155,7 @@ public sealed partial class FloatingDictationWindow : Window
     {
         if (_closed) { return; }
         try { ApplyCapturePrivacy(_state.Settings.HideFromCapture); }
-        catch (Exception error) { _session.Notify(NoticeKind.Warning, "Screen capture privacy unavailable", error.Message, NoticeArea.Application); }
+        catch (Exception error) { ShowCapturePrivacyFailure(error); }
         var presentation = FloatingPreviewPresentation.From(_state);
         if (_state.IsLiveOperation) { _replay = _state.IsReplay; }
         var source = _replay ? "Public WAV replay. No microphone is open." : "Microphone audio. On-device recognition.";
@@ -171,6 +175,10 @@ public sealed partial class FloatingDictationWindow : Window
         }
         QueueLayout();
     }
+
+    // One key for the condition across windows, so the main window clears it after the next successful apply.
+    private void ShowCapturePrivacyFailure(Exception error) => _notices.Set(MainWindow.CapturePrivacyNoticeKey,
+        new NoticeContent(NoticeSeverity.Warning, "Screen capture privacy unavailable", error.Message), NoticeArea.Application);
 
     internal void ApplyCapturePrivacy(bool enabled)
     {
@@ -276,7 +284,7 @@ public sealed partial class FloatingDictationWindow : Window
             _pill ??= new NativeCompositionPill(WinRT.Interop.WindowNative.GetWindowHandle(_owner),
                 QueueTerminalDismiss, _cleanupTasks.Add);
             try { _pill.ApplyCapturePrivacy(_state.Settings.HideFromCapture); }
-            catch (Exception error) { _session.Notify(NoticeKind.Warning, "Screen capture privacy unavailable", error.Message, NoticeArea.Application); }
+            catch (Exception error) { ShowCapturePrivacyFailure(error); }
             var foreground = ((SolidColorBrush)PreviewRoot.BorderBrush).Color;
             _pill.Configure(bounds.X + shape.Item1, bounds.Y + shape.Item2, pillWidth, pillHeight,
                 scale, foreground, ((SolidColorBrush)PreviewRoot.Background).Color,
@@ -309,7 +317,7 @@ public sealed partial class FloatingDictationWindow : Window
             try { DismissTerminalPreview(); }
             catch (Exception error)
             {
-                _session.ReportUiError(new InvalidOperationException("The floating preview could not be dismissed.", error));
+                _notices.SetError(NoticeKey, new InvalidOperationException("The floating preview could not be dismissed.", error));
             }
         }))
         {

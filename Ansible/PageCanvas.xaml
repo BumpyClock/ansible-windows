@@ -4,7 +4,8 @@
     <UserControl.Content>
         <ScrollViewer x:Name="Viewport" HorizontalScrollBarVisibility="Disabled" HorizontalScrollMode="Disabled"
                       HorizontalContentAlignment="Stretch" VerticalScrollBarVisibility="Auto"
-                      AutomationProperties.AutomationId="PageViewport" SizeChanged="ViewportSizeChanged">
+                      AutomationProperties.AutomationId="PageViewport" SizeChanged="ViewportSizeChanged"
+                      ViewChanged="ViewportViewChanged">
             <Grid x:Name="ContentHost" MaxWidth="{StaticResource PageContentMaxWidth}"
                   Padding="{StaticResource PagePadding}">
                 <Grid.RowDefinitions>

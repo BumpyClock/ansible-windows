@@ -67,11 +67,13 @@ dotnet run --project .\Ansible.Probe -- `
 Auto example. Build the app first so the worker exists. Use the public sample as
 the positional WAV; Auto uses that file for isolated qualification. Use the
 `Debug` worker folder after a Debug app build. Auto probes CPU, then GPU;
-compared times exclude load and warmup. Each device has a five-minute deadline
-that includes load, warmup, recognition, and teardown. The CLI also has a
+compared times exclude load and warmup. CPU has a 150-second deadline and GPU a
+two-minute deadline, so both fit inside the app's five-minute recognition
+operation; each includes load, warmup, recognition, and teardown. The CLI also has a
 three-minute timeout for each recognition operation, so it can cancel qualification before
 a device deadline. A GPU worker crash or
-timeout disqualifies GPU only. Shared validation, integrity, memory, protocol,
+timeout, or GPU device-memory exhaustion (`VK_ERROR_OUT_OF_DEVICE_MEMORY`),
+disqualifies GPU only. Shared validation, integrity, host memory, protocol,
 or ownership errors abort calibration and do not write a device cache entry:
 
 ```powershell
@@ -266,9 +268,10 @@ calls; a blocked Windows call can delay shutdown while its owned worker is joine
 - Nemotron GPU streaming has a recorded failure on Intel Arc 140V with driver
   `32.0.101.8425` (2026-10-08): WAV transcription completed, but streaming cleanup
   terminated with native `vk::DeviceLostError` from `vk::Queue::submit`. This can
-  terminate the app. Native Auto streaming skips Nemotron Vulkan qualification
-  and uses a qualified CPU. Manual GPU has no fallback. Other
-  model/GPU combinations require separate qualification. Isolated
+  terminate the app. Auto qualifies Nemotron Vulkan like every other model, so
+  a GPU that passes isolated qualification runs live Nemotron streaming in the
+  app process. Manual GPU has no fallback. Each model/GPU combination requires
+  separate qualification. Isolated
   `Ansible.DeviceProbe` qualification cannot catch a later in-process driver
   crash; live GPU work still runs in the app process. Auto does not replay
   consumed live audio after a GPU failure.

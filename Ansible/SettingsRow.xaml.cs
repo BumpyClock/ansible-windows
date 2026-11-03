@@ -22,9 +22,16 @@ public sealed partial class SettingsRow : UserControl
     public static readonly DependencyProperty CompactAlignmentProperty =
         DependencyProperty.Register(nameof(CompactAlignment), typeof(HorizontalAlignment), typeof(SettingsRow), new PropertyMetadata(HorizontalAlignment.Stretch, OnLayoutPropertyChanged));
 
+    public static readonly DependencyProperty ShowDividerProperty =
+        DependencyProperty.Register(nameof(ShowDivider), typeof(bool), typeof(SettingsRow), new PropertyMetadata(true, OnLayoutPropertyChanged));
+
+    public static readonly DependencyProperty IsChildProperty =
+        DependencyProperty.Register(nameof(IsChild), typeof(bool), typeof(SettingsRow), new PropertyMetadata(false, OnLayoutPropertyChanged));
+
     public SettingsRow()
     {
         InitializeComponent();
+        ApplyChrome();
         SizeChanged += LayoutSizeChanged;
         Loaded += (_, _) =>
         {
@@ -65,16 +72,61 @@ public sealed partial class SettingsRow : UserControl
         set => SetValue(CompactAlignmentProperty, value);
     }
 
+    /// <summary>Draws a hairline above the row. The first row in a group turns it off. Collapsing a row removes its divider.</summary>
+    public bool ShowDivider
+    {
+        get => (bool)GetValue(ShowDividerProperty);
+        set => SetValue(ShowDividerProperty, value);
+    }
+
+    /// <summary>Indents the row under the setting it depends on.</summary>
+    public bool IsChild
+    {
+        get => (bool)GetValue(IsChildProperty);
+        set => SetValue(IsChildProperty, value);
+    }
+
     private static void OnLayoutPropertyChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
     {
         if (sender is SettingsRow row)
         {
+            if (args.Property == ControlContentProperty) row.AttachToggle(args.NewValue as ToggleSwitch);
             row.UpdateDescription();
+            row.ApplyChrome();
             row.ApplyLayout(row.ActualWidth);
         }
     }
 
     private void LayoutSizeChanged(object sender, SizeChangedEventArgs args) => ApplyLayout(args.NewSize.Width);
+
+    // The stock ToggleSwitch draws its On/Off text after the switch. The row draws it before the switch instead,
+    // and the empty template column after the switch is pulled back so the switch ends at the right edge.
+    private void AttachToggle(ToggleSwitch? toggle)
+    {
+        ToggleStateText.Visibility = toggle is null ? Visibility.Collapsed : Visibility.Visible;
+        if (toggle is null) return;
+        toggle.OnContent = null;
+        toggle.OffContent = null;
+        toggle.MinWidth = 0;
+        toggle.Margin = new Thickness(0, 0, -12, 0);
+        toggle.Toggled += (_, _) => RenderToggleState(toggle);
+        toggle.IsEnabledChanged += (_, _) => RenderToggleState(toggle);
+        RenderToggleState(toggle);
+    }
+
+    private void RenderToggleState(ToggleSwitch toggle)
+    {
+        ToggleStateText.Text = toggle.IsOn ? "On" : "Off";
+        ToggleStateText.Opacity = toggle.IsEnabled ? 1 : 0.5;
+    }
+
+    // Divider and padding follow ShowDivider and IsChild. Code is their only source so the two cannot disagree.
+    private void ApplyChrome()
+    {
+        var resources = Application.Current.Resources;
+        LayoutRoot.BorderThickness = ShowDivider ? (Thickness)resources["SettingsRowDividerThickness"] : new Thickness(0);
+        LayoutRoot.Padding = (Thickness)resources[IsChild ? "SettingsChildRowPadding" : "SettingsRowPadding"];
+    }
 
     private void ApplyLayout(double width)
     {

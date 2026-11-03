@@ -28,6 +28,17 @@ public sealed class DeviceBenchmarkTests
     }
 
     [Theory]
+    [InlineData(4900, 5100, NativeBackend.Cpu)]     // near tie, only CPU keeps a meeting's pace
+    [InlineData(4800, 4900, NativeBackend.Vulkan)]  // near tie, both keep pace
+    [InlineData(5200, 5300, NativeBackend.Vulkan)]  // near tie, neither keeps pace; the gate rejects it later
+    public void MeetingPaceOutranksTheGpuNearTiePreference(double cpu, double gpu, NativeBackend expected)
+    {
+        var limit = DeviceBenchmark.PaceLimitMilliseconds(10000);
+        var result = DeviceBenchmark.Select("key", new(NativeBackend.Cpu, cpu, null), new(NativeBackend.Vulkan, gpu, null), limit);
+        Assert.Equal(expected, result.Backend);
+    }
+
+    [Theory]
     [InlineData(true, NativeBackend.Vulkan)]
     [InlineData(false, NativeBackend.Cpu)]
     public void SelectsOnlyWorkingDeviceAndReportsOtherFailure(bool cpuFailed, NativeBackend expected)
@@ -113,7 +124,6 @@ public sealed class DeviceBenchmarkTests
     [InlineData("vocos CUDA graph alloc failed")]
     [InlineData("Nemotron ASR decoder failed to create graph allocator")]
     [InlineData("Nemotron ASR decoder failed to create joint graph allocator")]
-    [InlineData("Qwen3 ASR prefill graph does not fit in device memory at this size")]
     public void GenericRuntimeAllocationFailureAbortsQualificationAndCannotBlacklistGpu(string message)
     {
         var failure = new NativeExecutionException(message, "process a dictation audio chunk", (int)NativeStatus.Runtime);
@@ -129,6 +139,28 @@ public sealed class DeviceBenchmarkTests
                 _ => { attempts++; throw failure; }, _ => Assert.Fail("allocation failure must not poison device selection"))));
         Assert.Equal(1, attempts);
     }
+
+    [Theory]
+    [InlineData("Qwen3 ASR prefill graph does not fit in device memory at this size")]
+    [InlineData("vkAllocateMemory failed: VK_ERROR_OUT_OF_DEVICE_MEMORY")]
+    public void GpuMemoryExhaustionDisqualifiesOnlyTheGpu(string message)
+    {
+        var failure = new NativeExecutionException(message, "process a dictation audio chunk", (int)NativeStatus.Runtime);
+        Assert.True(failure.IsDeviceMemoryFailure);
+        var gpu = DeviceBenchmarkWorker.ClassifyFailure(NativeBackend.Vulkan, failure);
+        Assert.False(gpu.Fatal);
+        Assert.Equal(NativeBackend.Cpu, DeviceBenchmark.Select("device-memory", new(NativeBackend.Cpu, 100, null), gpu).Backend);
+        // The same message from the CPU worker is not a GPU limit, and host exhaustion stays fatal on any device.
+        Assert.True(DeviceBenchmarkWorker.ClassifyFailure(NativeBackend.Cpu, failure).Fatal);
+        var host = new NativeExecutionException("VK_ERROR_OUT_OF_DEVICE_MEMORY after VK_ERROR_OUT_OF_HOST_MEMORY",
+            "process a dictation audio chunk", (int)NativeStatus.Runtime);
+        Assert.True(DeviceBenchmarkWorker.ClassifyFailure(NativeBackend.Vulkan, host).Fatal);
+    }
+
+    [Fact]
+    public void BothProbeDeadlinesFitInsideOneRecognitionOperation() =>
+        Assert.True(DeviceBenchmark.DeviceDeadline(NativeBackend.Cpu) + DeviceBenchmark.DeviceDeadline(NativeBackend.Vulkan) <
+            TimeSpan.FromMinutes(5));
 
     [Fact]
     public void ConsumedStreamingFailureDoesNotReplayAndUpdatesNextDevice()
@@ -403,21 +435,17 @@ public sealed class DeviceBenchmarkTests
             NativeBackend.Vulkan, CancellationToken.None));
     }
 
-    [Theory]
-    [InlineData("nemotron_asr", "streaming", false)]
-    [InlineData("nemotron_asr", "offline", true)]
-    [InlineData("moonshine_asr", "streaming", true)]
-    public async Task QualificationDoesNotLaunchIneligibleGpu(string family, string mode, bool gpuEligible)
+    [Fact]
+    public async Task QualificationProbesCpuThenVulkan()
     {
         var attempts = new List<NativeBackend>();
-        var selection = await DeviceBenchmark.QualifyAsync("key", family, mode, backend =>
+        var selection = await DeviceBenchmark.QualifyAsync("key", backend =>
         {
             attempts.Add(backend);
             return Task.FromResult(new DeviceBenchmarkResult(backend, 100, null));
         }, CancellationToken.None);
-        Assert.Equal(gpuEligible ? [NativeBackend.Cpu, NativeBackend.Vulkan] : new[] { NativeBackend.Cpu }, attempts);
-        Assert.Equal(gpuEligible ? NativeBackend.Vulkan : NativeBackend.Cpu, selection.Backend);
-        if (!gpuEligible) Assert.Contains("qualification skipped", selection.Gpu.Error);
+        Assert.Equal([NativeBackend.Cpu, NativeBackend.Vulkan], attempts);
+        Assert.Equal(NativeBackend.Vulkan, selection.Backend);
     }
 
     [Fact]

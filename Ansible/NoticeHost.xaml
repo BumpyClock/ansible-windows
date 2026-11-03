@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl x:Class="Ansible.NoticeHost"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             HorizontalAlignment="Stretch" VerticalAlignment="Bottom" IsTabStop="False"
+             AutomationProperties.Name="Notifications" AutomationProperties.LandmarkType="Custom"
+             PointerEntered="HostPointerEntered" PointerExited="HostPointerExited"
+             GotFocus="HostGotFocus" LostFocus="HostLostFocus">
+    <!-- Floats over the bottom of the content panel and never moves page content; the host adds its height to the
+         current page's bottom padding instead. No background, so the empty area passes input to the page. -->
+    <StackPanel x:Name="Layout" MaxWidth="{StaticResource NoticeHostMaxWidth}" Margin="{StaticResource NoticeHostMargin}"
+                Spacing="{StaticResource NoticeHostSpacing}" HorizontalAlignment="Stretch">
+        <Button x:Name="MoreButton" HorizontalAlignment="Center" Height="28" Padding="12,0" CornerRadius="14"
+                FontSize="12" Visibility="Collapsed" Click="MoreClicked"
+                AutomationProperties.AutomationId="MoreNoticesButton" />
+        <!-- Theme transitions follow the Windows animation setting: notices rise into place and the others slide. -->
+        <StackPanel x:Name="Bars" Spacing="{StaticResource NoticeHostSpacing}">
+            <StackPanel.ChildrenTransitions>
+                <TransitionCollection>
+                    <EntranceThemeTransition FromVerticalOffset="12" IsStaggeringEnabled="False" />
+                    <RepositionThemeTransition />
+                </TransitionCollection>
+            </StackPanel.ChildrenTransitions>
+        </StackPanel>
+    </StackPanel>
+</UserControl>

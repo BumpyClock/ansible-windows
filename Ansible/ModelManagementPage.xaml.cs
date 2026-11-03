@@ -16,8 +16,8 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
     private readonly Func<Task> _transcribeFile;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly List<ModelCard> _cardList = [];
-    private static double TwoColumnThreshold => (double)Application.Current.Resources["ModelTwoColumnThreshold"];
-    private int _columns;
+    private const string OperationNoticeKey = "models-operation";
+    private const string CatalogNoticeKey = "models-catalog";
     private ModelDownloadManager? _manager;
     private ThemeSettings? _themeSettings;
     private UiSessionObserver? _observer;
@@ -27,13 +27,15 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
     private bool _dialogActive;
     private bool _transcribingFile;
     private bool _closed;
-    private string? _error;
+
+    private readonly AppNotices _notices;
 
     internal ModelManagementPage(DictationSession session, AppPaths paths, Func<nint> windowHandle,
-        HttpClient http, Func<Task> transcribeFile, LocalDiagnosticLog diagnostics)
+        HttpClient http, Func<Task> transcribeFile, LocalDiagnosticLog diagnostics, AppNotices notices)
     {
         InitializeComponent();
         _session = session;
+        _notices = notices;
         _paths = paths;
         _windowHandle = windowHandle;
         _http = http;
@@ -80,10 +82,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
                         card.DiscardRequested += OnDiscardRequested;
                         card.UseRequested += OnUseRequested;
                         _cardList.Add(card);
-                        ModelsGrid.Children.Add(card);
                     }
-                    _columns = 0;
-                    LayoutCards(ModelsGrid.ActualWidth >= TwoColumnThreshold ? 2 : 1);
                 }
                 candidate.Changed += ManagerChanged;
                 _manager = candidate;
@@ -95,9 +94,8 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
                 if (_manager is null)
                 {
                     foreach (var card in _cardList) { card.DetachThemeEvents(); }
-                    ModelsGrid.Children.Clear();
+                    foreach (var group in Groups) { Panels(group).Rows.Children.Clear(); }
                     _cardList.Clear();
-                    _columns = 0;
                     _themeSettings = null;
                     await candidate.DisposeAsync();
                 }
@@ -114,27 +112,14 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
             System.Diagnostics.Debug.WriteLine("Ansible: model view dispatcher is closed.");
     }
 
-    private void OnModelsGridSizeChanged(object sender, SizeChangedEventArgs args) =>
-        LayoutCards(args.NewSize.Width >= TwoColumnThreshold ? 2 : 1);
+    private static readonly ModelGroup[] Groups = Enum.GetValues<ModelGroup>();
 
-    // Catalog order stays fixed through verification, downloads, and selection. A row-based grid
-    // keeps each card in its slot even when a preceding card's status changes its height.
-    private void LayoutCards(int columns)
+    private (StackPanel Section, StackPanel Rows) Panels(ModelGroup group) => group switch
     {
-        if (_columns == columns) { return; }
-        _columns = columns;
-        ModelsGrid.ColumnDefinitions.Clear();
-        ModelsGrid.RowDefinitions.Clear();
-        for (var column = 0; column < columns; column++)
-            ModelsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        for (var row = 0; row < (_cardList.Count + columns - 1) / columns; row++)
-            ModelsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        for (var index = 0; index < _cardList.Count; index++)
-        {
-            Grid.SetRow(_cardList[index], index / columns);
-            Grid.SetColumn(_cardList[index], index % columns);
-        }
-    }
+        ModelGroup.InUse => (InUseSection, InUseRows),
+        ModelGroup.Installed => (InstalledSection, InstalledRows),
+        _ => (AvailableSection, AvailableRows)
+    };
 
     private void Render()
     {
@@ -152,20 +137,12 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         BackendText.Text = $"audio.cpp {state.BackendVersion} \u00B7 selected: {(state.Settings.Backend == NativeBackend.Vulkan ? "GPU (Vulkan)" : "CPU")}";
         BackendText.Visibility = string.IsNullOrEmpty(state.BackendVersion) ? Visibility.Collapsed : Visibility.Visible;
 
-        // Warnings and errors only. A missing catalog counts only after initialization finishes, so the
-        // page does not flash "Catalog unavailable" while the catalog is still loading.
-        var attention = state.Notice.ShouldDisplayOn(NoticeArea.Models);
+        // A missing catalog counts only after initialization finishes, so the page does not flash the notice
+        // while the catalog is still loading.
         var catalogMissing = _manager is null && _initialization?.IsCompleted == true;
-        StatusInfo.Severity = _error is not null || catalogMissing || state.Notice.Kind == NoticeKind.Error
-            ? InfoBarSeverity.Error : InfoBarSeverity.Warning;
-        StatusInfo.IsOpen = _error is not null || catalogMissing || attention;
-        StatusInfo.Title = _error is not null ? "Model operation failed" :
-            catalogMissing ? "Catalog unavailable" :
-            attention ? state.Notice.Title : "";
-        StatusInfo.Message = _error ?? (catalogMissing ? "Open Model folder, then Verify installed files to retry opening the catalog." :
-            attention ? state.Notice.Message : "");
-        // A closed InfoBar stays Visible and still takes stack spacing, which pushes the cards below other pages.
-        StatusInfo.Visibility = StatusInfo.IsOpen ? Visibility.Visible : Visibility.Collapsed;
+        _notices.Set(CatalogNoticeKey, catalogMissing ? new NoticeContent(NoticeSeverity.Error, "Model catalog unavailable",
+            "Open Model folder, then Verify installed files to retry opening the catalog.", IsClosable: false) : null,
+            NoticeArea.Models);
 
         if (_manager is null) { return; }
         // Selecting an installed model does not depend on the download manager.
@@ -181,6 +158,23 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
             card.Update(snapshots[card], idle, managerIdle, managerBusy,
                 active: activeId == card.ModelId, canSelect: canSelect, busyReason: busyReason);
         }
+        PlaceCards(activeId, snapshots);
+    }
+
+    private void PlaceCards(string? activeId, Dictionary<ModelCard, ModelDownloadSnapshot> snapshots)
+    {
+        var cards = _cardList.ToDictionary(card => card.ModelId);
+        var placed = ModelGrouping.Place(_cardList.Select(card => new ModelPlacement(card.ModelId,
+            ModelSelectionPolicy.IsDiarizationTask(snapshots[card].Model.Task), snapshots[card].HasModelFile)), activeId);
+
+        // Render runs on every download tick, so only groups whose rows changed are rebuilt. Every changed group
+        // is emptied before any is filled because a row can belong to one parent only.
+        var changed = Groups.Where(group => !Panels(group).Rows.Children.SequenceEqual(placed[group].Select(id => cards[id]))).ToArray();
+        foreach (var group in changed) { Panels(group).Rows.Children.Clear(); }
+        foreach (var group in changed)
+            foreach (var id in placed[group]) { Panels(group).Rows.Children.Add(cards[id]); }
+        foreach (var group in Groups)
+            Panels(group).Section.Visibility = placed[group].Count > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void OnUseRequested(string id)
@@ -193,13 +187,18 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         }
         if (index < 0)
         {
-            _session.Notify(NoticeKind.Warning, "Model not loaded",
-                "Open Model folder, then Verify installed files to load this model.", NoticeArea.Models);
+            _notices.Set(OperationNoticeKey, new NoticeContent(NoticeSeverity.Warning, "Model not loaded",
+                "Open Model folder, then Verify installed files to load this model."), NoticeArea.Models);
         }
         else
         {
-            try { _session.SelectModel(index); }
-            catch (Exception error) { _session.ReportUiError(error, NoticeArea.Models); }
+            try
+            {
+                _session.SelectModel(index);
+                _notices.Set(OperationNoticeKey, null);
+                _notices.Confirm($"Dictation now uses {DisplayName(id)}.");
+            }
+            catch (Exception error) { ShowError(error, "Operation failed"); }
         }
         Render();
     }
@@ -212,23 +211,30 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         catch (Exception error) { ShowError(error); return; }
         if (selected.State == ModelInstallState.ReadyToInstall)
         {
-            await MaintainAsync(token => _manager.InstallAsync(id, token));
+            await InstallAsync(id);
             return;
         }
         try
         {
-            _error = null;
+            _notices.Set(OperationNoticeKey, null);
             await _manager.DownloadAsync(id, _lifetime.Token);
             if (!_closed && _session.State.IsIdle)
-                await MaintainAsync(token => _manager.InstallAsync(id, token));
+                await InstallAsync(id);
         }
-        catch (OperationCanceledException)
-        {
-            if (!_closed) { _session.Notify(NoticeKind.Information, "Download paused", "Partial weights remain available for Resume.", NoticeArea.Models); }
-        }
+        catch (OperationCanceledException) { }
         catch (Exception error) { ShowError(error); }
         finally { Render(); }
     }
+
+    // Confirms only a file the manager reports as installed after the maintenance step completes.
+    private async Task InstallAsync(string id)
+    {
+        if (_manager is null) { return; }
+        if (await MaintainAsync(token => _manager.InstallAsync(id, token)) && !_closed && _manager.Get(id).HasModelFile)
+            _notices.Confirm($"{DisplayName(id)} is installed.");
+    }
+
+    private string DisplayName(string id) => _cardList.FirstOrDefault(card => card.ModelId == id)?.DisplayName ?? id;
 
     private async void OnPauseRequested(string id)
     {
@@ -287,7 +293,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         if (_closed || _initialization is { IsCompleted: false }) { return; }
         if (_manager is null)
         {
-            _error = null;
+            _notices.Set(OperationNoticeKey, null);
             _initialization = InitializeAsync();
             Render();
             await _initialization;
@@ -324,9 +330,10 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
     {
         if (_closed || _transcribingFile || !_session.State.IsIdle || _session.State.SelectedModel is null) return;
         _transcribingFile = true;
+        _notices.Set(OperationNoticeKey, null);
         Render();
         try { await _transcribeFile(); }
-        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Models); Render(); }
+        catch (Exception error) { ShowError(error, "Operation failed"); }
         finally { _transcribingFile = false; Render(); }
     }
 
@@ -335,15 +342,12 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         if (_manager is null) { return; }
         try
         {
-            _error = null;
+            _notices.Set(OperationNoticeKey, null);
             await _manager.RefreshAsync(_lifetime.Token);
             if (!_closed && _session.State.IsIdle)
                 await MaintainAsync(_ => Task.CompletedTask, _manager.DirectoryPath);
         }
-        catch (OperationCanceledException)
-        {
-            if (!_closed) { _session.Notify(NoticeKind.Information, "Verification paused", "Verify installed files again to complete the checks.", NoticeArea.Models); }
-        }
+        catch (OperationCanceledException) { }
         catch (Exception error) { ShowError(error); }
         finally { Render(); }
     }
@@ -352,7 +356,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
     {
         try
         {
-            _error = null;
+            _notices.Set(OperationNoticeKey, null);
             var outcome = await _session.MaintainModelsAsync(action, directory);
             if (outcome.Error is not null) { ShowError(outcome.Error); }
             return outcome.Kind == SessionOutcomeKind.Completed;
@@ -361,10 +365,12 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         finally { Render(); }
     }
 
-    private void ShowError(Exception error)
+    // A new failure replaces the previous operation notice. Each operation clears it when it starts.
+    private void ShowError(Exception error, string title = "Model operation failed")
     {
-        _error = error.Message;
-        _session.ReportUiError(error, NoticeArea.Models);
+        if (_closed) { return; }
+        _notices.Set(OperationNoticeKey, new NoticeContent(NoticeSeverity.Error, title, error.Message),
+            NoticeArea.Models);
         Render();
     }
 

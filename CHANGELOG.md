@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+- Give every page one vertical scroller in an inset content panel. When the page
+  heading scrolls out, the title bar shows the page name and a copy of the page's
+  primary action. Home keeps the History header, search box and insights cards on
+  screen while the list scrolls.
+- Show every main-window notification as a floating notice over the bottom of the
+  content panel, so notices never move page content. Each source owns one keyed
+  notice, and a new error replaces that source's previous one.
+- Lay out Settings with one row control, flush-right stock WinUI toggles and combo
+  boxes. Remove the section links and the segmented controls. The Processor row
+  keeps its height when the choice changes. Turning on automatic cleanup asks for
+  consent in a dialog.
+- Open the welcome lesson as a dialog on first launch and from Settings. Keycaps
+  press with the real keys, and the practice step reacts only to real dictation.
+- Qualify Nemotron on Vulkan like every other model instead of skipping the GPU.
+  The qualification cache key changes, so every model qualifies again once.
+- Name the model and its kind (streaming, meeting or whole recording) in the
+  Settings device comparison, because each keeps its own CPU or GPU result. The
+  "Auto chose" label uses the shared badge.
+- Enter in Custom words explains why a word cannot be added. Meeting notices no
+  longer cover the last transcript lines, and meeting times follow the system
+  clock format.
+- Show history insertion status as a quiet icon and word instead of a pill. Rows
+  no longer flash white when the pointer moves between them.
+- Check every app XAML file for its compiled resource in the published package.
+
 - Report failed injected-key release as unverified insertion, including when Windows
   queued only a modifier. Keep the warning and never replay uncertain input.
 - Reuse verified runtime hashes for Auto selection while checking file identity,

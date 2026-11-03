@@ -80,7 +80,7 @@ public sealed partial class NativeAudioEngine
             UseDictionary: model.Family == "kroko_asr" && options.CustomDictionary.Length > 0);
         try
         {
-            return _deviceQualifier.Qualify(new(request, modelIdentity, model.Family), () =>
+            return _deviceQualifier.Qualify(new(request, modelIdentity, model.DisplayName ?? model.Id), () =>
             {
                 // No resident execution weights coexist with either owned subprocess.
                 ReleaseModel();

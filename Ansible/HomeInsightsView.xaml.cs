@@ -17,6 +17,9 @@ internal sealed partial class HomeModelTemplateSelector : DataTemplateSelector
 
 public sealed partial class HomeInsightsView : UserControl
 {
+    // A strip card is never narrower than this. The strip drops a column and wraps to a new row first.
+    private const double StripCardMinWidth = 220;
+
     private HomeInsightsViewModel? _model;
 
     public HomeInsightsView()
@@ -24,12 +27,16 @@ public sealed partial class HomeInsightsView : UserControl
         InitializeComponent();
     }
 
+    /// <summary>False stacks the cards as a side rail. True flows them into columns as a strip above history.</summary>
+    internal bool Strip
+    {
+        get => RailCards.MinColumnWidth < double.PositiveInfinity;
+        set => RailCards.MinColumnWidth = value ? StripCardMinWidth : double.PositiveInfinity;
+    }
+
     internal void Render(HomeInsightsViewModel model)
     {
         _model = model;
-        UsageWarningBar.Message = model.UsageWarning ?? "";
-        UsageWarningBar.IsOpen = model.UsageWarning is not null;
-        UsageWarningBar.Visibility = UsageWarningBar.IsOpen ? Visibility.Visible : Visibility.Collapsed;
         HomePaceText.Text = model.PaceText;
         HomeSessionsText.Text = model.SessionsText;
         HomeWordsText.Text = model.WordsText;

@@ -1,8 +1,9 @@
 namespace Ansible.Core;
 
-internal sealed record QualificationInput(DeviceBenchmarkRequest Request, string ModelFingerprint, string? Family);
+internal sealed record QualificationInput(DeviceBenchmarkRequest Request, string ModelFingerprint, string ModelName);
 
-internal sealed record QualifiedDevice(DeviceBenchmarkSelection Selection, string ModelId, double? SampleMilliseconds)
+internal sealed record QualifiedDevice(DeviceBenchmarkSelection Selection, string ModelId, string ModelName, DeviceComparisonKind Kind,
+    double? SampleMilliseconds)
 {
     public NativeBackend Backend => Selection.Backend;
 }
@@ -31,6 +32,7 @@ internal sealed class AutoDeviceQualifier(
             var key = DeviceBenchmark.Key(request, input.ModelFingerprint, token, _identity);
             if (!_devices.TryGetValue(key, out var device))
             {
+                var sampleMilliseconds = request.History > 0 ? ReadSampleMilliseconds(request.Sample, token) : (double?)null;
                 var selection = DeviceBenchmark.ReadCache(cachePath).LastOrDefault(value => value.Key == key);
                 if (selection is null)
                 {
@@ -39,14 +41,14 @@ internal sealed class AutoDeviceQualifier(
                     // This callback releases engine residency and admits memory under the already-held gate.
                     prepareProbe();
                     token.ThrowIfCancellationRequested();
-                    selection = DeviceBenchmark.QualifyAsync(key, input.Family, request.Mode,
-                        backend => probe(request with { Backend = backend }, token), token).GetAwaiter().GetResult();
+                    selection = DeviceBenchmark.QualifyAsync(key,
+                        backend => probe(request with { Backend = backend }, token), token,
+                        sampleMilliseconds is { } sample ? DeviceBenchmark.PaceLimitMilliseconds(sample) : null).GetAwaiter().GetResult();
                     token.ThrowIfCancellationRequested();
                     _cacheWarning = DeviceBenchmark.TryUpdateCache(cachePath, key, selection);
                 }
                 else Current = new(Source: NativeDiagnosticSource.DiskCache);
-                device = new(selection, request.ModelId,
-                    request.History > 0 ? ReadSampleMilliseconds(request.Sample, token) : null);
+                device = new(selection, request.ModelId, input.ModelName, Kind(request), sampleMilliseconds);
                 _devices[key] = device;
             }
             else Current = new(Source: NativeDiagnosticSource.MemoryCache);
@@ -56,7 +58,7 @@ internal sealed class AutoDeviceQualifier(
                 Summary = device.Selection.Summary +
                     (cachePath is null ? " Persistence disabled; this session only." : "") +
                     (_cacheWarning is null ? "" : " " + _cacheWarning),
-                Comparison = Comparison(device.Selection)
+                Comparison = Comparison(device)
             };
             token.ThrowIfCancellationRequested();
             if (device.SampleMilliseconds is { } duration)
@@ -98,7 +100,7 @@ internal sealed class AutoDeviceQualifier(
         {
             Summary = selection.Summary + " GPU failure reported; CPU is selected for the next attempt." +
                 (_cacheWarning is null ? "" : " " + _cacheWarning),
-            Comparison = Comparison(selection)
+            Comparison = Comparison(fallback)
         };
         if (fallback.SampleMilliseconds is { } duration)
             DeviceBenchmark.RequireMeetingRealTime(selection, duration, fallback.ModelId);
@@ -111,8 +113,17 @@ internal sealed class AutoDeviceQualifier(
         return audio.Samples.Length / (double)audio.Channels / audio.SampleRate * 1000;
     }
 
-    private static DeviceComparisonSnapshot Comparison(DeviceBenchmarkSelection selection) => new(
-        selection.Cpu.Working ? selection.Cpu.Milliseconds : null,
-        selection.Gpu.Working ? selection.Gpu.Milliseconds : null,
-        selection.Backend, selection.MeasuredAt, selection.Cpu.Error, selection.Gpu.Error);
+    // Dictation and meetings both stream, but history makes them separate qualifications.
+    private static DeviceComparisonKind Kind(DeviceBenchmarkRequest request) =>
+        request.Mode == "offline" ? DeviceComparisonKind.WholeRecording
+        : request.History > 0 ? DeviceComparisonKind.Meeting : DeviceComparisonKind.Streaming;
+
+    private static DeviceComparisonSnapshot Comparison(QualifiedDevice device)
+    {
+        var selection = device.Selection;
+        return new(device.ModelName, device.Kind,
+            selection.Cpu.Working ? selection.Cpu.Milliseconds : null,
+            selection.Gpu.Working ? selection.Gpu.Milliseconds : null,
+            selection.Backend, selection.MeasuredAt, selection.Cpu.Error, selection.Gpu.Error);
+    }
 }

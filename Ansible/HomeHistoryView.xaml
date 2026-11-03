@@ -8,39 +8,62 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="HomeStyles.xaml" />
             </ResourceDictionary.MergedDictionaries>
-            <!-- Insertion tags. Verified insertion uses the accent; every other outcome keeps the amber HistoryTagStyle. -->
-            <Style x:Key="HistoryInsertedTagStyle" TargetType="Border" BasedOn="{StaticResource HistoryTagStyle}">
-                <Setter Property="Background" Value="{ThemeResource AccentSoftBrush}" />
+            <!-- Insertion status reads as row metadata: an icon and a word, no pill. Colour carries the outcome:
+                 an accent check when the field confirmed it, muted when unverified, amber when the text did not arrive. -->
+            <Style x:Key="HistoryTagTextStyle" TargetType="TextBlock" BasedOn="{StaticResource HistoryMetaTextStyle}">
+                <Setter Property="TextWrapping" Value="NoWrap" />
             </Style>
-            <Style x:Key="HistoryInsertedTagTextStyle" TargetType="TextBlock" BasedOn="{StaticResource HistoryTagTextStyle}">
-                <Setter Property="Foreground" Value="{ThemeResource AccentForegroundBrush}" />
+            <Style x:Key="HistoryNotInsertedTagTextStyle" TargetType="TextBlock" BasedOn="{StaticResource HistoryTagTextStyle}">
+                <Setter Property="Foreground" Value="{ThemeResource AppTagBrush}" />
             </Style>
             <Style x:Key="HistoryTagIconStyle" TargetType="FontIcon">
-                <Setter Property="FontSize" Value="{StaticResource HistoryTagIconSize}" />
-                <Setter Property="Foreground" Value="{ThemeResource AppTagBrush}" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="Foreground" Value="{ThemeResource AppMutedTextBrush}" />
                 <Setter Property="VerticalAlignment" Value="Center" />
             </Style>
             <Style x:Key="HistoryInsertedTagIconStyle" TargetType="FontIcon" BasedOn="{StaticResource HistoryTagIconStyle}">
                 <Setter Property="Foreground" Value="{ThemeResource AccentForegroundBrush}" />
             </Style>
+            <Style x:Key="HistoryNotInsertedTagIconStyle" TargetType="FontIcon" BasedOn="{StaticResource HistoryTagIconStyle}">
+                <Setter Property="Foreground" Value="{ThemeResource AppTagBrush}" />
+            </Style>
+            <Style x:Key="HistoryCopyIconStyle" TargetType="FontIcon">
+                <Setter Property="FontSize" Value="{StaticResource IconButtonGlyphSize}" />
+            </Style>
+            <!-- Text that never reached the app keeps an amber Copy so the recovery action stays obvious. -->
+            <Style x:Key="HistoryNeedsCopyIconStyle" TargetType="FontIcon" BasedOn="{StaticResource HistoryCopyIconStyle}">
+                <Setter Property="Foreground" Value="{ThemeResource AppTagBrush}" />
+            </Style>
+            <!-- Rows sit on the page surface. The negative margin keeps row text aligned with the section header
+                 while the hover fill extends past it. -->
+            <Style x:Key="HomeHistoryRowStyle" TargetType="Border" BasedOn="{StaticResource HistoryRowStyle}">
+                <Setter Property="Padding" Value="12" />
+                <Setter Property="Margin" Value="-12,0" />
+            </Style>
+            <Thickness x:Key="HomeHistoryGroupMargin">0,16,0,8</Thickness>
         </ResourceDictionary>
     </UserControl.Resources>
     <Grid x:Name="HistorySection" RowSpacing="{StaticResource SectionHeaderGap}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
         </Grid.RowDefinitions>
         <!-- Rows are built in code; this anchor supplies the hover fill resolved for this element's theme. -->
-        <Border x:Name="HoverFillAnchor" Visibility="Collapsed" Background="{ThemeResource AppHoverBrush}" />
-        <Grid x:Name="HistoryHeaderGrid" Style="{StaticResource HomeSectionHeaderStyle}" SizeChanged="HistoryHeaderSizeChanged">
+        <Border x:Name="HoverFillAnchor" Visibility="Collapsed" Background="{ThemeResource AppCardBrush}" />
+        <!-- The header sticks to the top of the page scroller (PinHeader). Its opaque surface fill reaches past the
+             row hover fill on both sides and adds breathing room above and below while stuck; matching negative
+             margins keep the layout where it was. It draws above the rows that scroll under it. -->
+        <Grid x:Name="HistoryHeaderGrid" Style="{StaticResource HomeSectionHeaderStyle}" Margin="-12,-12,-12,-10"
+              Padding="12,12,12,10" Background="{ThemeResource AppSurfaceBrush}" Canvas.ZIndex="1"
+              SizeChanged="HistoryHeaderSizeChanged">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="{StaticResource HistorySearchColumnWidth}" />
             </Grid.ColumnDefinitions>
-            <TextBlock x:Name="HistoryTitle" Text="History" Style="{StaticResource HomeSectionTitleStyle}" />
+            <TextBlock x:Name="HistoryTitle" Text="History" Style="{StaticResource HomeSectionTitleStyle}"
+                       AutomationProperties.HeadingLevel="Level2" />
             <local:Badge x:Name="HistoryCountPill" Grid.Column="1" Text="0 transcriptions"
                          ToolTipService.ToolTip="Your latest transcriptions saved on this device, up to 100." />
             <TextBox x:Name="HistorySearchBox" Grid.Column="3" Height="36" PlaceholderText="Search transcripts"
@@ -59,33 +82,33 @@
                     HorizontalAlignment="Right" VerticalAlignment="Center" IsHitTestVisible="False">
                 <TextBlock Text="Ctrl K" Style="{StaticResource SearchKeycapTextStyle}" />
             </Border>
+            <!-- A hairline under the stuck header. The pin fades it in only while rows pass underneath. -->
+            <Border x:Name="HistoryHeaderDivider" Grid.ColumnSpan="4" Grid.RowSpan="2" Margin="-12,0,-12,-10"
+                    Style="{StaticResource HistoryDividerStyle}" VerticalAlignment="Bottom" IsHitTestVisible="False" />
         </Grid>
-        <InfoBar x:Name="HistoryStorageWarning" Grid.Row="1" Title="History needs attention"
-                 Severity="Warning" IsOpen="False" IsClosable="False" Visibility="Collapsed" />
-        <Border x:Name="HistoryCard" Grid.Row="2" Style="{StaticResource CardStyle}" Padding="0">
-            <ScrollViewer x:Name="HistoryRowsHost"
-                          VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
-                          VerticalContentAlignment="Stretch">
-                <StackPanel x:Name="HistoryContent" Padding="{StaticResource HistoryListPadding}" Spacing="4"
-                            HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
-                    <TextBlock x:Name="OversizedNotice" TextWrapping="Wrap" Margin="12,8,12,4"
-                               Style="{StaticResource CaptionSecondaryStyle}" Visibility="Collapsed" />
-                    <StackPanel x:Name="HistoryRows" Spacing="4" SizeChanged="HistoryRowsSizeChanged">
-                        <!-- Full rebuilds (search, first render) detach these; only real history changes animate. -->
-                        <StackPanel.ChildrenTransitions>
-                            <TransitionCollection>
-                                <AddDeleteThemeTransition />
-                                <RepositionThemeTransition />
-                            </TransitionCollection>
-                        </StackPanel.ChildrenTransitions>
-                    </StackPanel>
-                    <StackPanel x:Name="EmptyState" Spacing="{StaticResource HistoryEmptyGap}"
-                                HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed">
-                        <TextBlock x:Name="EmptyTitle" TextWrapping="Wrap" HorizontalAlignment="Center" Style="{StaticResource HistoryEmptyTitleStyle}" />
-                        <TextBlock x:Name="EmptyDetail" TextWrapping="Wrap" HorizontalAlignment="Center" Style="{StaticResource HistoryEmptyDetailStyle}" />
-                    </StackPanel>
+        <!-- History flows in the page scroller. No card, no fixed height, no nested scroller. -->
+        <StackPanel x:Name="HistoryContent" Grid.Row="1">
+            <TextBlock x:Name="OversizedNotice" TextWrapping="Wrap" Margin="0,4,0,8"
+                       Style="{StaticResource CaptionSecondaryStyle}" Visibility="Collapsed" />
+            <StackPanel x:Name="HistoryRows" SizeChanged="HistoryRowsSizeChanged">
+                <!-- Full rebuilds (search, first render) detach these; only real history changes animate. -->
+                <StackPanel.ChildrenTransitions>
+                    <TransitionCollection>
+                        <AddDeleteThemeTransition />
+                        <RepositionThemeTransition />
+                    </TransitionCollection>
+                </StackPanel.ChildrenTransitions>
+            </StackPanel>
+            <Grid x:Name="EmptyState" Margin="0,8,0,0" Visibility="Collapsed">
+                <Rectangle Stroke="{ThemeResource AppBorderBrush}" StrokeThickness="1" StrokeDashArray="4,3"
+                           RadiusX="12" RadiusY="12" IsHitTestVisible="False" />
+                <StackPanel Padding="24,48" Spacing="{StaticResource HistoryEmptyGap}" HorizontalAlignment="Center">
+                    <TextBlock x:Name="EmptyTitle" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center"
+                               Style="{StaticResource HistoryEmptyTitleStyle}" />
+                    <TextBlock x:Name="EmptyDetail" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center"
+                               Style="{StaticResource HistoryEmptyDetailStyle}" />
                 </StackPanel>
-            </ScrollViewer>
-        </Border>
+            </Grid>
+        </StackPanel>
     </Grid>
 </UserControl>

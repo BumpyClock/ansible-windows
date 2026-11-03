@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl x:Class="Ansible.NoticeBar"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             HorizontalAlignment="Stretch">
+    <!-- One control for every notification. NoticeHost floats it over the content panel; a page may place it
+         inline only for a condition that explains that page. -->
+    <Border x:Name="Surface"
+            Background="{ThemeResource AppCardBrush}"
+            BorderBrush="{ThemeResource AppBorderBrush}"
+            BorderThickness="1"
+            CornerRadius="{StaticResource CardCornerRadius}"
+            Padding="16,10,8,10">
+        <Grid ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Grid x:Name="IconHost" Width="20" Height="20" VerticalAlignment="Center"
+                  AutomationProperties.AccessibilityView="Raw">
+                <!-- ThemeResource fills keep the disc correct when the theme changes while a notice shows. -->
+                <Ellipse x:Name="InfoDisc" Fill="{ThemeResource AccentGraphicBrush}" />
+                <Ellipse x:Name="WarningDisc" Fill="{ThemeResource AppTagBrush}" Visibility="Collapsed" />
+                <Ellipse x:Name="ErrorDisc" Fill="{ThemeResource SystemFillColorCriticalBrush}" Visibility="Collapsed" />
+                <FontIcon x:Name="IconGlyph" FontSize="11" Foreground="{ThemeResource AppOnAccentBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Grid>
+            <TextBlock x:Name="Text" Grid.Column="1" TextWrapping="Wrap" VerticalAlignment="Center"
+                       Foreground="{ThemeResource AppSecondaryTextBrush}">
+                <Run x:Name="TitleRun" FontWeight="SemiBold" Foreground="{ThemeResource AppTextBrush}" /><Run x:Name="MessageRun" />
+            </TextBlock>
+            <StackPanel x:Name="ActionsPanel" Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <Button x:Name="CloseButton" Style="{StaticResource IconButtonStyle}" Click="CloseClicked"
+                        ToolTipService.ToolTip="Dismiss">
+                    <FontIcon Glyph="&#xE711;" FontSize="{StaticResource IconSize}" />
+                </Button>
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl>

@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ansible · page-scroll shell mockup</title>
+<style>
+/* Tokens copied from Ansible/DesignTokens.xaml (Dark and Light theme dictionaries). */
+:root, [data-theme="dark"] {
+  --bg: #121720; --surface: #191F29; --card: #222A36; --control: #303A49; --border: #354052;
+  --hover: #2B3544; --active: #2A3443; --search: #161C26;
+  --text: #F1F3F4; --text-2: #9CA1A7; --text-3: #8E949B; --transcript: #E3E6E8;
+  --tag: #E8B450; --tag-bg: rgba(232,180,80,.12);
+  --danger: #FF99A4; --danger-bg: rgba(255,153,164,.12);
+  --accent: #D3EB62; --on-accent: #19210D; --accent-strong: #B9D63F; --accent-fg: #D3EB62;
+  --accent-soft: rgba(211,235,98,.14); --bar: #3A4556;
+  --chrome: rgba(18,23,32,.72);
+  color-scheme: dark;
+}
+[data-theme="light"] {
+  --bg: #E9EDF2; --surface: #F6F8FB; --card: #FFFFFF; --control: #E9EEF4; --border: #D6DEE8;
+  --hover: #EFF3E6; --active: #DDE5D4; --search: #F1F4F8;
+  --text: #1C2636; --text-2: #536174; --text-3: #657286; --transcript: #29364A;
+  --tag: #805214; --tag-bg: #FFF2CB;
+  --danger: #A4262C; --danger-bg: #FDE7E9;
+  --accent: #D3EB62; --on-accent: #19210D; --accent-strong: #B9D63F; --accent-fg: #526719;
+  --accent-soft: rgba(101,127,30,.12); --bar: #C9D2DD;
+  --chrome: rgba(233,237,242,.78);
+  color-scheme: light;
+}
+:root {
+  --nav-w: 248px; --titlebar: 48px; --page-max: 1120px; --rail-w: 320px;
+  --r-card: 12px; --r-ctl: 8px; --r-badge: 6px;
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px;
+  --ease: cubic-bezier(.2,.8,.2,1);
+  font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  font-size: 14px; line-height: 20px;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; border-radius: 4px; }
+.num { font-variant-numeric: tabular-nums; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---------- Shell: fixed navigation and title bar; the inset content surface is the only scroller ---------- */
+.nav { position: fixed; inset: 0 auto 0 0; width: var(--nav-w); display: flex; flex-direction: column;
+  padding: 0 var(--s3) var(--s3); background: var(--bg); z-index: 20; }
+.brand { height: var(--titlebar); display: flex; align-items: center; gap: 10px; padding: 0 var(--s3); margin-bottom: var(--s3); font-weight: 600; font-size: 15px; }
+.brand-mark { width: 22px; height: 22px; border-radius: 6px; background: linear-gradient(135deg,#FAFFD2,#D3EB62 60%,#B9D63F); position: relative; }
+.brand-mark::after { content: ""; position: absolute; left: -4px; top: -3px; width: 13px; height: 13px; border-radius: 4px; background: linear-gradient(135deg,#687384,#293144); }
+.nav a { display: flex; align-items: center; gap: var(--s3); height: 40px; padding: 0 var(--s3); border-radius: var(--r-ctl);
+  color: var(--text-2); text-decoration: none; position: relative; transition: background .12s; }
+.nav a:hover { background: var(--hover); color: var(--text); }
+.nav a[aria-current="page"] { background: var(--active); color: var(--text); font-weight: 600; }
+.nav a[aria-current="page"]::before { content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px; border-radius: 2px; background: var(--accent); }
+.nav a[aria-current="page"] svg { stroke: var(--accent-fg); }
+.nav .spacer { flex: 1; }
+
+.titlebar { position: fixed; top: 0; left: var(--nav-w); right: 0; height: var(--titlebar); z-index: 15;
+  display: flex; align-items: center; padding-left: 40px; gap: var(--s3);
+  background: var(--bg); }
+.tb-title { font-weight: 600; opacity: 0; transform: translateY(4px); transition: opacity .18s var(--ease), transform .18s var(--ease); }
+.titlebar.scrolled .tb-title { opacity: 1; transform: none; }
+.tb-actions { margin-left: auto; margin-right: 150px; display: flex; gap: var(--s2); opacity: 0; pointer-events: none; transition: opacity .18s; }
+.titlebar.scrolled .tb-actions { opacity: 1; pointer-events: auto; }
+.caption { position: fixed; top: 0; right: 0; height: var(--titlebar); display: flex; z-index: 30; }
+.caption span { width: 46px; display: grid; place-items: center; color: var(--text-2); }
+
+main { position: fixed; top: calc(var(--titlebar) + 4px); left: var(--nav-w); right: 4px; bottom: 4px; overflow-y: auto; overscroll-behavior: contain;
+  scroll-padding-top: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+.wrap { max-width: calc(var(--page-max) + 80px); margin: 0 auto; padding: var(--s5) 40px max(96px, calc(var(--notice-space, 0px) + 32px)); }
+
+/* ---------- Shared page header ---------- */
+.page { display: none; }
+.page.on { display: block; animation: pageIn .22s var(--ease); }
+@keyframes pageIn { from { opacity: 0; transform: translateY(6px); } }
+.page-head { display: flex; align-items: flex-end; gap: var(--s4); margin-bottom: var(--s6); min-height: 64px; }
+.page-head h1 { margin: 0; font-family: "Segoe UI Variable Display", "Segoe UI", sans-serif; font-size: 28px; line-height: 36px; font-weight: 600; letter-spacing: -.2px; }
+.page-head p { margin: 4px 0 0; color: var(--text-2); }
+.page-head .actions { margin-left: auto; display: flex; align-items: center; gap: var(--s2); }
+
+/* ---------- Controls ---------- */
+.btn { display: inline-flex; align-items: center; gap: var(--s2); height: 32px; padding: 0 var(--s3); border-radius: var(--r-ctl);
+  border: 1px solid var(--border); background: var(--card); color: var(--text); white-space: nowrap; text-decoration: none; transition: background .12s, transform .08s; }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn:hover { background: var(--hover); }
+.btn:active { transform: scale(.98); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+.btn.primary:hover { background: var(--accent-strong); }
+.btn.subtle { background: transparent; border-color: transparent; color: var(--text-2); }
+.btn.subtle:hover { background: var(--hover); color: var(--text); }
+.btn.icon { width: 32px; padding: 0; justify-content: center; }
+.btn.lg { height: 40px; padding: 0 var(--s4); }
+.link { color: var(--accent-fg); background: none; border: 0; padding: 0; text-decoration: none; }
+.link:hover { text-decoration: underline; }
+kbd { display: inline-grid; place-items: center; min-width: 26px; height: 24px; padding: 0 7px; border-radius: 6px; font-family: inherit; font-size: 12px; font-weight: 600; line-height: 1;
+  background: var(--control); border: 1px solid var(--border); border-bottom-width: 2px; color: var(--text); }
+.badge { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px; border-radius: var(--r-badge); font-size: 12px; white-space: nowrap;
+  background: var(--control); color: var(--text-2); max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
+.badge.warn { background: var(--tag-bg); color: var(--tag); }
+.badge.danger { background: var(--danger-bg); color: var(--danger); }
+.badge.accent { background: var(--accent-soft); color: var(--accent-fg); }
+.badge svg.i { width: 12px; height: 12px; }
+.field { height: 32px; border-radius: var(--r-ctl); border: 1px solid var(--border); border-bottom-color: var(--text-3); background: var(--search); padding: 0 var(--s3); min-width: 0; }
+.field:focus { outline: none; border-bottom: 2px solid var(--accent); }
+.search { position: relative; display: flex; align-items: center; }
+.search svg { position: absolute; left: 10px; color: var(--text-3); }
+.search .field { padding-left: 34px; padding-right: 48px; width: 100%; }
+.search kbd { position: absolute; right: 6px; height: 20px; font-size: 11px; font-weight: 400; color: var(--text-3); }
+.seg { display: inline-flex; padding: 3px; border-radius: 11px; background: var(--search); border: 1px solid var(--border); }
+.seg button { height: 28px; padding: 0 var(--s3); border: 0; border-radius: var(--r-ctl); background: transparent; color: var(--text-2); }
+.seg button[aria-pressed="true"] { background: var(--control); color: var(--text); font-weight: 600; }
+.toggle { display: inline-flex; align-items: center; gap: var(--s3); background: none; border: 0; padding: 0; color: var(--text-2); }
+.toggle .track { width: 40px; height: 20px; border-radius: 10px; border: 1px solid var(--text-3); position: relative; transition: background .15s, border-color .15s; }
+.toggle .track::after { content: ""; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 50%; background: var(--text-2); transition: transform .18s var(--ease), background .15s; }
+.toggle[aria-checked="true"] .track { background: var(--accent); border-color: var(--accent); }
+.toggle[aria-checked="true"] .track::after { transform: translateX(20px); background: var(--on-accent); }
+.toggle .state { min-width: 22px; text-align: right; }
+select.field { padding-right: 28px; appearance: none; background-image: linear-gradient(45deg,transparent 50%,var(--text-2) 50%),linear-gradient(135deg,var(--text-2) 50%,transparent 50%);
+  background-position: calc(100% - 15px) 14px, calc(100% - 10px) 14px; background-size: 5px 5px; background-repeat: no-repeat; }
+
+/* ---------- Notice: one control for every notification ----------
+   Placement "float" lives in .notice-host over the bottom of the content panel and never moves content.
+   Placement "inline" is the same control inside a page, only for conditions that explain that page. */
+.notice { display: flex; align-items: center; gap: var(--s3); padding: 10px var(--s2) 10px var(--s4); border-radius: var(--r-card);
+  background: var(--card); border: 1px solid var(--border); }
+.notice .dot { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; flex: none; background: var(--accent); color: var(--on-accent); }
+.notice .dot svg { width: 12px; height: 12px; }
+.notice.warning .dot { background: var(--tag); color: #1a1408; }
+.notice.error .dot { background: var(--danger); color: #2a0b0f; }
+.notice .msg { flex: 1; min-width: 0; color: var(--text-2); }
+.notice .msg b { color: var(--text); font-weight: 600; margin-right: 6px; }
+.notice .msg .ph { color: var(--text-3); font-style: italic; }
+.notice .acts { display: flex; gap: var(--s2); flex: none; }
+.notice.transient { padding-left: var(--s4); }
+.notice.transient .msg { color: var(--text); }
+.notice[hidden] { display: none; }
+.notice.inline { margin-bottom: var(--s5); }
+
+.notice-host { position: fixed; left: var(--nav-w); right: 4px; bottom: 4px; z-index: 40; pointer-events: none;
+  display: flex; flex-direction: column; align-items: center; gap: var(--s2); padding: 0 var(--s5) var(--s4); }
+.notice-host > * { pointer-events: auto; width: min(680px, 100%); }
+.notice-host .notice { box-shadow: 0 12px 32px rgba(0,0,0,.32), 0 2px 6px rgba(0,0,0,.18); animation: noticeIn .22s var(--ease); }
+[data-theme="light"] .notice-host .notice { box-shadow: 0 12px 32px rgba(20,30,50,.16), 0 2px 6px rgba(20,30,50,.08); }
+.notice-host .notice.leaving { opacity: 0; transform: translateY(8px); transition: opacity .14s, transform .14s var(--ease); }
+.notice-host .more { width: auto; height: 28px; border-radius: 14px; font-size: 12px; box-shadow: 0 4px 12px rgba(0,0,0,.2); }
+@keyframes noticeIn { from { opacity: 0; transform: translateY(12px); } }
+
+/* ---------- Sections, lists ---------- */
+h2.sec { font-family: "Segoe UI Variable Display", "Segoe UI", sans-serif; font-size: 20px; line-height: 28px; font-weight: 600; margin: 0; }
+.sec-head { display: flex; align-items: center; gap: var(--s3); margin-bottom: var(--s3); }
+.sec-head .grow { flex: 1; }
+.group-label { display: flex; align-items: center; gap: var(--s3); font-size: 12px; font-weight: 600; letter-spacing: .4px; text-transform: uppercase; color: var(--text-3);
+  padding: var(--s4) 0 var(--s2); }
+.group-label::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.list { list-style: none; margin: 0; padding: 0; }
+.empty { text-align: center; padding: var(--s7) var(--s5); color: var(--text-2); border: 1px dashed var(--border); border-radius: var(--r-card); }
+.empty strong { display: block; color: var(--text); font-size: 16px; margin-bottom: 4px; }
+
+/* ---------- Home ---------- */
+.home-grid { display: grid; grid-template-columns: minmax(0,1fr) var(--rail-w); gap: var(--s6); align-items: start; }
+.greeting-actions { display: flex; align-items: center; gap: var(--s3); color: var(--text-2); }
+.greeting-actions .keys { display: inline-flex; align-items: center; gap: 4px; }
+.day { position: sticky; top: 0; z-index: 2; background: var(--surface); }
+/* Home pins the History header; day labels stick below it. */
+.home-grid .sec-head { position: sticky; top: 0; z-index: 3; height: var(--hist-head, 56px); margin-bottom: 0; background: var(--surface); }
+.home-grid .day { top: var(--hist-head, 56px); }
+.hrow { display: grid; grid-template-columns: 72px minmax(0,1fr) auto; gap: var(--s4); padding: var(--s3) var(--s3); margin: 0 calc(-1 * var(--s3)); border-radius: 10px; transition: background .12s; }
+.hrow:hover, .hrow:focus-within { background: var(--card); }
+.hrow time { color: var(--text-3); font-size: 13px; padding-top: 2px; }
+.hrow .txt { font-size: 15px; line-height: 24px; color: var(--transcript); margin: 0; overflow-wrap: anywhere; }
+.hrow .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px var(--s2); margin-top: 6px; font-size: 12px; color: var(--text-3); }
+.hrow .meta .unverified { display: inline-flex; align-items: center; gap: 4px; }
+.hrow .meta .unverified svg.i { width: 12px; height: 12px; }
+.hrow .acts { display: flex; gap: 2px; opacity: 0; transition: opacity .12s; }
+.hrow:hover .acts, .hrow:focus-within .acts, .hrow.needs-copy .acts { opacity: 1; }
+.hrow.needs-copy .copy { color: var(--tag); }
+mark { background: var(--accent-soft); color: inherit; border-radius: 3px; }
+
+.rail { position: sticky; top: 16px; display: flex; flex-direction: column; gap: var(--s4); }
+.card { background: var(--card); border-radius: var(--r-card); padding: var(--s4) var(--s5); }
+.metric-label { font-size: 12px; color: var(--text-2); }
+.big { font-family: "Segoe UI Variable Display", "Segoe UI", sans-serif; font-size: 40px; line-height: 48px; font-weight: 600; letter-spacing: -.5px; }
+.minis { display: grid; grid-template-columns: repeat(3,1fr); gap: var(--s3); margin-top: var(--s4); padding-top: var(--s4); border-top: 1px solid var(--border); }
+.minis .v { font-size: 20px; line-height: 28px; font-weight: 600; }
+.rhythm-head { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; justify-content: space-between; margin-bottom: var(--s3); }
+.bars { display: grid; grid-template-columns: repeat(24,1fr); gap: 3px; align-items: end; height: 72px; }
+.bars span { background: var(--bar); border-radius: 2px; min-height: 3px; }
+.bars span.peak { background: var(--accent); }
+.bars span.some { background: color-mix(in srgb, var(--accent) 55%, var(--bar)); }
+.axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-3); margin-top: 4px; }
+.models-used li { display: grid; grid-template-columns: 1fr auto; gap: 4px var(--s2); font-size: 13px; margin-top: var(--s3); }
+.models-used .track { grid-column: 1 / -1; height: 4px; border-radius: 2px; background: var(--bar); }
+.models-used .track i { display: block; height: 100%; border-radius: 2px; background: var(--accent); }
+.illustrative { font-size: 11px; color: var(--tag); }
+
+/* ---------- Meetings ---------- */
+.mrow { display: flex; align-items: center; gap: var(--s4); padding: var(--s3); margin: 0 calc(-1 * var(--s3)); border-radius: 10px; text-decoration: none; color: inherit; }
+.mrow:hover { background: var(--card); }
+.mrow .t { font-weight: 600; }
+.mrow .s { color: var(--text-3); font-size: 13px; display: flex; align-items: center; margin-top: 2px; }
+.mrow .grow { flex: 1; min-width: 0; }
+.mrow .chev { color: var(--text-3); opacity: 0; transition: opacity .12s, transform .12s; }
+.mrow:hover .chev { opacity: 1; transform: translateX(2px); }
+
+/* ---------- Models ---------- */
+.model { display: grid; grid-template-columns: 40px minmax(0,1fr) auto; gap: var(--s4); align-items: center; padding: var(--s4); border-radius: var(--r-card); background: var(--card); margin-bottom: var(--s2); }
+.model.inuse { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 60%, transparent); }
+.mono { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; font-weight: 700; background: var(--control); color: var(--text); }
+.model .name { font-weight: 600; display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; }
+.model .spec { color: var(--text-2); font-size: 13px; margin-top: 2px; }
+.model .acts { display: flex; align-items: center; gap: 4px; }
+.model details { grid-column: 2 / -1; }
+.model summary { list-style: none; }
+.model .more { margin-top: var(--s2); padding-top: var(--s3); border-top: 1px solid var(--border); display: grid; grid-template-columns: 120px 1fr; gap: 6px var(--s4); font-size: 13px; color: var(--text-2); }
+.model .more dt { color: var(--text-3); }
+.model .more dd { margin: 0; }
+.progress { width: 160px; display: grid; gap: 4px; font-size: 12px; color: var(--text-2); }
+.progress .bar { height: 4px; border-radius: 2px; background: var(--bar); overflow: hidden; }
+.progress .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .25s linear; }
+.models-section + .models-section { margin-top: var(--s6); }
+
+/* ---------- Dictionary ---------- */
+.adder { display: flex; gap: var(--s2); align-items: center; margin-bottom: var(--s3); }
+.adder .search { flex: 1; max-width: 420px; }
+.adder .count { margin-left: auto; color: var(--text-3); font-size: 13px; }
+.wrow { display: flex; align-items: center; gap: var(--s2); height: 44px; padding: 0 var(--s3); border-radius: var(--r-ctl); border-bottom: 1px solid var(--border); }
+.wrow:hover, .wrow:focus-within { background: var(--card); border-bottom-color: transparent; }
+.wrow .w { flex: 1; }
+.wrow .acts { opacity: 0; display: flex; gap: 2px; }
+.wrow:hover .acts, .wrow:focus-within .acts { opacity: 1; }
+.wrow input.field { flex: 1; height: 30px; }
+
+/* ---------- Settings ---------- */
+.settings-grid { display: grid; grid-template-columns: minmax(0,1fr) 180px; gap: var(--s7); align-items: start; }
+.toc { position: sticky; top: 16px; display: grid; gap: 2px; font-size: 13px; }
+.toc a { color: var(--text-2); text-decoration: none; padding: 6px 10px; border-radius: 6px; border-left: 2px solid transparent; }
+.toc a:hover { color: var(--text); background: var(--hover); }
+.toc a.cur { color: var(--text); border-left-color: var(--accent); background: var(--active); }
+.sgroup { margin-bottom: var(--s6); }
+.sgroup > h2 { margin-bottom: var(--s3); }
+.sgroup > .lede { color: var(--text-2); margin: -4px 0 var(--s3); max-width: 64ch; }
+.rows { background: var(--card); border-radius: var(--r-card); }
+.srow { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: var(--s2) var(--s6); align-items: center; padding: var(--s4) var(--s5); }
+.srow + .srow, .rows > .sub + .srow, .srow + .sub { border-top: 1px solid var(--border); }
+.srow .lbl { font-weight: 600; }
+.srow .desc { color: var(--text-2); font-size: 13px; margin-top: 2px; max-width: 62ch; }
+.srow .ctl { display: flex; align-items: center; gap: var(--s2); justify-self: end; }
+.srow .ctl .field { width: 220px; }
+.srow .full { grid-column: 1 / -1; }
+.srow.child { padding-left: calc(var(--s5) + var(--s5)); }
+.inline-warn { display: flex; gap: var(--s3); align-items: flex-start; padding: var(--s3) var(--s4); border-radius: var(--r-ctl); background: var(--tag-bg); color: var(--text); font-size: 13px; }
+.inline-warn svg { color: var(--tag); margin-top: 2px; }
+.inline-warn p { margin: 0; }
+.inline-warn p + p { color: var(--text-2); margin-top: 2px; }
+.confirm { display: grid; gap: var(--s3); padding: var(--s4); border-radius: var(--r-ctl); background: var(--surface); border: 1px solid var(--border); }
+.confirm p { margin: 0; color: var(--text-2); max-width: 70ch; }
+.confirm .row { display: flex; gap: var(--s2); }
+.stepper { display: inline-flex; align-items: center; border: 1px solid var(--border); border-radius: var(--r-ctl); background: var(--search); }
+.stepper button { width: 32px; height: 30px; border: 0; background: none; color: var(--text-2); }
+.stepper button:hover { color: var(--text); background: var(--hover); }
+.stepper output { min-width: 56px; text-align: center; }
+.shortcut-keys { display: inline-flex; gap: 4px; align-items: center; color: var(--text-3); }
+
+/* ---------- Mockup chrome (not part of the app) ---------- */
+.mock { position: fixed; left: 12px; bottom: 64px; z-index: 50; width: 224px; padding: var(--s3) var(--s4); border-radius: var(--r-card);
+  background: #0B0E13; color: #E6E8EA; border: 1px dashed #6B7480; font-size: 12px; box-shadow: 0 12px 32px rgba(0,0,0,.4); }
+.mock h3 { margin: 0 0 var(--s2); font-size: 11px; letter-spacing: .6px; text-transform: uppercase; color: #F2C14E; }
+.mock label { display: flex; align-items: center; gap: var(--s2); padding: 3px 0; cursor: pointer; }
+.mock .note { color: #9AA1A9; margin: var(--s2) 0 0; line-height: 16px; }
+.mock.min > :not(h3) { display: none; }
+.mock h3 button { float: right; background: none; border: 0; color: #9AA1A9; font-size: 11px; }
+.changes { display: none; margin-bottom: var(--s5); padding: var(--s3) var(--s4); border: 1px dashed #F2C14E; border-radius: var(--r-card); font-size: 13px; color: var(--text-2); }
+.changes b { color: #F2C14E; font-weight: 600; }
+.changes ul { margin: 6px 0 0; padding-left: 18px; }
+body.annotate .changes { display: block; }
+
+
+/* ---------- Adaptation ---------- */
+@media (max-width: 1360px) {
+  .home-grid { grid-template-columns: minmax(0,1fr); }
+  .rail { position: static; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); order: -1; }
+}
+@media (max-height: 760px) { .rail { position: static; } }
+@media (max-width: 1100px) {
+  .settings-grid { grid-template-columns: minmax(0,1fr); }
+  .toc { display: none; }
+}
+@media (max-width: 900px) {
+  .mock { left: auto; right: 12px; bottom: 12px; }
+  :root { --nav-w: 64px; }
+  .brand span { display: none; }
+  /* Compact links keep their text for assistive technology. */
+  .nav a span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .wrap { padding-left: 20px; padding-right: 20px; }
+  .titlebar { padding-left: 20px; }
+  .page-head { flex-wrap: wrap; }
+  .srow { grid-template-columns: minmax(0,1fr); }
+  .srow .ctl { justify-self: start; }
+  .hrow { grid-template-columns: minmax(0,1fr) auto; }
+  .hrow time { grid-column: 1 / -1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-home" viewBox="0 0 16 16"><path d="M2.5 7 8 2.5 13.5 7v6a.5.5 0 0 1-.5.5H10V10H6v3.5H3a.5.5 0 0 1-.5-.5Z"/></symbol>
+  <symbol id="i-meet" viewBox="0 0 16 16"><path d="M2 3.5h8v6H5L2 12ZM10 6h4v6.5l-2.5-2H6.5V9.5"/></symbol>
+  <symbol id="i-model" viewBox="0 0 16 16"><path d="M8 2v8m-3-3 3 3 3-3M2.5 11v2.5h11V11"/></symbol>
+  <symbol id="i-book" viewBox="0 0 16 16"><path d="M3.5 2.5h9v11h-9zM6 5.5h4M6 8h4"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2"/><path d="M8 1.8v1.7M8 12.5v1.7M1.8 8h1.7M12.5 8h1.7M3.6 3.6l1.2 1.2M11.2 11.2l1.2 1.2M3.6 12.4l1.2-1.2M11.2 4.8l1.2-1.2"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 16 16"><rect x="5.5" y="1.5" width="5" height="8" rx="2.5"/><path d="M3 7.5a5 5 0 0 0 10 0M8 12.5v2"/></symbol>
+  <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"/></symbol>
+  <symbol id="i-more" viewBox="0 0 16 16"><circle cx="3.5" cy="8" r=".6"/><circle cx="8" cy="8" r=".6"/><circle cx="12.5" cy="8" r=".6"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 16 16"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 9h5.8l.6-9"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 16 16"><path d="m10.5 2.5 3 3-8 8h-3v-3Z"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 16 16"><path d="m6 3.5 4.5 4.5L6 12.5"/></symbol>
+  <symbol id="i-down" viewBox="0 0 16 16"><path d="m4 6 4 4 4-4"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 16 16"><path d="M2 4a1 1 0 0 1 1-1h3l1.5 1.5H13a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1Z"/></symbol>
+  <symbol id="i-file" viewBox="0 0 16 16"><path d="M4 1.5h5.5l3 3v10H4zM9.5 1.5v3h3M6.5 9v2.5M8 7.5v5.5M9.5 9v2.5"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 16 16"><path d="M8 2 14.5 13.5h-13ZM8 6.5v3M8 11.5v.1"/></symbol>
+  <symbol id="i-info" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 7.5v3.5M8 5v.1"/></symbol>
+  <symbol id="i-x" viewBox="0 0 16 16"><path d="m4 4 8 8m0-8-8 8"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></symbol>
+  <symbol id="i-check" viewBox="0 0 16 16"><path d="m3 8.5 3 3 7-7"/></symbol>
+</svg>
+
+<nav class="nav" aria-label="Main">
+  <div class="brand"><div class="brand-mark" aria-hidden="true"></div><span>Ansible</span></div>
+  <a href="#home" data-page="home"><svg class="i"><use href="#i-home"/></svg><span>Home</span></a>
+  <a href="#meetings" data-page="meetings"><svg class="i"><use href="#i-meet"/></svg><span>Meetings</span></a>
+  <a href="#models" data-page="models"><svg class="i"><use href="#i-model"/></svg><span>Speech models</span></a>
+  <a href="#dictionary" data-page="dictionary"><svg class="i"><use href="#i-book"/></svg><span>Dictionary</span></a>
+  <div class="spacer"></div>
+  <a href="#settings" data-page="settings"><svg class="i"><use href="#i-gear"/></svg><span>Settings</span></a>
+</nav>
+
+<div class="titlebar" id="titlebar">
+  <span class="tb-title" id="tbTitle">Home</span>
+  <div class="tb-actions" id="tbActions"></div>
+</div>
+<div class="caption" aria-hidden="true">
+  <span><svg class="i" viewBox="0 0 16 16"><path d="M4 8h8"/></svg></span>
+  <span><svg class="i" viewBox="0 0 16 16"><rect x="4" y="4" width="8" height="8"/></svg></span>
+  <span><svg class="i"><use href="#i-x"/></svg></span>
+</div>
+
+<main>
+<div class="wrap">
+
+
+  <!-- ===================== HOME ===================== -->
+  <section class="page" id="page-home" data-title="Home" aria-labelledby="h-home">
+    <div class="changes"><b>Changes on Home.</b><ul>
+      <li>History flows in the page. The window scrollbar is the only scrollbar; day labels stick under the title bar.</li>
+      <li>Insights rail is compact and sticky so it stays in view while you scroll history. Under 1360px it becomes a strip above history.</li>
+      <li>"Not verified" is quiet text. Only "Not inserted" is amber, and its Copy button stays visible because that text never reached the app.</li>
+      <li>Every notification uses one Notice control. It floats over the bottom of the content panel, never pushes content, and shows only on the pages its area covers. Content gains bottom padding while notices show, so the last rows stay reachable.</li>
+      <li>Removed "Learn your shortcut" link and subtitle. The keycaps already teach the shortcut; Settings changes it.</li>
+    </ul></div>
+    <header class="page-head">
+      <div><h1 id="h-home">Good afternoon</h1></div>
+      <div class="actions greeting-actions">
+        <span class="keys">Hold <kbd>Ctrl</kbd>+<kbd>Space</kbd> anywhere</span>
+        <button class="btn primary lg" data-toast="Listening. Release to insert." data-primary><svg class="i"><use href="#i-mic"/></svg>Dictate</button>
+      </div>
+    </header>
+
+    <div class="home-grid">
+      <div>
+        <div class="sec-head">
+          <h2 class="sec">History</h2>
+          <span class="badge num" id="histCount">21 transcriptions</span>
+          <span class="grow"></span>
+          <label class="search" style="width:280px">
+            <span class="sr">Search transcripts</span>
+            <svg class="i"><use href="#i-search"/></svg>
+            <input class="field" id="histSearch" type="search" placeholder="Search transcripts">
+            <kbd>Ctrl K</kbd>
+          </label>
+        </div>
+        <div id="history"></div>
+      </div>
+
+      <aside class="rail" aria-label="Your voice, in numbers">
+        <div class="card">
+          <div class="metric-label">Words dictated · all time on this device</div>
+          <div class="big num">2,488</div>
+          <div class="minis">
+            <div><div class="v num">123</div><div class="metric-label">Words / min</div></div>
+            <div><div class="v num">43</div><div class="metric-label">Dictations</div></div>
+            <div><div class="v num">20.3</div><div class="metric-label">Mic minutes</div></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="rhythm-head">
+            <div><strong>Daily rhythm</strong> <span class="badge accent" style="margin-left:6px">1 day streak</span></div>
+            <div class="seg" role="group" aria-label="Period" style="transform:scale(.9);transform-origin:right">
+              <button aria-pressed="true">Week</button><button aria-pressed="false">Month</button>
+            </div>
+          </div>
+          <div class="bars" id="bars" role="img" aria-label="Dictations by hour of day, last 7 days. Busiest hour 12:00 with 7 dictations."></div>
+          <div class="axis"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>
+          <div class="metric-label" style="margin-top:8px">24 dictations, last 7 days. Busiest hour 12:00 (7).</div>
+          <div class="illustrative">Per-hour split is illustrative; totals are from the screenshot.</div>
+        </div>
+        <div class="card">
+          <strong>Most-used models</strong>
+          <ul class="list models-used">
+            <li><span>Nemotron 3.5 ASR 0.6B</span><span class="num">41</span><span class="track"><i style="width:95%"></i></span></li>
+            <li><span>Kroko English 64-L</span><span class="num">2</span><span class="track"><i style="width:5%"></i></span></li>
+          </ul>
+          <div class="illustrative" style="margin-top:8px">Illustrative counts. The screenshot cut this card off.</div>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ===================== MEETINGS ===================== -->
+  <section class="page" id="page-meetings" data-title="Meetings" aria-labelledby="h-meet">
+    <div class="changes"><b>Changes on Meetings.</b><ul>
+      <li>List is content height and grouped by day like History. No empty panel stretched to the window bottom.</li>
+      <li>Status is a badge only when it needs attention (Failed). Completed is the quiet default.</li>
+      <li>Privacy line folded into the subtitle. Year dropped for dates in the current year.</li>
+    </ul></div>
+    <header class="page-head">
+      <div><h1 id="h-meet">Meetings</h1><p>Transcribed on this device. Audio is never saved.</p></div>
+      <div class="actions"><button class="btn primary lg" data-primary data-toast="Notetaker window opens. Nothing records until you click Start.">Start meeting</button></div>
+    </header>
+    <div id="meetingList"></div>
+  </section>
+
+  <!-- ===================== MODELS ===================== -->
+  <section class="page" id="page-models" data-title="Speech models" aria-labelledby="h-models">
+    <div class="changes"><b>Changes on Speech models.</b><ul>
+      <li>Uneven card grid replaced by grouped rows: In use, Installed, Available. Status is the group, so rows drop the "In use" dot.</li>
+      <li>Diarization companion is grouped under In use for meetings and never offers Use.</li>
+      <li>Info expands in place with catalog details from <code>tools/audio-models.json</code>. "Custom words" chip comes from <code>supports_custom_dictionary</code>.</li>
+      <li>Download shows progress in the row (simulated here).</li>
+    </ul></div>
+    <header class="page-head">
+      <div><h1 id="h-models">Speech models</h1><p>Recognition runs on this device. One model handles dictation at a time.</p></div>
+      <div class="actions">
+        <button class="btn"><svg class="i"><use href="#i-file"/></svg>Transcribe WAV file…</button>
+        <button class="btn"><svg class="i"><use href="#i-folder"/></svg>Model folder</button>
+      </div>
+    </header>
+    <div id="modelList"></div>
+  </section>
+
+  <!-- ===================== DICTIONARY ===================== -->
+  <section class="page" id="page-dictionary" data-title="Dictionary" aria-labelledby="h-dict">
+    <div class="changes"><b>Changes on Dictionary.</b><ul>
+      <li>The "model does not support custom words" footnote is now a warning at the top, with the installed model that does support them.</li>
+      <li>One field both finds and adds. Enter adds the word; no separate Add dialog.</li>
+      <li>Delete is immediate with Undo instead of a confirmation.</li>
+    </ul></div>
+    <header class="page-head">
+      <div><h1 id="h-dict">Dictionary</h1><p>Words that guide recognition. Stored on this device. Not replacement rules.</p></div>
+      <div class="actions"><button class="btn">Import…</button></div>
+    </header>
+    <div class="notice warning inline" role="note">
+      <div class="dot" aria-hidden="true"><svg class="i"><use href="#i-warn"/></svg></div>
+      <div class="msg"><b>Nemotron 3.5 ASR Streaming 0.6B Q8 ignores custom words.</b>Kroko English Community 64-L Q8 is installed and uses them.</div>
+      <a class="btn" href="#models">Speech models</a>
+    </div>
+    <div class="adder">
+      <label class="search">
+        <span class="sr">Find or add a word</span>
+        <svg class="i"><use href="#i-search"/></svg>
+        <input class="field" id="wordInput" placeholder="Find or add a word" autocomplete="off">
+      </label>
+      <button class="btn primary" id="addWord"><svg class="i"><use href="#i-plus"/></svg>Add</button>
+      <span class="count num" id="wordCount">7 of 100</span>
+    </div>
+    <ul class="list" id="words"></ul>
+  </section>
+
+  <!-- ===================== SETTINGS ===================== -->
+  <section class="page" id="page-settings" data-title="Settings" aria-labelledby="h-set">
+    <div class="changes"><b>Changes on Settings.</b><ul>
+      <li>One pattern per row: label and description left, control right. Checkboxes and left-aligned toggles become right-aligned toggles.</li>
+      <li>Sections regrouped: meeting suggestions moved from Privacy into Meetings beside transcript cleanup.</li>
+      <li>Vulkan warning and device line show only when Vulkan is selected. Paste shortcut shows only when Paste text is selected.</li>
+      <li>Proposal: cleanup fields save on change. "Save cleanup settings" is replaced by an explicit confirm when turning on automatic cleanup. Consent wording is kept.</li>
+      <li>Sticky section index on the right at wide widths.</li>
+    </ul></div>
+    <header class="page-head">
+      <div><h1 id="h-set">Settings</h1><p>How Ansible listens, recognizes speech, and handles your data.</p></div>
+    </header>
+
+    <div class="settings-grid">
+      <div>
+        <section class="sgroup" id="s-dictation">
+          <h2 class="sec">Dictation</h2>
+          <div class="rows">
+            <div class="srow">
+              <div><div class="lbl">Activation</div><div class="desc">Hold the shortcut while you speak, or press once to start and again to stop.</div></div>
+              <div class="ctl"><div class="seg" role="group" aria-label="Activation"><button aria-pressed="true">Hold to talk</button><button aria-pressed="false">Press to start and stop</button></div></div>
+            </div>
+            <div class="srow">
+              <div><div class="lbl">Shortcut</div></div>
+              <div class="ctl"><span class="shortcut-keys"><kbd>Ctrl</kbd>+<kbd>Space</kbd></span><button class="btn">Change</button><button class="btn subtle">Reset</button></div>
+            </div>
+            <div class="srow">
+              <div><div class="lbl">Show overlay at the text cursor</div><div class="desc">Falls back to the bottom of the screen when Windows cannot report the cursor position.</div></div>
+              <div class="ctl"><button class="toggle" role="switch" aria-checked="true"><span class="state">On</span><span class="track"></span></button></div>
+            </div>
+            <div class="srow">
+              <div><div class="lbl">Text insertion</div><div class="desc" id="insertDesc"></div></div>
+              <div class="ctl"><div class="seg" role="group" aria-label="Text insertion" id="insertSeg"><button aria-pressed="true" data-v="paste">Paste text</button><button aria-pressed="false" data-v="type">Type characters</button></div></div>
+            </div>
+            <div class="srow child" id="pasteRow">
+              <div><div class="lbl">Paste shortcut</div><div class="desc">Use the shortcut your editor or terminal accepts. Applies to all paste dictation. Not detected automatically.</div></div>
+              <div class="ctl"><select class="field" aria-label="Paste shortcut"><option>Ctrl+V</option><option>Ctrl+Shift+V</option><option>Shift+Insert</option></select></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="sgroup" id="s-recognition">
+          <h2 class="sec">Recognition</h2>
+          <p class="lede">Applies to the next dictation.</p>
+          <div class="rows">
+            <div class="srow">
+              <div><div class="lbl">Microphone boost</div><div class="desc">For quiet speech or whispering. 0 is off; try 6 or 12 dB first. Higher boost also raises background noise and can distort louder speech.</div></div>
+              <div class="ctl"><div class="stepper"><button aria-label="Decrease">−</button><output class="num" id="boost">6 dB</output><button aria-label="Increase">+</button></div></div>
+            </div>
+            <div class="srow">
+              <div><div class="lbl">Language hint</div><div class="desc">Leave empty to use the model default.</div></div>
+              <div class="ctl"><input class="field" placeholder="Model default" aria-label="Language hint"></div>
+            </div>
+            <div class="srow">
+              <div><div class="lbl">Processor</div><div class="desc">Auto picks a processor for this device.</div></div>
+              <div class="ctl"><div class="seg" role="group" aria-label="Processor" id="procSeg"><button aria-pressed="false" data-v="auto">Auto (recommended)</button><button aria-pressed="false" data-v="cpu">CPU</button><button aria-pressed="true" data-v="vulkan">Vulkan</button></div></div>
+              <div class="full inline-warn" id="vulkanWarn">
+                <svg class="i"><use href="#i-warn"/></svg>
+                <div><p>Nemotron GPU streaming has a known native crash in this build. Choose Auto or CPU for dictation and replay.</p><p>Manual Vulkan, device 0. No automatic benchmark or fallback.</p></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="sgroup" id="s-meetings">
+          <h2 class="sec">Meetings</h2>
+          <div class="rows">
+            <div class="srow">
+              <div><div class="lbl">Suggest notes when Teams uses the microphone</div><div class="desc">Checks app activity without recording audio. You must click Start to capture a meeting. Calendar access is not used.</div></div>
+              <div class="ctl"><button class="toggle" role="switch" aria-checked="true"><span class="state">On</span><span class="track"></span></button></div>
+            </div>
+          </div>
+          <h3 style="margin:var(--s5) 0 4px;font-size:15px">Transcript cleanup</h3>
+          <p class="lede" style="color:var(--text-2);margin:0 0 var(--s3);max-width:64ch">Sends completed meeting text, never audio, to the service you choose. Original wording is kept.</p>
+          <div class="rows">
+            <div class="srow">
+              <div><div class="lbl">Service</div><div class="desc" id="svcDesc">Uses the installed Copilot CLI and its signed-in account. Run <code>copilot login</code> if needed. No fallback to another service or account.</div></div>
+              <div class="ctl"><select class="field" id="svc" aria-label="Cleanup service"><option>Copilot CLI</option><option>OpenAI</option></select></div>
+            </div>
+            <div class="srow child">
+              <div><div class="lbl">Model</div></div>
+              <div class="ctl"><input class="field" value="gpt-6-luna" aria-label="Copilot model"></div>
+            </div>
+            <div class="srow child">
+              <div><div class="lbl">Reasoning effort</div></div>
+              <div class="ctl"><select class="field" aria-label="Reasoning effort"><option>low</option><option>medium</option><option selected>high</option></select></div>
+            </div>
+            <div class="srow">
+              <div><div class="lbl">Clean up automatically</div><div class="desc">Off until you turn it on. Manual cleanup stays available on each meeting.</div></div>
+              <div class="ctl"><button class="toggle" role="switch" aria-checked="false" id="autoClean"><span class="state">Off</span><span class="track"></span></button></div>
+              <div class="full confirm" id="autoConfirm" hidden>
+                <p><strong style="color:var(--text)">Send each new completed meeting transcript to <span id="svcName">Copilot CLI</span> without asking again?</strong></p>
+                <p>Applies to meetings started after you turn this on. Saved meetings are not uploaded automatically.</p>
+                <div class="row"><button class="btn primary" id="autoYes">Turn on</button><button class="btn" id="autoNo">Cancel</button></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="sgroup" id="s-privacy">
+          <h2 class="sec">Privacy and data</h2>
+          <div class="rows">
+            <div class="srow">
+              <div><div class="lbl">Hide overlay and meeting windows from capture</div><div class="desc">Applies to supported Windows screenshots and screen sharing. The main window stays visible. Some recorders can still capture protected windows.</div></div>
+              <div class="ctl"><button class="toggle" role="switch" aria-checked="false"><span class="state">Off</span><span class="track"></span></button></div>
+            </div>
+            <div class="srow">
+              <div><div class="lbl">Usage statistics</div><div class="desc">Records session counts only. Never audio or text.</div></div>
+              <div class="ctl"><button class="toggle" role="switch" aria-checked="true"><span class="state">On</span><span class="track"></span></button></div>
+            </div>
+            <div class="srow">
+              <div><div class="lbl">Local diagnostics</div><div class="desc">Operational metadata stays on this device. No audio or transcript text is recorded.</div></div>
+              <div class="ctl"><button class="toggle" role="switch" aria-checked="true"><span class="state">On</span><span class="track"></span></button></div>
+            </div>
+          </div>
+        </section>
+      </div>
+      <nav class="toc" aria-label="Settings sections">
+        <a href="#s-dictation" class="cur">Dictation</a>
+        <a href="#s-recognition">Recognition</a>
+        <a href="#s-meetings">Meetings</a>
+        <a href="#s-privacy">Privacy and data</a>
+      </nav>
+    </div>
+  </section>
+
+</div>
+</main>
+
+<div class="notice-host" id="noticeHost" role="region" aria-label="Notifications"></div>
+
+<aside class="mock" id="mock" aria-label="Mockup controls">
+  <h3>Mockup controls <button id="mockMin">hide</button></h3>
+  <label><input type="checkbox" id="mAnn"> Show change notes per page</label>
+  <label for="mNoticePick" style="padding-top:6px">Fire a notice (copy from the app)</label>
+  <select id="mNoticePick" style="width:100%;margin:2px 0 6px;background:#161B22;color:#E6E8EA;border:1px solid #3A424D;border-radius:6px;padding:3px 4px;font-size:12px"></select>
+  <div style="display:flex;gap:6px"><button class="btn" id="mNoticeShow" style="height:26px;font-size:12px">Show</button><button class="btn subtle" id="mNoticeClear" style="height:26px;font-size:12px">Clear all</button></div>
+  <label><input type="checkbox" id="mEmpty"> Empty data</label>
+  <label><input type="checkbox" id="mLight"> Light theme</label>
+  <p class="note">Content is copied from the 2 Nov screenshots unless marked illustrative. Resize the window to see the rail and settings index reflow.</p>
+</aside>
+
+<script>
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const ic = (id) => `<svg class="i"><use href="#i-${id}"/></svg>`;
+const esc = (s) => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* ---------- Data copied from screenshots ---------- */
+const NEM = 'Nemotron 3.5 ASR Streaming 0.6B Q8';
+const history = [
+  { day: 'Today', items: [
+    ['12:34 PM', 'डैशबोर्ड पेज, वन लीडरशिप, वे \' needs our attention if nothing needs my attention, then don\'t show me anything', 19, '0:13', 'unverified'],
+    ['12:34 PM', 'On the dashboard page when nothing needs attention, we shouldn\'t show a bar that says nothing needs your attention.  We should just remove that', 24, '0:11', 'failed'],
+    ['11:33 AM', 'You\'ve already shown great knack at prototyping to communicate your ideas, and I want to encourage you to continue to push forward in that space', 25, '0:19', 'failed'],
+  ]},
+  { day: 'Wed, Oct 28', items: [
+    ['4:30 PM', 'When done, create logical commits, and then I want to create stacked PRs to emerge all of these changes', 19, '0:10', 'unverified'],
+    ['11:10 AM', 'No, I mean if I\'m in a bulleted list and I erase the content and the bullet for that list, sometimes the list gets split into two, and then I cannot erase that blank line it just remains other times I can delete a bullet and it\'s totally fine', 49, '0:24', 'unverified'],
+    ['11:00 AM', 'To enable users to personalize their device, get the right apps on their machines and get set up with the Microsoft ecosystem so that their experience with Windows and Microsoft is better.', 32, '0:19', 'unverified'],
+    ['10:59 AM', 'We will continue to work on delivering holistic improvements across each step of the onboarding journey to ensure that people exit the onboarding journey with high confidence, their device is ready for them.', null, null, 'unverified'],
+  ]},
+];
+const meetings = [
+  { day: 'Today', items: [['New meeting', '12:03 PM', 'Failed']] },
+  { day: 'Wed, Oct 28', items: [['New meeting', '11:50 AM', 'Completed'], ['Onboarding crew', '9:39 AM', 'Completed'], ['Circle round', '8:54 AM', 'Completed'], ['New meeting', '8:53 AM', 'Failed']] },
+  { day: 'Tue, Oct 27', items: [['New meeting', '11:02 AM', 'Completed'], ['New meeting', '9:33 AM', 'Completed'], ['New meeting', '9:33 AM', 'Completed']] },
+  { day: 'Mon, Oct 26', items: [['New meeting', '10:29 PM', 'Failed'], ['New meeting', '10:28 PM', 'Failed'], ['New meeting', '10:23 PM', 'Failed']] },
+];
+/* Catalog fields from tools/audio-models.json; sizes from the Models screenshot. */
+const models = [
+  { group: 'In use', id: 'nem', mono: 'N', name: NEM, role: 'Dictation', spec: 'Live transcript · 2.08 GiB', words: false, state: 'inuse',
+    lang: 'Depends on the upstream model; not qualified by this app.', lic: 'OpenMDW-1.1', desc: 'Streaming speech recognition with incremental text. Real-time CPU performance is not guaranteed.' },
+  { group: 'In use', id: 'diar', mono: 'N', name: 'Nemotron 3 Diarization Q8', role: 'Meeting companion', spec: 'Meeting speaker detection · 1.19 GiB', words: false, state: 'companion',
+    lang: 'Depends on the upstream model; not qualified by this app.', lic: 'OpenMDW-1.1', desc: 'Labels speaker turns. Does not transcribe speech or identify people by name.' },
+  { group: 'Installed', id: 'kroko', mono: 'K', name: 'Kroko English Community 64-L Q8', spec: 'Live transcript · 1.26 GiB', words: true, state: 'installed',
+    lang: 'English', lic: 'CC-BY-SA (version unspecified upstream)', desc: 'English-only streaming recognition with live custom hotwords.' },
+  { group: 'Available', id: 'moon', mono: 'M', name: 'Moonshine Streaming Tiny Q8', spec: 'Text after you finish · 57.6 MiB download · 1.15 GiB memory', words: false, state: 'available',
+    lang: 'English', lic: 'MIT', desc: 'Small English dictation model. Buffers speech and returns text after Finish.' },
+  { group: 'Available', id: 'vv15', mono: 'V', name: 'VibeVoice ASR Streaming 1.5B Q4_K', spec: 'Live transcript · 1.97 GiB download · 3.35 GiB memory', words: true, state: 'available',
+    lang: 'Depends on the upstream model; not qualified by this app.', lic: 'MIT', desc: 'Streaming recognition with incremental text.' },
+  { group: 'Available', id: 'qwen', mono: 'Q', name: 'Qwen3-ASR 0.6B Q8', spec: 'Buffered text · 1.07 GiB download · 2.31 GiB memory', words: true, state: 'available',
+    lang: 'Multilingual; individual languages not qualified by this app.', lic: 'Apache-2.0', desc: 'Text arrives after the native decoding step, not continuously.' },
+  { group: 'Available', id: 'vv7', mono: 'V', name: 'VibeVoice ASR 7B Q8', spec: 'Text after you finish · 9.18 GiB download · 11.59 GiB memory', words: true, state: 'available',
+    lang: 'Multilingual; individual languages not qualified by this app.', lic: 'MIT', desc: 'Large offline model. Loading requires substantial free memory.' },
+];
+let words = ['Karyl', 'luna', 'OOBE', 'SCOOBE', 'Sharma', 'sol', 'terra'];
+const hours = Array(24).fill(0); Object.assign(hours, { 9: 1, 10: 2, 11: 5, 12: 7, 13: 3, 16: 2, 17: 4 });
+let empty = false;
+
+/* ---------- Home ---------- */
+function renderHistory() {
+  const q = $('#histSearch').value.trim().toLowerCase();
+  const host = $('#history');
+  if (empty) {
+    host.innerHTML = `<div class="empty"><strong>No dictations yet</strong>Hold <kbd>Ctrl</kbd>+<kbd>Space</kbd> in any app and speak. Your text appears here too.</div>`;
+    $('#histCount').textContent = '0 transcriptions'; return;
+  }
+  let n = 0, html = '';
+  for (const g of history) {
+    const rows = g.items.filter(r => !q || r[1].toLowerCase().includes(q));
+    if (!rows.length) continue;
+    html += `<div class="group-label day">${g.day}</div><ul class="list">`;
+    for (const [t, txt, w, dur, st] of rows) {
+      n++;
+      const shown = q ? esc(txt).replace(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'ig'), m => `<mark>${m}</mark>`) : esc(txt);
+      const meta = [w != null ? `${w} words` : null, dur, 'Nemotron 3.5 ASR 0.6B'].filter(Boolean).join(' · ');
+      const status = st === 'failed'
+        ? `<span class="badge warn">${ic('x')}Not inserted</span>`
+        : `<span class="unverified" title="Ansible sent the text but could not confirm the app received it.">${ic('info')}Not verified</span>`;
+      html += `<li class="hrow ${st === 'failed' ? 'needs-copy' : ''}"><time>${t}</time>
+        <div><p class="txt">${shown}</p><div class="meta num"><span>${meta}</span>${status}</div></div>
+        <div class="acts"><button class="btn subtle icon copy" aria-label="Copy transcript" data-toast="Copied to clipboard">${ic('copy')}</button>
+        <button class="btn subtle icon" aria-label="More actions">${ic('more')}</button></div></li>`;
+    }
+    html += '</ul>';
+  }
+  host.innerHTML = html || `<div class="empty"><strong>No matches</strong>No saved transcript contains "${esc(q)}".</div>`;
+  $('#histCount').textContent = q ? `${n} of 21` : '21 transcriptions';
+}
+function renderBars() {
+  const max = Math.max(...hours);
+  $('#bars').innerHTML = hours.map((v, h) =>
+    `<span class="${v === max ? 'peak' : v ? 'some' : ''}" style="height:${v ? Math.max(8, v / max * 100) : 4}%" title="${String(h).padStart(2,'0')}:00 · ${v} dictations"></span>`).join('');
+}
+
+/* ---------- Meetings ---------- */
+function renderMeetings() {
+  if (empty) { $('#meetingList').innerHTML = `<div class="empty"><strong>No meetings yet</strong>Start a meeting to transcribe it locally. Ansible suggests notes when Teams uses your microphone.</div>`; return; }
+  $('#meetingList').innerHTML = meetings.map(g => `<div class="group-label day">${g.day}</div><ul class="list">` +
+    g.items.map(([t, time, st]) => `<li><a class="mrow" href="#meetings" data-toast="Opens the meeting window."><div class="grow"><div class="t">${t}</div><div class="s num">${time}${st === 'Failed' ? ` <span class="badge danger" style="margin-left:6px">Failed</span>` : ''}</div></div>
+      <span class="chev">${ic('chev')}</span></a></li>`).join('') + '</ul>').join('');
+}
+
+/* ---------- Models ---------- */
+function modelRow(m) {
+  let acts = '';
+  if (m.state === 'available') acts = `<button class="btn primary" data-dl="${m.id}">Download</button>`;
+  if (m.state === 'installed') acts = `<button class="btn" data-use="${m.id}">Use for dictation</button><button class="btn subtle icon" aria-label="Remove ${esc(m.name)}">${ic('trash')}</button>`;
+  if (m.state === 'inuse' || m.state === 'companion') acts = `<button class="btn subtle icon" aria-label="Remove ${esc(m.name)}">${ic('trash')}</button>`;
+  return `<div class="model ${m.state === 'inuse' ? 'inuse' : ''}" id="m-${m.id}">
+    <div class="mono" aria-hidden="true">${m.mono}</div>
+    <div><div class="name">${esc(m.name)}${m.role ? `<span class="badge accent">${m.role}</span>` : ''}${m.words ? `<span class="badge">Custom words</span>` : ''}</div>
+      <div class="spec num">${m.spec}</div></div>
+    <div class="acts">${acts}<button class="btn subtle icon" aria-expanded="false" aria-label="Details" data-more="${m.id}">${ic('info')}</button></div>
+    <dl class="more" hidden style="grid-column:2 / -1"><dt>About</dt><dd>${m.desc}</dd><dt>Languages</dt><dd>${m.lang}</dd><dt>License</dt><dd>${m.lic}</dd></dl>
+  </div>`;
+}
+function renderModels() {
+  const groups = ['In use', 'Installed', 'Available'];
+  const sub = { 'In use': 'Dictation model and the meeting speaker companion.', 'Installed': 'Ready on this device.', 'Available': 'Pinned downloads, verified by SHA-256.' };
+  $('#modelList').innerHTML = groups.map(g => `<section class="models-section"><div class="sec-head"><h2 class="sec">${g}</h2><span style="color:var(--text-3)">${sub[g]}</span></div>
+    ${models.filter(m => m.group === g).map(modelRow).join('')}</section>`).join('');
+}
+document.addEventListener('click', e => {
+  const more = e.target.closest('[data-more]');
+  if (more) { const box = more.closest('.model').querySelector('.more'); box.hidden = !box.hidden; more.setAttribute('aria-expanded', !box.hidden); }
+  const dl = e.target.closest('[data-dl]');
+  if (dl) {
+    const acts = dl.parentElement; let p = 0, done;
+    acts.innerHTML = `<div class="progress"><div class="bar"><i></i></div><span class="num">Downloading 0%</span></div><button class="btn subtle">Cancel</button>`;
+    const bar = acts.querySelector('.bar i'), lbl = acts.querySelector('.progress span');
+    const t = setInterval(() => {
+      p = Math.min(100, p + 7); bar.style.width = p + '%'; lbl.textContent = p < 100 ? `Downloading ${p}%` : 'Verifying checksum';
+      if (p >= 100) { clearInterval(t); done = setTimeout(() => { const m = models.find(x => x.id === dl.dataset.dl); m.state = 'installed'; m.group = 'Installed'; renderModels(); toast(`${m.name} is installed.`); }, 700); }
+    }, 180);
+    acts.querySelector('.btn').onclick = () => { clearInterval(t); clearTimeout(done); renderModels(); };
+  }
+  const use = e.target.closest('[data-use]');
+  if (use) {
+    const cur = models.find(m => m.state === 'inuse'), next = models.find(m => m.id === use.dataset.use);
+    cur.state = 'installed'; cur.group = 'Installed'; delete cur.role;
+    next.state = 'inuse'; next.group = 'In use'; next.role = 'Dictation';
+    models.sort((a, b) => (a.state === 'inuse' ? -1 : 0) - (b.state === 'inuse' ? -1 : 0));
+    renderModels(); toast(`Dictation now uses ${next.name}.`);
+  }
+  const t = e.target.closest('[data-toast]'); if (t) toast(t.dataset.toast);
+});
+
+/* ---------- Dictionary ---------- */
+function renderWords() {
+  const q = $('#wordInput').value.trim();
+  const list = empty ? [] : words.filter(w => w.toLowerCase().includes(q.toLowerCase()));
+  $('#wordCount').textContent = `${empty ? 0 : words.length} of 100`;
+  const exact = words.some(w => w.toLowerCase() === q.toLowerCase());
+  $('#addWord').disabled = !q || exact;
+  $('#addWord').innerHTML = `${ic('plus')}${q && !exact ? `Add "${esc(q)}"` : 'Add'}`;
+  if (empty && !q) { $('#words').innerHTML = `<li class="empty"><strong>No words yet</strong>Add names, product terms, and acronyms the model gets wrong.</li>`; return; }
+  $('#words').innerHTML = list.map(w => `<li class="wrow" data-w="${esc(w)}"><span class="w">${esc(w)}</span>
+    <span class="acts"><button class="btn subtle icon" aria-label="Edit ${esc(w)}" data-edit>${ic('edit')}</button><button class="btn subtle icon" aria-label="Remove ${esc(w)}" data-del>${ic('trash')}</button></span></li>`).join('')
+    || `<li style="color:var(--text-2);padding:12px 0">No match. Press Enter to add "${esc(q)}".</li>`;
+}
+$('#wordInput').addEventListener('input', renderWords);
+function addWord() { const q = $('#wordInput').value.trim(); if (!q || words.some(w => w.toLowerCase() === q.toLowerCase())) return; empty = false; $('#mEmpty').checked = false; words.push(q); words.sort((a, b) => a.localeCompare(b)); $('#wordInput').value = ''; renderWords(); toast(`Added "${q}".`); }
+$('#wordInput').addEventListener('keydown', e => { if (e.key === 'Enter') addWord(); });
+$('#addWord').onclick = addWord;
+$('#words').addEventListener('click', e => {
+  const row = e.target.closest('.wrow'); if (!row) return; const w = row.dataset.w;
+  if (e.target.closest('[data-del]')) { const i = words.indexOf(w); words.splice(i, 1); renderWords(); toast(`Removed "${w}".`, () => { words.splice(i, 0, w); renderWords(); }); }
+  if (e.target.closest('[data-edit]')) {
+    row.innerHTML = `<input class="field" value="${esc(w)}" aria-label="Edit word"><button class="btn primary">Save</button><button class="btn subtle">Cancel</button>`;
+    const inp = row.querySelector('input'); inp.focus(); inp.select();
+    const save = () => { const v = inp.value.trim(); if (v) words[words.indexOf(w)] = v; renderWords(); };
+    row.querySelector('.primary').onclick = save; row.querySelector('.subtle').onclick = renderWords;
+    inp.onkeydown = ev => { if (ev.key === 'Enter') save(); if (ev.key === 'Escape') renderWords(); };
+  }
+});
+
+/* ---------- Settings ---------- */
+const insertCopy = {
+  paste: 'Replaces your clipboard with the dictated text and sends the paste shortcut. The text stays available for apps that paste later. Requests exclusion from clipboard history and cloud sync.',
+  type: 'Types characters at a steady pace and keeps your clipboard. Slower than paste.',
+};
+function bindSeg(id, onChange) {
+  $(id).addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; $$('button', $(id)).forEach(x => x.setAttribute('aria-pressed', x === b)); onChange && onChange(b.dataset.v); });
+}
+$$('.seg').forEach(s => { if (!s.id) s.addEventListener('click', e => { const b = e.target.closest('button'); if (b) $$('button', s).forEach(x => x.setAttribute('aria-pressed', x === b)); }); });
+bindSeg('#insertSeg', v => { $('#insertDesc').textContent = insertCopy[v]; $('#pasteRow').hidden = v !== 'paste'; });
+bindSeg('#procSeg', v => { $('#vulkanWarn').hidden = v !== 'vulkan'; });
+$('#insertDesc').textContent = insertCopy.paste;
+let boost = 6; const steps = [0, 3, 6, 9, 12, 18, 24];
+$$('.stepper button').forEach((b, i) => b.onclick = () => { const k = steps.indexOf(boost); boost = steps[Math.max(0, Math.min(steps.length - 1, k + (i ? 1 : -1)))]; $('#boost').textContent = `${boost} dB`; });
+function setToggle(t, on) { t.setAttribute('aria-checked', on); t.querySelector('.state').textContent = on ? 'On' : 'Off'; }
+$$('.toggle').forEach(t => t.addEventListener('click', () => {
+  if (t.id === 'autoClean') { if (t.getAttribute('aria-checked') === 'true') setToggle(t, false); else $('#autoConfirm').hidden = false; return; }
+  setToggle(t, t.getAttribute('aria-checked') !== 'true');
+}));
+$('#autoYes').onclick = () => { setToggle($('#autoClean'), true); $('#autoConfirm').hidden = true; toast('Automatic cleanup is on for new meetings.'); };
+$('#autoNo').onclick = () => { $('#autoConfirm').hidden = true; };
+$('#svc').onchange = e => {
+  $('#svcName').textContent = e.target.value;
+  $('#svcDesc').innerHTML = e.target.value === 'OpenAI'
+    ? 'Uses your OpenAI API key. No fallback to another service or account.'
+    : 'Uses the installed Copilot CLI and its signed-in account. Run <code>copilot login</code> if needed. No fallback to another service or account.';
+};
+const tocObs = new IntersectionObserver(es => es.forEach(en => { if (en.isIntersecting) $$('.toc a').forEach(a => a.classList.toggle('cur', a.getAttribute('href') === '#' + en.target.id)); }), { root: $('main'), rootMargin: '-40% 0px -55% 0px' });
+$$('.sgroup').forEach(s => tocObs.observe(s));
+
+/* ---------- Shell: routing, collapsing title bar ---------- */
+function show(page) {
+  if (!$('#page-' + page)) page = 'home';
+  $$('.page').forEach(p => p.classList.toggle('on', p.id === 'page-' + page));
+  $$('.nav a').forEach(a => a.dataset.page === page ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current'));
+  const el = $('#page-' + page);
+  $('#tbTitle').textContent = el.dataset.title;
+  const primary = el.querySelector('[data-primary]');
+  $('#tbActions').innerHTML = primary ? primary.outerHTML.replace(' lg', '') : '';
+  $('main').scrollTo(0, 0);
+  syncTitlebar();
+  if (typeof renderNotices === 'function') { expanded = false; renderNotices(); }
+}
+function syncTitlebar() {
+  const h1 = $('.page.on h1'); if (!h1) return;
+  const scrolled = h1.getBoundingClientRect().bottom < $('main').getBoundingClientRect().top;
+  $('#titlebar').classList.toggle('scrolled', scrolled);
+  $('#tbActions').inert = !scrolled;
+}
+$('main').addEventListener('scroll', syncTitlebar, { passive: true });
+addEventListener('hashchange', () => { const h = location.hash.slice(1); if (h.startsWith('s-')) return; show(h); });
+document.addEventListener('keydown', e => { if (e.ctrlKey && e.key.toLowerCase() === 'k') { e.preventDefault(); if (!location.hash.match(/home|^$/)) location.hash = 'home'; setTimeout(() => { const s = $('#histSearch'); s.scrollIntoView({ block: 'center' }); s.focus(); }, 0); } });
+$('#histSearch').addEventListener('input', renderHistory);
+
+/* ---------- Notice host ----------
+   Mirrors the app's notice sources. area uses SessionNotice.Area names; Dictation maps to Home.
+   Text in .ph is filled at runtime by the app (an exception or storage message). */
+const AREA_PAGE = { Dictation: 'home', Settings: 'settings', Models: 'models', Dictionary: 'dictionary', Meetings: 'meetings' };
+const SEV = { error: 0, warning: 1, info: 2, transient: 3 };
+const ICON = { info: 'info', warning: 'warn', error: 'warn' };
+const ph = t => `<span class="ph">‹${t}›</span>`;
+const CATALOG = {
+  teams:      { src: 'MainWindow · MeetingSuggestion', kind: 'info', icon: 'mic', area: 'Application', title: 'Teams is using your microphone.', msg: 'Start local notes? Recording begins only when you click Start.',
+                actions: [['Open notetaker', 'Notetaker window opens. Nothing records until you click Start.', true]] },
+  mic:        { src: 'MainWindow · MicrophonePermissionNotice', kind: 'warning', icon: 'mic', area: 'Application', title: 'Microphone access required', msg: 'Enable microphone access for Ansible and desktop apps in Windows Settings, then check again.',
+                actions: [['Open settings', 'Windows Settings opens at Privacy & security > Microphone.'], ['Check again', 'Checks permission again without prompting.']] },
+  tray:       { src: 'MainWindow · TrayError', kind: 'error', area: 'Application', closable: false, title: 'Tray icon unavailable', msg: `${ph('error')} Try closing the window again, or choose Exit Ansible to stop the app.`,
+                actions: [['Exit Ansible', 'Ansible joins owned work, then exits.']] },
+  shutdown:   { src: 'MainWindow · ShutdownError', kind: 'error', area: 'Application', closable: false, title: 'Close failed', msg: `${ph('error')} Try Exit from the tray menu again.` },
+  capture:    { src: 'Session notice · Application', kind: 'warning', area: 'Application', title: 'Screen capture privacy unavailable', msg: ph('error') },
+  winset:     { src: 'Session notice · Application', kind: 'warning', area: 'Application', title: 'Windows Settings unavailable', msg: 'Open Windows Settings > Privacy & security > Microphone.' },
+  shortcut:   { src: 'Session notice · Settings, Dictation', kind: 'error', area: 'Settings Dictation', title: 'Shortcut unavailable', msg: ph('error') },
+  inserted:   { src: 'Session notice · Dictation', kind: 'warning', area: 'Dictation', title: 'Insertion stopped', msg: `${ph('delivery error')} Check the destination before using Copy transcript; do not repeat text that already appeared.` },
+  unverified: { src: 'Session notice · Dictation', kind: 'warning', area: 'Dictation', title: 'Text sent; unverified', msg: 'The insertion input was sent. Check the destination.' },
+  ineligible: { src: 'Session notice · Dictation', kind: 'warning', area: 'Dictation', title: 'Speech text required', msg: 'This model does not support speech text extraction for shortcut insertion. Choose another speech model. Manual transcription remains available.' },
+  finish:     { src: 'Session notice · Dictation', kind: 'warning', area: 'Dictation', title: 'Finish dictation first', msg: 'Wait for the current dictation and insertion to finish before opening the shortcut lesson.' },
+  history:    { src: 'HomeHistoryView · HistoryStorageWarning', kind: 'warning', area: 'Dictation', closable: false, title: 'History needs attention', msg: ph('storage error') },
+  usage:      { src: 'HomeInsightsView · UsageWarningBar', kind: 'warning', area: 'Dictation', closable: false, title: 'Some usage statistics are missing', msg: ph('usage error') },
+  meeting:    { src: 'Session notice · Meetings', kind: 'error', area: 'Meetings', title: 'Meeting unavailable', msg: ph('error') },
+  notloaded:  { src: 'Session notice · Models', kind: 'warning', area: 'Models', title: 'Model not loaded', msg: 'Open Model folder, then Verify installed files to load this model.' },
+  modelfail:  { src: 'ModelManagementPage · StatusInfo', kind: 'error', area: 'Models', title: 'Model operation failed', msg: ph('error') },
+  catalog:    { src: 'ModelManagementPage · StatusInfo', kind: 'error', area: 'Models', closable: false, title: 'Model catalog unavailable', msg: 'Open Model folder, then Verify installed files to retry opening the catalog.' },
+};
+const MAX_VISIBLE = 3;
+let live = [], seq = 0, expanded = false;
+
+function notify(n) {
+  if (n.key) live = live.filter(x => x.key !== n.key);
+  const item = { closable: true, area: 'Application', ...n, id: ++seq };
+  live.push(item);
+  if (item.kind === 'transient') { item.timer = { left: item.undo ? 5000 : 2400 }; armTimer(item); }
+  renderNotices(item.id);
+  return item;
+}
+function armTimer(item) { clearTimeout(item.timer.h); item.timer.at = Date.now(); item.timer.h = setTimeout(() => dismiss(item.id), item.timer.left); }
+function pauseTimer(item) { clearTimeout(item.timer.h); item.timer.left -= Date.now() - item.timer.at; }
+function dismiss(id) {
+  const el = $(`#noticeHost [data-nid="${id}"]`);
+  const drop = () => { live = live.filter(x => x.id !== id); renderNotices(); };
+  if (el && !matchMedia('(prefers-reduced-motion: reduce)').matches) { el.classList.add('leaving'); setTimeout(drop, 140); } else drop();
+}
+function toast(msg, undo) { notify({ kind: 'transient', key: 'transient', title: msg, undo }); }
+function visibleNotices() {
+  const page = (document.querySelector('.page.on')?.id || '').replace('page-', '');
+  return live.filter(n => n.area === 'Application' || n.area.split(' ').some(a => AREA_PAGE[a] === page))
+             .sort((a, b) => SEV[a.kind] - SEV[b.kind] || a.id - b.id);
+}
+function renderNotices(fresh) {
+  const host = $('#noticeHost'), all = visibleNotices();
+  const persistent = all.filter(n => n.kind !== 'transient'), transient = all.filter(n => n.kind === 'transient');
+  const shown = expanded ? persistent : persistent.slice(0, MAX_VISIBLE), hidden = persistent.length - shown.length;
+  const old = new Set([...host.querySelectorAll('[data-nid]')].map(e => +e.dataset.nid));
+  host.innerHTML = (hidden ? `<button class="btn more" id="noticeMore">${hidden} more notice${hidden > 1 ? 's' : ''}</button>` : '')
+    + [...shown, ...transient].map(n => {
+      const role = n.kind === 'error' ? 'alert' : 'status';
+      const icon = n.kind === 'transient' ? '' : `<div class="dot" aria-hidden="true"><svg class="i"><use href="#i-${n.icon || ICON[n.kind]}"/></svg></div>`;
+      const acts = (n.actions || []).map(([label], i) => `<button class="btn" data-nact="${i}">${label}</button>`).join('')
+        + (n.undo ? `<button class="btn subtle" data-nundo>Undo</button>` : '')
+        + (n.closable ? `<button class="btn subtle icon" data-nclose aria-label="Dismiss ${n.kind === 'transient' ? 'message' : n.title}"><svg class="i"><use href="#i-x"/></svg></button>` : '');
+      return `<div class="notice ${n.kind}" data-nid="${n.id}" role="${role}"${n.src ? ` title="Source: ${n.src}"` : ''}>${icon}
+        <div class="msg">${n.msg ? `<b>${n.title}</b>${n.msg}` : n.title}</div><div class="acts">${acts}</div></div>`;
+    }).join('');
+  host.querySelectorAll('[data-nid]').forEach(e => { if (old.has(+e.dataset.nid) && +e.dataset.nid !== fresh) e.style.animation = 'none'; });
+  renderNoticeSpace();
+}
+function renderNoticeSpace() { $('main').style.setProperty('--notice-space', (visibleNotices().length ? $('#noticeHost').offsetHeight : 0) + 'px'); }
+$('#noticeHost').addEventListener('click', e => {
+  if (e.target.closest('#noticeMore')) { expanded = true; return renderNotices(); }
+  const el = e.target.closest('[data-nid]'); if (!el) return;
+  const n = live.find(x => x.id === +el.dataset.nid);
+  if (e.target.closest('[data-nclose]')) return dismiss(n.id);
+  if (e.target.closest('[data-nundo]')) { n.undo(); return dismiss(n.id); }
+  const a = e.target.closest('[data-nact]');
+  if (a) { const [, says, closes] = n.actions[+a.dataset.nact]; if (closes) dismiss(n.id); toast(says); }
+});
+$('#noticeHost').addEventListener('keydown', e => {
+  const el = e.target.closest('[data-nid]'); if (e.key !== 'Escape' || !el) return;
+  const n = live.find(x => x.id === +el.dataset.nid); if (n?.closable) dismiss(n.id);
+});
+// Confirmations pause while the pointer or focus is inside, and resume only once both have left.
+let pointerIn = false, focusIn = false;
+function holdChanged(pointer, focus) {
+  const was = pointerIn || focusIn; pointerIn = pointer; focusIn = focus;
+  const now = pointerIn || focusIn; if (now === was) return;
+  live.forEach(n => n.timer && (now ? pauseTimer(n) : armTimer(n)));
+}
+$('#noticeHost').addEventListener('pointerenter', () => holdChanged(true, focusIn));
+$('#noticeHost').addEventListener('pointerleave', () => holdChanged(false, focusIn));
+$('#noticeHost').addEventListener('focusin', () => holdChanged(pointerIn, true));
+$('#noticeHost').addEventListener('focusout', e => { if (!$('#noticeHost').contains(e.relatedTarget)) holdChanged(pointerIn, false); });
+new ResizeObserver(renderNoticeSpace).observe($('#noticeHost'));
+
+/* ---------- Mock controls ---------- */
+$('#mNoticePick').innerHTML = Object.entries(CATALOG).map(([k, n]) => `<option value="${k}">${n.title} (${n.area === 'Application' ? 'all pages' : n.area.split(' ').map(a => AREA_PAGE[a]).join(', ')})</option>`).join('');
+$('#mNoticeShow').onclick = () => { const k = $('#mNoticePick').value; notify({ key: k, ...CATALOG[k] }); };
+$('#mNoticeClear').onclick = () => { live.forEach(n => n.timer && clearTimeout(n.timer.h)); live = []; expanded = false; renderNotices(); };
+$('#mAnn').onchange = e => document.body.classList.toggle('annotate', e.target.checked);
+$('#mLight').onchange = e => document.documentElement.dataset.theme = e.target.checked ? 'light' : 'dark';
+$('#mEmpty').onchange = e => { empty = e.target.checked; document.querySelector('.rail').hidden = empty; renderHistory(); renderMeetings(); renderWords(); };
+$('#mockMin').onclick = () => { const m = $('#mock'); m.classList.toggle('min'); $('#mockMin').textContent = m.classList.contains('min') ? 'show' : 'hide'; };
+
+renderHistory(); renderBars(); renderMeetings(); renderModels(); renderWords();
+show(location.hash.slice(1) || 'home');
+notify({ key: 'teams', ...CATALOG.teams });
+</script>
+</body>
+</html>
