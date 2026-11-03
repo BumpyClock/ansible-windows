@@ -1,6 +1,5 @@
 using Ansible.Core;
 using System.Diagnostics;
-using System.Globalization;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Windows.Storage.Pickers;
@@ -9,7 +8,9 @@ namespace Ansible;
 
 public sealed partial class MeetingsPage : Page
 {
-    private readonly DictationSession _session;
+    private const string ErrorNoticeKey = "meetings-error";
+
+    private readonly AppNotices _notices;
     private readonly MeetingStore _store;
     private readonly LocalDiagnosticLog _diagnostics;
     private readonly Func<MeetingDocument?, Task> _openMeeting;
@@ -23,11 +24,12 @@ public sealed partial class MeetingsPage : Page
     private readonly List<Button> _exportButtons = [];
     private bool _rendered;
 
-    internal MeetingsPage(DictationSession session, MeetingStore store, Func<MeetingDocument?, Task> openMeeting,
+    internal MeetingsPage(MeetingStore store, Func<MeetingDocument?, Task> openMeeting,
         Func<nint> windowHandle, LocalDiagnosticLog diagnostics, AppNotices notices)
     {
         InitializeComponent();
-        _session = session;
+        ((PageCanvas)Content).PrimaryAction = new PageAction(NewMeetingButton, NewMeetingClicked);
+        _notices = notices;
         _store = store;
         _diagnostics = diagnostics;
         _openMeeting = openMeeting;
@@ -49,6 +51,7 @@ public sealed partial class MeetingsPage : Page
             var token = _shutdown.Token;
             var result = await Task.Run(() => _store.ListAsync(token), token);
             if (_shutdown.IsCancellationRequested) return;
+            _notices.Set(ErrorNoticeKey, null);
             var summaries = result.Summaries;
             if (_rendered && _displayedSummaries.SequenceEqual(summaries) && _displayedFailures.SequenceEqual(result.Failures)) return;
             _rendered = true;
@@ -163,14 +166,16 @@ public sealed partial class MeetingsPage : Page
             }
             token.ThrowIfCancellationRequested();
             await _openMeeting(document);
+            _notices.Set(ErrorNoticeKey, null);
         }
         catch (OperationCanceledException) when (_shutdown.IsCancellationRequested) { }
         catch (Exception error) { ShowError(error); }
     }
 
-    private void ShowError(Exception error) =>
-        _session.Notify(NoticeKind.Error, "Meeting unavailable", error.Message, NoticeArea.Meetings);
+    private void ShowError(Exception error) => _notices.Set(ErrorNoticeKey,
+        new NoticeContent(NoticeSeverity.Error, "Meeting unavailable", error.Message), NoticeArea.Meetings);
 
+    public static Visibility VisibleIf(bool visible) => visible ? Visibility.Visible : Visibility.Collapsed;
 }
 
 internal sealed partial class MeetingListTemplateSelector : DataTemplateSelector
@@ -182,40 +187,4 @@ internal sealed partial class MeetingListTemplateSelector : DataTemplateSelector
 
     // ItemsControl asks with its container; the base overload does not forward to the one above.
     protected override DataTemplate SelectTemplateCore(object item, DependencyObject container) => SelectTemplateCore(item);
-}
-
-public sealed record MeetingDayHeader(string Label);
-
-internal static class MeetingList
-{
-    /// <summary>Newest first, with a day header before each local day's meetings.</summary>
-    public static List<object> Create(IEnumerable<MeetingSummary> summaries, DateOnly today)
-    {
-        var items = new List<object>();
-        DateOnly? day = null;
-        foreach (var summary in summaries.OrderByDescending(summary => summary.CreatedAt))
-        {
-            var date = DateOnly.FromDateTime(summary.CreatedAt.LocalDateTime);
-            if (date != day) items.Add(new MeetingDayHeader(DayLabel(date, today)));
-            day = date;
-            items.Add(new MeetingHistoryRow(summary));
-        }
-        return items;
-    }
-
-    // Same labels as the Home history. The year appears only for dates outside the current year.
-    private static string DayLabel(DateOnly date, DateOnly today)
-    {
-        if (date == today) return "TODAY";
-        if (date == today.AddDays(-1)) return "YESTERDAY";
-        var format = date.Year == today.Year ? "ddd, MMM d" : "ddd, MMM d, yyyy";
-        return date.ToString(format, CultureInfo.CurrentCulture).ToUpperInvariant();
-    }
-}
-
-public sealed record MeetingHistoryRow(MeetingSummary Summary)
-{
-    public string Title => Summary.Title;
-    public string Time => Summary.CreatedAt.ToLocalTime().ToString("h:mm tt", CultureInfo.CurrentCulture);
-    public Visibility FailedVisibility => Summary.Status == MeetingStatus.Failed ? Visibility.Visible : Visibility.Collapsed;
 }

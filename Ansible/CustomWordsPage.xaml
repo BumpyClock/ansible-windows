@@ -59,10 +59,16 @@
                        AutomationProperties.LiveSetting="Polite"
                        Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
 
-            <!-- Rows are built in code so a word can switch to an in-place editor. They flow in the page scroller. -->
             <ItemsControl x:Name="WordsList" Margin="0,12,0,0" IsTabStop="False"
                           AutomationProperties.AutomationId="CustomWordsList"
-                          AutomationProperties.Name="Dictionary entries" />
+                          AutomationProperties.Name="Dictionary entries">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="local:DictionaryWordRowModel">
+                        <local:DictionaryWordRow Model="{x:Bind}" EditRequested="BeginEdit" SaveRequested="SaveEdit"
+                                                 CancelRequested="EndEdit" RemoveRequested="RemoveWord" />
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
             <StackPanel x:Name="EmptyState" HorizontalAlignment="Center" Padding="24,32" Spacing="4" Visibility="Collapsed">
                 <TextBlock x:Name="EmptyTitle" Text="No words yet" Style="{StaticResource SubtitleTextBlockStyle}"
                            TextWrapping="Wrap" TextAlignment="Center" />

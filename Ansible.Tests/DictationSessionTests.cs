@@ -97,7 +97,7 @@ public sealed partial class DictationSessionTests : IDisposable
     public async Task ApplicationFailureIsVisibleOnEveryPageUntilDismissed()
     {
         var session = Create(new FakeEngine());
-        session.ReportUiError(new InvalidOperationException("Capture privacy unavailable"), NoticeArea.Application);
+        session.ReportError(new InvalidOperationException("Capture privacy unavailable"), NoticeArea.Application);
 
         Assert.All(
             (NoticeArea[])[NoticeArea.Dictation, NoticeArea.Settings, NoticeArea.Models, NoticeArea.Dictionary, NoticeArea.Meetings],

@@ -94,7 +94,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
                 if (_manager is null)
                 {
                     foreach (var card in _cardList) { card.DetachThemeEvents(); }
-                    foreach (var rows in GroupRows) { rows.Children.Clear(); }
+                    foreach (var group in Groups) { Panels(group).Rows.Children.Clear(); }
                     _cardList.Clear();
                     _themeSettings = null;
                     await candidate.DisposeAsync();
@@ -112,7 +112,14 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
             System.Diagnostics.Debug.WriteLine("Ansible: model view dispatcher is closed.");
     }
 
-    private StackPanel[] GroupRows => [InUseRows, InstalledRows, AvailableRows];
+    private static readonly ModelGroup[] Groups = Enum.GetValues<ModelGroup>();
+
+    private (StackPanel Section, StackPanel Rows) Panels(ModelGroup group) => group switch
+    {
+        ModelGroup.InUse => (InUseSection, InUseRows),
+        ModelGroup.Installed => (InstalledSection, InstalledRows),
+        _ => (AvailableSection, AvailableRows)
+    };
 
     private void Render()
     {
@@ -154,29 +161,20 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         PlaceCards(activeId, snapshots);
     }
 
-    // In use holds the dictation model, then an installed diarization companion. Installed holds other model files.
-    // Available holds the rest, including transfers, failures, and a companion that is not installed yet.
     private void PlaceCards(string? activeId, Dictionary<ModelCard, ModelDownloadSnapshot> snapshots)
     {
-        var groups = new List<ModelCard>[] { [], [], [] };
-        foreach (var card in _cardList)
-        {
-            var snapshot = snapshots[card];
-            var companion = ModelSelectionPolicy.IsDiarizationTask(snapshot.Model.Task);
-            groups[card.ModelId == activeId || companion && snapshot.HasModelFile ? 0 : snapshot.HasModelFile ? 1 : 2].Add(card);
-        }
-        groups[0] = [.. groups[0].OrderBy(card => ModelSelectionPolicy.IsDiarizationTask(snapshots[card].Model.Task))];
+        var cards = _cardList.ToDictionary(card => card.ModelId);
+        var placed = ModelGrouping.Place(_cardList.Select(card => new ModelPlacement(card.ModelId,
+            ModelSelectionPolicy.IsDiarizationTask(snapshots[card].Model.Task), snapshots[card].HasModelFile)), activeId);
 
         // Render runs on every download tick, so only groups whose rows changed are rebuilt. Every changed group
         // is emptied before any is filled because a row can belong to one parent only.
-        var rows = GroupRows;
-        var changed = Enumerable.Range(0, rows.Length).Where(index => !rows[index].Children.SequenceEqual(groups[index])).ToArray();
-        foreach (var index in changed) { rows[index].Children.Clear(); }
-        foreach (var index in changed)
-            foreach (var card in groups[index]) { rows[index].Children.Add(card); }
-        InUseSection.Visibility = groups[0].Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-        InstalledSection.Visibility = groups[1].Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-        AvailableSection.Visibility = groups[2].Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        var changed = Groups.Where(group => !Panels(group).Rows.Children.SequenceEqual(placed[group].Select(id => cards[id]))).ToArray();
+        foreach (var group in changed) { Panels(group).Rows.Children.Clear(); }
+        foreach (var group in changed)
+            foreach (var id in placed[group]) { Panels(group).Rows.Children.Add(cards[id]); }
+        foreach (var group in Groups)
+            Panels(group).Section.Visibility = placed[group].Count > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void OnUseRequested(string id)
@@ -189,17 +187,18 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         }
         if (index < 0)
         {
-            _session.Notify(NoticeKind.Warning, "Model not loaded",
-                "Open Model folder, then Verify installed files to load this model.", NoticeArea.Models);
+            _notices.Set(OperationNoticeKey, new NoticeContent(NoticeSeverity.Warning, "Model not loaded",
+                "Open Model folder, then Verify installed files to load this model."), NoticeArea.Models);
         }
         else
         {
             try
             {
                 _session.SelectModel(index);
+                _notices.Set(OperationNoticeKey, null);
                 _notices.Confirm($"Dictation now uses {DisplayName(id)}.");
             }
-            catch (Exception error) { _session.ReportUiError(error, NoticeArea.Models); }
+            catch (Exception error) { ShowError(error, "Operation failed"); }
         }
         Render();
     }
@@ -222,10 +221,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
             if (!_closed && _session.State.IsIdle)
                 await InstallAsync(id);
         }
-        catch (OperationCanceledException)
-        {
-            if (!_closed) { _session.Notify(NoticeKind.Information, "Download paused", "Partial weights remain available for Resume.", NoticeArea.Models); }
-        }
+        catch (OperationCanceledException) { }
         catch (Exception error) { ShowError(error); }
         finally { Render(); }
     }
@@ -334,9 +330,10 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
     {
         if (_closed || _transcribingFile || !_session.State.IsIdle || _session.State.SelectedModel is null) return;
         _transcribingFile = true;
+        _notices.Set(OperationNoticeKey, null);
         Render();
         try { await _transcribeFile(); }
-        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Models); Render(); }
+        catch (Exception error) { ShowError(error, "Operation failed"); }
         finally { _transcribingFile = false; Render(); }
     }
 
@@ -350,10 +347,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
             if (!_closed && _session.State.IsIdle)
                 await MaintainAsync(_ => Task.CompletedTask, _manager.DirectoryPath);
         }
-        catch (OperationCanceledException)
-        {
-            if (!_closed) { _session.Notify(NoticeKind.Information, "Verification paused", "Verify installed files again to complete the checks.", NoticeArea.Models); }
-        }
+        catch (OperationCanceledException) { }
         catch (Exception error) { ShowError(error); }
         finally { Render(); }
     }
@@ -371,11 +365,11 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         finally { Render(); }
     }
 
-    // The page notice replaces a session notice here: both would show the same message on this page.
-    private void ShowError(Exception error)
+    // A new failure replaces the previous operation notice. Each operation clears it when it starts.
+    private void ShowError(Exception error, string title = "Model operation failed")
     {
         if (_closed) { return; }
-        _notices.Set(OperationNoticeKey, new NoticeContent(NoticeSeverity.Error, "Model operation failed", error.Message),
+        _notices.Set(OperationNoticeKey, new NoticeContent(NoticeSeverity.Error, title, error.Message),
             NoticeArea.Models);
         Render();
     }

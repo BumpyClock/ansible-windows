@@ -76,7 +76,7 @@ public sealed class ShortcutDictation : IDisposable
             _pressTask = _pressTask is { IsCompleted: false } previous ? Task.WhenAll(previous, task) : task;
             await task;
         }
-        catch (Exception error) { _session.ReportUiError(error); }
+        catch (Exception error) { _session.ReportError(error); }
     }
 
     // Marks a pending push-to-talk capture stale so its inspection cannot start a late recording. Once admitted,
@@ -97,7 +97,7 @@ public sealed class ShortcutDictation : IDisposable
                 await task;
             }
         }
-        catch (Exception error) { _session.ReportUiError(error); }
+        catch (Exception error) { _session.ReportError(error); }
     }
 
     /// <summary>Stops admitting presses and cancels delivery. Call <see cref="JoinAsync"/> next.</summary>
@@ -153,7 +153,7 @@ public sealed class ShortcutDictation : IDisposable
             else if (state.Phase == DictationPhase.Preparing) { await _session.CancelAsync(); }
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
-        catch (Exception error) { _session.ReportUiError(error); }
+        catch (Exception error) { _session.ReportError(error); }
     }
 
     // Recording and destination inspection start together. The session buffers speech until the destination
@@ -304,7 +304,7 @@ public sealed class ShortcutDictation : IDisposable
                     delivery.Delivery?.Message ?? "The insertion input was sent. Check the destination.");
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
-        catch (Exception error) { _session.ReportUiError(error); }
+        catch (Exception error) { _session.ReportError(error); }
         finally
         {
             if (ReferenceEquals(_delivery, delivery))

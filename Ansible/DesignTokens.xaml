@@ -947,9 +947,6 @@
     <Thickness x:Key="SettingsRowDividerThickness">0,1,0,0</Thickness>
     <Thickness x:Key="SettingsChildRowPadding">28,20,0,20</Thickness>
     <x:Double x:Key="SettingsFieldWidth">220</x:Double>
-    <x:Double x:Key="SettingsTocWidth">180</x:Double>
-    <Thickness x:Key="SettingsTocMargin">40,0,0,0</Thickness>
-    <x:Double x:Key="SettingsTocMinWidth">980</x:Double>
     <Thickness x:Key="SettingsInlineNoticePadding">16,12</Thickness>
     <CornerRadius x:Key="SettingsInlineNoticeCornerRadius">8</CornerRadius>
 </ResourceDictionary>

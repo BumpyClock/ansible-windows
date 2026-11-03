@@ -36,6 +36,9 @@ public sealed record NoticeConfirmation(string Message, NoticeAction? Undo = nul
     public TimeSpan Duration => TimeSpan.FromSeconds(Undo is null ? 2.4 : 5);
 }
 
+/// <summary>The notices a host shows for one page, and how many more wait behind its "more notices" button.</summary>
+public sealed record NoticeStack(IReadOnlyList<AppNotice> Shown, int Hidden);
+
 /// <summary>
 /// Window-owned notices. Sources declare their current notice with Set, as often as their state changes:
 /// posting what is already shown is cheap because NoticeBar keeps the visual and the announcement.
@@ -43,6 +46,9 @@ public sealed record NoticeConfirmation(string Message, NoticeAction? Undo = nul
 /// </summary>
 public sealed class AppNotices
 {
+    /// <summary>A collapsed host shows at most this many notices.</summary>
+    public const int CollapsedLimit = 3;
+
     private readonly List<AppNotice> _current = [];
 
     public event Action? Changed;
@@ -67,6 +73,25 @@ public sealed class AppNotices
         else if (index < 0) _current.Add(new AppNotice(key, content, area, dismissed));
         else _current[index] = new AppNotice(key, content, area, dismissed);
         Changed?.Invoke();
+    }
+
+    /// <summary>Reports a failed operation under its source's key, replacing that source's previous notice.</summary>
+    public void SetError(string key, Exception error, NoticeArea area = NoticeArea.Dictation) =>
+        Set(key, new NoticeContent(NoticeSeverity.Error, "Operation failed", error.Message), area);
+
+    /// <summary>
+    /// The notices for a page area, most severe first and in posting order within a severity. A null area is a
+    /// page outside the navigation, such as Welcome, and shows every notice. Collapsed shows CollapsedLimit.
+    /// </summary>
+    public NoticeStack Arrange(NoticeArea? area, bool expanded)
+    {
+        // OrderBy is stable, so posting order holds within a severity.
+        var visible = _current
+            .Where(notice => area is not { } page || (notice.Area & page) != 0)
+            .OrderByDescending(notice => notice.Content.Severity)
+            .ToList();
+        var shown = expanded ? visible : visible.Take(CollapsedLimit).ToList();
+        return new NoticeStack(shown, visible.Count - shown.Count);
     }
 
     /// <summary>The user closed the notice: removes it, then runs its Dismissed callback.</summary>

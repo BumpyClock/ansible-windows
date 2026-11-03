@@ -1,6 +1,6 @@
+using System.Collections.ObjectModel;
 using Ansible.Core;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 
@@ -8,24 +8,14 @@ namespace Ansible;
 
 public sealed partial class CustomWordsPage : Page
 {
-    private sealed class WordRow(string word)
-    {
-        public string Word { get; } = word;
-        public required StackPanel Root { get; init; }
-        public required TextBlock Label { get; init; }
-        public required TextBox Editor { get; init; }
-        public required StackPanel Actions { get; init; }
-        public required StackPanel EditActions { get; init; }
-    }
-
     private readonly DictationSession _session;
     private readonly Action _openModels;
     private readonly AppNotices _notices;
-    private readonly Dictionary<string, WordRow> _rows = new(StringComparer.Ordinal);
+    private readonly ObservableCollection<DictionaryWordRowModel> _rows = [];
     private UiSessionObserver? _observer;
     private SessionSnapshot _state;
     private string? _renderedDictionary;
-    private WordRow? _editingRow;
+    private DictionaryWordRow? _editingRow;
     private bool _editorOpen;
 
     internal CustomWordsPage(DictationSession session, Action openModels, AppNotices notices)
@@ -35,6 +25,7 @@ public sealed partial class CustomWordsPage : Page
         _openModels = openModels;
         _state = session.State;
         InitializeComponent();
+        WordsList.ItemsSource = _rows;
         Loaded += (_, _) => _observer = new UiSessionObserver(session, DispatcherQueue, state =>
         {
             _state = state;
@@ -48,8 +39,6 @@ public sealed partial class CustomWordsPage : Page
         };
         Render();
     }
-
-    private static Style AppStyle(string key) => (Style)Application.Current.Resources[key];
 
     private void Render()
     {
@@ -77,8 +66,8 @@ public sealed partial class CustomWordsPage : Page
         else if (!model.SupportsCustomDictionary)
         {
             title = $"{model.DisplayName ?? model.Id} ignores custom words.";
-            var alternative = _state.Models.FirstOrDefault(candidate =>
-                candidate.SupportsCustomDictionary && candidate.Task != "diar" && candidate.Id != model.Id);
+            var alternative = ModelSelectionPolicy.DictationModels(_state.Models).FirstOrDefault(candidate =>
+                candidate.SupportsCustomDictionary && candidate.Id != model.Id);
             message = alternative is null ? "Install a model that supports them in Speech models."
                 : $"{alternative.DisplayName ?? alternative.Id} is installed and uses them.";
         }
@@ -97,18 +86,19 @@ public sealed partial class CustomWordsPage : Page
         var filtered = entries.Where(word => word.Contains(query, StringComparison.OrdinalIgnoreCase))
             .Order(StringComparer.CurrentCultureIgnoreCase).ToArray();
         var keep = filtered.ToHashSet(StringComparer.Ordinal);
-        foreach (var word in _rows.Keys.Where(word => !keep.Contains(word)).ToArray())
+        for (var index = _rows.Count - 1; index >= 0; index--)
         {
-            if (_editingRow is { } editing && editing.Word == word) _editingRow = null;
-            WordsList.Items.Remove(_rows[word].Root);
-            _rows.Remove(word);
+            if (keep.Contains(_rows[index].Word)) continue;
+            if (_editingRow?.Word == _rows[index].Word) _editingRow = null;
+            _rows.RemoveAt(index);
         }
         // Preserve unchanged rows so dictionary updates do not discard their focused controls.
         for (var index = 0; index < filtered.Length; index++)
         {
-            var row = RowFor(filtered[index]);
-            if (index >= WordsList.Items.Count || !ReferenceEquals(WordsList.Items[index], row.Root))
-                WordsList.Items.Insert(index, row.Root);
+            if (index < _rows.Count && _rows[index].Word == filtered[index]) continue;
+            var existing = _rows.FirstOrDefault(row => row.Word == filtered[index]);
+            if (existing is null) _rows.Insert(index, new DictionaryWordRowModel(filtered[index]));
+            else _rows.Move(_rows.IndexOf(existing), index);
         }
         CountText.Text = $"{entries.Length} of {CustomVocabulary.MaximumEntries}";
         var empty = filtered.Length == 0;
@@ -119,116 +109,32 @@ public sealed partial class CustomWordsPage : Page
             : $"No match. Press Enter to add \"{query}\".";
     }
 
-    private WordRow RowFor(string word)
-    {
-        if (_rows.TryGetValue(word, out var existing)) return existing;
-        var resources = Application.Current.Resources;
-        var label = new TextBlock { Text = word, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
-        var editor = new TextBox { Text = word, Visibility = Visibility.Collapsed, VerticalAlignment = VerticalAlignment.Center };
-        AutomationProperties.SetName(editor, $"Edit {word}");
-        var edit = IconButton("", "Edit word", $"Edit {word}", "EditCustomWordButton");
-        var remove = IconButton("", "Remove word", $"Remove {word}", "RemoveCustomWordButton");
-        var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
-        actions.Children.Add(edit);
-        actions.Children.Add(remove);
-        var save = new Button { Content = "Save", Style = AppStyle("AppPrimaryButtonStyle") };
-        var cancel = new Button { Content = "Cancel" };
-        var editActions = new StackPanel
-        {
-            Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center,
-            Visibility = Visibility.Collapsed
-        };
-        editActions.Children.Add(save);
-        editActions.Children.Add(cancel);
-
-        var body = new Grid { VerticalAlignment = VerticalAlignment.Center };
-        body.Children.Add(label);
-        body.Children.Add(editor);
-        var buttons = new Grid { VerticalAlignment = VerticalAlignment.Center };
-        buttons.Children.Add(actions);
-        buttons.Children.Add(editActions);
-        var layout = new Grid { MinHeight = 44, Padding = new Thickness(12, 4, 8, 4), ColumnSpacing = 8 };
-        layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        layout.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        layout.Children.Add(body);
-        Grid.SetColumn(buttons, 1);
-        layout.Children.Add(buttons);
-        var root = new StackPanel();
-        root.Children.Add(layout);
-        root.Children.Add(new Border { Style = (Style)resources["HistoryDividerStyle"] });
-
-        var row = new WordRow(word) { Root = root, Label = label, Editor = editor, Actions = actions, EditActions = editActions };
-        edit.Click += (_, _) => BeginEdit(row);
-        remove.Click += (_, _) => RemoveWord(row);
-        save.Click += (_, _) => SaveEdit(row);
-        cancel.Click += (_, _) => EndEdit(row);
-        editor.KeyDown += (_, args) =>
-        {
-            if (args.Key == Windows.System.VirtualKey.Enter) { args.Handled = true; SaveEdit(row); }
-            else if (args.Key == Windows.System.VirtualKey.Escape) { args.Handled = true; EndEdit(row); }
-        };
-        _rows[word] = row;
-        return row;
-    }
-
-    private static Button IconButton(string glyph, string toolTip, string name, string automationId)
-    {
-        var button = new Button
-        {
-            Style = AppStyle("IconButtonStyle"), Content = new FontIcon { Glyph = glyph, FontSize = 16 }
-        };
-        ToolTipService.SetToolTip(button, toolTip);
-        AutomationProperties.SetName(button, name);
-        AutomationProperties.SetAutomationId(button, automationId);
-        return button;
-    }
-
-    private void BeginEdit(WordRow row)
+    private void BeginEdit(DictionaryWordRow row)
     {
         if (!_state.IsIdle) return;
         if (_editingRow is { } other && other != row) EndEdit(other);
         _editingRow = row;
         ShowFieldError("");
-        row.Label.Visibility = Visibility.Collapsed;
-        row.Actions.Visibility = Visibility.Collapsed;
-        row.Editor.Text = row.Word;
-        row.Editor.Visibility = Visibility.Visible;
-        row.EditActions.Visibility = Visibility.Visible;
-        row.Editor.Focus(FocusState.Programmatic);
-        row.Editor.SelectAll();
+        row.BeginEdit();
     }
 
-    private void EndEdit(WordRow row)
+    private void EndEdit(DictionaryWordRow row)
     {
         if (_editingRow == row) _editingRow = null;
         ShowFieldError("");
-        row.Editor.Visibility = Visibility.Collapsed;
-        row.EditActions.Visibility = Visibility.Collapsed;
-        row.Label.Visibility = Visibility.Visible;
-        row.Actions.Visibility = Visibility.Visible;
-        if (row.Root.IsLoaded && FocusManager.FindFirstFocusableElement(row.Actions) is Control control)
-            control.Focus(FocusState.Programmatic);
+        row.EndEdit();
     }
 
-    private void SaveEdit(WordRow row)
+    private void SaveEdit(DictionaryWordRow row)
     {
         if (!_state.IsIdle) return;
-        string updated;
-        try
+        if (!ApplyEdit(new CustomVocabulary.Edit.Replace(row.Word, row.EditedWord), _state.SelectedModel, out var error))
         {
-            var dictionary = _state.Settings.CustomDictionary;
-            var text = CustomVocabulary.Normalize(row.Editor.Text);
-            if (text == row.Word) { EndEdit(row); return; }
-            if (CustomVocabulary.ModelCompatibilityError(_state.SelectedModel, text) is { } compatibilityError)
-                throw new InvalidDataException(compatibilityError);
-            updated = CustomVocabulary.ReplaceEntry(dictionary, row.Word, text);
-        }
-        catch (Exception failure) when (failure is InvalidDataException or ArgumentException or InvalidOperationException)
-        {
-            ShowFieldError(failure.Message);
+            ShowFieldError(error);
             return;
         }
-        if (ApplyDictionary(updated)) ShowFieldError("");
+        if (_editingRow == row) EndEdit(row);
+        else ShowFieldError("");
     }
 
     private void AddWordClicked(object sender, RoutedEventArgs args) => AddFromField();
@@ -243,32 +149,23 @@ public sealed partial class CustomWordsPage : Page
     private void AddFromField()
     {
         if (!_state.IsIdle || !CanAdd(SearchBox.Text)) return;
-        string entry, updated;
-        try
+        if (!ApplyEdit(new CustomVocabulary.Edit.Add(SearchBox.Text, SingleEntry: true), _state.SelectedModel, out var error))
         {
-            entry = CustomVocabulary.Normalize(SearchBox.Text);
-            if (entry.Contains('\n')) throw new InvalidDataException("Enter one word or phrase. Use Import to add a list.");
-            if (CustomVocabulary.ModelCompatibilityError(_state.SelectedModel, entry) is { } compatibilityError)
-                throw new InvalidDataException(compatibilityError);
-            updated = CustomVocabulary.AddEntries(_state.Settings.CustomDictionary, entry);
-        }
-        catch (Exception failure) when (failure is InvalidDataException or ArgumentException or InvalidOperationException)
-        {
-            ShowFieldError(failure.Message);
+            ShowFieldError(error);
             return;
         }
-        if (!ApplyDictionary(updated)) return;
+        var entry = CustomVocabulary.Normalize(SearchBox.Text);
         ShowFieldError("");
         SearchBox.Text = "";
         _notices.Confirm($"Added \"{entry}\".");
     }
 
-    // A word is addable when the field holds text that is not already in the dictionary, ignoring case.
     private bool CanAdd(string text)
     {
-        var query = string.Join(" ", text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
-        return query.Length > 0 && !_state.Settings.CustomDictionary.Split('\n', StringSplitOptions.RemoveEmptyEntries)
-            .Contains(query, StringComparer.OrdinalIgnoreCase);
+        var dictionary = _state.Settings.CustomDictionary;
+        var (updated, _) = CustomVocabulary.TryApply(dictionary,
+            new CustomVocabulary.Edit.Add(text, SingleEntry: true), _state.SelectedModel);
+        return updated is not null && updated != dictionary;
     }
 
     private void UpdateAddButton()
@@ -293,47 +190,57 @@ public sealed partial class CustomWordsPage : Page
         UpdateAddButton();
     }
 
-    private void RemoveWord(WordRow row)
+    private void RemoveWord(DictionaryWordRow row)
     {
         if (!_state.IsIdle) return;
         var word = row.Word;
-        var index = WordsList.Items.IndexOf(row.Root);
-        string after;
-        try { after = CustomVocabulary.RemoveEntry(_state.Settings.CustomDictionary, word); }
-        catch (InvalidOperationException error) { _session.ReportUiError(error, NoticeArea.Dictionary); return; }
-        if (!ApplyDictionary(after)) return;
+        var index = row.Model is { } model ? _rows.IndexOf(model) : -1;
+        if (!ApplyEdit(new CustomVocabulary.Edit.Remove(word), _state.SelectedModel, out _)) return;
         _notices.Confirm($"Removed \"{word}\".", new NoticeAction("Undo", () => RestoreWord(word)));
-        if (WordsList.Items.Count == 0) { SearchBox.Focus(FocusState.Programmatic); return; }
-        var next = (UIElement)WordsList.Items[Math.Min(Math.Max(index, 0), WordsList.Items.Count - 1)];
+        if (_rows.Count == 0) { SearchBox.Focus(FocusState.Programmatic); return; }
         WordsList.UpdateLayout();
-        if (FocusManager.FindFirstFocusableElement(next) is Control control) control.Focus(FocusState.Programmatic);
+        var next = WordsList.ContainerFromIndex(Math.Min(Math.Max(index, 0), _rows.Count - 1));
+        if (next is not null && FocusManager.FindFirstFocusableElement(next) is Control control)
+            control.Focus(FocusState.Programmatic);
     }
 
-    // Undo adds the word back to the current dictionary, so words added since the removal are kept.
-    private void RestoreWord(string word)
+    // Undo keeps newer words and restores saved vocabulary even if the current model cannot use it.
+    private void RestoreWord(string word) => ApplyEdit(new CustomVocabulary.Edit.Add(word), null, out _);
+
+    private bool ApplyEdit(CustomVocabulary.Edit edit, AudioModel? model, out string error)
     {
-        string updated;
-        try { updated = CustomVocabulary.AddEntries(_session.State.Settings.CustomDictionary, word); }
-        catch (Exception error) when (error is InvalidDataException or ArgumentException or InvalidOperationException)
+        var dictionary = _session.State.Settings.CustomDictionary;
+        var (updated, failure) = CustomVocabulary.TryApply(dictionary, edit, model);
+        if (updated is not null)
         {
-            _session.ReportUiError(error, NoticeArea.Dictionary);
-            return;
+            if (updated != dictionary) return ApplyDictionary(updated, out error);
+            error = "";
+            _notices.Set("dictionary-error", null);
+            return true;
         }
-        ApplyDictionary(updated);
+        error = failure!;
+        ReportError(error);
+        return false;
     }
 
-    private bool ApplyDictionary(string dictionary)
+    private void ReportError(string error) => _notices.Set("dictionary-error",
+        new NoticeContent(NoticeSeverity.Error, "Couldn't update dictionary", error), NoticeArea.Dictionary);
+
+    private bool ApplyDictionary(string dictionary, out string error)
     {
+        error = "";
         try
         {
             _session.SetCustomDictionary(dictionary);
             _state = _session.State;
             Render();
+            _notices.Set("dictionary-error", null);
             return true;
         }
-        catch (Exception error)
+        catch (Exception failure)
         {
-            _session.ReportUiError(error, NoticeArea.Dictionary);
+            error = failure.Message;
+            ReportError(error);
             _state = _session.State;
             Render();
             return false;
@@ -351,7 +258,7 @@ public sealed partial class CustomWordsPage : Page
             ValidateEditor();
             await EntryDialog.ShowAsync();
         }
-        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Dictionary); }
+        catch (Exception error) { ReportError(error.Message); }
         finally
         {
             _editorOpen = false;
@@ -362,26 +269,19 @@ public sealed partial class CustomWordsPage : Page
     private string? ImportedDictionary(out string error)
     {
         error = "";
-        if (!_session.State.IsIdle)
+        var state = _session.State;
+        if (!state.IsIdle)
         {
             error = "Finish the current operation to change your dictionary.";
             return null;
         }
         if (string.IsNullOrWhiteSpace(EntryBox.Text)) return null;
-        try
-        {
-            var dictionary = _session.State.Settings.CustomDictionary;
-            var text = CustomVocabulary.Normalize(EntryBox.Text);
-            if (CustomVocabulary.ModelCompatibilityError(_state.SelectedModel, text) is { } compatibilityError)
-                throw new InvalidDataException(compatibilityError);
-            var updated = CustomVocabulary.AddEntries(dictionary, text);
-            if (updated != dictionary) return updated;
-            error = "These words are already in your dictionary.";
-        }
-        catch (Exception failure) when (failure is InvalidDataException or ArgumentException or InvalidOperationException)
-        {
-            error = failure.Message;
-        }
+        var dictionary = state.Settings.CustomDictionary;
+        var (updated, failure) = CustomVocabulary.TryApply(dictionary,
+            new CustomVocabulary.Edit.Add(EntryBox.Text), state.SelectedModel);
+        if (failure is not null) error = failure;
+        else if (updated != dictionary) return updated;
+        else error = "These words are already in your dictionary.";
         return null;
     }
 
@@ -402,17 +302,11 @@ public sealed partial class CustomWordsPage : Page
     private void EntryDialogPrimaryClicked(ContentDialog sender, ContentDialogButtonClickEventArgs args)
     {
         var dictionary = ImportedDictionary(out var error);
-        if (dictionary is null)
-        {
-            args.Cancel = true;
-            EditorValidationText.Text = error;
-            EditorValidationText.Visibility = error.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
-            return;
-        }
-        if (ApplyDictionary(dictionary)) return;
+        if (dictionary is not null && ApplyDictionary(dictionary, out error)) return;
         args.Cancel = true;
-        EditorValidationText.Text = _session.State.Notice.Message;
-        EditorValidationText.Visibility = Visibility.Visible;
+        if (error.Length > 0) ReportError(error);
+        EditorValidationText.Text = error;
+        EditorValidationText.Visibility = error.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void EntryTextChanged(object sender, TextChangedEventArgs args) => ValidateEditor();

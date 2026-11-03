@@ -17,6 +17,9 @@ public sealed partial class MeetingWindow : Window
     private readonly MeetingSession _session;
     private readonly MeetingStore _store;
     private readonly string? _diagnosticsDirectory;
+    // One notice slot: the newest error or model notice replaces the last, and starting an action clears it.
+    private const string NoticeKey = "meeting";
+    private readonly AppNotices _notices = new();
     private MeetingDocument? _document;
     private string? _shownNotice;
     private readonly bool _savedMeeting;
@@ -81,10 +84,7 @@ public sealed partial class MeetingWindow : Window
     {
         InitializeComponent();
         Root.RequestedTheme = theme;
-        var noticeShadow = new Microsoft.UI.Xaml.Media.ThemeShadow();
-        noticeShadow.Receivers.Add(Root);
-        MeetingNotice.Shadow = noticeShadow;
-        MeetingNotice.Translation = new System.Numerics.Vector3(0, 0, 32);
+        Notices.Attach(_notices);
         TranscriptRows.ItemsSource = _transcript.Rows;
         _session = session;
         _store = store;
@@ -352,7 +352,7 @@ public sealed partial class MeetingWindow : Window
         if (_busy) return;
         _busy = true;
         string? actionError = null;
-        HideBar();
+        HideNotice();
         StartButton.IsEnabled = PauseButton.IsEnabled = EndButton.IsEnabled = false;
         RefreshCleanupControls();
         try
@@ -582,7 +582,7 @@ public sealed partial class MeetingWindow : Window
     {
         CleanupStatusText.Visibility = Visibility.Visible;
         CleanupStatusText.Text = "Cleaning up wording. Original text is kept until the complete result is ready.";
-        HideBar();
+        HideNotice();
         try
         {
             var texts = await _textCleanup.CleanAsync(document, options, token);
@@ -723,15 +723,11 @@ public sealed partial class MeetingWindow : Window
         if (_selectedDetectedMeeting != SelectedMeetingIdentity) _selectedDetectedMeeting = null;
         UpdateNamingHelp();
     }
-    private void ShowError(string message) => ShowBar(NoticeSeverity.Error, "Meeting needs attention", message);
-    private void ShowNotice(string message) => ShowBar(NoticeSeverity.Warning, "Speaker model changed", message);
-    private void ShowBar(NoticeSeverity severity, string title, string message)
-    {
-        MeetingNotice.Show(new NoticeContent(severity, title, message));
-        MeetingNotice.Visibility = Visibility.Visible;
-    }
-    private void HideBar() => MeetingNotice.Visibility = Visibility.Collapsed;
-    private void NoticeCloseRequested(object? sender, EventArgs args) => HideBar();
+    private void ShowError(string message) =>
+        _notices.Set(NoticeKey, new NoticeContent(NoticeSeverity.Error, "Meeting needs attention", message));
+    private void ShowNotice(string message) =>
+        _notices.Set(NoticeKey, new NoticeContent(NoticeSeverity.Warning, "Speaker model changed", message));
+    private void HideNotice() => _notices.Set(NoticeKey, null);
     private static string FormatTime(double seconds) => TimeSpan.FromSeconds(Math.Max(0, seconds)).ToString(seconds >= 3600 ? @"h\:mm\:ss" : @"m\:ss");
     private sealed record MeetingProcessChoice(int Id, string DisplayName, bool IsTeams, DateTime StartedUtc);
 }

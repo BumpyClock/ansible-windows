@@ -45,6 +45,19 @@ public sealed class HomeProjectionTests
     }
 
     [Fact]
+    public void HistoryGroupsOutsideTheCurrentYearNameTheYear()
+    {
+        var today = new DateTime(2026, 10, 20);
+        var lastYear = new DateTime(2025, 12, 31, 12, 0, 0);
+        var item = History(new DateTimeOffset(lastYear, TimeZoneInfo.Local.GetUtcOffset(lastYear)), "old");
+
+        var model = HomeHistoryProjection.Create([item], "", false, _ => null, today);
+
+        Assert.Equal(lastYear.ToString("ddd, MMM d, yyyy", CultureInfo.CurrentCulture).ToUpperInvariant(),
+            Assert.Single(model.Groups).Label);
+    }
+
+    [Fact]
     public void MissingUsageStaysUnknownAndLoadedEmptyUsageShowsZero()
     {
         var today = new DateOnly(2026, 10, 20);

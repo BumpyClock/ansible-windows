@@ -7,7 +7,10 @@ namespace Ansible;
 
 public sealed partial class WelcomePage : Page
 {
+    /// <summary>The notice key for failures in the welcome lesson, shared with the window that completes it.</summary>
+    internal const string NoticeKey = "welcome";
     private readonly DictationSession _session;
+    private readonly AppNotices _notices;
     private readonly Action _completed;
     private readonly Action _modelsRequested;
     private readonly Func<bool> _shortcutBusy;
@@ -16,10 +19,11 @@ public sealed partial class WelcomePage : Page
     private int _step;
     private bool _practiced;
 
-    internal WelcomePage(DictationSession session, Action completed, Action modelsRequested, Func<bool> shortcutBusy)
+    internal WelcomePage(DictationSession session, Action completed, Action modelsRequested, Func<bool> shortcutBusy, AppNotices notices)
     {
         InitializeComponent();
         _session = session;
+        _notices = notices;
         _completed = completed;
         _modelsRequested = modelsRequested;
         _shortcutBusy = shortcutBusy;
@@ -119,7 +123,7 @@ public sealed partial class WelcomePage : Page
     private async void CancelPracticeClicked(object sender, RoutedEventArgs args)
     {
         try { await _session.CancelAsync(); }
-        catch (Exception error) { _session.ReportUiError(error); }
+        catch (Exception error) { _notices.SetError(NoticeKey, error); }
     }
 
     private sealed class PracticeTarget(WelcomePage page) : IShortcutTextTarget

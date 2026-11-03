@@ -285,15 +285,16 @@ public sealed partial class HomeHistoryView : UserControl
             row.TagPill.Visibility = Visibility.Collapsed;
             return;
         }
-        var prefix = tag.Tone switch
+        var (pill, text, icon) = tag.Tone switch
         {
-            HomeHistoryTagTone.Inserted => "HistoryInserted",
-            HomeHistoryTagTone.Unverified => "HistoryUnverified",
-            _ => "History"
+            HomeHistoryTagTone.Inserted => ("HistoryInsertedTagStyle", "HistoryInsertedTagTextStyle", "HistoryInsertedTagIconStyle"),
+            HomeHistoryTagTone.Unverified => ("HistoryUnverifiedTagStyle", "HistoryUnverifiedTagTextStyle", "HistoryUnverifiedTagIconStyle"),
+            HomeHistoryTagTone.NotInserted => ("HistoryTagStyle", "HistoryTagTextStyle", "HistoryTagIconStyle"),
+            _ => throw new ArgumentOutOfRangeException(nameof(tag))
         };
-        SetStyle(row.TagPill, prefix + "TagStyle");
-        SetStyle(row.TagText, prefix + "TagTextStyle");
-        SetStyle(row.TagIcon, prefix + "TagIconStyle");
+        SetStyle(row.TagPill, pill);
+        SetStyle(row.TagText, text);
+        SetStyle(row.TagIcon, icon);
         row.TagIcon.Glyph = tag.Glyph;
         row.TagText.Text = tag.Label;
         ToolTipService.SetToolTip(row.TagPill, tag.Meaning);

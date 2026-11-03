@@ -1,24 +1,30 @@
 using System.Diagnostics;
 using System.Numerics;
 using Ansible.Core;
-using Microsoft.UI;
-using Microsoft.UI.System;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
-using Microsoft.UI.Xaml.Automation.Peers;
-using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Hosting;
-using Microsoft.UI.Xaml.Media;
 
 namespace Ansible;
 
 public sealed partial class MainWindow : Window
 {
+    // Notice keys, one per source. A source's newest notice replaces its previous one.
     private const string SessionNoticeKey = "session";
     private const string MicrophonePermissionNoticeKey = "microphone-permission";
+    private const string MicrophoneCheckNoticeKey = "microphone-check";
+    private const string MicrophoneSettingsNoticeKey = "microphone-settings";
     private const string MeetingSuggestionNoticeKey = "meeting-suggestion";
+    private const string MeetingDetectionNoticeKey = "meeting-detection";
+    private const string MeetingRecoveryNoticeKey = "meeting-recovery";
+    private const string MeetingWindowNoticeKey = "meeting-window";
+    private const string StartupNoticeKey = "startup";
+    private const string ShortcutNoticeKey = "shortcut";
+    private const string ShortcutRegistrationNoticeKey = "shortcut-registration";
+    private const string ShortcutLessonNoticeKey = "shortcut-lesson";
+    private const string CapturePrivacyNoticeKey = "capture-privacy";
     private const string TrayErrorNoticeKey = "tray-error";
     private const string ShutdownErrorNoticeKey = "shutdown-error";
     private readonly DictationSession _session;
@@ -45,7 +51,6 @@ public sealed partial class MainWindow : Window
     private bool _compactNavigation;
     private bool _meetingRecoveryComplete;
     private bool _closed;
-    private ThemeSettings? _themeSettings;
     private bool _allowClose;
     private bool _closing;
     private bool _popupFailed;
@@ -63,11 +68,7 @@ public sealed partial class MainWindow : Window
     private bool _launchReady;
     private bool _permissionCheckComplete;
     private MicrophonePermissionStatus? _dismissedMicrophonePermissionStatus;
-    // The microphone status the posted notice describes; null while no microphone notice is posted.
-    private PageCanvas? _canvas;
-    // The current page's primary action mirrored in the title bar, and the property callbacks that keep the copy current.
-    private Button? _primaryAction;
-    private readonly List<(DependencyObject source, DependencyProperty property, long token)> _primaryActionCallbacks = [];
+    private readonly ShellPages _pages;
 
     internal MainWindow(DictationSession session, AppPaths paths, HttpClient modelDownloads, MicrophonePermissionPreflight microphonePermission,
         LocalDiagnosticLog diagnostics)
@@ -80,7 +81,7 @@ public sealed partial class MainWindow : Window
         _meetingStore = new MeetingStore(Path.Combine(Path.GetDirectoryName(paths.Settings)!, "meetings"));
         _meetingDiagnostics = diagnostics;
         _meetingCleanup = new(diagnostics);
-        _meetings = new MeetingsPage(session, _meetingStore, OpenMeetingAsync, () => WinRT.Interop.WindowNative.GetWindowHandle(this), diagnostics, _notices);
+        _meetings = new MeetingsPage(_meetingStore, OpenMeetingAsync, () => WinRT.Interop.WindowNative.GetWindowHandle(this), diagnostics, _notices);
         _history = new HomeDictationHistory(session, Path.Combine(Path.GetDirectoryName(paths.Settings)!, "dictation-history.json"), diagnostics);
         _shortcut = new ShortcutDictation(session,
             new WelcomeShortcutTargetInspector(DispatcherQueue, CurrentWelcome,
@@ -93,25 +94,27 @@ public sealed partial class MainWindow : Window
         _suggestions = new MeetingSuggestions(new Ansible.Core.Windows.TeamsMeetingDetector(),
             () => _session.State.Settings.AutoDetectMeetings, () => MeetingSuggestionsBlocked,
             candidate => _meetingWindows.Any(meeting => meeting.session.IsActive && meeting.window.SelectedMeetingIdentity == candidate),
-            (title, message) => _session.Notify(NoticeKind.Warning, title, message, NoticeArea.Meetings));
+            (title, message) => _notices.Set(MeetingDetectionNoticeKey,
+                new NoticeContent(NoticeSeverity.Warning, title, message), NoticeArea.Meetings));
         _suggestions.Changed += RenderMeetingSuggestion;
-        _welcome = new WelcomePage(session, CompleteWelcome, () => Navigate("models"), () => _shortcut.IsBusy);
+        // Page callbacks run after _pages is assigned below.
+        _welcome = new WelcomePage(session, CompleteWelcome, () => Navigate(_pages!.Models), () => _shortcut.IsBusy, _notices);
         _dictation = new DictationPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this), _history, _notices);
         _settings = new MainPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this),
             ChangeHotkey, ChangeDictationMode, CaptureShortcut, diagnostics, _notices);
         _settings.ShortcutLessonRequested += OpenShortcutLesson;
         _models = new ModelManagementPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this), modelDownloads,
-            () => { Navigate("dictation"); return _dictation.TranscribeFileAsync(); }, diagnostics, _notices);
-        _customWords = new CustomWordsPage(session, () => Navigate("models"), _notices);
-        ExtendsContentIntoTitleBar = true;
-        SetTitleBar(AppTitleBar);
-        AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
+            () => { Navigate(_pages!.Home); return _dictation.TranscribeFileAsync(); }, diagnostics, _notices);
+        _customWords = new CustomWordsPage(session, () => Navigate(_pages!.Models), _notices);
+        _pages = new ShellPages(
+            Home: ShellPage.InSidebar(_dictation, DictationNav, DictationIndicator, NoticeArea.Dictation),
+            Welcome: new ShellPage(_welcome, DictationNav, DictationIndicator, Area: null, Title: ""),
+            Meetings: ShellPage.InSidebar(_meetings, MeetingsNav, MeetingsIndicator, NoticeArea.Meetings),
+            Models: ShellPage.InSidebar(_models, ModelsNav, ModelsIndicator, NoticeArea.Models),
+            Dictionary: ShellPage.InSidebar(_customWords, CustomWordsNav, CustomWordsIndicator, NoticeArea.Dictionary),
+            Settings: ShellPage.InSidebar(_settings, SettingsNav, SettingsIndicator, NoticeArea.Settings));
+        AppTitleBar.Attach(this);
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
-        AppWindow.TitleBar.ButtonBackgroundColor = Colors.Transparent;
-        AppWindow.TitleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
-        _themeSettings = ThemeSettings.CreateForWindowId(AppWindow.Id);
-        _themeSettings.Changed += ContrastThemeChanged;
-        RefreshTitleBarColors();
         var area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Nearest).WorkArea;
         var size = new Windows.Graphics.SizeInt32(Math.Min(1700, area.Width - 60), Math.Min(1100, area.Height - 60));
         AppWindow.Resize(size);
@@ -129,8 +132,7 @@ public sealed partial class MainWindow : Window
         };
         AppWindow.Closing += CloseRequested;
         Closed += WindowClosed;
-        AddTitleBarAnimations();
-        Navigate("dictation");
+        Navigate(_pages.Home);
         _observer = new UiSessionObserver(session, DispatcherQueue, SessionChanged);
         try { EnsureTrayIcon(); }
         catch (Exception error) { TrayFailed(error); }
@@ -197,10 +199,11 @@ public sealed partial class MainWindow : Window
             catch (Exception error)
             {
                 LogApplication(ApplicationDiagnosticStage.Hotkey, DiagnosticOutcome.Failed, diagnosticsGeneration, hotkeyStarted, error);
-                _session.Notify(NoticeKind.Error, "Shortcut unavailable", error.Message, NoticeArea.Settings | NoticeArea.Dictation);
+                _notices.Set(ShortcutRegistrationNoticeKey, new NoticeContent(NoticeSeverity.Error, "Shortcut unavailable", error.Message),
+                    NoticeArea.Settings | NoticeArea.Dictation);
             }
-            if (!_session.State.Settings.WelcomeCompleted) Navigate("welcome");
-            else if (_session.State.Phase == DictationPhase.Disconnected && _session.State.Models.Count == 0) Navigate("models");
+            if (!_session.State.Settings.WelcomeCompleted) Navigate(_pages.Welcome);
+            else if (_session.State.Phase == DictationPhase.Disconnected && _session.State.Models.Count == 0) Navigate(_pages.Models);
             _suggestions.Start();
             LogApplication(ApplicationDiagnosticStage.Startup, DiagnosticOutcome.Completed, startupGeneration, startupStarted);
         }
@@ -211,7 +214,7 @@ public sealed partial class MainWindow : Window
         catch (Exception error)
         {
             LogApplication(ApplicationDiagnosticStage.Startup, DiagnosticOutcome.Failed, startupGeneration, startupStarted, error);
-            _session.ReportUiError(error, NoticeArea.Application);
+            _notices.SetError(StartupNoticeKey, error, NoticeArea.Application);
         }
     }
 
@@ -225,22 +228,22 @@ public sealed partial class MainWindow : Window
 
     private async Task RecoverMeetingsAsync(CancellationToken token)
     {
-        SessionNotice? notice = null;
+        NoticeContent? notice = null;
         try
         {
             var failures = await Task.Run(() => _meetingStore.MarkInterruptedSessionsAsync(token), token);
             token.ThrowIfCancellationRequested();
             _meetingRecoveryComplete = true;
             if (failures.Count > 0)
-                notice = new(NoticeKind.Warning, "Some saved transcripts unavailable",
-                    "Open Meetings to export and remove unreadable files. New meetings are still available.", NoticeArea.Meetings);
+                notice = new(NoticeSeverity.Warning, "Some saved transcripts unavailable",
+                    "Open Meetings to export and remove unreadable files. New meetings are still available.");
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { return; }
-        catch (Exception error) { notice = new(NoticeKind.Error, "Meeting recovery failed", error.Message, NoticeArea.Meetings); }
+        catch (Exception error) { notice = new(NoticeSeverity.Error, "Meeting recovery failed", error.Message); }
         // Initialization publishes its own notice. Report recovery problems afterward without delaying dictation.
         if (notice is not null && _startupTask is not null) await _startupTask;
         if (token.IsCancellationRequested || _closed || _closing) return;
-        if (notice is not null) _session.Notify(notice.Kind, notice.Title, notice.Message, notice.Area);
+        if (notice is not null) _notices.Set(MeetingRecoveryNoticeKey, notice, NoticeArea.Meetings);
         if (ReferenceEquals(MainContent.Content, _meetings)) await _meetings.RefreshAsync();
     }
 
@@ -286,9 +289,10 @@ public sealed partial class MainWindow : Window
     private async Task RetryMicrophonePermissionAsync()
     {
         _dismissedMicrophonePermissionStatus = null;
+        _notices.Set(MicrophoneCheckNoticeKey, null);
         try { await _microphonePermission.InitializeAsync(_startupCancellation.Token); }
         catch (OperationCanceledException) when (_startupCancellation.IsCancellationRequested) { }
-        catch (Exception error) { if (!_closing) _session.ReportUiError(error, NoticeArea.Application); }
+        catch (Exception error) { if (!_closing) _notices.SetError(MicrophoneCheckNoticeKey, error, NoticeArea.Application); }
         finally { RenderMicrophonePermission(); }
     }
 
@@ -301,50 +305,18 @@ public sealed partial class MainWindow : Window
 
     private async Task OpenMicrophoneSettingsAsync()
     {
+        _notices.Set(MicrophoneSettingsNoticeKey, null);
         try
         {
             if (!await Windows.System.Launcher.LaunchUriAsync(new Uri("ms-settings:privacy-microphone")) && !_closing)
-                _session.Notify(NoticeKind.Warning, "Windows Settings unavailable", "Open Windows Settings > Privacy & security > Microphone.", NoticeArea.Application);
+                _notices.Set(MicrophoneSettingsNoticeKey, new NoticeContent(NoticeSeverity.Warning, "Windows Settings unavailable",
+                    "Open Windows Settings > Privacy & security > Microphone."), NoticeArea.Application);
         }
-        catch (Exception error) { if (!_closing) _session.ReportUiError(error, NoticeArea.Application); }
+        catch (Exception error) { if (!_closing) _notices.SetError(MicrophoneSettingsNoticeKey, error, NoticeArea.Application); }
     }
 
-    private void NavigateClicked(object sender, RoutedEventArgs args) => Navigate((string)((Button)sender).Tag);
-
-    private Button[] NavigationButtons => [DictationNav, MeetingsNav, ModelsNav, CustomWordsNav, SettingsNav];
-
-    // The collapsed title and action fade and rise into the title bar, and fade out. Skipped when Windows
-    // animations are off.
-    private void AddTitleBarAnimations()
-    {
-        if (!new Windows.UI.ViewManagement.UISettings().AnimationsEnabled) return;
-        var resources = Application.Current.Resources;
-        var duration = TimeSpan.FromMilliseconds((double)resources["MotionNormalMilliseconds"]);
-        var compositor = ElementCompositionPreview.GetElementVisual(ShellRoot).Compositor;
-        foreach (UIElement element in new UIElement[] { TitleBarPageTitle, TitleBarPrimaryAction })
-        {
-            ElementCompositionPreview.SetIsTranslationEnabled(element, true);
-            var fadeIn = compositor.CreateScalarKeyFrameAnimation();
-            fadeIn.Target = "Opacity";
-            fadeIn.InsertKeyFrame(0, 0);
-            fadeIn.InsertKeyFrame(1, 1);
-            fadeIn.Duration = duration;
-            var rise = compositor.CreateVector3KeyFrameAnimation();
-            rise.Target = "Translation";
-            rise.InsertKeyFrame(0, new Vector3(0, 4, 0));
-            rise.InsertKeyFrame(1, Vector3.Zero);
-            rise.Duration = duration;
-            var show = compositor.CreateAnimationGroup();
-            show.Add(fadeIn);
-            show.Add(rise);
-            ElementCompositionPreview.SetImplicitShowAnimation(element, show);
-            var fadeOut = compositor.CreateScalarKeyFrameAnimation();
-            fadeOut.Target = "Opacity";
-            fadeOut.InsertKeyFrame(1, 0);
-            fadeOut.Duration = duration;
-            ElementCompositionPreview.SetImplicitHideAnimation(element, fadeOut);
-        }
-    }
+    private void NavigateClicked(object sender, RoutedEventArgs args) =>
+        Navigate(_pages.Sidebar.First(page => ReferenceEquals(page.Nav, sender)));
 
     private void ShellSizeChanged(object sender, SizeChangedEventArgs args)
     {
@@ -352,19 +324,16 @@ public sealed partial class MainWindow : Window
         if (_compactNavigation == compact) return;
         _compactNavigation = compact;
         var resources = Application.Current.Resources;
-        SidebarColumn.Width = TitleBarBrandColumn.Width = (GridLength)resources[compact ? "CompactSidebarColumnWidth" : "SidebarColumnWidth"];
+        SidebarColumn.Width = (GridLength)resources[compact ? "CompactSidebarColumnWidth" : "SidebarColumnWidth"];
         Sidebar.Padding = (Thickness)resources[compact ? "CompactSidebarPadding" : "SidebarPadding"];
-        AppWordmark.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
-        Brand.Margin = compact ? new Thickness(0) : (Thickness)resources["SidebarBrandMargin"];
-        Brand.HorizontalAlignment = compact ? HorizontalAlignment.Center : HorizontalAlignment.Left;
-        TitleBarPageTitle.Margin = (Thickness)resources[compact ? "CompactTitleBarPageTitleMargin" : "TitleBarPageTitleMargin"];
-        foreach (var button in NavigationButtons)
+        AppTitleBar.SetCompact(compact);
+        foreach (var button in _pages.Sidebar.Select(page => page.Nav))
         {
             // A local value outlasts Navigate's style swaps, so the icon stays centred in the 72 px column.
             button.HorizontalContentAlignment = compact ? HorizontalAlignment.Center : HorizontalAlignment.Left;
             if (button.Content is StackPanel content)
             {
-                content.Spacing = compact ? 0 : (double)Application.Current.Resources["NavLabelGap"];
+                content.Spacing = compact ? 0 : (double)resources["NavLabelGap"];
                 foreach (var label in content.Children.OfType<TextBlock>())
                     label.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
             }
@@ -372,139 +341,20 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void Navigate(string page)
+    private void Navigate(ShellPage page)
     {
-        if (page == "settings" && _permissionCheckComplete && _microphonePermission.Status != MicrophonePermissionStatus.Allowed)
+        if (page == _pages.Settings && _permissionCheckComplete && _microphonePermission.Status != MicrophonePermissionStatus.Allowed)
         {
             _dismissedMicrophonePermissionStatus = null;
             RenderMicrophonePermission();
         }
-        if (page == "dictation" && _launchReady && !_session.State.Settings.WelcomeCompleted) page = "welcome";
-        Page target = page switch { "welcome" => _welcome, "settings" => _settings, "dictation" => _dictation, "models" => _models,
-            "custom-words" => _customWords, "meetings" => _meetings, _ => _dictation };
+        if (page == _pages.Home && _launchReady && !_session.State.Settings.WelcomeCompleted) page = _pages.Welcome;
         // Reselecting the current page keeps its state and scroll position.
-        if (ReferenceEquals(MainContent.Content, target)) return;
-        MainContent.Content = target;
-        foreach (var (button, indicator) in new[]
-        {
-            (DictationNav, DictationIndicator), (ModelsNav, ModelsIndicator),
-            (MeetingsNav, MeetingsIndicator),
-            (CustomWordsNav, CustomWordsIndicator),
-            (SettingsNav, SettingsIndicator),
-        })
-        {
-            var selected = (string)button.Tag == (page == "welcome" ? "dictation" : page);
-            button.Style = (Style)Application.Current.Resources[
-                selected ? "SelectedNavigationButtonStyle" : "NavigationButtonStyle"];
-            indicator.Style = (Style)Application.Current.Resources[
-                selected ? "SelectedNavigationIconStyle" : "NavigationIconStyle"];
-            AutomationProperties.SetHelpText(button, selected ? "Current page" : "");
-            AutomationProperties.SetItemStatus(button, selected ? "Current page" : "");
-        }
-        var canvas = PageCanvas.Find(target);
-        if (!ReferenceEquals(_canvas, canvas))
-        {
-            if (_canvas is not null) _canvas.HeadingScrolledOutChanged -= HeadingScrolledOutChanged;
-            _canvas = canvas;
-            if (canvas is not null) canvas.HeadingScrolledOutChanged += HeadingScrolledOutChanged;
-        }
-        Notices.ShowPage(page, canvas);
-        // The title bar names the page as the sidebar does; the page heading may be a greeting instead.
-        TitleBarPageTitle.Text = NavigationButtons.FirstOrDefault(button => (string)button.Tag == page) is { } current
-            ? AutomationProperties.GetName(current) : "";
-        RenderTitleBar();
-    }
-
-    private void HeadingScrolledOutChanged(object? sender, EventArgs args) => RenderTitleBar();
-
-    // Once the page heading scrolls away, the title bar shows the page name and a compact copy of the page's
-    // primary action. The copy invokes the original, so pages need no title bar API.
-    private void RenderTitleBar()
-    {
-        if (_closed) return;
-        var scrolled = _canvas is { IsHeadingScrolledOut: true } && TitleBarPageTitle.Text.Length > 0;
-        var action = scrolled ? _canvas!.FindPrimaryAction() : null;
-        BindPrimaryAction(action);
-        var showAction = action is not null && IsDisplayed(action);
-        if (action is not null && showAction)
-        {
-            var label = PrimaryActionLabel(action);
-            TitleBarPrimaryAction.Content = label;
-            TitleBarPrimaryAction.IsEnabled = action.IsEnabled;
-            AutomationProperties.SetName(TitleBarPrimaryAction,
-                AutomationProperties.GetName(action) is { Length: > 0 } name ? name : label);
-        }
-        var changed = SetShown(TitleBarPageTitle, scrolled) | SetShown(TitleBarPrimaryAction, showAction);
-        // The TitleBar keeps visible controls in its content clickable; refresh its regions after the button toggles.
-        if (changed) DispatcherQueue.TryEnqueue(() => { if (!_closed) AppTitleBar.RecomputeDragRegions(); });
-    }
-
-    private static bool SetShown(UIElement element, bool shown)
-    {
-        var visibility = shown ? Visibility.Visible : Visibility.Collapsed;
-        if (element.Visibility == visibility) return false;
-        element.Visibility = visibility;
-        return true;
-    }
-
-    private bool IsDisplayed(FrameworkElement element)
-    {
-        for (DependencyObject? current = element; current is not null && !ReferenceEquals(current, _canvas);
-             current = VisualTreeHelper.GetParent(current))
-        {
-            if (current is UIElement { Visibility: Visibility.Collapsed }) return false;
-        }
-        return true;
-    }
-
-    private static string PrimaryActionLabel(Button button) =>
-        button.Content as string ?? FirstText(button.Content as DependencyObject) ?? AutomationProperties.GetName(button);
-
-    private static string? FirstText(DependencyObject? root)
-    {
-        if (root is null) return null;
-        var pending = new Queue<DependencyObject>([root]);
-        while (pending.TryDequeue(out var current))
-        {
-            if (current is TextBlock { Visibility: Visibility.Visible, Text.Length: > 0 } text) return text.Text;
-            for (var index = 0; index < VisualTreeHelper.GetChildrenCount(current); index++)
-                pending.Enqueue(VisualTreeHelper.GetChild(current, index));
-        }
-        return null;
-    }
-
-    private void BindPrimaryAction(Button? action)
-    {
-        if (ReferenceEquals(_primaryAction, action)) return;
-        foreach (var (source, property, token) in _primaryActionCallbacks)
-            source.UnregisterPropertyChangedCallback(property, token);
-        _primaryActionCallbacks.Clear();
-        _primaryAction = action;
-        if (action is null) return;
-        void Watch(DependencyObject source, DependencyProperty property) => _primaryActionCallbacks.Add((source, property,
-            source.RegisterPropertyChangedCallback(property, (_, _) => DispatcherQueue.TryEnqueue(RenderTitleBar))));
-        Watch(action, ContentControl.ContentProperty);
-        Watch(action, Control.IsEnabledProperty);
-        Watch(action, UIElement.VisibilityProperty);
-        Watch(action, FrameworkElement.StyleProperty);
-        Watch(action, AutomationProperties.NameProperty);
-        if (action.Content is DependencyObject content)
-        {
-            var pending = new Queue<DependencyObject>([content]);
-            while (pending.TryDequeue(out var current))
-            {
-                if (current is TextBlock text) Watch(text, TextBlock.TextProperty);
-                for (var index = 0; index < VisualTreeHelper.GetChildrenCount(current); index++)
-                    pending.Enqueue(VisualTreeHelper.GetChild(current, index));
-            }
-        }
-    }
-
-    private void TitleBarPrimaryActionClicked(object sender, RoutedEventArgs args)
-    {
-        if (_primaryAction is { IsEnabled: true } action
-            && FrameworkElementAutomationPeer.CreatePeerForElement(action)?.GetPattern(PatternInterface.Invoke) is IInvokeProvider invoke)
-            invoke.Invoke();
+        if (ReferenceEquals(MainContent.Content, page.Page)) return;
+        MainContent.Content = page.Page;
+        foreach (var item in _pages.Sidebar) item.SetSelected(ReferenceEquals(item.Nav, page.Nav));
+        Notices.ShowPage(page.Area, page.Canvas);
+        AppTitleBar.ShowPage(page.Title, page.Canvas);
     }
 
     // The panel's border draws rounded corners but does not clip; clip the page so its scrollbar and content stay
@@ -528,13 +378,13 @@ public sealed partial class MainWindow : Window
     {
         if (!_session.State.IsIdle || _shortcut.IsBusy)
         {
-            _session.Notify(NoticeKind.Warning, "Finish dictation first",
-                "Wait for the current dictation and insertion to finish before opening the shortcut lesson.",
-                NoticeArea.Settings);
+            _notices.Set(ShortcutLessonNoticeKey, new NoticeContent(NoticeSeverity.Warning, "Finish dictation first",
+                "Wait for the current dictation and insertion to finish before opening the shortcut lesson."), NoticeArea.Settings);
             return;
         }
+        _notices.Set(ShortcutLessonNoticeKey, null);
         _welcome.RestartLesson();
-        Navigate("welcome");
+        Navigate(_pages.Welcome);
     }
 
     private void CompleteWelcome()
@@ -543,22 +393,9 @@ public sealed partial class MainWindow : Window
         {
             if (!_session.State.IsIdle || _shortcut.IsBusy) return;
             _session.CompleteWelcome();
-            Navigate("dictation");
+            Navigate(_pages.Home);
         }
-        catch (Exception error) { _session.ReportUiError(error); }
-    }
-
-    private void ShellThemeChanged(FrameworkElement sender, object args) => RefreshTitleBarColors();
-    private void ContrastThemeChanged(ThemeSettings sender, object args) => RefreshTitleBarColors();
-
-    private void RefreshTitleBarColors()
-    {
-        DispatcherQueue.TryEnqueue(() =>
-        {
-            if (_closed || AppTitleBar is null) return;
-            AppWindow.TitleBar.ButtonForegroundColor = ((SolidColorBrush)AppTitleBar.Foreground).Color;
-            AppWindow.TitleBar.ButtonInactiveForegroundColor = ((SolidColorBrush)ShellRoot.BorderBrush).Color;
-        });
+        catch (Exception error) { _notices.SetError(WelcomePage.NoticeKey, error); }
     }
 
     private async Task OpenMeetingAsync(MeetingDocument? document)
@@ -605,7 +442,7 @@ public sealed partial class MainWindow : Window
         var window = new MeetingWindow(meeting, _meetingStore, document, ShellRoot.RequestedTheme, _meetingDiagnostics.DirectoryPath,
             _meetingCleanup, () => _session.State.Settings.MeetingCleanup);
         try { window.ApplyCapturePrivacy(_session.State.Settings.HideFromCapture); }
-        catch (Exception error) { _session.Notify(NoticeKind.Warning, "Screen capture privacy unavailable", error.Message, NoticeArea.Application); }
+        catch (Exception error) { ShowCapturePrivacyFailure(error.Message); }
         _meetingWindows.Add((meeting, window, document?.Id));
         meeting.StateChanged += state => DispatcherQueue.TryEnqueue(() =>
         {
@@ -620,7 +457,7 @@ public sealed partial class MainWindow : Window
                 _meetingWindows.RemoveAll(item => ReferenceEquals(item.window, window));
                 if (ReferenceEquals(MainContent.Content, _meetings)) await _meetings.RefreshAsync();
             }
-            catch (Exception error) { _session.ReportUiError(error, NoticeArea.Meetings); }
+            catch (Exception error) { _notices.SetError(MeetingWindowNoticeKey, error, NoticeArea.Meetings); }
         };
         return window;
     }
@@ -647,7 +484,7 @@ public sealed partial class MainWindow : Window
             return true;
         });
         if (!_closing && !_closed && outcome is MeetingSuggestionOutcome.Rejected or MeetingSuggestionOutcome.Failed)
-            Navigate("meetings");
+            Navigate(_pages.Meetings);
     }
 
     private void ChangeHotkey(DictationShortcut choice)
@@ -659,6 +496,7 @@ public sealed partial class MainWindow : Window
         _hotkey?.Dispose();
         _hotkey = replacement;
         _configuredHotkey = choice;
+        _notices.Set(ShortcutRegistrationNoticeKey, null);
         _session.SetShortcut(choice);
     }
 
@@ -700,8 +538,8 @@ public sealed partial class MainWindow : Window
             }
             try { _floating?.ApplyCapturePrivacy(state.Settings.HideFromCapture); }
             catch (Exception error) { failures.Add(error.Message); }
-            if (failures.Count > 0)
-                _session.Notify(NoticeKind.Warning, "Screen capture privacy unavailable", string.Join(" ", failures.Distinct()), NoticeArea.Application);
+            if (failures.Count > 0) ShowCapturePrivacyFailure(string.Join(" ", failures.Distinct()));
+            else _notices.Set(CapturePrivacyNoticeKey, null);
         }
         var showWaveform = FloatingPreviewPresentation.ShouldShowWaveform(state);
         if (!showWaveform)
@@ -714,19 +552,23 @@ public sealed partial class MainWindow : Window
             _creatingFloating = true;
             try
             {
-                _floating = new FloatingDictationWindow(_session, this);
+                _floating = new FloatingDictationWindow(_session, this, _notices);
                 _floating.Closed += (_, _) => _floating = null;
             }
             catch (Exception error)
             {
                 _popupFailed = true;
-                _session.ReportUiError(new InvalidOperationException("The floating preview could not be opened.", error));
+                _notices.SetError(FloatingDictationWindow.NoticeKey,
+                    new InvalidOperationException("The floating preview could not be opened.", error));
             }
             finally { _creatingFloating = false; }
         }
         if (showWaveform) { _floating?.ShowPreview(_overlayAnchor); }
         else { _floating?.HidePreview(); }
     }
+
+    private void ShowCapturePrivacyFailure(string message) => _notices.Set(CapturePrivacyNoticeKey,
+        new NoticeContent(NoticeSeverity.Warning, "Screen capture privacy unavailable", message), NoticeArea.Application);
 
     private async void HotkeyChanged(bool pressed)
     {
@@ -736,7 +578,7 @@ public sealed partial class MainWindow : Window
             if (pressed) { await _shortcut.PressedAsync(_configuredHotkey); }
             else { await _shortcut.ReleasedAsync(); }
         }
-        catch (Exception error) { _session.ReportUiError(error); }
+        catch (Exception error) { _notices.SetError(ShortcutNoticeKey, error); }
         finally { CurrentWelcome()?.RefreshAfterShortcut(); }
     }
 
@@ -851,8 +693,7 @@ public sealed partial class MainWindow : Window
     private void WindowClosed(object sender, WindowEventArgs args)
     {
         _closed = true;
-        if (_themeSettings is not null) _themeSettings.Changed -= ContrastThemeChanged;
-        _themeSettings = null;
+        AppTitleBar.Detach();
         _tray?.Dispose();
         _dictation.Dispose();
         _history.Dispose();

@@ -18,7 +18,6 @@ namespace Ansible;
 /// </summary>
 public sealed partial class NoticeHost : UserControl
 {
-    private const int MaximumPersistentNotices = 3;
     private static readonly Vector3 NoticeElevation = new(0, 0, 32);
     private readonly Dictionary<string, Grid> _bars = [];
     private const string ConfirmationKey = "(confirmation)";
@@ -49,20 +48,12 @@ public sealed partial class NoticeHost : UserControl
     }
 
     /// <summary>
-    /// Shows the notices for a navigation page tag and reserves space on that page's canvas. Welcome and unknown
-    /// pages show every notice. Navigation collapses an expanded list.
+    /// Shows the notices for a page area and reserves space on that page's canvas. A null area shows every notice.
+    /// Navigation collapses an expanded list.
     /// </summary>
-    public void ShowPage(string page, PageCanvas? canvas)
+    public void ShowPage(NoticeArea? area, PageCanvas? canvas)
     {
-        _area = page switch
-        {
-            "dictation" => NoticeArea.Dictation,
-            "settings" => NoticeArea.Settings,
-            "models" => NoticeArea.Models,
-            "custom-words" => NoticeArea.Dictionary,
-            "meetings" => NoticeArea.Meetings,
-            _ => null,
-        };
+        _area = area;
         if (!ReferenceEquals(_canvas, canvas))
         {
             if (_canvas is not null) _canvas.BottomInset = 0;
@@ -76,15 +67,7 @@ public sealed partial class NoticeHost : UserControl
     {
         if (_notices is null) return;
         SyncTimer(_notices.Confirmation);
-        var visible = _notices.Current
-            .Select((notice, order) => (notice, order))
-            .Where(item => _area is not { } area || (item.notice.Area & area) != 0)
-            .OrderByDescending(item => item.notice.Content.Severity)
-            .ThenBy(item => item.order)
-            .Select(item => item.notice)
-            .ToList();
-        var shown = _expanded ? visible : visible.Take(MaximumPersistentNotices).ToList();
-        var hidden = visible.Count - shown.Count;
+        var (shown, hidden) = _notices.Arrange(_area, _expanded);
         MoreButton.Content = hidden == 1 ? "1 more notice" : $"{hidden} more notices";
         MoreButton.Visibility = hidden > 0 ? Visibility.Visible : Visibility.Collapsed;
 

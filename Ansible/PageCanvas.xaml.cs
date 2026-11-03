@@ -1,7 +1,6 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Markup;
-using Microsoft.UI.Xaml.Media;
 using Windows.Foundation;
 
 namespace Ansible;
@@ -54,38 +53,11 @@ public sealed partial class PageCanvas : UserControl
 
     public double ContentWidth => Math.Max(0, ContentHost.ActualWidth - ContentHost.Padding.Left - ContentHost.Padding.Right);
 
-    /// <summary>Returns the page's canvas: its direct content, or the first canvas in its visual tree.</summary>
-    public static PageCanvas? Find(DependencyObject? root)
-    {
-        if (root is PageCanvas canvas) return canvas;
-        if (root is UserControl { Content: PageCanvas content }) return content;
-        if (root is null) return null;
-        var pending = new Queue<DependencyObject>([root]);
-        while (pending.TryDequeue(out var current))
-        {
-            for (var index = 0; index < VisualTreeHelper.GetChildrenCount(current); index++)
-            {
-                var child = VisualTreeHelper.GetChild(current, index);
-                if (child is PageCanvas found) return found;
-                pending.Enqueue(child);
-            }
-        }
-        return null;
-    }
-
-    /// <summary>The first header action button styled as the page's primary action, whether or not it is shown.</summary>
-    public Button? FindPrimaryAction()
-    {
-        var primary = Application.Current.Resources["AppPrimaryButtonStyle"];
-        var pending = new Queue<DependencyObject>([HeaderActionsPanel]);
-        while (pending.TryDequeue(out var current))
-        {
-            if (current is Button button && ReferenceEquals(button.Style, primary)) return button;
-            for (var index = 0; index < VisualTreeHelper.GetChildrenCount(current); index++)
-                pending.Enqueue(VisualTreeHelper.GetChild(current, index));
-        }
-        return null;
-    }
+    /// <summary>
+    /// The header action the window title bar repeats once the heading scrolls out. Pages with one declare it
+    /// while they are constructed, before navigation shows them.
+    /// </summary>
+    public PageAction? PrimaryAction { get; set; }
 
     private void ViewportSizeChanged(object sender, SizeChangedEventArgs args)
     {

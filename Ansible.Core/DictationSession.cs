@@ -280,7 +280,8 @@ public sealed class DictationSession
         }
     }
 
-    public void Notify(NoticeKind kind, string title, string message, NoticeArea area = NoticeArea.Dictation)
+    // Core-originated notices only. UI code posts to the window's AppNotices.
+    internal void Notify(NoticeKind kind, string title, string message, NoticeArea area = NoticeArea.Dictation)
     {
         SessionSnapshot state;
         lock (_gate)
@@ -302,7 +303,7 @@ public sealed class DictationSession
         Publish(state);
     }
 
-    public void ReportUiError(Exception error, NoticeArea area = NoticeArea.Dictation) =>
+    internal void ReportError(Exception error, NoticeArea area = NoticeArea.Dictation) =>
         Notify(NoticeKind.Error, "Operation failed", error.Message, area);
 
     // Requires _gate. Recognition keeps the admitted engine and model for its entire lifetime.

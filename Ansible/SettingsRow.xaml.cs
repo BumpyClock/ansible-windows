@@ -31,6 +31,7 @@ public sealed partial class SettingsRow : UserControl
     public SettingsRow()
     {
         InitializeComponent();
+        ApplyChrome();
         SizeChanged += LayoutSizeChanged;
         Loaded += (_, _) =>
         {
@@ -90,11 +91,20 @@ public sealed partial class SettingsRow : UserControl
         if (sender is SettingsRow row)
         {
             row.UpdateDescription();
+            row.ApplyChrome();
             row.ApplyLayout(row.ActualWidth);
         }
     }
 
     private void LayoutSizeChanged(object sender, SizeChangedEventArgs args) => ApplyLayout(args.NewSize.Width);
+
+    // Divider and padding follow ShowDivider and IsChild. Code is their only source so the two cannot disagree.
+    private void ApplyChrome()
+    {
+        var resources = Application.Current.Resources;
+        LayoutRoot.BorderThickness = ShowDivider ? (Thickness)resources["SettingsRowDividerThickness"] : new Thickness(0);
+        LayoutRoot.Padding = (Thickness)resources[IsChild ? "SettingsChildRowPadding" : "SettingsRowPadding"];
+    }
 
     private void ApplyLayout(double width)
     {
@@ -105,9 +115,6 @@ public sealed partial class SettingsRow : UserControl
         }
 
         var wide = width >= SettingsWideMinWidth;
-        var resources = Application.Current.Resources;
-        LayoutRoot.BorderThickness = ShowDivider ? (Thickness)resources["SettingsRowDividerThickness"] : new Thickness(0);
-        LayoutRoot.Padding = (Thickness)resources[IsChild ? "SettingsChildRowPadding" : "SettingsRowPadding"];
         // The row keeps one shared visual tree, but only the active axis may contribute
         // geometry. Collapsing the inactive track and its spacing prevents a hidden
         // column or row from changing compact widths or wide row heights.

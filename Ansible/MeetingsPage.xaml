@@ -32,7 +32,7 @@
                                        VerticalAlignment="Center"/>
                             <Border Style="{StaticResource SectionBadgeStyle}"
                                     Background="{ThemeResource SystemFillColorCriticalBackgroundBrush}"
-                                    Visibility="{x:Bind FailedVisibility}">
+                                    Visibility="{x:Bind local:MeetingsPage.VisibleIf(IsFailed)}">
                                 <TextBlock Text="Failed" Style="{StaticResource CaptionTextBlockStyle}"
                                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"/>
                             </Border>

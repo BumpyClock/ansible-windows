@@ -11,6 +11,7 @@ public sealed partial class DictationPage : Page
 {
     private const string HistoryNoticeKey = "history-storage";
     private const string UsageNoticeKey = "usage-statistics";
+    private const string ErrorNoticeKey = "dictation-error";
 
     private static readonly TimeSpan CopiedDuration = TimeSpan.FromSeconds(2);
 
@@ -40,6 +41,7 @@ public sealed partial class DictationPage : Page
     internal DictationPage(DictationSession session, AppPaths paths, Func<nint> windowHandle, HomeDictationHistory history, AppNotices notices)
     {
         InitializeComponent();
+        HomeViewport.PrimaryAction = new PageAction(CompactDictateButton, RecordClicked, CompactDictateLabel);
         _session = session;
         _notices = notices;
         _paths = paths;
@@ -94,6 +96,7 @@ public sealed partial class DictationPage : Page
         if (_copiedTimer.IsEnabled) { _copiedTimer.Stop(); CopyLabel.Text = "Copy"; }
         _notices.Set(HistoryNoticeKey, null);
         _notices.Set(UsageNoticeKey, null);
+        _notices.Set(ErrorNoticeKey, null);
     }
 
     private void Render()
@@ -230,9 +233,10 @@ public sealed partial class DictationPage : Page
         }
         catch (Exception error)
         {
-            _session.ReportUiError(error);
+            ShowError(error);
             return;
         }
+        _notices.Set(ErrorNoticeKey, null);
         HistoryView.ShowCopied(item.OperationId);
     }
 
@@ -349,13 +353,18 @@ public sealed partial class DictationPage : Page
         {
             if (_state.CanFinish) { await _session.FinishAsync(); }
             else { await _session.StartDictationAsync(); }
+            _notices.Set(ErrorNoticeKey, null);
         }
-        catch (Exception error) { _session.ReportUiError(error); }
+        catch (Exception error) { ShowError(error); }
     }
     private async void CancelClicked(object sender, RoutedEventArgs args)
     {
-        try { await _session.CancelAsync(); }
-        catch (Exception error) { _session.ReportUiError(error); }
+        try
+        {
+            await _session.CancelAsync();
+            _notices.Set(ErrorNoticeKey, null);
+        }
+        catch (Exception error) { ShowError(error); }
     }
     internal Task TranscribeFileAsync() => PickAndRunAsync();
 
@@ -371,8 +380,9 @@ public sealed partial class DictationPage : Page
             WinRT.Interop.InitializeWithWindow.Initialize(picker, _windowHandle());
             var file = await picker.PickSingleFileAsync();
             if (file is not null && IsEnabled) { await _session.TranscribeFileAsync(file.Path); }
+            _notices.Set(ErrorNoticeKey, null);
         }
-        catch (Exception error) { _session.ReportUiError(error); }
+        catch (Exception error) { ShowError(error); }
         finally { _picking = false; Render(); }
     }
 
@@ -386,7 +396,11 @@ public sealed partial class DictationPage : Page
             CopyLabel.Text = "Copied";
             _copiedTimer.Stop();
             _copiedTimer.Start();
+            _notices.Set(ErrorNoticeKey, null);
         }
-        catch (Exception error) { _session.ReportUiError(error); }
+        catch (Exception error) { ShowError(error); }
     }
+
+    private void ShowError(Exception error) => _notices.Set(ErrorNoticeKey,
+        new NoticeContent(NoticeSeverity.Error, "Operation failed", error.Message), NoticeArea.Dictation);
 }

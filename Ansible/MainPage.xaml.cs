@@ -4,8 +4,6 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Input;
-using System.Numerics;
-using Windows.Foundation;
 using Windows.System;
 using Windows.UI.Core;
 
@@ -28,6 +26,7 @@ public sealed partial class MainPage : Page
     private bool _rendering;
     private MeetingCleanupSettings? _renderedCleanupSettings;
 
+    private const string ErrorNoticeKey = "settings-error";
     private readonly AppNotices _notices;
 
     internal event Action? ShortcutLessonRequested;
@@ -62,19 +61,31 @@ public sealed partial class MainPage : Page
         _rendering = false;
         Loaded += (_, _) =>
         {
-            SettingsCanvas.Scroller.ViewChanged += ScrollerViewChanged;
             _observer = new UiSessionObserver(session, DispatcherQueue, state => { _state = state; Render(); });
             if (_state.Settings.LocalDiagnostics) _diagnosticStatusTimer.Start();
         };
         Unloaded += (_, _) =>
         {
             _diagnosticStatusTimer.Stop();
-            SettingsCanvas.Scroller.ViewChanged -= ScrollerViewChanged;
             EndShortcutCapture();
             _observer?.Dispose(); _observer = null;
         };
         _diagnosticStatusTimer.Tick += (_, _) => RenderDiagnosticStatus();
     }
+
+    // A failed change replaces the page error. The next change that succeeds clears it.
+    private bool Try(Action change, string title = "Operation failed")
+    {
+        try { change(); }
+        catch (Exception error) { ReportError(error, title); return false; }
+        ClearError();
+        return true;
+    }
+
+    private void ReportError(Exception error, string title = "Operation failed") =>
+        _notices.Set(ErrorNoticeKey, new NoticeContent(NoticeSeverity.Error, title, error.Message), NoticeArea.Settings);
+
+    private void ClearError() => _notices.Set(ErrorNoticeKey, null);
 
     private void Render()
     {
@@ -96,8 +107,11 @@ public sealed partial class MainPage : Page
                     ? "Auto compares CPU and GPU using a bundled speech sample, then remembers the faster working device for each model. The first preparation takes longer. Audio stays local."
                     : $"Last device comparison: {_state.DeviceSelectionSummary}"
                 : "Manual selection applies to the next recognition. Choose Auto to compare devices and recover from a failed GPU qualification.";
-            VulkanWarning.Visibility = _state.Settings.Backend == NativeBackend.Vulkan && _state.SelectedModel?.Family == "nemotron_asr"
-                ? Visibility.Visible : Visibility.Collapsed;
+            var vulkanCrash = _state.Settings.Backend == NativeBackend.Vulkan && _state.SelectedModel?.Family == "nemotron_asr";
+            if (vulkanCrash)
+                VulkanWarning.Show(new NoticeContent(NoticeSeverity.Warning, "Nemotron GPU streaming has a known native crash in this build.",
+                    "Choose Auto or CPU for dictation and replay.", IsClosable: false));
+            VulkanWarning.Visibility = vulkanCrash ? Visibility.Visible : Visibility.Collapsed;
             // The comparison and device line only explain Auto and Vulkan; a manual CPU choice has nothing to compare.
             DeviceComparison.Visibility = _state.Settings.Backend == NativeBackend.Cpu ? Visibility.Collapsed : Visibility.Visible;
             DeviceComparison.Comparison = _state.DeviceComparison;
@@ -212,24 +226,16 @@ public sealed partial class MainPage : Page
 
     private void SaveOpenAIKeyClicked(object sender, RoutedEventArgs args)
     {
-        try
-        {
-            MeetingCleanupService.SaveKey(OpenAIKeyBox.Password.Trim());
-            OpenAIKeyBox.Password = "";
-            RenderKeyStatus();
-        }
-        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); }
+        if (!Try(() => MeetingCleanupService.SaveKey(OpenAIKeyBox.Password.Trim()))) return;
+        OpenAIKeyBox.Password = "";
+        RenderKeyStatus();
     }
 
     private void RemoveOpenAIKeyClicked(object sender, RoutedEventArgs args)
     {
-        try
-        {
-            MeetingCleanupService.RemoveKey();
-            OpenAIKeyBox.Password = "";
-            RenderKeyStatus();
-        }
-        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); }
+        if (!Try(MeetingCleanupService.RemoveKey)) return;
+        OpenAIKeyBox.Password = "";
+        RenderKeyStatus();
     }
 
     // Cleanup fields save as they change. The saved opt-in changes only through the confirmed toggle.
@@ -252,11 +258,12 @@ public sealed partial class MainPage : Page
             if (settings.Automatic && settings.Provider == MeetingCleanupProvider.OpenAI && !MeetingCleanupService.HasKey)
                 throw new InvalidOperationException("Save an OpenAI API key before enabling automatic cleanup.");
             _session.SetMeetingCleanup(settings);
+            ClearError();
             return true;
         }
         catch (Exception error)
         {
-            _session.ReportUiError(error, NoticeArea.Settings);
+            ReportError(error);
             // Show the saved values again so the fields never claim settings that were rejected.
             _renderedCleanupSettings = null;
             Render();
@@ -273,10 +280,9 @@ public sealed partial class MainPage : Page
             SaveCleanupSettings(automatic: false);
             return;
         }
-        // The opt-in is saved only after the confirmation below, so the switch stays off until then.
-        _rendering = true;
-        try { AutomaticCleanupToggle.IsOn = false; }
-        finally { _rendering = false; }
+        // The opt-in is saved only after the confirmation below, so the switch stays off until then. The Toggled
+        // event this raises finds the switch equal to the saved value and returns at the guard above.
+        AutomaticCleanupToggle.IsOn = false;
         AutomaticCleanupConfirm.Visibility = Visibility.Visible;
         AutomaticCleanupConfirmButton.Focus(FocusState.Programmatic);
     }
@@ -291,84 +297,34 @@ public sealed partial class MainPage : Page
     private void AutomaticCleanupCancelClicked(object sender, RoutedEventArgs args) =>
         AutomaticCleanupConfirm.Visibility = Visibility.Collapsed;
 
-    private void SettingsLayoutSizeChanged(object sender, SizeChangedEventArgs args)
-    {
-        Toc.Visibility = args.NewSize.Width >= (double)Application.Current.Resources["SettingsTocMinWidth"]
-            ? Visibility.Visible : Visibility.Collapsed;
-        UpdateToc();
-    }
-
-    private void ScrollerViewChanged(object? sender, ScrollViewerViewChangedEventArgs args) => UpdateToc();
-
-    private FrameworkElement TocSection(object tag) => (string)tag switch
-    {
-        "Dictation" => DictationSection,
-        "Recognition" => RecognitionSection,
-        "Meetings" => MeetingsSection,
-        _ => PrivacySection
-    };
-
-    private static double OffsetIn(FrameworkElement element, UIElement content) =>
-        element.TransformToVisual(content).TransformPoint(new Point(0, 0)).Y;
-
-    private void TocClicked(object sender, RoutedEventArgs args)
-    {
-        var scroller = SettingsCanvas.Scroller;
-        if (scroller.Content is not UIElement content) return;
-        scroller.ChangeView(null, Math.Max(0, OffsetIn(TocSection(((Button)sender).Tag), content) - 16), null, false);
-    }
-
-    // The index follows the scroll position by translation and marks the section nearest the top.
-    private void UpdateToc()
-    {
-        var scroller = SettingsCanvas.Scroller;
-        if (Toc.Visibility != Visibility.Visible || scroller.Content is not UIElement content) return;
-        var travel = Math.Max(0, SettingsLayout.ActualHeight - Toc.ActualHeight);
-        Toc.Translation = new Vector3(0, (float)Math.Clamp(scroller.VerticalOffset - OffsetIn(SettingsLayout, content) + 16, 0, travel), 0);
-
-        var probe = scroller.VerticalOffset + scroller.ViewportHeight * 0.35;
-        var buttons = new[] { TocDictation, TocRecognition, TocMeetings, TocPrivacy };
-        var current = buttons[0];
-        foreach (var button in buttons)
-            if (OffsetIn(TocSection(button.Tag), content) <= probe) current = button;
-        foreach (var button in buttons)
-            button.Style = (Style)Resources[button == current ? "SettingsTocCurrentStyle" : "SettingsTocButtonStyle"];
-    }
-
     private void BackendChanged(object sender, SelectionChangedEventArgs args)
     {
         if (_rendering || BackendChoice is null || BackendChoice.SelectedIndex < 0) { return; }
-        try
+        Try(() => _session.SetBackend(BackendChoice.SelectedIndex switch
         {
-            _session.SetBackend(BackendChoice.SelectedIndex switch
-            {
-                0 => NativeBackend.Auto,
-                1 => NativeBackend.Cpu,
-                2 => NativeBackend.Vulkan,
-                _ => throw new InvalidOperationException("Choose a recognition processor.")
-            });
-        }
-        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); }
+            0 => NativeBackend.Auto,
+            1 => NativeBackend.Cpu,
+            2 => NativeBackend.Vulkan,
+            _ => throw new InvalidOperationException("Choose a recognition processor.")
+        }));
     }
 
     private void LanguageChanged(object sender, TextChangedEventArgs args)
     {
         if (_rendering || LanguageBox is null) { return; }
-        try { _session.SetLanguage(LanguageBox.Text); }
-        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); }
+        Try(() => _session.SetLanguage(LanguageBox.Text));
     }
+
     private void UsageToggled(object sender, RoutedEventArgs args)
     {
         if (_rendering) { return; }
-        try { _session.SetUsageEnabled(UsageToggle.IsOn); }
-        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); Render(); }
+        if (!Try(() => _session.SetUsageEnabled(UsageToggle.IsOn))) Render();
     }
 
     private void DiagnosticsToggled(object sender, RoutedEventArgs args)
     {
         if (_rendering || DiagnosticsToggle.IsOn == _session.State.Settings.LocalDiagnostics) return;
-        try { _session.SetLocalDiagnosticsEnabled(DiagnosticsToggle.IsOn); }
-        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); Render(); }
+        if (!Try(() => _session.SetLocalDiagnosticsEnabled(DiagnosticsToggle.IsOn))) Render();
     }
 
     private void RenderDiagnosticStatus()
@@ -382,24 +338,21 @@ public sealed partial class MainPage : Page
     private void OverlayFollowsCaretToggled(object sender, RoutedEventArgs args)
     {
         if (_rendering || OverlayFollowsCaretToggle.IsOn == _session.State.Settings.OverlayFollowsCaret) { return; }
-        try { _session.SetOverlayFollowsCaret(OverlayFollowsCaretToggle.IsOn); }
-        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); Render(); }
+        if (!Try(() => _session.SetOverlayFollowsCaret(OverlayFollowsCaretToggle.IsOn))) Render();
     }
 
     private void HideFromCaptureChanged(object sender, RoutedEventArgs args)
     {
         var enabled = HideFromCaptureToggle.IsOn;
         if (_rendering || enabled == _session.State.Settings.HideFromCapture) return;
-        try { _session.SetHideFromCapture(enabled); }
-        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); Render(); }
+        if (!Try(() => _session.SetHideFromCapture(enabled))) Render();
     }
 
     private void AutoDetectMeetingsChanged(object sender, RoutedEventArgs args)
     {
         var enabled = AutoDetectMeetingsToggle.IsOn;
         if (_rendering || enabled == _session.State.Settings.AutoDetectMeetings) return;
-        try { _session.SetAutoDetectMeetings(enabled); }
-        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); Render(); }
+        if (!Try(() => _session.SetAutoDetectMeetings(enabled))) Render();
     }
 
     private void DictationModeChanged(object sender, SelectionChangedEventArgs args)
@@ -408,8 +361,7 @@ public sealed partial class MainPage : Page
         var pushToTalk = PushToTalkChoice.SelectedIndex == 0;
         // Selection controls can raise SelectionChanged after Render returns; ignore echoes of the current setting.
         if (pushToTalk == _session.State.Settings.PushToTalk) { return; }
-        try { _changeMode(pushToTalk); }
-        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); Render(); }
+        if (!Try(() => _changeMode(pushToTalk))) Render();
     }
 
     private void InsertionMethodChanged(object sender, SelectionChangedEventArgs args)
@@ -417,8 +369,7 @@ public sealed partial class MainPage : Page
         if (_rendering || InsertionChoice.SelectedIndex < 0) { return; }
         var method = InsertionChoice.SelectedIndex == 0 ? TextInsertionMethod.Paste : TextInsertionMethod.Type;
         if (method == _session.State.Settings.InsertionMethod) { return; }
-        try { _session.SetInsertionMethod(method); }
-        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); Render(); }
+        if (!Try(() => _session.SetInsertionMethod(method))) Render();
     }
 
     private void TypingGapChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
@@ -427,8 +378,7 @@ public sealed partial class MainPage : Page
         if (double.IsNaN(args.NewValue)) { Render(); return; }
         var gap = (int)Math.Round(Math.Clamp(args.NewValue, 0, AppSettings.MaxTypingGapMilliseconds));
         if (gap == _session.State.Settings.TypingGapMilliseconds) { return; }
-        try { _session.SetTypingGap(gap); }
-        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); Render(); }
+        if (!Try(() => _session.SetTypingGap(gap))) Render();
     }
 
     private void PasteShortcutChanged(object sender, SelectionChangedEventArgs args)
@@ -436,8 +386,7 @@ public sealed partial class MainPage : Page
         if (_rendering || PasteShortcutChoice.SelectedIndex < 0) { return; }
         var shortcut = (PasteShortcut)PasteShortcutChoice.SelectedIndex;
         if (shortcut == _session.State.Settings.PasteShortcut) { return; }
-        try { _session.SetPasteShortcut(shortcut); }
-        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); Render(); }
+        if (!Try(() => _session.SetPasteShortcut(shortcut))) Render();
     }
 
     private void MicrophoneBoostChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
@@ -446,8 +395,7 @@ public sealed partial class MainPage : Page
         if (double.IsNaN(args.NewValue)) { Render(); return; }
         var boost = (int)Math.Round(Math.Clamp(args.NewValue, 0, MicrophoneBoost.MaxDecibels));
         if (boost == _session.State.Settings.MicrophoneBoostDecibels) { Render(); return; }
-        try { _session.SetMicrophoneBoost(boost); }
-        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); Render(); }
+        if (!Try(() => _session.SetMicrophoneBoost(boost))) Render();
     }
 
     private void ChangeShortcutClicked(object sender, RoutedEventArgs args) =>
@@ -455,11 +403,8 @@ public sealed partial class MainPage : Page
 
     private void PracticeShortcutClicked(object sender, RoutedEventArgs args) => ShortcutLessonRequested?.Invoke();
 
-    private void ResetShortcutClicked(object sender, RoutedEventArgs args)
-    {
-        try { _changeHotkey(DictationShortcut.Default); }
-        catch (Exception error) { _session.Notify(NoticeKind.Error, "Shortcut unavailable", error.Message, NoticeArea.Settings); }
-    }
+    private void ResetShortcutClicked(object sender, RoutedEventArgs args) =>
+        Try(() => _changeHotkey(DictationShortcut.Default), "Shortcut unavailable");
 
     private void ShortcutGotFocus(object sender, RoutedEventArgs args) => StartShortcutCapture();
 
@@ -475,7 +420,7 @@ public sealed partial class MainPage : Page
             _shortcutPrimarySeen = false;
             SetShortcutDisplay("Press a shortcut; Esc cancels");
         }
-        catch (Exception error) { _session.ReportUiError(error, NoticeArea.Settings); }
+        catch (Exception error) { ReportError(error); }
     }
 
     private void ShortcutKeyDown(object sender, KeyRoutedEventArgs args)
@@ -532,9 +477,8 @@ public sealed partial class MainPage : Page
         }
         else if ((uint)args.Key != shortcut.Key) { return; }
         args.Handled = true;
-        try { _changeHotkey(shortcut); }
-        catch (Exception error) { _session.Notify(NoticeKind.Error, "Shortcut unavailable", error.Message, NoticeArea.Settings); }
-        finally { EndShortcutCapture(); }
+        Try(() => _changeHotkey(shortcut), "Shortcut unavailable");
+        EndShortcutCapture();
     }
 
     private static bool Down(VirtualKey key) =>
@@ -555,7 +499,7 @@ public sealed partial class MainPage : Page
         _pendingShortcut = null;
         _shortcutPrimarySeen = false;
         try { _captureShortcut(false); }
-        catch (Exception error) { _session.Notify(NoticeKind.Error, "Shortcut unavailable", error.Message, NoticeArea.Settings); }
+        catch (Exception error) { ReportError(error, "Shortcut unavailable"); }
         SetShortcutDisplay(_session.State.Settings.Shortcut.DisplayText);
     }
 

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl x:Class="Ansible.DictionaryWordRow"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             HorizontalAlignment="Stretch" IsTabStop="False">
+    <StackPanel>
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="EditingStates">
+                <VisualState x:Name="Reading" />
+                <VisualState x:Name="Editing">
+                    <VisualState.Setters>
+                        <Setter Target="WordLabel.Visibility" Value="Collapsed" />
+                        <Setter Target="Actions.Visibility" Value="Collapsed" />
+                        <Setter Target="Editor.Visibility" Value="Visible" />
+                        <Setter Target="EditActions.Visibility" Value="Visible" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+        <Grid MinHeight="44" Padding="12,4,8,4" ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Grid VerticalAlignment="Center">
+                <TextBlock x:Name="WordLabel" TextWrapping="Wrap" VerticalAlignment="Center" />
+                <TextBox x:Name="Editor" Visibility="Collapsed" VerticalAlignment="Center" KeyDown="EditorKeyDown" />
+            </Grid>
+            <Grid Grid.Column="1" VerticalAlignment="Center">
+                <StackPanel x:Name="Actions" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                    <Button x:Name="EditButton" Style="{StaticResource IconButtonStyle}" Click="EditClicked"
+                            ToolTipService.ToolTip="Edit word" AutomationProperties.AutomationId="EditCustomWordButton">
+                        <FontIcon Glyph="&#xE70F;" FontSize="16" />
+                    </Button>
+                    <Button x:Name="RemoveButton" Style="{StaticResource IconButtonStyle}" Click="RemoveClicked"
+                            ToolTipService.ToolTip="Remove word" AutomationProperties.AutomationId="RemoveCustomWordButton">
+                        <FontIcon Glyph="&#xE74D;" FontSize="16" />
+                    </Button>
+                </StackPanel>
+                <StackPanel x:Name="EditActions" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
+                            Visibility="Collapsed">
+                    <Button Content="Save" Style="{StaticResource AppPrimaryButtonStyle}" Click="SaveClicked" />
+                    <Button Content="Cancel" Click="CancelClicked" />
+                </StackPanel>
+            </Grid>
+        </Grid>
+        <Border Style="{StaticResource HistoryDividerStyle}" />
+    </StackPanel>
+</UserControl>

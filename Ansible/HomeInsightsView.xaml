@@ -14,7 +14,7 @@
                 <Setter Property="FontSize" Value="{StaticResource InsightNumeralFontSize}" />
                 <Setter Property="TextTrimming" Value="CharacterEllipsis" />
             </Style>
-            <!-- Compact rail cards: 16 DIP vertical and 24 DIP horizontal padding, per the approved shell mockup. -->
+            <!-- Rail cards use 16 DIP vertical and 24 DIP horizontal padding. CardStyle's 20 DIP all round makes the stacked rail taller. -->
             <Style x:Key="HomeRailCardStyle" TargetType="Border" BasedOn="{StaticResource CardStyle}">
                 <Setter Property="Padding" Value="24,16" />
             </Style>
@@ -54,9 +54,9 @@
         </ResourceDictionary>
     </UserControl.Resources>
     <!-- Three cards. As a rail they stack in one column; as a strip above history they flow into columns. -->
-    <Grid x:Name="RailCards" RowSpacing="16" ColumnSpacing="16" VerticalAlignment="Top"
+    <local:CardFlowPanel x:Name="RailCards" RowSpacing="16" ColumnSpacing="16" VerticalAlignment="Top"
           AutomationProperties.Name="Your voice, in numbers" AutomationProperties.LandmarkType="Custom"
-          AutomationProperties.LocalizedLandmarkType="Your voice, in numbers" SizeChanged="RailCardsSizeChanged">
+          AutomationProperties.LocalizedLandmarkType="Your voice, in numbers">
         <Border x:Name="WordsCard" Style="{StaticResource HomeRailCardStyle}">
             <StackPanel>
                 <TextBlock Text="Words dictated · all time on this device" Style="{StaticResource HomeMetricLabelStyle}" TextWrapping="Wrap" />
@@ -180,5 +180,5 @@
                            Style="{StaticResource SecondaryTextStyle}" Visibility="Collapsed" />
             </StackPanel>
         </Border>
-    </Grid>
+    </local:CardFlowPanel>
 </UserControl>
