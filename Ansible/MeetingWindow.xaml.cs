@@ -81,6 +81,10 @@ public sealed partial class MeetingWindow : Window
     {
         InitializeComponent();
         Root.RequestedTheme = theme;
+        var noticeShadow = new Microsoft.UI.Xaml.Media.ThemeShadow();
+        noticeShadow.Receivers.Add(Root);
+        MeetingNotice.Shadow = noticeShadow;
+        MeetingNotice.Translation = new System.Numerics.Vector3(0, 0, 32);
         TranscriptRows.ItemsSource = _transcript.Rows;
         _session = session;
         _store = store;
@@ -348,8 +352,7 @@ public sealed partial class MeetingWindow : Window
         if (_busy) return;
         _busy = true;
         string? actionError = null;
-        ErrorBar.IsOpen = false;
-        ErrorBar.Visibility = Visibility.Collapsed;
+        HideBar();
         StartButton.IsEnabled = PauseButton.IsEnabled = EndButton.IsEnabled = false;
         RefreshCleanupControls();
         try
@@ -579,8 +582,7 @@ public sealed partial class MeetingWindow : Window
     {
         CleanupStatusText.Visibility = Visibility.Visible;
         CleanupStatusText.Text = "Cleaning up wording. Original text is kept until the complete result is ready.";
-        ErrorBar.IsOpen = false;
-        ErrorBar.Visibility = Visibility.Collapsed;
+        HideBar();
         try
         {
             var texts = await _textCleanup.CleanAsync(document, options, token);
@@ -721,20 +723,15 @@ public sealed partial class MeetingWindow : Window
         if (_selectedDetectedMeeting != SelectedMeetingIdentity) _selectedDetectedMeeting = null;
         UpdateNamingHelp();
     }
-    private void ShowError(string message) => ShowBar(InfoBarSeverity.Error, "Meeting needs attention", message);
-    private void ShowNotice(string message) => ShowBar(InfoBarSeverity.Warning, "Speaker model changed", message);
-    private void ShowBar(InfoBarSeverity severity, string title, string message)
+    private void ShowError(string message) => ShowBar(AppNoticeSeverity.Error, "Meeting needs attention", message);
+    private void ShowNotice(string message) => ShowBar(AppNoticeSeverity.Warning, "Speaker model changed", message);
+    private void ShowBar(AppNoticeSeverity severity, string title, string message)
     {
-        ErrorBar.Severity = severity;
-        ErrorBar.Title = title;
-        ErrorBar.Message = message;
-        ErrorBar.Visibility = Visibility.Visible;
-        ErrorBar.IsOpen = true;
+        MeetingNotice.Show(new AppNotice("meeting", severity, title, message));
+        MeetingNotice.Visibility = Visibility.Visible;
     }
-    private void ErrorBarClosed(InfoBar sender, InfoBarClosedEventArgs args)
-    {
-        if (!sender.IsOpen) sender.Visibility = Visibility.Collapsed;
-    }
+    private void HideBar() => MeetingNotice.Visibility = Visibility.Collapsed;
+    private void NoticeCloseRequested(object? sender, AppNotice notice) => HideBar();
     private static string FormatTime(double seconds) => TimeSpan.FromSeconds(Math.Max(0, seconds)).ToString(seconds >= 3600 ? @"h\:mm\:ss" : @"m\:ss");
     private sealed record MeetingProcessChoice(int Id, string DisplayName, bool IsTeams, DateTime StartedUtc);
 }

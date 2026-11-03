@@ -2,9 +2,9 @@ using Ansible.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.System;
+using Windows.Foundation;
 
 namespace Ansible;
 
@@ -15,13 +15,14 @@ public sealed partial class ModelCard : UserControl
     private string _name = "";
     private Uri? _iconUri;
     private bool _iconFailureLogged;
-    private bool _keyboardFocusWithin;
-    private bool _active;
-    private bool _pointerOver;
     private ModelInstallState _state;
     private bool _removeDiscardsPartial;
+    private bool _companion;
+    private string? _shownError;
     private string _behavior = "";
     private const string MemoryEstimateTip = "Memory is the admission estimate used before loading, not measured usage.";
+    // Below this row width the actions move under the name so the name and chips keep readable space.
+    private const double StackedActionsWidth = 600;
 
     public ModelCard()
     {
@@ -31,6 +32,7 @@ public sealed partial class ModelCard : UserControl
     }
 
     public string ModelId { get; private set; } = "";
+    public string DisplayName => _name;
 
     public event Action<string>? PrimaryRequested;
     public event Action<string>? PauseRequested;
@@ -44,17 +46,18 @@ public sealed partial class ModelCard : UserControl
         themeSettings.Changed += OnThemeSettingsChanged;
         ModelId = entry.Id;
         _name = entry.DisplayName ?? entry.Id;
+        _companion = ModelSelectionPolicy.IsDiarizationTask(entry.Task);
         NameText.Text = _name;
         AutomationProperties.SetName(NameText, _name);
         _behavior = BehaviorLabel(entry);
-        var languages = entry.Languages ?? "Languages not specified";
-        ToolTipService.SetToolTip(StatsText, MemoryEstimateTip);
+        CustomWordsBadge.Visibility = entry.SupportsCustomDictionary ? Visibility.Visible : Visibility.Collapsed;
 
         DescriptionText.Text = entry.Description ?? "";
-        AboutSection.Visibility = string.IsNullOrEmpty(entry.Description) ? Visibility.Collapsed : Visibility.Visible;
-        CapabilityText.Text = (entry.SupportsCustomDictionary
+        AboutRow.Visibility = string.IsNullOrEmpty(entry.Description) ? Visibility.Collapsed : Visibility.Visible;
+        LanguagesText.Text = entry.Languages ?? "Languages not specified";
+        CustomWordsText.Text = entry.SupportsCustomDictionary
             ? "Supports custom dictionary context hints."
-            : "Custom dictionary hints are not supported.") + $"\n{languages}";
+            : "Custom dictionary hints are not supported.";
         LicenseDetailText.Text = $"{entry.License ?? "License not specified"}\n{entry.LicenseNotes ?? ""}".TrimEnd();
         SourceText.Text = $"{entry.Repo}\nPinned revision {entry.Revision}\n{entry.RemoteFile}";
         ByteCountText.Text = $"{entry.Bytes:N0} bytes";
@@ -65,8 +68,8 @@ public sealed partial class ModelCard : UserControl
         AutomationProperties.SetAutomationId(PrimaryButton, $"ModelPrimary_{entry.Id}");
         AutomationProperties.SetAutomationId(UseButton, $"ModelUse_{entry.Id}");
         AutomationProperties.SetAutomationId(DetailsButton, $"ModelDetails_{entry.Id}");
-        AutomationProperties.SetName(UseButton, $"Use {_name}");
-        AutomationProperties.SetName(DetailsButton, $"Details for {_name}");
+        AutomationProperties.SetName(UseButton, $"Use {_name} for dictation");
+        ApplyDetailsState();
 
         _assetName = entry.Family switch
         {
@@ -88,50 +91,58 @@ public sealed partial class ModelCard : UserControl
         var state = snapshot.State;
         _state = state;
 
-        // Not installed and Installed have no state label; the Download, Use and Remove buttons already say it.
-        var stateLabel = !snapshot.Supported ? "Unsupported" : active ? "In use" :
-            ModelSelectionPolicy.IsDiarizationTask(entry.Task) && state == ModelInstallState.Installed ? "Meeting companion" : StateLabel(state);
-        // Installed cards carry behaviour and memory on this line; other cards carry them on the caption row below.
+        // The group heading says In use, Installed or Available; the role chip says what an in-use model does.
+        RoleBadge.Text = active ? "Dictation" : _companion ? "Meeting companion" : "";
+        RoleBadge.Visibility = active || _companion ? Visibility.Visible : Visibility.Collapsed;
+        VisualStateManager.GoToState(this, active ? "OutlineActive" : "OutlineRest", false);
+
+        // Installed rows show behaviour and memory; other rows add the download size. A transfer replaces
+        // the sizes with its byte counts so the 160 px progress label can stay short.
         var installed = snapshot.HasModelFile || active;
         var memory = FormatBytes(entry.EstimatedMemoryBytes);
-        var caption = !installed ? "" : _behavior.Length > 0 ? $"{_behavior} \u00B7 {memory}" : memory;
+        var transfer = $"{FormatBytes(snapshot.DownloadedBytes)} of {FormatBytes(entry.Bytes)}";
+        var facts = state switch
+        {
+            ModelInstallState.Downloading => snapshot.BytesPerSecond > 0
+                ? $"{transfer} · {FormatBytes((long)snapshot.BytesPerSecond)}/s" : transfer,
+            ModelInstallState.Paused => $"{transfer} downloaded",
+            _ when installed => memory,
+            _ => $"{FormatBytes(entry.Bytes)} download · {memory} memory"
+        };
+        var caption = _behavior.Length > 0 ? $"{_behavior} · {facts}" : facts;
+        var stateLabel = !snapshot.Supported ? "Unsupported" : StateLabel(state);
         StateRun.Text = stateLabel ?? "";
-        SeparatorRun.Text = stateLabel is not null && caption.Length > 0 ? " \u00B7 " : "";
+        SeparatorRun.Text = stateLabel is not null ? " · " : "";
         CaptionRun.Text = caption;
-        StateLine.Visibility = stateLabel is null && caption.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
-        ToolTipService.SetToolTip(StateLineText, installed ? MemoryEstimateTip : null);
-        StateDot.Visibility = stateLabel is null ? Visibility.Collapsed : Visibility.Visible;
-        VisualStateManager.GoToState(this, stateLabel is null ? "DotNone"
-            : !snapshot.Supported || (!active && state == ModelInstallState.Failed) ? "DotCritical"
-            : active ? "DotAccent"
-            : "DotCaution", false);
-        _active = active;
-        ApplyCardBorder();
+        ToolTipService.SetToolTip(FactsText, state is ModelInstallState.Downloading or ModelInstallState.Paused ? null : MemoryEstimateTip);
 
-        var sizes = $"{FormatBytes(entry.Bytes)} download \u00B7 {memory} memory";
-        StatsText.Text = installed ? "" : _behavior.Length > 0 ? $"{_behavior} \u00B7 {sizes}" : sizes;
-        StatsText.Visibility = installed ? Visibility.Collapsed : Visibility.Visible;
-
-        var showBar = state is ModelInstallState.Downloading or ModelInstallState.Paused or ModelInstallState.Verifying;
+        var showProgress = state is ModelInstallState.Downloading or ModelInstallState.Paused or ModelInstallState.Verifying;
+        ProgressPanel.Visibility = showProgress ? Visibility.Visible : Visibility.Collapsed;
         DownloadProgress.Value = snapshot.Progress;
         // Verification reports no progress, so the bar shows activity rather than a fill level.
         DownloadProgress.IsIndeterminate = state == ModelInstallState.Verifying;
+        ProgressText.Text = state switch
+        {
+            ModelInstallState.Verifying => "Verifying checksum",
+            ModelInstallState.Paused => $"Paused at {snapshot.Progress:F0}%",
+            _ => $"Downloading {snapshot.Progress:F0}%"
+        };
         AutomationProperties.SetName(DownloadProgress, state == ModelInstallState.Verifying
             ? $"File verification progress for {_name}"
             : $"Model download progress for {_name}");
-        ProgressHost.Visibility = showBar ? Visibility.Visible : Visibility.Collapsed;
-        // Verifying shows the state and bar only; Ready to install is covered by the state and the Install button.
-        ProgressText.Text = $"{FormatBytes(snapshot.DownloadedBytes)} / {FormatBytes(entry.Bytes)}" +
-            (snapshot.BytesPerSecond > 0 ? $" / {FormatBytes((long)snapshot.BytesPerSecond)}/s" : "");
-        ProgressText.Visibility = state is ModelInstallState.Downloading or ModelInstallState.Paused
-            ? Visibility.Visible : Visibility.Collapsed;
 
-        ErrorInfo.Message = snapshot.Error ?? "";
-        ErrorInfo.IsOpen = snapshot.Error is not null;
-        ErrorInfo.Visibility = snapshot.Error is null ? Visibility.Collapsed : Visibility.Visible;
+        // Re-showing the same error would repeat the live-region announcement on every progress tick.
+        if (snapshot.Error != _shownError)
+        {
+            _shownError = snapshot.Error;
+            if (snapshot.Error is { } error)
+                ErrorNotice.Show(new AppNotice($"model-{ModelId}", AppNoticeSeverity.Error, "Model file problem", error,
+                    NoticeArea.Models, IsClosable: false));
+            ErrorNotice.Visibility = snapshot.Error is null ? Visibility.Collapsed : Visibility.Visible;
+        }
 
-        // One primary action per card. While a transfer runs the primary action stops it; an installed
-        // file has no primary action here because Use or the in-use state covers it.
+        // One primary action per row. While a transfer runs the primary action stops it; an installed
+        // file has no primary action here because Use for dictation or the In use group covers it.
         var transferring = state is ModelInstallState.Downloading or ModelInstallState.Verifying;
         PrimaryButton.Content = state switch
         {
@@ -174,11 +185,10 @@ public sealed partial class ModelCard : UserControl
         AutomationProperties.SetAutomationId(RemoveButton, _removeDiscardsPartial ? $"ModelDiscard_{ModelId}" : $"ModelRemove_{ModelId}");
         AutomationProperties.SetName(RemoveButton, _removeDiscardsPartial ? $"Discard partial download of {_name}" : $"Remove {_name}");
 
-        // Use appears only when it can be clicked; a disabled Use cannot explain itself. A card that is still
-        // downloading or verifying offers Pause or Stop only, so selection follows a finished install.
-        UseButton.Visibility = !ModelSelectionPolicy.IsDiarizationTask(entry.Task) && state == ModelInstallState.Installed && !active && snapshot.Supported && canSelect
-            ? Visibility.Visible : Visibility.Collapsed;
-        ActionRow.Visibility = PrimaryHost.Visibility == Visibility.Visible || UseButton.Visibility == Visibility.Visible
+        // Use for dictation appears only when it can be clicked; a disabled button cannot explain itself. A row that
+        // is still downloading or verifying offers Pause or Stop only, so selection follows a finished install.
+        // The diarization companion never offers it: it is not a dictation model.
+        UseButton.Visibility = !_companion && state == ModelInstallState.Installed && !active && snapshot.Supported && canSelect
             ? Visibility.Visible : Visibility.Collapsed;
 
         LocationText.Text = snapshot.Path;
@@ -196,40 +206,27 @@ public sealed partial class ModelCard : UserControl
 
     private void OnThemeChanged(FrameworkElement sender, object args) => ApplyIcon();
 
-    // Cards are borderless tonal layers: hover and keyboard focus lift the fill, and the in-use card keeps its accent outline.
-    // High Contrast has no tonal fill to lift, so it strengthens the outline instead. The border is always 1.5 px so
-    // selection and focus never shift the layout. Rest colours come from CardStyle; the states are in ModelCard.xaml.
-    private void ApplyCardBorder()
+    private void RowSizeChanged(object sender, SizeChangedEventArgs args)
     {
-        var lifted = _pointerOver || _keyboardFocusWithin;
-        var highContrast = _themeSettings?.HighContrast == true;
-        VisualStateManager.GoToState(this, lifted && !highContrast ? "FillLifted" : "FillRest", false);
-        VisualStateManager.GoToState(this,
-            lifted && !_active && (highContrast || _keyboardFocusWithin) ? "OutlineKey" : _active ? "OutlineActive" : "OutlineRest", false);
+        var stacked = args.NewSize.Width < StackedActionsWidth;
+        Grid.SetRow(ActionsPanel, stacked ? 1 : 0);
+        Grid.SetColumn(ActionsPanel, stacked ? 1 : 2);
+        Grid.SetColumnSpan(ActionsPanel, stacked ? 2 : 1);
+        ActionsPanel.HorizontalAlignment = stacked ? HorizontalAlignment.Left : HorizontalAlignment.Stretch;
+        ActionsPanel.Margin = stacked ? new Thickness(0, 12, 0, 0) : new Thickness(0);
     }
 
-    private void CardPointerEntered(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    private void DetailsClicked(object sender, RoutedEventArgs e)
     {
-        _pointerOver = true;
-        ApplyCardBorder();
+        DetailsPanel.Visibility = DetailsPanel.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
+        ApplyDetailsState();
     }
 
-    private void CardPointerExited(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    private void ApplyDetailsState()
     {
-        _pointerOver = false;
-        ApplyCardBorder();
-    }
-
-    private void CardGotFocus(object sender, RoutedEventArgs e)
-    {
-        _keyboardFocusWithin = e.OriginalSource is Control { FocusState: FocusState.Keyboard };
-        ApplyCardBorder();
-    }
-
-    private void CardLostFocus(object sender, RoutedEventArgs e)
-    {
-        _keyboardFocusWithin = false;
-        ApplyCardBorder();
+        var expanded = DetailsPanel.Visibility == Visibility.Visible;
+        AutomationProperties.SetName(DetailsButton, expanded ? $"Hide details for {_name}" : $"Show details for {_name}");
+        ToolTipService.SetToolTip(DetailsButton, expanded ? "Hide details" : "Details");
     }
 
     private void OnThemeSettingsChanged(ThemeSettings sender, object args)
@@ -277,14 +274,6 @@ public sealed partial class ModelCard : UserControl
     private bool IsHighContrast() => (_themeSettings ??
         throw new InvalidOperationException("Initialize the model card before loading it.")).HighContrast;
 
-    private void DetailsOpening(object sender, object args)
-    {
-        // A finite content width makes long hashes and descriptions wrap inside the popup.
-        // Leave room for the presenter's padding and the window edge at compact sizes.
-        DetailsViewport.Width = Math.Min(360, Math.Max(0, XamlRoot.Size.Width - 64));
-        DetailsViewport.MaxHeight = Math.Min(420, Math.Max(0, XamlRoot.Size.Height - 64));
-    }
-
     private void PrimaryClicked(object sender, RoutedEventArgs e)
     {
         if (_state is ModelInstallState.Downloading or ModelInstallState.Verifying) { PauseRequested?.Invoke(ModelId); }
@@ -305,10 +294,66 @@ public sealed partial class ModelCard : UserControl
     internal static string FormatBytes(long bytes) => bytes >= 1024L * 1024 * 1024 ? $"{bytes / (1024.0 * 1024 * 1024):F2} GiB" :
         bytes >= 1024 * 1024 ? $"{bytes / (1024.0 * 1024):F1} MiB" : $"{bytes:N0} bytes";
 
+    // Exceptional states only. Installed and Not installed are the group; transfers show in the progress label.
     private static string? StateLabel(ModelInstallState state) => state switch
     {
-        ModelInstallState.NotInstalled or ModelInstallState.Installed => null,
         ModelInstallState.ReadyToInstall => "Ready to install",
-        _ => state.ToString()
+        ModelInstallState.Failed => "Failed",
+        _ => null
     };
+}
+
+/// <summary>
+/// Lays children out left to right and wraps to a new line when the next child does not fit, like CSS flex-wrap.
+/// Each child is centred on its line, so a text name and taller chips share a line cleanly.
+/// </summary>
+public sealed partial class ModelRowWrapPanel : Panel
+{
+    public double HorizontalSpacing { get; set; }
+    public double VerticalSpacing { get; set; }
+
+    protected override Size MeasureOverride(Size availableSize)
+    {
+        foreach (var child in Children) child.Measure(availableSize);
+        return Flow(availableSize.Width, arrange: false);
+    }
+
+    protected override Size ArrangeOverride(Size finalSize)
+    {
+        Flow(finalSize.Width, arrange: true);
+        return finalSize;
+    }
+
+    private Size Flow(double width, bool arrange)
+    {
+        double x = 0, y = 0, lineHeight = 0, extent = 0;
+        var line = new List<(UIElement Child, double X)>();
+        void EndLine()
+        {
+            if (arrange)
+                foreach (var (child, left) in line)
+                    child.Arrange(new Rect(left, y + (lineHeight - child.DesiredSize.Height) / 2,
+                        child.DesiredSize.Width, child.DesiredSize.Height));
+            line.Clear();
+        }
+        foreach (var child in Children)
+        {
+            var size = child.DesiredSize;
+            if (size.Width == 0 && size.Height == 0) continue;
+            if (line.Count > 0 && x + HorizontalSpacing + size.Width > width)
+            {
+                EndLine();
+                y += lineHeight + VerticalSpacing;
+                x = 0;
+                lineHeight = 0;
+            }
+            var left = line.Count == 0 ? 0 : x + HorizontalSpacing;
+            line.Add((child, left));
+            x = left + size.Width;
+            lineHeight = Math.Max(lineHeight, size.Height);
+            extent = Math.Max(extent, x);
+        }
+        EndLine();
+        return new Size(extent, y + lineHeight);
+    }
 }

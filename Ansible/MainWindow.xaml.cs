@@ -1,17 +1,26 @@
 using System.Diagnostics;
+using System.Numerics;
 using Ansible.Core;
 using Microsoft.UI;
 using Microsoft.UI.System;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Automation.Peers;
+using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Media;
 
 namespace Ansible;
 
 public sealed partial class MainWindow : Window
 {
+    private const string SessionNoticeKey = "session";
+    private const string MicrophonePermissionNoticeKey = "microphone-permission";
+    private const string MeetingSuggestionNoticeKey = "meeting-suggestion";
+    private const string TrayErrorNoticeKey = "tray-error";
+    private const string ShutdownErrorNoticeKey = "shutdown-error";
     private readonly DictationSession _session;
     private readonly DictationPage _dictation;
     private readonly WelcomePage _welcome;
@@ -54,11 +63,20 @@ public sealed partial class MainWindow : Window
     private bool _launchReady;
     private bool _permissionCheckComplete;
     private MicrophonePermissionStatus? _dismissedMicrophonePermissionStatus;
+    // The microphone status the posted notice describes; null while no microphone notice is posted.
+    private MicrophonePermissionStatus? _shownMicrophonePermissionStatus;
+    private SessionNotice? _relayedSessionNotice;
+    private MeetingDetectionCandidate? _shownMeetingOffer;
+    private PageCanvas? _canvas;
+    // The current page's primary action mirrored in the title bar, and the property callbacks that keep the copy current.
+    private Button? _primaryAction;
+    private readonly List<(DependencyObject source, DependencyProperty property, long token)> _primaryActionCallbacks = [];
 
     internal MainWindow(DictationSession session, AppPaths paths, HttpClient modelDownloads, MicrophonePermissionPreflight microphonePermission,
         LocalDiagnosticLog diagnostics)
     {
         InitializeComponent();
+        Notices.Attach(_notices);
         _session = session;
         _microphonePermission = microphonePermission;
         _paths = paths;
@@ -82,14 +100,15 @@ public sealed partial class MainWindow : Window
         _suggestions.Changed += RenderMeetingSuggestion;
         _welcome = new WelcomePage(session, CompleteWelcome, () => Navigate("models"), () => _shortcut.IsBusy);
         _dictation = new DictationPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this), _history, _notices);
-        _dictation.ShortcutLessonRequested += OpenShortcutLesson;
         _settings = new MainPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this),
             ChangeHotkey, ChangeDictationMode, CaptureShortcut, diagnostics, _notices);
+        _settings.ShortcutLessonRequested += OpenShortcutLesson;
         _models = new ModelManagementPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this), modelDownloads,
             () => { Navigate("dictation"); return _dictation.TranscribeFileAsync(); }, diagnostics, _notices);
         _customWords = new CustomWordsPage(session, () => Navigate("models"), _notices);
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
+        AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
         AppWindow.TitleBar.ButtonBackgroundColor = Colors.Transparent;
         AppWindow.TitleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
@@ -113,7 +132,7 @@ public sealed partial class MainWindow : Window
         };
         AppWindow.Closing += CloseRequested;
         Closed += WindowClosed;
-        AddNoticeShowAnimations();
+        AddTitleBarAnimations();
         Navigate("dictation");
         _observer = new UiSessionObserver(session, DispatcherQueue, SessionChanged);
         try { EnsureTrayIcon(); }
@@ -236,7 +255,16 @@ public sealed partial class MainWindow : Window
         var allowed = status == MicrophonePermissionStatus.Allowed;
         if (allowed || (_dismissedMicrophonePermissionStatus is { } dismissed && dismissed != status))
             _dismissedMicrophonePermissionStatus = null;
-        MicrophonePermissionMessage.Text = status switch
+        MicrophonePermissionStatus? shown = allowed || _dismissedMicrophonePermissionStatus == status ? null : status;
+        // Session snapshots re-render often; repost only when the notice would change.
+        if (shown == _shownMicrophonePermissionStatus) return;
+        _shownMicrophonePermissionStatus = shown;
+        if (shown is null)
+        {
+            _notices.Clear(MicrophonePermissionNoticeKey);
+            return;
+        }
+        var message = status switch
         {
             MicrophonePermissionStatus.DeniedByUser => "Enable microphone access for Ansible and desktop apps in Windows Settings, then check again.",
             MicrophonePermissionStatus.DeniedBySystem => "Windows is blocking microphone access. Check Windows Settings or contact your administrator.",
@@ -244,31 +272,19 @@ public sealed partial class MainWindow : Window
             MicrophonePermissionStatus.PromptRequired => "Microphone access is required. Check again to request access.",
             _ => "Microphone access could not be checked. Review Windows privacy settings, then check again."
         };
-        MicrophonePermissionNotice.Visibility = allowed || _dismissedMicrophonePermissionStatus == status
-            ? Visibility.Collapsed : Visibility.Visible;
-        CheckMicrophonePermissionButton.IsEnabled = _permissionRetryTask is not { IsCompleted: false };
+        _notices.Show(new AppNotice(MicrophonePermissionNoticeKey, AppNoticeSeverity.Warning, "Microphone access required", message,
+            Actions: [new("Open settings", OpenMicrophoneSettings), new("Check again", CheckMicrophonePermission)],
+            Dismissed: () =>
+            {
+                // Dismissal holds for this status only; a different failure, or opening Settings, shows it again.
+                if (_microphonePermission.Status != MicrophonePermissionStatus.Allowed)
+                    _dismissedMicrophonePermissionStatus = _microphonePermission.Status;
+                _shownMicrophonePermissionStatus = null;
+            }));
     }
 
-    private void MicrophonePermissionNoticeDismissed(object sender, RoutedEventArgs args)
-    {
-        if (_microphonePermission.Status != MicrophonePermissionStatus.Allowed)
-            _dismissedMicrophonePermissionStatus = _microphonePermission.Status;
-        MicrophonePermissionNotice.Visibility = Visibility.Collapsed;
-    }
-
-    private void MicrophonePermissionNoticeSizeChanged(object sender, SizeChangedEventArgs args)
-    {
-        var available = MicrophonePermissionActions.ActualWidth;
-        if (available <= 0) return;
-        var gap = (double)Application.Current.Resources["NavItemGap"];
-        var required = MicrophonePermissionActions.Children.OfType<FrameworkElement>()
-            .Sum(child => child.DesiredSize.Width) + gap * Math.Max(0, MicrophonePermissionActions.Children.Count - 1);
-        var orientation = required <= available ? Orientation.Horizontal : Orientation.Vertical;
-        if (MicrophonePermissionActions.Orientation != orientation)
-            MicrophonePermissionActions.Orientation = orientation;
-    }
-
-    private async void CheckMicrophonePermissionClicked(object sender, RoutedEventArgs args)
+    // A check already in progress ignores the request; the notice keeps its actions rather than reflowing.
+    private async void CheckMicrophonePermission()
     {
         if (_closing || _closed || !_permissionCheckComplete || _permissionRetryTask is { IsCompleted: false }) return;
         _permissionRetryTask = RetryMicrophonePermissionAsync();
@@ -278,18 +294,13 @@ public sealed partial class MainWindow : Window
     private async Task RetryMicrophonePermissionAsync()
     {
         _dismissedMicrophonePermissionStatus = null;
-        CheckMicrophonePermissionButton.IsEnabled = false;
         try { await _microphonePermission.InitializeAsync(_startupCancellation.Token); }
         catch (OperationCanceledException) when (_startupCancellation.IsCancellationRequested) { }
         catch (Exception error) { if (!_closing) _session.ReportUiError(error, NoticeArea.Application); }
-        finally
-        {
-            RenderMicrophonePermission();
-            if (!_closed && !_closing) CheckMicrophonePermissionButton.IsEnabled = true;
-        }
+        finally { RenderMicrophonePermission(); }
     }
 
-    private async void OpenMicrophoneSettingsClicked(object sender, RoutedEventArgs args)
+    private async void OpenMicrophoneSettings()
     {
         if (_closing || _closed || _microphoneSettingsTask is { IsCompleted: false }) return;
         _microphoneSettingsTask = OpenMicrophoneSettingsAsync();
@@ -310,32 +321,36 @@ public sealed partial class MainWindow : Window
 
     private Button[] NavigationButtons => [DictationNav, MeetingsNav, ModelsNav, CustomWordsNav, SettingsNav];
 
-    // Notices toggle Visibility rather than joining the panel, so an implicit show animation lets them rise into
-    // place instead of popping. Skipped when Windows animations are off.
-    private void AddNoticeShowAnimations()
+    // The collapsed title and action fade and rise into the title bar, and fade out. Skipped when Windows
+    // animations are off.
+    private void AddTitleBarAnimations()
     {
         if (!new Windows.UI.ViewManagement.UISettings().AnimationsEnabled) return;
         var resources = Application.Current.Resources;
         var duration = TimeSpan.FromMilliseconds((double)resources["MotionNormalMilliseconds"]);
-        var offset = (float)(double)resources["MotionEntranceOffset"];
-        var compositor = Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(ShellRoot).Compositor;
-        foreach (UIElement notice in new UIElement[] { MicrophonePermissionNotice, MeetingSuggestion, ShutdownError })
+        var compositor = ElementCompositionPreview.GetElementVisual(ShellRoot).Compositor;
+        foreach (UIElement element in new UIElement[] { TitleBarPageTitle, TitleBarPrimaryAction })
         {
-            Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.SetIsTranslationEnabled(notice, true);
-            var fade = compositor.CreateScalarKeyFrameAnimation();
-            fade.Target = "Opacity";
-            fade.InsertKeyFrame(0, 0);
-            fade.InsertKeyFrame(1, 1);
-            fade.Duration = duration;
+            ElementCompositionPreview.SetIsTranslationEnabled(element, true);
+            var fadeIn = compositor.CreateScalarKeyFrameAnimation();
+            fadeIn.Target = "Opacity";
+            fadeIn.InsertKeyFrame(0, 0);
+            fadeIn.InsertKeyFrame(1, 1);
+            fadeIn.Duration = duration;
             var rise = compositor.CreateVector3KeyFrameAnimation();
             rise.Target = "Translation";
-            rise.InsertKeyFrame(0, new System.Numerics.Vector3(0, offset, 0));
-            rise.InsertKeyFrame(1, System.Numerics.Vector3.Zero);
+            rise.InsertKeyFrame(0, new Vector3(0, 4, 0));
+            rise.InsertKeyFrame(1, Vector3.Zero);
             rise.Duration = duration;
             var show = compositor.CreateAnimationGroup();
-            show.Add(fade);
+            show.Add(fadeIn);
             show.Add(rise);
-            Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.SetImplicitShowAnimation(notice, show);
+            ElementCompositionPreview.SetImplicitShowAnimation(element, show);
+            var fadeOut = compositor.CreateScalarKeyFrameAnimation();
+            fadeOut.Target = "Opacity";
+            fadeOut.InsertKeyFrame(1, 0);
+            fadeOut.Duration = duration;
+            ElementCompositionPreview.SetImplicitHideAnimation(element, fadeOut);
         }
     }
 
@@ -344,9 +359,13 @@ public sealed partial class MainWindow : Window
         var compact = args.NewSize.Width < (double)Application.Current.Resources["CompactNavigationThreshold"];
         if (_compactNavigation == compact) return;
         _compactNavigation = compact;
-        SidebarColumn.Width = (GridLength)Application.Current.Resources[compact ? "CompactSidebarColumnWidth" : "SidebarColumnWidth"];
-        Sidebar.Padding = (Thickness)Application.Current.Resources[compact ? "CompactSidebarPadding" : "SidebarPadding"];
+        var resources = Application.Current.Resources;
+        SidebarColumn.Width = TitleBarBrandColumn.Width = (GridLength)resources[compact ? "CompactSidebarColumnWidth" : "SidebarColumnWidth"];
+        Sidebar.Padding = (Thickness)resources[compact ? "CompactSidebarPadding" : "SidebarPadding"];
         AppWordmark.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        Brand.Margin = compact ? new Thickness(0) : (Thickness)resources["SidebarBrandMargin"];
+        Brand.HorizontalAlignment = compact ? HorizontalAlignment.Center : HorizontalAlignment.Left;
+        TitleBarPageTitle.Margin = (Thickness)resources[compact ? "CompactTitleBarPageTitleMargin" : "TitleBarPageTitleMargin"];
         foreach (var button in NavigationButtons)
         {
             // A local value outlasts Navigate's style swaps, so the icon stays centred in the 72 px column.
@@ -390,6 +409,120 @@ public sealed partial class MainWindow : Window
             AutomationProperties.SetHelpText(button, selected ? "Current page" : "");
             AutomationProperties.SetItemStatus(button, selected ? "Current page" : "");
         }
+        var canvas = PageCanvas.Find(target);
+        if (!ReferenceEquals(_canvas, canvas))
+        {
+            if (_canvas is not null) _canvas.HeadingScrolledOutChanged -= HeadingScrolledOutChanged;
+            _canvas = canvas;
+            if (canvas is not null) canvas.HeadingScrolledOutChanged += HeadingScrolledOutChanged;
+        }
+        Notices.ShowPage(page, canvas);
+        // The title bar names the page as the sidebar does; the page heading may be a greeting instead.
+        TitleBarPageTitle.Text = NavigationButtons.FirstOrDefault(button => (string)button.Tag == page) is { } current
+            ? AutomationProperties.GetName(current) : "";
+        RenderTitleBar();
+    }
+
+    private void HeadingScrolledOutChanged(object? sender, EventArgs args) => RenderTitleBar();
+
+    // Once the page heading scrolls away, the title bar shows the page name and a compact copy of the page's
+    // primary action. The copy invokes the original, so pages need no title bar API.
+    private void RenderTitleBar()
+    {
+        if (_closed) return;
+        var scrolled = _canvas is { IsHeadingScrolledOut: true } && TitleBarPageTitle.Text.Length > 0;
+        var action = scrolled ? _canvas!.FindPrimaryAction() : null;
+        BindPrimaryAction(action);
+        var showAction = action is not null && IsDisplayed(action);
+        if (action is not null && showAction)
+        {
+            var label = PrimaryActionLabel(action);
+            TitleBarPrimaryAction.Content = label;
+            TitleBarPrimaryAction.IsEnabled = action.IsEnabled;
+            AutomationProperties.SetName(TitleBarPrimaryAction,
+                AutomationProperties.GetName(action) is { Length: > 0 } name ? name : label);
+        }
+        var changed = SetShown(TitleBarPageTitle, scrolled) | SetShown(TitleBarPrimaryAction, showAction);
+        // The TitleBar keeps visible controls in its content clickable; refresh its regions after the button toggles.
+        if (changed) DispatcherQueue.TryEnqueue(() => { if (!_closed) AppTitleBar.RecomputeDragRegions(); });
+    }
+
+    private static bool SetShown(UIElement element, bool shown)
+    {
+        var visibility = shown ? Visibility.Visible : Visibility.Collapsed;
+        if (element.Visibility == visibility) return false;
+        element.Visibility = visibility;
+        return true;
+    }
+
+    private bool IsDisplayed(FrameworkElement element)
+    {
+        for (DependencyObject? current = element; current is not null && !ReferenceEquals(current, _canvas);
+             current = VisualTreeHelper.GetParent(current))
+        {
+            if (current is UIElement { Visibility: Visibility.Collapsed }) return false;
+        }
+        return true;
+    }
+
+    private static string PrimaryActionLabel(Button button) =>
+        button.Content as string ?? FirstText(button.Content as DependencyObject) ?? AutomationProperties.GetName(button);
+
+    private static string? FirstText(DependencyObject? root)
+    {
+        if (root is null) return null;
+        var pending = new Queue<DependencyObject>([root]);
+        while (pending.TryDequeue(out var current))
+        {
+            if (current is TextBlock { Visibility: Visibility.Visible, Text.Length: > 0 } text) return text.Text;
+            for (var index = 0; index < VisualTreeHelper.GetChildrenCount(current); index++)
+                pending.Enqueue(VisualTreeHelper.GetChild(current, index));
+        }
+        return null;
+    }
+
+    private void BindPrimaryAction(Button? action)
+    {
+        if (ReferenceEquals(_primaryAction, action)) return;
+        foreach (var (source, property, token) in _primaryActionCallbacks)
+            source.UnregisterPropertyChangedCallback(property, token);
+        _primaryActionCallbacks.Clear();
+        _primaryAction = action;
+        if (action is null) return;
+        void Watch(DependencyObject source, DependencyProperty property) => _primaryActionCallbacks.Add((source, property,
+            source.RegisterPropertyChangedCallback(property, (_, _) => DispatcherQueue.TryEnqueue(RenderTitleBar))));
+        Watch(action, ContentControl.ContentProperty);
+        Watch(action, Control.IsEnabledProperty);
+        Watch(action, UIElement.VisibilityProperty);
+        Watch(action, FrameworkElement.StyleProperty);
+        Watch(action, AutomationProperties.NameProperty);
+        if (action.Content is DependencyObject content)
+        {
+            var pending = new Queue<DependencyObject>([content]);
+            while (pending.TryDequeue(out var current))
+            {
+                if (current is TextBlock text) Watch(text, TextBlock.TextProperty);
+                for (var index = 0; index < VisualTreeHelper.GetChildrenCount(current); index++)
+                    pending.Enqueue(VisualTreeHelper.GetChild(current, index));
+            }
+        }
+    }
+
+    private void TitleBarPrimaryActionClicked(object sender, RoutedEventArgs args)
+    {
+        if (_primaryAction is { IsEnabled: true } action
+            && FrameworkElementAutomationPeer.CreatePeerForElement(action)?.GetPattern(PatternInterface.Invoke) is IInvokeProvider invoke)
+            invoke.Invoke();
+    }
+
+    // The panel's border draws rounded corners but does not clip; clip the page so its scrollbar and content stay
+    // inside the corners.
+    private void MainContentSizeChanged(object sender, SizeChangedEventArgs args)
+    {
+        var visual = ElementCompositionPreview.GetElementVisual(MainContent);
+        var radius = new Vector2((float)Math.Max(0, ContentPanel.CornerRadius.TopLeft - ContentPanel.BorderThickness.Left));
+        visual.Clip = visual.Compositor.CreateRectangleClip(0, 0, (float)args.NewSize.Width, (float)args.NewSize.Height,
+            radius, radius, radius, radius);
     }
 
     // A window hidden to the tray or minimized is not showing the lesson, so it must not hold the global shortcut.
@@ -404,7 +537,8 @@ public sealed partial class MainWindow : Window
         if (!_session.State.IsIdle || _shortcut.IsBusy)
         {
             _session.Notify(NoticeKind.Warning, "Finish dictation first",
-                "Wait for the current dictation and insertion to finish before opening the shortcut lesson.");
+                "Wait for the current dictation and insertion to finish before opening the shortcut lesson.",
+                NoticeArea.Settings);
             return;
         }
         _welcome.RestartLesson();
@@ -506,14 +640,21 @@ public sealed partial class MainWindow : Window
     private void RenderMeetingSuggestion()
     {
         var offer = _suggestions.Offer;
-        MeetingSuggestion.IsOpen = offer is not null;
-        MeetingSuggestion.Visibility = offer is null ? Visibility.Collapsed : Visibility.Visible;
-        OpenSuggestedMeetingButton.IsEnabled = !_suggestions.IsConfirming && offer is not null;
+        if (Equals(offer, _shownMeetingOffer)) return;
+        _shownMeetingOffer = offer;
+        if (offer is null)
+        {
+            _notices.Clear(MeetingSuggestionNoticeKey);
+            return;
+        }
+        // Open notetaker is ignored while a confirmation runs; MeetingSuggestions guards the second request.
+        _notices.Show(new AppNotice(MeetingSuggestionNoticeKey, AppNoticeSeverity.Information, "Teams microphone is active.",
+            "Start local notetaking? Recording starts only when you click Start.",
+            Actions: [new("Open notetaker", OpenSuggestedMeeting)],
+            Dismissed: _suggestions.Dismiss));
     }
 
-    private void MeetingSuggestionDismissed(InfoBar sender, object args) => _suggestions.Dismiss();
-
-    private async void OpenSuggestedMeetingClicked(object sender, RoutedEventArgs args)
+    private async void OpenSuggestedMeeting()
     {
         var outcome = await _suggestions.ConfirmAsync(candidate =>
         {
@@ -559,6 +700,16 @@ public sealed partial class MainWindow : Window
     private void SessionChanged(SessionSnapshot state)
     {
         if (_closed) { return; }
+        if (!ReferenceEquals(_relayedSessionNotice, state.Notice))
+        {
+            // Snapshots keep the notice instance until it changes, so each session notice is posted once.
+            var notice = _relayedSessionNotice = state.Notice;
+            if (notice.ShouldDisplay)
+                _notices.Show(new AppNotice(SessionNoticeKey,
+                    notice.Kind == NoticeKind.Error ? AppNoticeSeverity.Error : AppNoticeSeverity.Warning,
+                    notice.Title, notice.Message, notice.Area, Dismissed: () => _session.DismissNotice(notice)));
+            else _notices.Clear(SessionNoticeKey);
+        }
         RenderMicrophonePermission();
         _suggestions.Refresh();
         if (_capturePrivacy != state.Settings.HideFromCapture)
@@ -630,8 +781,7 @@ public sealed partial class MainWindow : Window
         _tray ??= new SystemTrayIcon(WinRT.Interop.WindowNative.GetWindowHandle(this),
             Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"), ShowFromTray, ExitRequested, TrayFailed);
         _tray.EnsureVisible();
-        TrayError.IsOpen = false;
-        TrayError.Visibility = Visibility.Collapsed;
+        _notices.Clear(TrayErrorNoticeKey);
     }
 
     private void ShowFromTray()
@@ -647,20 +797,17 @@ public sealed partial class MainWindow : Window
     {
         Debug.WriteLine($"Ansible: tray unavailable: {error}");
         ShowFromTray();
-        TrayError.Message = $"{error.Message} Try closing the window again, or choose Exit Ansible to stop the app.";
-        TrayError.Visibility = Visibility.Visible;
-        TrayError.IsOpen = true;
+        _notices.Show(new AppNotice(TrayErrorNoticeKey, AppNoticeSeverity.Error, "Tray icon unavailable",
+            $"{error.Message} Try closing the window again, or choose Exit Ansible to stop the app.",
+            IsClosable: false, Actions: [new("Exit Ansible", ExitRequested)]));
     }
-
-    private void ExitClicked(object sender, RoutedEventArgs args) => ExitRequested();
 
     private async void ExitRequested()
     {
         if (_closing) { return; }
         _closing = true;
         MainContent.IsEnabled = false;
-        ShutdownError.IsOpen = false;
-        ShutdownError.Visibility = Visibility.Collapsed;
+        _notices.Clear(ShutdownErrorNoticeKey);
         _shortcut.BeginShutdown();
         _suggestions.BeginShutdown();
         _startupCancellation.Cancel();
@@ -692,9 +839,7 @@ public sealed partial class MainWindow : Window
             ShowFromTray();
             LogApplication(ApplicationDiagnosticStage.Shutdown, DiagnosticOutcome.Failed, diagnosticGeneration, diagnosticStartedAt, error);
             Debug.WriteLine($"Ansible: native shutdown needs recovery: {error.Message}");
-            ShutdownError.Message = $"{error.Message} Waiting for owned work to stop.";
-            ShutdownError.Visibility = Visibility.Visible;
-            ShutdownError.IsOpen = true;
+            ShowShutdownError($"{error.Message} Waiting for owned work to stop.");
             var failures = new List<Exception> { error };
             _suggestions.BeginShutdown();
             try { await _session.CancelAsync(); }
@@ -713,7 +858,7 @@ public sealed partial class MainWindow : Window
             _startupCancellation.Dispose();
             _startupCancellation = new CancellationTokenSource();
             var failure = failures.Count == 1 ? error : new AggregateException("Shutdown and recovery reported failures.", failures);
-            ShutdownError.Message = $"{failure.Message} Try Exit from the tray menu again.";
+            ShowShutdownError($"{failure.Message} Try Exit from the tray menu again.");
             _closing = false;
             MainContent.IsEnabled = true;
             _meetings.ResumeAfterFailedShutdown();
@@ -722,6 +867,9 @@ public sealed partial class MainWindow : Window
             _suggestions.ResumeAfterFailedShutdown();
         }
     }
+
+    private void ShowShutdownError(string message) => _notices.Show(new AppNotice(ShutdownErrorNoticeKey,
+        AppNoticeSeverity.Error, "Close failed", message, IsClosable: false));
 
     private void WindowClosed(object sender, WindowEventArgs args)
     {

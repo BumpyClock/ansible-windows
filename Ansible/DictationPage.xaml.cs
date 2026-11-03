@@ -9,8 +9,8 @@ namespace Ansible;
 
 public sealed partial class DictationPage : Page
 {
-    internal event Action? ShortcutLessonRequested;
-    private void ShortcutLessonClicked(object sender, RoutedEventArgs args) => ShortcutLessonRequested?.Invoke();
+    private const string HistoryNoticeKey = "history-storage";
+    private const string UsageNoticeKey = "usage-statistics";
 
     private static readonly TimeSpan CopiedDuration = TimeSpan.FromSeconds(2);
 
@@ -32,6 +32,8 @@ public sealed partial class DictationPage : Page
     private bool _homeDataInitialized;
     private DateTime _homeDataDate;
     private bool _disposed;
+    private string? _historyNotice;
+    private string? _usageNotice;
     // Removing the current transcript's history row must not bring it back as the separate transcript card.
     private Guid? _removedTranscriptOperationId;
 
@@ -92,6 +94,8 @@ public sealed partial class DictationPage : Page
         _observer = null;
         _clock.Stop();
         if (_copiedTimer.IsEnabled) { _copiedTimer.Stop(); CopyLabel.Text = "Copy"; }
+        _notices.Clear(HistoryNoticeKey);
+        _notices.Clear(UsageNoticeKey);
     }
 
     private void Render()
@@ -99,7 +103,6 @@ public sealed partial class DictationPage : Page
         RenderRecordControl();
         RenderStatus();
         RenderClock();
-        RenderNotice();
         RenderHomeData();
         if (TranscriptBox.Text != _state.Transcript) { TranscriptBox.Text = _state.Transcript; }
         var empty = string.IsNullOrWhiteSpace(_state.Transcript);
@@ -173,21 +176,42 @@ public sealed partial class DictationPage : Page
             }
         }
         if (ShortcutTailText.Text != "anywhere, or") ShortcutTailText.Text = "anywhere, or";
+        var emptyHint = settings.PushToTalk
+            ? $"Hold {settings.Shortcut.DisplayText} in any app and speak. Your text appears here too."
+            : $"Press {settings.Shortcut.DisplayText} in any app, speak, then press it again. Your text appears here too.";
+        if (HistoryView.EmptyHint != emptyHint)
+        {
+            HistoryView.EmptyHint = emptyHint;
+            RenderHomeHistory(animate: false);
+        }
         if (!_homeDataInitialized || _homeDataDate != DateTime.Today || !ReferenceEquals(_homeUsage, _state.Usage) || _homeUsageError != _state.UsageError)
         {
             _homeDataInitialized = true;
             _homeDataDate = DateTime.Today;
             _homeUsage = _state.Usage;
             _homeUsageError = _state.UsageError;
-            HomeInsightsColumn.Render(HomeInsightsProjection.Create(_state.Usage, _state.UsageError,
-                HomeModelDisplayName, DateOnly.FromDateTime(DateTime.Today), TimeZoneInfo.Local));
+            var insights = HomeInsightsProjection.Create(_state.Usage, _state.UsageError,
+                HomeModelDisplayName, DateOnly.FromDateTime(DateTime.Today), TimeZoneInfo.Local);
+            HomeInsightsColumn.Render(insights);
+            PostNotice(UsageNoticeKey, "Some usage statistics are missing", insights.UsageWarning, ref _usageNotice);
         }
     }
 
     private void RenderHomeHistory(bool animate)
     {
-        HistoryView.Render(HomeHistoryProjection.Create(_history.Snapshot(), HistoryView.Query,
-            _history.OversizedCurrentResult, HomeModelDisplayName, DateTime.Today, _history.StorageError), animate);
+        var model = HomeHistoryProjection.Create(_history.Snapshot(), HistoryView.Query,
+            _history.OversizedCurrentResult, HomeModelDisplayName, DateTime.Today, _history.StorageError);
+        HistoryView.Render(model, animate);
+        PostNotice(HistoryNoticeKey, "History needs attention", model.StorageError, ref _historyNotice);
+    }
+
+    // Storage problems are conditions, not events: the notice stays until the error clears and cannot be closed.
+    private void PostNotice(string key, string title, string? message, ref string? current)
+    {
+        if (current == message) return;
+        current = message;
+        if (message is null) _notices.Clear(key);
+        else _notices.Show(new AppNotice(key, AppNoticeSeverity.Warning, title, message, NoticeArea.Dictation, IsClosable: false));
     }
 
     private void HistoryChanged()
@@ -246,34 +270,27 @@ public sealed partial class DictationPage : Page
         Grid.SetColumnSpan(ShortcutButtons, stackedHelper ? 2 : 1);
         ShortcutButtons.HorizontalAlignment = stackedHelper ? HorizontalAlignment.Right : HorizontalAlignment.Left;
     }
+    // Wide: history beside a fixed insights rail. Narrow: the insights cards become a strip above history.
     private void HomeColumnsSizeChanged(object sender, SizeChangedEventArgs args)
     {
-        var narrow = args.NewSize.Width < (double)Application.Current.Resources["HomeColumnsStackThreshold"];
+        var stacked = args.NewSize.Width < (double)Resources["HomeRailStackThreshold"];
+        if (HomeInsightsColumn.Strip == stacked && HomeColumns.ColumnDefinitions.Count == (stacked ? 1 : 2)) return;
+        HomeInsightsColumn.Strip = stacked;
         HomeColumns.ColumnDefinitions.Clear();
         HomeColumns.RowDefinitions.Clear();
-        if (narrow)
-        {
-            HomeColumns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            HomeColumns.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            HomeColumns.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            Grid.SetColumn(HomeInsightsColumn, 0);
-            Grid.SetRow(HomeInsightsColumn, 1);
-        }
-        else
-        {
-            HomeColumns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            HomeColumns.ColumnDefinitions.Add(new ColumnDefinition { Width = (GridLength)Application.Current.Resources["HomeInsightsColumnWidth"] });
-            HomeColumns.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-            Grid.SetColumn(HomeInsightsColumn, 1);
-            Grid.SetRow(HomeInsightsColumn, 0);
-        }
+        HomeColumns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        if (!stacked) HomeColumns.ColumnDefinitions.Add(new ColumnDefinition { Width = (GridLength)Resources["HomeRailColumnWidth"] });
+        HomeColumns.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        if (stacked) HomeColumns.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        Grid.SetColumn(HomeInsightsColumn, stacked ? 0 : 1);
+        Grid.SetRow(HomeInsightsColumn, 0);
+        Grid.SetRow(HistoryView, stacked ? 1 : 0);
     }
 
     private void HomeViewportSizeChanged(object sender, SizeChangedEventArgs args) => UpdateShortcutLayout();
 
     private void RenderRecordControl()
     {
-        ShortcutLessonButton.IsEnabled = _state.IsIdle;
         var canRecord = !_picking && (_state.CanStart || _state.CanFinish);
         CompactDictateButton.IsEnabled = canRecord;
         var label = _state.CanFinish ? "Finish dictation" : "Start dictation";
@@ -330,32 +347,6 @@ public sealed partial class DictationPage : Page
         var text = _session.Elapsed.ToString(@"mm\:ss");
         if (_state.Words is { } words) { text += $"  ·  {words:N0} {(words == 1 ? "word" : "words")}"; }
         CompactLiveText.Text = text;
-    }
-
-    private void RenderNotice()
-    {
-        var notice = _state.Notice;
-        if (!notice.ShouldDisplayOn(NoticeArea.Dictation))
-        {
-            StatusInfo.IsOpen = false;
-            StatusInfo.Visibility = Visibility.Collapsed;
-            return;
-        }
-        StatusInfo.Severity = notice.Kind == NoticeKind.Error ? InfoBarSeverity.Error : InfoBarSeverity.Warning;
-        StatusInfo.Title = notice.Title;
-        StatusInfo.Message = notice.Message;
-        StatusInfo.Visibility = Visibility.Visible;
-        StatusInfo.IsOpen = true;
-    }
-
-    private void StatusInfoClosing(InfoBar sender, InfoBarClosingEventArgs args)
-    {
-        if (args.Reason == InfoBarCloseReason.CloseButton) { _session.DismissNotice(_state.Notice); }
-    }
-
-    private void StatusInfoClosed(InfoBar sender, InfoBarClosedEventArgs args)
-    {
-        if (!sender.IsOpen) { sender.Visibility = Visibility.Collapsed; }
     }
 
     private async void RecordClicked(object sender, RoutedEventArgs args)

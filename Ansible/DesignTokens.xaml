@@ -396,26 +396,20 @@
     <x:Double x:Key="NarrowActionsThreshold">400</x:Double>
     <x:Double x:Key="ShortcutStackThreshold">440</x:Double>
     <x:Double x:Key="HistorySearchStackThreshold">520</x:Double>
-    <x:Double x:Key="HomeColumnsStackThreshold">900</x:Double>
-    <GridLength x:Key="HomeInsightsColumnWidth">400</GridLength>
     <GridLength x:Key="HistorySearchColumnWidth">280</GridLength>
     <!-- Two 400 DIP cards plus the 16 DIP gutter keep model names and status readable. -->
-    <x:Double x:Key="ModelTwoColumnThreshold">816</x:Double>
     <Thickness x:Key="PageSectionBottomMargin">0,0,0,20</Thickness>
-    <Thickness x:Key="PageFooterTopMargin">0,20,0,0</Thickness>
     <x:Double x:Key="PageSectionSpacing">28</x:Double>
-    <Thickness x:Key="ApplicationNoticeMargin">16,8,16,16</Thickness>
-    <x:Double x:Key="ApplicationNoticeMaxWidth">460</x:Double>
-    <Thickness x:Key="ApplicationNoticePadding">16,12</Thickness>
+    <!-- Window notices float bottom-centred over the content panel. -->
+    <Thickness x:Key="NoticeHostMargin">24,0,24,16</Thickness>
+    <x:Double x:Key="NoticeHostMaxWidth">680</x:Double>
+    <x:Double x:Key="NoticeHostSpacing">8</x:Double>
     <x:Double x:Key="CardGap">20</x:Double>
-    <x:Double x:Key="HomeCardGap">20</x:Double>
-    <x:Double x:Key="HomeSectionGap">24</x:Double>
     <x:Double x:Key="SectionHeaderGap">10</x:Double>
     <x:Double x:Key="HomeSectionTitleFontSize">28</x:Double>
     <FontFamily x:Key="InsightNumeralFontFamily">Consolas</FontFamily>
     <x:Double x:Key="InsightNumeralFontSize">22</x:Double>
     <x:Double x:Key="InsightTotalNumeralFontSize">32</x:Double>
-    <x:Double x:Key="InsightHeroNumeralFontSize">56</x:Double>
     <x:Double x:Key="HomeSectionHeaderMinHeight">36</x:Double>
     <x:Double x:Key="NavLabelGap">12</x:Double>
     <Thickness x:Key="CardBorderThickness">1</Thickness>
@@ -432,13 +426,17 @@
     <GridLength x:Key="SidebarColumnWidth">248</GridLength>
     <GridLength x:Key="CompactSidebarColumnWidth">72</GridLength>
     <x:Double x:Key="CompactNavigationThreshold">1000</x:Double>
-    <Thickness x:Key="CompactSidebarPadding">8,30,8,18</Thickness>
-    <Thickness x:Key="ShellPadding">0</Thickness>
-    <Thickness x:Key="SidebarPadding">14,30,14,18</Thickness>
-    <Thickness x:Key="SidebarBrandMargin">10,0,10,28</Thickness>
+    <Thickness x:Key="CompactSidebarPadding">8,12,8,12</Thickness>
+    <Thickness x:Key="SidebarPadding">12,12,12,12</Thickness>
+    <!-- The brand sits in the title bar row above the sidebar, aligned with the navigation icons. -->
+    <Thickness x:Key="SidebarBrandMargin">24,0,12,0</Thickness>
+    <!-- The page area is an inset surface panel under the title bar, beside the sidebar. -->
+    <Thickness x:Key="ContentPanelMargin">0,4,4,4</Thickness>
+    <CornerRadius x:Key="ContentPanelCornerRadius">8</CornerRadius>
+    <Thickness x:Key="TitleBarPageTitleMargin">40,0,12,0</Thickness>
+    <Thickness x:Key="CompactTitleBarPageTitleMargin">20,0,12,0</Thickness>
     <Thickness x:Key="SettingsSegmentPadding">14,0</Thickness>
     <CornerRadius x:Key="SettingsSegmentCornerRadius">8</CornerRadius>
-    <CornerRadius x:Key="SettingsCheckBoxCornerRadius">6</CornerRadius>
     <x:Double x:Key="BenchmarkBarHeight">8</x:Double>
     <x:Double x:Key="BenchmarkValueMaxWidth">160</x:Double>
     <CornerRadius x:Key="BenchmarkBarCornerRadius">4</CornerRadius>
@@ -454,10 +452,7 @@
     <x:Double x:Key="SettingsLanguageWidth">180</x:Double>
     <x:Double x:Key="SettingsProcessorWidth">305</x:Double>
     <x:Double x:Key="SettingsWideMinWidth">700</x:Double>
-    <Thickness x:Key="SettingsPrivacyCardPadding">24,8,24,24</Thickness>
     <Thickness x:Key="SettingsRowPadding">0,20</Thickness>
-    <Thickness x:Key="SettingsLastOptionPadding">0,20,0,0</Thickness>
-    <Thickness x:Key="SettingsRowBorderThickness">0,0,0,1</Thickness>
     <Thickness x:Key="SettingsBenchmarkMargin">0,0,0,20</Thickness>
     <x:Double x:Key="SettingsRowColumnGap">32</x:Double>
     <x:Double x:Key="SettingsLabelFontSize">14.5</x:Double>
@@ -465,7 +460,6 @@
     <x:Double x:Key="SettingsDescriptionFontSize">13</x:Double>
     <x:Double x:Key="SettingsDescriptionLineHeight">19.5</x:Double>
     <x:Double x:Key="SettingsLinkFontSize">13.5</x:Double>
-    <x:Double x:Key="SettingsOptionGap">10</x:Double>
     <x:Double x:Key="SettingsOptionFontSize">14</x:Double>
     <Thickness x:Key="BenchmarkPanelPadding">24,20</Thickness>
     <CornerRadius x:Key="BenchmarkPanelCornerRadius">12</CornerRadius>
@@ -482,10 +476,9 @@
     <CornerRadius x:Key="BenchmarkTagCornerRadius">20</CornerRadius>
     <x:Double x:Key="BenchmarkTagFontSize">12</x:Double>
     <x:Double x:Key="BenchmarkTagGap">5</x:Double>
-    <Thickness x:Key="SettingsGroupHeaderPadding">4,0</Thickness>
     <x:Double x:Key="NavItemGap">4</x:Double>
     <x:Double x:Key="BrandSize">32</x:Double>
-    <x:Double x:Key="TitleBarHeight">44</x:Double>
+    <x:Double x:Key="TitleBarHeight">48</x:Double>
     <x:Double x:Key="PageTitleFontSize">28</x:Double>
     <x:Double x:Key="MetricValueFontSize">30</x:Double>
     <x:Double x:Key="PageTitleLineHeight">34</x:Double>
@@ -507,8 +500,6 @@
     <Thickness x:Key="SearchKeycapMargin">0,0,8,0</Thickness>
     <Thickness x:Key="KeycapBorderThickness">0,0,0,2</Thickness>
     <CornerRadius x:Key="KeycapCornerRadius">6</CornerRadius>
-    <Thickness x:Key="HistoryHeaderPadding">24,16,24,14</Thickness>
-    <Thickness x:Key="HistoryListPadding">16,12,16,16</Thickness>
     <x:Double x:Key="HomeStatsGap">16</x:Double>
     <x:Double x:Key="HomeMetricColumnGap">12</x:Double>
     <x:Double x:Key="HomeModelRowsGap">8</x:Double>
@@ -541,7 +532,6 @@
     <x:Double x:Key="HistoryMetaFontSize">12</x:Double>
     <x:Double x:Key="HistoryMetaGap">8</x:Double>
     <x:Double x:Key="HistoryGroupLabelFontSize">11.5</x:Double>
-    <Thickness x:Key="HistoryGroupMargin">20,16,16,8</Thickness>
     <x:Double x:Key="HistoryTagFontSize">11.5</x:Double>
     <Thickness x:Key="HistoryTagPadding">8,2</Thickness>
     <CornerRadius x:Key="HistoryTagCornerRadius">20</CornerRadius>
@@ -953,4 +943,13 @@
         <Setter Property="Background" Value="{ThemeResource AppControlBrush}" />
         <Setter Property="Foreground" Value="{ThemeResource ActivityMediumBrush}" />
     </Style>
+    <!-- Settings unit -->
+    <Thickness x:Key="SettingsRowDividerThickness">0,1,0,0</Thickness>
+    <Thickness x:Key="SettingsChildRowPadding">28,20,0,20</Thickness>
+    <x:Double x:Key="SettingsFieldWidth">220</x:Double>
+    <x:Double x:Key="SettingsTocWidth">180</x:Double>
+    <Thickness x:Key="SettingsTocMargin">40,0,0,0</Thickness>
+    <x:Double x:Key="SettingsTocMinWidth">980</x:Double>
+    <Thickness x:Key="SettingsInlineNoticePadding">16,12</Thickness>
+    <CornerRadius x:Key="SettingsInlineNoticeCornerRadius">8</CornerRadius>
 </ResourceDictionary>

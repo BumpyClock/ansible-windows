@@ -22,6 +22,12 @@ public sealed partial class SettingsRow : UserControl
     public static readonly DependencyProperty CompactAlignmentProperty =
         DependencyProperty.Register(nameof(CompactAlignment), typeof(HorizontalAlignment), typeof(SettingsRow), new PropertyMetadata(HorizontalAlignment.Stretch, OnLayoutPropertyChanged));
 
+    public static readonly DependencyProperty ShowDividerProperty =
+        DependencyProperty.Register(nameof(ShowDivider), typeof(bool), typeof(SettingsRow), new PropertyMetadata(true, OnLayoutPropertyChanged));
+
+    public static readonly DependencyProperty IsChildProperty =
+        DependencyProperty.Register(nameof(IsChild), typeof(bool), typeof(SettingsRow), new PropertyMetadata(false, OnLayoutPropertyChanged));
+
     public SettingsRow()
     {
         InitializeComponent();
@@ -65,6 +71,20 @@ public sealed partial class SettingsRow : UserControl
         set => SetValue(CompactAlignmentProperty, value);
     }
 
+    /// <summary>Draws a hairline above the row. The first row in a group turns it off. Collapsing a row removes its divider.</summary>
+    public bool ShowDivider
+    {
+        get => (bool)GetValue(ShowDividerProperty);
+        set => SetValue(ShowDividerProperty, value);
+    }
+
+    /// <summary>Indents the row under the setting it depends on.</summary>
+    public bool IsChild
+    {
+        get => (bool)GetValue(IsChildProperty);
+        set => SetValue(IsChildProperty, value);
+    }
+
     private static void OnLayoutPropertyChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
     {
         if (sender is SettingsRow row)
@@ -85,6 +105,9 @@ public sealed partial class SettingsRow : UserControl
         }
 
         var wide = width >= SettingsWideMinWidth;
+        var resources = Application.Current.Resources;
+        LayoutRoot.BorderThickness = ShowDivider ? (Thickness)resources["SettingsRowDividerThickness"] : new Thickness(0);
+        LayoutRoot.Padding = (Thickness)resources[IsChild ? "SettingsChildRowPadding" : "SettingsRowPadding"];
         // The row keeps one shared visual tree, but only the active axis may contribute
         // geometry. Collapsing the inactive track and its spacing prevents a hidden
         // column or row from changing compact widths or wide row heights.

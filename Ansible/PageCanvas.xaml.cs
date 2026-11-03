@@ -1,6 +1,8 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Markup;
+using Microsoft.UI.Xaml.Media;
+using Windows.Foundation;
 
 namespace Ansible;
 
@@ -12,10 +14,29 @@ public sealed partial class PageCanvas : UserControl
     public static readonly DependencyProperty SubtitleProperty = DependencyProperty.Register(
         nameof(Subtitle), typeof(string), typeof(PageCanvas), new PropertyMetadata("", HeaderChanged));
 
+    private double _bottomInset;
+
     public PageCanvas()
     {
         InitializeComponent();
-        Loaded += (_, _) => { UpdateLayoutBounds(); UpdateHeader(); };
+        Loaded += (_, _) => { UpdateLayoutBounds(); UpdateHeader(); UpdateHeadingScrolledOut(); };
+    }
+
+    /// <summary>True while the page title has scrolled above the viewport. The window title bar then shows the page.</summary>
+    public bool IsHeadingScrolledOut { get; private set; }
+
+    public event EventHandler? HeadingScrolledOutChanged;
+
+    /// <summary>Extra bottom padding for floating window content, such as notices, so the last rows can scroll above it.</summary>
+    public double BottomInset
+    {
+        get => _bottomInset;
+        set
+        {
+            if (_bottomInset == value) return;
+            _bottomInset = value;
+            UpdateLayoutBounds();
+        }
     }
 
     public string Title { get => (string)GetValue(TitleProperty); set => SetValue(TitleProperty, value); }
@@ -33,16 +54,73 @@ public sealed partial class PageCanvas : UserControl
 
     public double ContentWidth => Math.Max(0, ContentHost.ActualWidth - ContentHost.Padding.Left - ContentHost.Padding.Right);
 
+    /// <summary>Returns the page's canvas: its direct content, or the first canvas in its visual tree.</summary>
+    public static PageCanvas? Find(DependencyObject? root)
+    {
+        if (root is PageCanvas canvas) return canvas;
+        if (root is UserControl { Content: PageCanvas content }) return content;
+        if (root is null) return null;
+        var pending = new Queue<DependencyObject>([root]);
+        while (pending.TryDequeue(out var current))
+        {
+            for (var index = 0; index < VisualTreeHelper.GetChildrenCount(current); index++)
+            {
+                var child = VisualTreeHelper.GetChild(current, index);
+                if (child is PageCanvas found) return found;
+                pending.Enqueue(child);
+            }
+        }
+        return null;
+    }
+
+    /// <summary>The first header action button styled as the page's primary action, whether or not it is shown.</summary>
+    public Button? FindPrimaryAction()
+    {
+        var primary = Application.Current.Resources["AppPrimaryButtonStyle"];
+        var pending = new Queue<DependencyObject>([HeaderActionsPanel]);
+        while (pending.TryDequeue(out var current))
+        {
+            if (current is Button button && ReferenceEquals(button.Style, primary)) return button;
+            for (var index = 0; index < VisualTreeHelper.GetChildrenCount(current); index++)
+                pending.Enqueue(VisualTreeHelper.GetChild(current, index));
+        }
+        return null;
+    }
+
     private void ViewportSizeChanged(object sender, SizeChangedEventArgs args)
     {
         UpdateLayoutBounds();
         UpdateHeader();
+        UpdateHeadingScrolledOut();
     }
 
-    private static void HeaderChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args) =>
-        ((PageCanvas)sender).UpdateHeader();
+    private void ViewportViewChanged(object? sender, ScrollViewerViewChangedEventArgs args) => UpdateHeadingScrolledOut();
 
-    private void HeaderSizeChanged(object sender, SizeChangedEventArgs args) => UpdateHeader();
+    private static void HeaderChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
+    {
+        var canvas = (PageCanvas)sender;
+        canvas.UpdateHeader();
+        canvas.UpdateHeadingScrolledOut();
+    }
+
+    private void HeaderSizeChanged(object sender, SizeChangedEventArgs args)
+    {
+        UpdateHeader();
+        UpdateHeadingScrolledOut();
+    }
+
+    private void UpdateHeadingScrolledOut()
+    {
+        var scrolledOut = false;
+        if (IsLoaded && TitleText.Visibility == Visibility.Visible && TitleText.ActualHeight > 0)
+        {
+            var bottom = TitleText.TransformToVisual(Viewport).TransformPoint(new Point(0, TitleText.ActualHeight)).Y;
+            scrolledOut = bottom <= 0;
+        }
+        if (scrolledOut == IsHeadingScrolledOut) return;
+        IsHeadingScrolledOut = scrolledOut;
+        HeadingScrolledOutChanged?.Invoke(this, EventArgs.Empty);
+    }
 
     private void UpdateHeader()
     {
@@ -74,8 +152,10 @@ public sealed partial class PageCanvas : UserControl
     {
         var resources = Application.Current.Resources;
         var width = Math.Min(Viewport.ActualWidth, (double)resources["PageContentMaxWidth"]);
-        ContentHost.Padding = (Thickness)resources[width < (double)resources["CompactPageThreshold"]
+        var padding = (Thickness)resources[width < (double)resources["CompactPageThreshold"]
             ? "CompactPagePadding" : "PagePadding"];
+        padding.Bottom += _bottomInset;
+        ContentHost.Padding = padding;
         // The page flows in one scroller; content fills at least the viewport so footers sit at the bottom.
         ContentHost.MinHeight = Viewport.ActualHeight;
     }

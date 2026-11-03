@@ -48,7 +48,6 @@
                         <TextBlock Text="Nothing is sent to another app or the clipboard here. Practice dictations also appear in your local history."
                                    Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap" />
                     </StackPanel>
-                    <InfoBar x:Name="Notice" IsOpen="False" Visibility="Collapsed" IsClosable="False" />
                 </StackPanel>
             </Border>
             <Grid ColumnSpacing="12">

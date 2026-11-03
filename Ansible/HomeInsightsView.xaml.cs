@@ -17,19 +17,61 @@ internal sealed partial class HomeModelTemplateSelector : DataTemplateSelector
 
 public sealed partial class HomeInsightsView : UserControl
 {
+    // A strip card narrower than this wraps to the next row, like the mockup's auto-fit minmax(220px, 1fr).
+    private const double StripCardMinWidth = 220;
+
     private HomeInsightsViewModel? _model;
+    private bool _strip;
+    private int _columns;
 
     public HomeInsightsView()
     {
         InitializeComponent();
+        ArrangeCards(1);
+    }
+
+    /// <summary>False stacks the cards as a side rail. True flows them into columns as a strip above history.</summary>
+    internal bool Strip
+    {
+        get => _strip;
+        set
+        {
+            if (_strip == value) return;
+            _strip = value;
+            ArrangeCards(ColumnsFor(RailCards.ActualWidth));
+        }
+    }
+
+    private int ColumnsFor(double width)
+    {
+        if (!_strip || width <= 0) return 1;
+        var gap = RailCards.ColumnSpacing;
+        return Math.Clamp((int)((width + gap) / (StripCardMinWidth + gap)), 1, RailCards.Children.Count);
+    }
+
+    private void RailCardsSizeChanged(object sender, SizeChangedEventArgs args) => ArrangeCards(ColumnsFor(args.NewSize.Width));
+
+    private void ArrangeCards(int columns)
+    {
+        if (columns == _columns) return;
+        _columns = columns;
+        var cards = RailCards.Children;
+        RailCards.ColumnDefinitions.Clear();
+        RailCards.RowDefinitions.Clear();
+        for (var column = 0; column < columns; column++)
+            RailCards.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        for (var row = 0; row < (cards.Count + columns - 1) / columns; row++)
+            RailCards.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        for (var index = 0; index < cards.Count; index++)
+        {
+            Grid.SetColumn((FrameworkElement)cards[index], index % columns);
+            Grid.SetRow((FrameworkElement)cards[index], index / columns);
+        }
     }
 
     internal void Render(HomeInsightsViewModel model)
     {
         _model = model;
-        UsageWarningBar.Message = model.UsageWarning ?? "";
-        UsageWarningBar.IsOpen = model.UsageWarning is not null;
-        UsageWarningBar.Visibility = UsageWarningBar.IsOpen ? Visibility.Visible : Visibility.Collapsed;
         HomePaceText.Text = model.PaceText;
         HomeSessionsText.Text = model.SessionsText;
         HomeWordsText.Text = model.WordsText;

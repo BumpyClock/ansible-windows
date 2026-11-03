@@ -94,13 +94,6 @@ public sealed partial class WelcomePage : Page
             : _practiced ? "That's your voice, in writing. You're ready."
             : state.CanStart ? ShortcutDetail.Text
             : "Set up a microphone-capable speech model before trying dictation. You can also skip this lesson.";
-        var notice = state.Notice;
-        var showNotice = notice.ShouldDisplayOn(NoticeArea.Dictation) || notice.ShouldDisplayOn(NoticeArea.Settings);
-        Notice.Title = notice.Title;
-        Notice.Message = notice.Message;
-        Notice.Severity = notice.Kind == NoticeKind.Error ? InfoBarSeverity.Error : InfoBarSeverity.Warning;
-        Notice.IsOpen = showNotice;
-        Notice.Visibility = showNotice ? Visibility.Visible : Visibility.Collapsed;
     }
 
     internal void RefreshAfterShortcut() => Render();

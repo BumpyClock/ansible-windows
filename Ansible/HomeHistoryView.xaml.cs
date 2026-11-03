@@ -32,6 +32,9 @@ public sealed partial class HomeHistoryView : UserControl
 
     internal string Query => HistorySearchBox.Text.Trim();
 
+    /// <summary>How to dictate, shown when nothing is saved yet. The page sets it from the current shortcut.</summary>
+    internal string EmptyHint { get; set; } = "Choose Dictate to start your history.";
+
     public HomeHistoryView()
     {
         InitializeComponent();
@@ -47,16 +50,15 @@ public sealed partial class HomeHistoryView : UserControl
     internal void Render(HomeHistoryViewModel model, bool animate)
     {
         var count = model.AllOperationIds.Count;
-        HistoryCountPill.Text = $"{count:N0} {(count == 1 ? "transcription" : "transcriptions")}";
-        HistoryStorageWarning.Message = model.StorageError ?? "";
-        HistoryStorageWarning.IsOpen = model.StorageError is not null;
-        HistoryStorageWarning.Visibility = model.StorageError is null ? Visibility.Collapsed : Visibility.Visible;
+        var query = Query;
+        HistoryCountPill.Text = query.Length > 0 && model.HasHistory
+            ? $"{model.Groups.Sum(group => group.Entries.Count):N0} of {count:N0}"
+            : $"{count:N0} {(count == 1 ? "transcription" : "transcriptions")}";
         OversizedNotice.Text = $"A transcript over {HomeDictationHistory.MaximumCharacters:N0} characters stays in the current result and is not added to saved history.";
         OversizedNotice.Visibility = model.OversizedCurrentResult ? Visibility.Visible : Visibility.Collapsed;
         EmptyState.Visibility = model.HasMatches ? Visibility.Collapsed : Visibility.Visible;
-        EmptyTitle.Text = model.HasHistory ? "No matching transcripts." : "No saved transcriptions yet.";
-        EmptyDetail.Text = model.HasHistory ? "Try a different search." : "Choose Dictate to start your history.";
-        HistoryContent.VerticalAlignment = model.HasMatches ? VerticalAlignment.Stretch : VerticalAlignment.Center;
+        EmptyTitle.Text = model.HasHistory ? "No matches" : "No dictations yet";
+        EmptyDetail.Text = model.HasHistory ? $"No saved transcript contains \"{query}\"." : EmptyHint;
         animate &= HistoryRows.Children.Count > 0;
 
         var desired = new List<UIElement>();
@@ -148,13 +150,13 @@ public sealed partial class HomeHistoryView : UserControl
         if (_groupHeaders.TryGetValue(label, out var header)) { return header; }
         header = new Grid
         {
-            Margin = (Thickness)Application.Current.Resources["HistoryGroupMargin"],
-            ColumnSpacing = 10,
+            Margin = (Thickness)Resources["HomeHistoryGroupMargin"],
+            ColumnSpacing = 12,
             VerticalAlignment = VerticalAlignment.Center
         };
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        header.Children.Add(new TextBlock { Text = label, Style = AppStyle("HistoryGroupLabelStyle") });
+        header.Children.Add(new TextBlock { Text = label, Style = AppStyle("HistoryGroupLabelStyle"), CharacterSpacing = 33 });
         var line = new Border { Style = AppStyle("HistoryDividerStyle") };
         Grid.SetColumn(line, 1);
         header.Children.Add(line);
@@ -168,7 +170,7 @@ public sealed partial class HomeHistoryView : UserControl
         var row = new HistoryRowView(item);
         var animations = _uiSettings.AnimationsEnabled;
         var fast = TimeSpan.FromMilliseconds((double)resources["MotionFastMilliseconds"]);
-        row.Root = new Border { Style = AppStyle("HistoryRowStyle") };
+        row.Root = new Border { Style = AppStyle("HomeHistoryRowStyle") };
         if (animations) { row.Root.BackgroundTransition = new BrushTransition { Duration = fast }; }
         row.Layout = new Grid { ColumnSpacing = (double)resources["HistoryRowColumnGap"] };
         row.Layout.ColumnDefinitions.Add(new ColumnDefinition { Width = (GridLength)resources["HistoryTimeColumnWidth"] });
@@ -209,7 +211,7 @@ public sealed partial class HomeHistoryView : UserControl
             Opacity = _accessibility.HighContrast ? 1 : ActionsRestOpacity
         };
         if (animations) { row.Actions.OpacityTransition = new ScalarTransition { Duration = fast }; }
-        row.CopyIcon = new FontIcon { Glyph = CopyGlyph, FontSize = (double)resources["IconButtonGlyphSize"] };
+        row.CopyIcon = new FontIcon { Glyph = CopyGlyph, Style = AppStyle("HistoryCopyIconStyle") };
         row.Copy = CreateIconButton(row.CopyIcon);
         row.Copy.Click += (_, _) => CopyRequested?.Invoke(row.Item);
         row.More = CreateIconButton(new FontIcon { Glyph = "\uE712", FontSize = (double)resources["IconButtonGlyphSize"] });
@@ -251,7 +253,7 @@ public sealed partial class HomeHistoryView : UserControl
         var highContrast = _accessibility.HighContrast;
         if (active && !highContrast) { row.Root.Background = HoverFillAnchor.Background; }
         else { row.Root.ClearValue(Border.BackgroundProperty); }
-        row.Actions.Opacity = active || row.Focused || highContrast ? 1 : ActionsRestOpacity;
+        row.Actions.Opacity = active || row.Focused || highContrast || row.NeedsCopy ? 1 : ActionsRestOpacity;
     }
 
     private static void ApplyRowLayout(HistoryRowView row, bool narrow)
@@ -275,14 +277,23 @@ public sealed partial class HomeHistoryView : UserControl
 
     private void UpdateTag(HistoryRowView row, HomeHistoryTag? tag)
     {
+        row.NeedsCopy = tag?.NeedsCopy == true;
+        SetStyle(row.CopyIcon, row.NeedsCopy ? "HistoryNeedsCopyIconStyle" : "HistoryCopyIconStyle");
+        UpdateRowState(row);
         if (tag is null)
         {
             row.TagPill.Visibility = Visibility.Collapsed;
             return;
         }
-        SetStyle(row.TagPill, tag.Inserted ? "HistoryInsertedTagStyle" : "HistoryTagStyle");
-        SetStyle(row.TagText, tag.Inserted ? "HistoryInsertedTagTextStyle" : "HistoryTagTextStyle");
-        SetStyle(row.TagIcon, tag.Inserted ? "HistoryInsertedTagIconStyle" : "HistoryTagIconStyle");
+        var prefix = tag.Tone switch
+        {
+            HomeHistoryTagTone.Inserted => "HistoryInserted",
+            HomeHistoryTagTone.Unverified => "HistoryUnverified",
+            _ => "History"
+        };
+        SetStyle(row.TagPill, prefix + "TagStyle");
+        SetStyle(row.TagText, prefix + "TagTextStyle");
+        SetStyle(row.TagIcon, prefix + "TagIconStyle");
         row.TagIcon.Glyph = tag.Glyph;
         row.TagText.Text = tag.Label;
         ToolTipService.SetToolTip(row.TagPill, tag.Meaning);
@@ -389,6 +400,7 @@ public sealed partial class HomeHistoryView : UserControl
         public bool Hovered;
         public bool Focused;
         public bool MenuOpen;
+        public bool NeedsCopy;
         private bool _rendered;
 
         public void Update(HomeHistoryEntry entry, HomeHistoryView view)

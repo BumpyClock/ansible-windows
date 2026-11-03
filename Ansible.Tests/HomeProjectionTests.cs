@@ -327,12 +327,12 @@ public sealed class HomeProjectionTests
     }
 
     [Theory]
-    [InlineData(TextDeliveryStatus.Verified, "Inserted", true)]
-    [InlineData(TextDeliveryStatus.CleanupFailed, "Not verified", false)]
-    [InlineData(TextDeliveryStatus.Sent, "Not verified", false)]
-    [InlineData(TextDeliveryStatus.Partial, "Partially inserted", false)]
-    [InlineData(TextDeliveryStatus.Rejected, "Not inserted", false)]
-    public void HistoryTagNamesTheReportedInsertionOutcome(TextDeliveryStatus status, string label, bool inserted)
+    [InlineData(TextDeliveryStatus.Verified, "Inserted", "Inserted", false)]
+    [InlineData(TextDeliveryStatus.CleanupFailed, "Not verified", "Unverified", false)]
+    [InlineData(TextDeliveryStatus.Sent, "Not verified", "Unverified", false)]
+    [InlineData(TextDeliveryStatus.Partial, "Partially inserted", "NotInserted", true)]
+    [InlineData(TextDeliveryStatus.Rejected, "Not inserted", "NotInserted", true)]
+    public void HistoryTagNamesTheReportedInsertionOutcome(TextDeliveryStatus status, string label, string tone, bool needsCopy)
     {
         var item = History(DateTimeOffset.Now, "speech") with { Delivery = status };
 
@@ -340,7 +340,8 @@ public sealed class HomeProjectionTests
 
         Assert.NotNull(tag);
         Assert.Equal(label, tag.Label);
-        Assert.Equal(inserted, tag.Inserted);
+        Assert.Equal(tone, tag.Tone.ToString());
+        Assert.Equal(needsCopy, tag.NeedsCopy);
     }
 
     [Theory]
@@ -385,7 +386,7 @@ public sealed class HomeProjectionTests
         var tag = new HomeHistoryEntry(History(DateTimeOffset.Now, "speech") with
             { Delivery = delivery.Delivery.Value.Status }, null).Tag!;
         Assert.Equal("Not verified", tag.Label);
-        Assert.False(tag.Inserted);
+        Assert.Equal(HomeHistoryTagTone.Unverified, tag.Tone);
         Assert.Contains("keys", tag.Meaning);
         Assert.DoesNotContain("clipboard", tag.Meaning, StringComparison.OrdinalIgnoreCase);
     }

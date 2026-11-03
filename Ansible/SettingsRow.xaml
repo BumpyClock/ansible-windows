@@ -9,6 +9,8 @@
     <UserControl.Content>
         <Grid x:Name="LayoutRoot"
               Padding="{StaticResource SettingsRowPadding}"
+              BorderBrush="{ThemeResource AppBorderBrush}"
+              BorderThickness="{StaticResource SettingsRowDividerThickness}"
               ColumnSpacing="{StaticResource SettingsRowColumnGap}"
               RowSpacing="{StaticResource SettingsRowRowSpacing}">
         <Grid.RowDefinitions>
