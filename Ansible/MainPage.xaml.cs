@@ -285,7 +285,7 @@ public sealed partial class MainPage : Page
     {
         AutomaticCleanupConfirm.Visibility = Visibility.Collapsed;
         if (SaveCleanupSettings(automatic: true) && _session.State.Settings.MeetingCleanup.Automatic)
-            _notices.Show(AppNotice.Confirmation("Automatic cleanup is on for new meetings."));
+            _notices.Confirm("Automatic cleanup is on for new meetings.");
     }
 
     private void AutomaticCleanupCancelClicked(object sender, RoutedEventArgs args) =>

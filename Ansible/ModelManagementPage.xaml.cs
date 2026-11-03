@@ -27,7 +27,6 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
     private bool _dialogActive;
     private bool _transcribingFile;
     private bool _closed;
-    private bool _catalogNoticeShown;
 
     private readonly AppNotices _notices;
 
@@ -132,18 +131,11 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         BackendText.Visibility = string.IsNullOrEmpty(state.BackendVersion) ? Visibility.Collapsed : Visibility.Visible;
 
         // A missing catalog counts only after initialization finishes, so the page does not flash the notice
-        // while the catalog is still loading. Posting only on change keeps Render from re-announcing it.
+        // while the catalog is still loading.
         var catalogMissing = _manager is null && _initialization?.IsCompleted == true;
-        if (catalogMissing != _catalogNoticeShown)
-        {
-            _catalogNoticeShown = catalogMissing;
-            if (catalogMissing)
-                _notices.Show(new AppNotice(CatalogNoticeKey, AppNoticeSeverity.Error, "Model catalog unavailable",
-                    "Open Model folder, then Verify installed files to retry opening the catalog.", NoticeArea.Models,
-                    IsClosable: false));
-            else
-                _notices.Clear(CatalogNoticeKey);
-        }
+        _notices.Set(CatalogNoticeKey, catalogMissing ? new NoticeContent(NoticeSeverity.Error, "Model catalog unavailable",
+            "Open Model folder, then Verify installed files to retry opening the catalog.", IsClosable: false) : null,
+            NoticeArea.Models);
 
         if (_manager is null) { return; }
         // Selecting an installed model does not depend on the download manager.
@@ -205,7 +197,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
             try
             {
                 _session.SelectModel(index);
-                _notices.Show(AppNotice.Confirmation($"Dictation now uses {DisplayName(id)}."));
+                _notices.Confirm($"Dictation now uses {DisplayName(id)}.");
             }
             catch (Exception error) { _session.ReportUiError(error, NoticeArea.Models); }
         }
@@ -225,7 +217,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         }
         try
         {
-            _notices.Clear(OperationNoticeKey);
+            _notices.Set(OperationNoticeKey, null);
             await _manager.DownloadAsync(id, _lifetime.Token);
             if (!_closed && _session.State.IsIdle)
                 await InstallAsync(id);
@@ -243,7 +235,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
     {
         if (_manager is null) { return; }
         if (await MaintainAsync(token => _manager.InstallAsync(id, token)) && !_closed && _manager.Get(id).HasModelFile)
-            _notices.Show(AppNotice.Confirmation($"{DisplayName(id)} is installed."));
+            _notices.Confirm($"{DisplayName(id)} is installed.");
     }
 
     private string DisplayName(string id) => _cardList.FirstOrDefault(card => card.ModelId == id)?.DisplayName ?? id;
@@ -305,7 +297,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         if (_closed || _initialization is { IsCompleted: false }) { return; }
         if (_manager is null)
         {
-            _notices.Clear(OperationNoticeKey);
+            _notices.Set(OperationNoticeKey, null);
             _initialization = InitializeAsync();
             Render();
             await _initialization;
@@ -353,7 +345,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         if (_manager is null) { return; }
         try
         {
-            _notices.Clear(OperationNoticeKey);
+            _notices.Set(OperationNoticeKey, null);
             await _manager.RefreshAsync(_lifetime.Token);
             if (!_closed && _session.State.IsIdle)
                 await MaintainAsync(_ => Task.CompletedTask, _manager.DirectoryPath);
@@ -370,7 +362,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
     {
         try
         {
-            _notices.Clear(OperationNoticeKey);
+            _notices.Set(OperationNoticeKey, null);
             var outcome = await _session.MaintainModelsAsync(action, directory);
             if (outcome.Error is not null) { ShowError(outcome.Error); }
             return outcome.Kind == SessionOutcomeKind.Completed;
@@ -383,8 +375,8 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
     private void ShowError(Exception error)
     {
         if (_closed) { return; }
-        _notices.Show(new AppNotice(OperationNoticeKey, AppNoticeSeverity.Error, "Model operation failed", error.Message,
-            NoticeArea.Models));
+        _notices.Set(OperationNoticeKey, new NoticeContent(NoticeSeverity.Error, "Model operation failed", error.Message),
+            NoticeArea.Models);
         Render();
     }
 

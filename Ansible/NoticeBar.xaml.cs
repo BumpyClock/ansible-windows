@@ -7,59 +7,72 @@ namespace Ansible;
 
 public sealed partial class NoticeBar : UserControl
 {
-    private AppNotice? _notice;
+    private NoticeContent? _content;
+    private bool _isConfirmation;
 
     public NoticeBar() => InitializeComponent();
 
-    public AppNotice? Notice => _notice;
+    /// <summary>Raised when the user closes the notice, or chooses Undo on a confirmation.</summary>
+    public event EventHandler? CloseRequested;
 
-    /// <summary>Raised when the user closes the notice or invokes an action that dismisses it.</summary>
-    public event EventHandler<AppNotice>? CloseRequested;
+    /// <summary>
+    /// Shows a notice. Content that looks the same as the current notice only replaces its actions, so posting
+    /// on every state change neither rebuilds the buttons nor repeats the screen reader announcement.
+    /// </summary>
+    public void Show(NoticeContent content) => Render(content, isConfirmation: false);
 
-    public void Show(AppNotice notice)
+    /// <summary>Shows a confirmation: no icon, regular weight, and an Undo action that also closes it.</summary>
+    public void ShowConfirmation(NoticeConfirmation confirmation) => Render(
+        new NoticeContent(NoticeSeverity.Information, confirmation.Message,
+            Actions: confirmation.Undo is null ? null : [confirmation.Undo]),
+        isConfirmation: true);
+
+    private void Render(NoticeContent content, bool isConfirmation)
     {
-        _notice = notice;
-        var transient = notice.Severity == AppNoticeSeverity.Transient;
-        IconHost.Visibility = transient ? Visibility.Collapsed : Visibility.Visible;
-        IconGlyph.Glyph = notice.Severity switch
+        var unchanged = isConfirmation == _isConfirmation && content.LooksLike(_content);
+        _content = content;
+        _isConfirmation = isConfirmation;
+        if (unchanged) return;
+
+        IconHost.Visibility = isConfirmation ? Visibility.Collapsed : Visibility.Visible;
+        IconGlyph.Glyph = content.Severity switch
         {
-            AppNoticeSeverity.Error => "",
-            AppNoticeSeverity.Warning => "",
+            NoticeSeverity.Error => "",
+            NoticeSeverity.Warning => "",
             _ => "",
         };
-        InfoDisc.Visibility = notice.Severity is AppNoticeSeverity.Information ? Visibility.Visible : Visibility.Collapsed;
-        WarningDisc.Visibility = notice.Severity is AppNoticeSeverity.Warning ? Visibility.Visible : Visibility.Collapsed;
-        ErrorDisc.Visibility = notice.Severity is AppNoticeSeverity.Error ? Visibility.Visible : Visibility.Collapsed;
+        InfoDisc.Visibility = content.Severity is NoticeSeverity.Information ? Visibility.Visible : Visibility.Collapsed;
+        WarningDisc.Visibility = content.Severity is NoticeSeverity.Warning ? Visibility.Visible : Visibility.Collapsed;
+        ErrorDisc.Visibility = content.Severity is NoticeSeverity.Error ? Visibility.Visible : Visibility.Collapsed;
 
-        var hasMessage = !string.IsNullOrWhiteSpace(notice.Message);
-        TitleRun.Text = hasMessage ? notice.Title + "  " : notice.Title;
-        MessageRun.Text = hasMessage ? notice.Message : "";
-        TitleRun.FontWeight = transient ? Microsoft.UI.Text.FontWeights.Normal : Microsoft.UI.Text.FontWeights.SemiBold;
+        var hasMessage = !string.IsNullOrWhiteSpace(content.Message);
+        TitleRun.Text = hasMessage ? content.Title + "  " : content.Title;
+        MessageRun.Text = hasMessage ? content.Message : "";
+        TitleRun.FontWeight = isConfirmation ? Microsoft.UI.Text.FontWeights.Normal : Microsoft.UI.Text.FontWeights.SemiBold;
 
         while (ActionsPanel.Children.Count > 1) ActionsPanel.Children.RemoveAt(0);
-        var index = 0;
-        foreach (var action in notice.Actions ?? [])
+        var actions = content.Actions ?? [];
+        for (var index = 0; index < actions.Count; index++)
         {
-            var button = new Button { Content = action.Label };
+            var button = new Button { Content = actions[index].Label };
+            var position = index;
+            // The newest post's delegate runs: it captured the state the notice now describes.
             button.Click += (_, _) =>
             {
-                action.Invoke();
-                if (action.DismissesNotice && _notice is { } current) CloseRequested?.Invoke(this, current);
+                _content?.Actions?[position].Invoke();
+                if (_isConfirmation) CloseRequested?.Invoke(this, EventArgs.Empty);
             };
-            ActionsPanel.Children.Insert(index++, button);
+            ActionsPanel.Children.Insert(index, button);
         }
-        CloseButton.Visibility = notice.IsClosable ? Visibility.Visible : Visibility.Collapsed;
-        AutomationProperties.SetName(CloseButton, transient ? "Dismiss message" : $"Dismiss {notice.Title}");
+        CloseButton.Visibility = content.IsClosable ? Visibility.Visible : Visibility.Collapsed;
+        AutomationProperties.SetName(CloseButton, isConfirmation ? "Dismiss message" : $"Dismiss {content.Title}");
 
-        AutomationProperties.SetName(this, hasMessage ? $"{notice.Title} {notice.Message}" : notice.Title);
-        AutomationProperties.SetLiveSetting(this, notice.Severity == AppNoticeSeverity.Error
+        AutomationProperties.SetName(this, hasMessage ? $"{content.Title} {content.Message}" : content.Title);
+        AutomationProperties.SetLiveSetting(this, content.Severity == NoticeSeverity.Error
             ? AutomationLiveSetting.Assertive : AutomationLiveSetting.Polite);
         if (FrameworkElementAutomationPeer.FromElement(this) is { } peer)
             peer.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
     }
 
-    private void CloseClicked(object sender, RoutedEventArgs args)
-    {
-        if (_notice is { } notice) CloseRequested?.Invoke(this, notice);
-    }
+    private void CloseClicked(object sender, RoutedEventArgs args) => CloseRequested?.Invoke(this, EventArgs.Empty);
 }

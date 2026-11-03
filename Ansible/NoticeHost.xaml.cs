@@ -21,7 +21,9 @@ public sealed partial class NoticeHost : UserControl
     private const int MaximumPersistentNotices = 3;
     private static readonly Vector3 NoticeElevation = new(0, 0, 32);
     private readonly Dictionary<string, Grid> _bars = [];
-    private readonly Dictionary<AppNotice, DismissTimer> _timers = new(ReferenceEqualityComparer.Instance);
+    private const string ConfirmationKey = "(confirmation)";
+    private NoticeConfirmation? _timed;
+    private DismissTimer? _timer;
     private readonly UISettings _uiSettings = new();
     private AppNotices? _notices;
     private PageCanvas? _canvas;
@@ -73,73 +75,77 @@ public sealed partial class NoticeHost : UserControl
     private void Render()
     {
         if (_notices is null) return;
-        SyncTimers(_notices.Current);
+        SyncTimer(_notices.Confirmation);
         var visible = _notices.Current
             .Select((notice, order) => (notice, order))
             .Where(item => _area is not { } area || (item.notice.Area & area) != 0)
-            .OrderBy(item => item.notice.Severity switch
-            {
-                AppNoticeSeverity.Error => 0,
-                AppNoticeSeverity.Warning => 1,
-                AppNoticeSeverity.Information => 2,
-                _ => 3,
-            })
+            .OrderByDescending(item => item.notice.Content.Severity)
             .ThenBy(item => item.order)
             .Select(item => item.notice)
             .ToList();
-        var persistent = visible.Where(notice => notice.Severity != AppNoticeSeverity.Transient).ToList();
-        var shown = _expanded ? persistent : persistent.Take(MaximumPersistentNotices).ToList();
-        var hidden = persistent.Count - shown.Count;
+        var shown = _expanded ? visible : visible.Take(MaximumPersistentNotices).ToList();
+        var hidden = visible.Count - shown.Count;
         MoreButton.Content = hidden == 1 ? "1 more notice" : $"{hidden} more notices";
         MoreButton.Visibility = hidden > 0 ? Visibility.Visible : Visibility.Collapsed;
 
-        var desired = shown.Concat(visible.Where(notice => notice.Severity == AppNoticeSeverity.Transient)).ToList();
-        var keys = desired.Select(notice => notice.Key).ToHashSet();
+        var keys = shown.Select(notice => notice.Key).ToList();
+        if (_notices.Confirmation is not null) keys.Add(ConfirmationKey);
         foreach (var key in _bars.Keys.Where(key => !keys.Contains(key)).ToList())
         {
             Bars.Children.Remove(_bars[key]);
             _bars.Remove(key);
         }
-        for (var index = 0; index < desired.Count; index++)
+        for (var index = 0; index < keys.Count; index++)
         {
-            var notice = desired[index];
+            var key = keys[index];
             // A notice that changes rank leaves and re-enters: its old element has already played its exit motion.
-            if (_bars.TryGetValue(notice.Key, out var wrapper) && Bars.Children.IndexOf(wrapper) != index)
+            if (_bars.TryGetValue(key, out var wrapper) && Bars.Children.IndexOf(wrapper) != index)
             {
                 Bars.Children.Remove(wrapper);
                 wrapper = null;
             }
             if (wrapper is null)
             {
-                _bars[notice.Key] = wrapper = CreateBar();
+                _bars[key] = wrapper = CreateBar(key);
                 Bars.Children.Insert(index, wrapper);
             }
             var bar = (NoticeBar)wrapper.Children[0];
-            // Show announces the notice to assistive technology, so an unchanged notice is not shown again.
-            if (!ReferenceEquals(bar.Notice, notice)) bar.Show(notice);
+            if (index < shown.Count) bar.Show(shown[index].Content);
+            else bar.ShowConfirmation(_notices.Confirmation!);
         }
-        _visibleCount = desired.Count;
+        _visibleCount = keys.Count;
         if (_visibleCount == 0) _pointerInside = false;
         _focusInside = ContainsFocus();
-        UpdateTimers();
+        UpdateTimer();
         ReserveSpace();
     }
 
-    private Grid CreateBar()
+    private Grid CreateBar(string key)
     {
         var bar = new NoticeBar { Shadow = new ThemeShadow(), Translation = NoticeElevation };
-        bar.CloseRequested += (_, notice) => _notices?.Dismiss(notice);
+        bar.CloseRequested += (_, _) => Close(key);
         // The wrapper carries the exit motion so it does not compete with the bar's elevation translation.
         var wrapper = new Grid();
         wrapper.Children.Add(bar);
         wrapper.KeyDown += (_, args) =>
         {
-            if (args.Key != VirtualKey.Escape || bar.Notice is not { IsClosable: true } notice) return;
+            if (args.Key != VirtualKey.Escape) return;
             args.Handled = true;
-            _notices?.Dismiss(notice);
+            Close(key);
         };
         if (_uiSettings.AnimationsEnabled) AddHideAnimation(wrapper);
         return wrapper;
+    }
+
+    private void Close(string key)
+    {
+        if (_notices is null) return;
+        if (key != ConfirmationKey)
+        {
+            if (_notices.Current.FirstOrDefault(notice => notice.Key == key) is { Content.IsClosable: true })
+                _notices.Dismiss(key);
+        }
+        else if (_notices.Confirmation is { } confirmation) _notices.EndConfirmation(confirmation);
     }
 
     // Removal plays a short fade and drop. Skipped when Windows animations are off.
@@ -174,38 +180,29 @@ public sealed partial class NoticeHost : UserControl
         Render();
     }
 
-    // Timers run for every auto-dismissing notice, shown on this page or not, and pause while the reader is
-    // pointing at or focused inside the notices.
-    private void SyncTimers(IReadOnlyList<AppNotice> current)
+    // The confirmation timer pauses while the reader is pointing at or focused inside the notices.
+    private void SyncTimer(NoticeConfirmation? confirmation)
     {
-        foreach (var (notice, timer) in _timers.Where(entry => !current.Any(item => ReferenceEquals(item, entry.Key))).ToList())
+        if (ReferenceEquals(_timed, confirmation)) return;
+        _timer?.Timer.Stop();
+        _timer = null;
+        _timed = confirmation;
+        if (confirmation is null) return;
+        var timer = DispatcherQueue.CreateTimer();
+        timer.IsRepeating = false;
+        timer.Tick += (_, _) =>
         {
-            timer.Timer.Stop();
-            _timers.Remove(notice);
-        }
-        foreach (var notice in current)
-        {
-            if (notice.AutoDismissAfter is not { } after || _timers.ContainsKey(notice)) continue;
-            var timer = DispatcherQueue.CreateTimer();
-            timer.IsRepeating = false;
-            timer.Tick += (_, _) =>
-            {
-                timer.Stop();
-                _timers.Remove(notice);
-                _notices?.Dismiss(notice);
-            };
-            _timers[notice] = new DismissTimer(timer, after);
-        }
+            timer.Stop();
+            _notices?.EndConfirmation(confirmation);
+        };
+        _timer = new DismissTimer(timer, confirmation.Duration);
     }
 
-    private void UpdateTimers()
+    private void UpdateTimer()
     {
-        var paused = _pointerInside || _focusInside;
-        foreach (var timer in _timers.Values)
-        {
-            if (paused) timer.Pause();
-            else timer.Resume();
-        }
+        if (_timer is null) return;
+        if (_pointerInside || _focusInside) _timer.Pause();
+        else _timer.Resume();
     }
 
     private bool ContainsFocus()
@@ -222,25 +219,25 @@ public sealed partial class NoticeHost : UserControl
     private void HostPointerEntered(object sender, PointerRoutedEventArgs args)
     {
         _pointerInside = true;
-        UpdateTimers();
+        UpdateTimer();
     }
 
     private void HostPointerExited(object sender, PointerRoutedEventArgs args)
     {
         _pointerInside = false;
-        UpdateTimers();
+        UpdateTimer();
     }
 
     private void HostGotFocus(object sender, RoutedEventArgs args)
     {
         _focusInside = true;
-        UpdateTimers();
+        UpdateTimer();
     }
 
     private void HostLostFocus(object sender, RoutedEventArgs args)
     {
         _focusInside = ContainsFocus();
-        UpdateTimers();
+        UpdateTimer();
     }
 
     private sealed class DismissTimer(DispatcherQueueTimer timer, TimeSpan remaining)

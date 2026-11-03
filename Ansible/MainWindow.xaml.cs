@@ -64,9 +64,6 @@ public sealed partial class MainWindow : Window
     private bool _permissionCheckComplete;
     private MicrophonePermissionStatus? _dismissedMicrophonePermissionStatus;
     // The microphone status the posted notice describes; null while no microphone notice is posted.
-    private MicrophonePermissionStatus? _shownMicrophonePermissionStatus;
-    private SessionNotice? _relayedSessionNotice;
-    private MeetingDetectionCandidate? _shownMeetingOffer;
     private PageCanvas? _canvas;
     // The current page's primary action mirrored in the title bar, and the property callbacks that keep the copy current.
     private Button? _primaryAction;
@@ -255,13 +252,9 @@ public sealed partial class MainWindow : Window
         var allowed = status == MicrophonePermissionStatus.Allowed;
         if (allowed || (_dismissedMicrophonePermissionStatus is { } dismissed && dismissed != status))
             _dismissedMicrophonePermissionStatus = null;
-        MicrophonePermissionStatus? shown = allowed || _dismissedMicrophonePermissionStatus == status ? null : status;
-        // Session snapshots re-render often; repost only when the notice would change.
-        if (shown == _shownMicrophonePermissionStatus) return;
-        _shownMicrophonePermissionStatus = shown;
-        if (shown is null)
+        if (allowed || _dismissedMicrophonePermissionStatus == status)
         {
-            _notices.Clear(MicrophonePermissionNoticeKey);
+            _notices.Set(MicrophonePermissionNoticeKey, null);
             return;
         }
         var message = status switch
@@ -272,15 +265,14 @@ public sealed partial class MainWindow : Window
             MicrophonePermissionStatus.PromptRequired => "Microphone access is required. Check again to request access.",
             _ => "Microphone access could not be checked. Review Windows privacy settings, then check again."
         };
-        _notices.Show(new AppNotice(MicrophonePermissionNoticeKey, AppNoticeSeverity.Warning, "Microphone access required", message,
-            Actions: [new("Open settings", OpenMicrophoneSettings), new("Check again", CheckMicrophonePermission)],
-            Dismissed: () =>
+        _notices.Set(MicrophonePermissionNoticeKey, new NoticeContent(NoticeSeverity.Warning, "Microphone access required", message,
+            [new("Open settings", OpenMicrophoneSettings), new("Check again", CheckMicrophonePermission)]),
+            dismissed: () =>
             {
                 // Dismissal holds for this status only; a different failure, or opening Settings, shows it again.
                 if (_microphonePermission.Status != MicrophonePermissionStatus.Allowed)
                     _dismissedMicrophonePermissionStatus = _microphonePermission.Status;
-                _shownMicrophonePermissionStatus = null;
-            }));
+            });
     }
 
     // A check already in progress ignores the request; the notice keeps its actions rather than reflowing.
@@ -639,19 +631,10 @@ public sealed partial class MainWindow : Window
 
     private void RenderMeetingSuggestion()
     {
-        var offer = _suggestions.Offer;
-        if (Equals(offer, _shownMeetingOffer)) return;
-        _shownMeetingOffer = offer;
-        if (offer is null)
-        {
-            _notices.Clear(MeetingSuggestionNoticeKey);
-            return;
-        }
         // Open notetaker is ignored while a confirmation runs; MeetingSuggestions guards the second request.
-        _notices.Show(new AppNotice(MeetingSuggestionNoticeKey, AppNoticeSeverity.Information, "Teams microphone is active.",
-            "Start local notetaking? Recording starts only when you click Start.",
-            Actions: [new("Open notetaker", OpenSuggestedMeeting)],
-            Dismissed: _suggestions.Dismiss));
+        _notices.Set(MeetingSuggestionNoticeKey, _suggestions.Offer is null ? null : new NoticeContent(NoticeSeverity.Information,
+            "Teams microphone is active.", "Start local notetaking? Recording starts only when you click Start.",
+            [new("Open notetaker", OpenSuggestedMeeting)]), dismissed: _suggestions.Dismiss);
     }
 
     private async void OpenSuggestedMeeting()
@@ -700,16 +683,10 @@ public sealed partial class MainWindow : Window
     private void SessionChanged(SessionSnapshot state)
     {
         if (_closed) { return; }
-        if (!ReferenceEquals(_relayedSessionNotice, state.Notice))
-        {
-            // Snapshots keep the notice instance until it changes, so each session notice is posted once.
-            var notice = _relayedSessionNotice = state.Notice;
-            if (notice.ShouldDisplay)
-                _notices.Show(new AppNotice(SessionNoticeKey,
-                    notice.Kind == NoticeKind.Error ? AppNoticeSeverity.Error : AppNoticeSeverity.Warning,
-                    notice.Title, notice.Message, notice.Area, Dismissed: () => _session.DismissNotice(notice)));
-            else _notices.Clear(SessionNoticeKey);
-        }
+        var notice = state.Notice;
+        _notices.Set(SessionNoticeKey, notice.ShouldDisplay ? new NoticeContent(
+            notice.Kind == NoticeKind.Error ? NoticeSeverity.Error : NoticeSeverity.Warning, notice.Title, notice.Message) : null,
+            notice.Area, () => _session.DismissNotice(notice));
         RenderMicrophonePermission();
         _suggestions.Refresh();
         if (_capturePrivacy != state.Settings.HideFromCapture)
@@ -781,7 +758,7 @@ public sealed partial class MainWindow : Window
         _tray ??= new SystemTrayIcon(WinRT.Interop.WindowNative.GetWindowHandle(this),
             Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"), ShowFromTray, ExitRequested, TrayFailed);
         _tray.EnsureVisible();
-        _notices.Clear(TrayErrorNoticeKey);
+        _notices.Set(TrayErrorNoticeKey, null);
     }
 
     private void ShowFromTray()
@@ -797,9 +774,9 @@ public sealed partial class MainWindow : Window
     {
         Debug.WriteLine($"Ansible: tray unavailable: {error}");
         ShowFromTray();
-        _notices.Show(new AppNotice(TrayErrorNoticeKey, AppNoticeSeverity.Error, "Tray icon unavailable",
+        _notices.Set(TrayErrorNoticeKey, new NoticeContent(NoticeSeverity.Error, "Tray icon unavailable",
             $"{error.Message} Try closing the window again, or choose Exit Ansible to stop the app.",
-            IsClosable: false, Actions: [new("Exit Ansible", ExitRequested)]));
+            [new("Exit Ansible", ExitRequested)], IsClosable: false));
     }
 
     private async void ExitRequested()
@@ -807,7 +784,7 @@ public sealed partial class MainWindow : Window
         if (_closing) { return; }
         _closing = true;
         MainContent.IsEnabled = false;
-        _notices.Clear(ShutdownErrorNoticeKey);
+        _notices.Set(ShutdownErrorNoticeKey, null);
         _shortcut.BeginShutdown();
         _suggestions.BeginShutdown();
         _startupCancellation.Cancel();
@@ -868,8 +845,8 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void ShowShutdownError(string message) => _notices.Show(new AppNotice(ShutdownErrorNoticeKey,
-        AppNoticeSeverity.Error, "Close failed", message, IsClosable: false));
+    private void ShowShutdownError(string message) => _notices.Set(ShutdownErrorNoticeKey,
+        new NoticeContent(NoticeSeverity.Error, "Close failed", message, IsClosable: false));
 
     private void WindowClosed(object sender, WindowEventArgs args)
     {

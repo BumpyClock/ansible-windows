@@ -25,7 +25,6 @@ public sealed partial class CustomWordsPage : Page
     private UiSessionObserver? _observer;
     private SessionSnapshot _state;
     private string? _renderedDictionary;
-    private string? _compatibilityKey;
     private WordRow? _editingRow;
     private bool _editorOpen;
 
@@ -85,13 +84,10 @@ public sealed partial class CustomWordsPage : Page
         }
         else title = CustomVocabulary.ModelCompatibilityError(model, dictionary);
 
-        var key = title is null ? null : title + "\n" + message;
-        if (key == _compatibilityKey) return;
-        _compatibilityKey = key;
         CompatibilityNotice.Visibility = title is null ? Visibility.Collapsed : Visibility.Visible;
         if (title is not null)
-            CompatibilityNotice.Show(new AppNotice("dictionary-compatibility", AppNoticeSeverity.Warning, title, message,
-                NoticeArea.Dictionary, IsClosable: false, Actions: [new("Speech models", _openModels)]));
+            CompatibilityNotice.Show(new NoticeContent(NoticeSeverity.Warning, title, message,
+                [new("Speech models", _openModels)], IsClosable: false));
     }
 
     private void RenderWords()
@@ -264,7 +260,7 @@ public sealed partial class CustomWordsPage : Page
         if (!ApplyDictionary(updated)) return;
         ShowFieldError("");
         SearchBox.Text = "";
-        _notices.Show(AppNotice.Confirmation($"Added \"{entry}\"."));
+        _notices.Confirm($"Added \"{entry}\".");
     }
 
     // A word is addable when the field holds text that is not already in the dictionary, ignoring case.
@@ -306,7 +302,7 @@ public sealed partial class CustomWordsPage : Page
         try { after = CustomVocabulary.RemoveEntry(_state.Settings.CustomDictionary, word); }
         catch (InvalidOperationException error) { _session.ReportUiError(error, NoticeArea.Dictionary); return; }
         if (!ApplyDictionary(after)) return;
-        _notices.Show(AppNotice.Confirmation($"Removed \"{word}\".", new AppNoticeAction("Undo", () => RestoreWord(word))));
+        _notices.Confirm($"Removed \"{word}\".", new NoticeAction("Undo", () => RestoreWord(word)));
         if (WordsList.Items.Count == 0) { SearchBox.Focus(FocusState.Programmatic); return; }
         var next = (UIElement)WordsList.Items[Math.Min(Math.Max(index, 0), WordsList.Items.Count - 1)];
         WordsList.UpdateLayout();

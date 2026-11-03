@@ -723,15 +723,15 @@ public sealed partial class MeetingWindow : Window
         if (_selectedDetectedMeeting != SelectedMeetingIdentity) _selectedDetectedMeeting = null;
         UpdateNamingHelp();
     }
-    private void ShowError(string message) => ShowBar(AppNoticeSeverity.Error, "Meeting needs attention", message);
-    private void ShowNotice(string message) => ShowBar(AppNoticeSeverity.Warning, "Speaker model changed", message);
-    private void ShowBar(AppNoticeSeverity severity, string title, string message)
+    private void ShowError(string message) => ShowBar(NoticeSeverity.Error, "Meeting needs attention", message);
+    private void ShowNotice(string message) => ShowBar(NoticeSeverity.Warning, "Speaker model changed", message);
+    private void ShowBar(NoticeSeverity severity, string title, string message)
     {
-        MeetingNotice.Show(new AppNotice("meeting", severity, title, message));
+        MeetingNotice.Show(new NoticeContent(severity, title, message));
         MeetingNotice.Visibility = Visibility.Visible;
     }
     private void HideBar() => MeetingNotice.Visibility = Visibility.Collapsed;
-    private void NoticeCloseRequested(object? sender, AppNotice notice) => HideBar();
+    private void NoticeCloseRequested(object? sender, EventArgs args) => HideBar();
     private static string FormatTime(double seconds) => TimeSpan.FromSeconds(Math.Max(0, seconds)).ToString(seconds >= 3600 ? @"h\:mm\:ss" : @"m\:ss");
     private sealed record MeetingProcessChoice(int Id, string DisplayName, bool IsTeams, DateTime StartedUtc);
 }

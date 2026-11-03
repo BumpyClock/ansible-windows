@@ -32,8 +32,6 @@ public sealed partial class DictationPage : Page
     private bool _homeDataInitialized;
     private DateTime _homeDataDate;
     private bool _disposed;
-    private string? _historyNotice;
-    private string? _usageNotice;
     // Removing the current transcript's history row must not bring it back as the separate transcript card.
     private Guid? _removedTranscriptOperationId;
 
@@ -94,8 +92,8 @@ public sealed partial class DictationPage : Page
         _observer = null;
         _clock.Stop();
         if (_copiedTimer.IsEnabled) { _copiedTimer.Stop(); CopyLabel.Text = "Copy"; }
-        _notices.Clear(HistoryNoticeKey);
-        _notices.Clear(UsageNoticeKey);
+        _notices.Set(HistoryNoticeKey, null);
+        _notices.Set(UsageNoticeKey, null);
     }
 
     private void Render()
@@ -193,7 +191,7 @@ public sealed partial class DictationPage : Page
             var insights = HomeInsightsProjection.Create(_state.Usage, _state.UsageError,
                 HomeModelDisplayName, DateOnly.FromDateTime(DateTime.Today), TimeZoneInfo.Local);
             HomeInsightsColumn.Render(insights);
-            PostNotice(UsageNoticeKey, "Some usage statistics are missing", insights.UsageWarning, ref _usageNotice);
+            PostStorageNotice(UsageNoticeKey, "Some usage statistics are missing", insights.UsageWarning);
         }
     }
 
@@ -202,17 +200,12 @@ public sealed partial class DictationPage : Page
         var model = HomeHistoryProjection.Create(_history.Snapshot(), HistoryView.Query,
             _history.OversizedCurrentResult, HomeModelDisplayName, DateTime.Today, _history.StorageError);
         HistoryView.Render(model, animate);
-        PostNotice(HistoryNoticeKey, "History needs attention", model.StorageError, ref _historyNotice);
+        PostStorageNotice(HistoryNoticeKey, "History needs attention", model.StorageError);
     }
 
     // Storage problems are conditions, not events: the notice stays until the error clears and cannot be closed.
-    private void PostNotice(string key, string title, string? message, ref string? current)
-    {
-        if (current == message) return;
-        current = message;
-        if (message is null) _notices.Clear(key);
-        else _notices.Show(new AppNotice(key, AppNoticeSeverity.Warning, title, message, NoticeArea.Dictation, IsClosable: false));
-    }
+    private void PostStorageNotice(string key, string title, string? message) => _notices.Set(key,
+        message is null ? null : new NoticeContent(NoticeSeverity.Warning, title, message, IsClosable: false), NoticeArea.Dictation);
 
     private void HistoryChanged()
     {

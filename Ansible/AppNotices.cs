@@ -2,34 +2,43 @@ using Ansible.Core;
 
 namespace Ansible;
 
-public enum AppNoticeSeverity { Information, Warning, Error, Transient }
+public enum NoticeSeverity { Information, Warning, Error }
 
-public sealed record AppNoticeAction(string Label, Action Invoke, bool DismissesNotice = false);
+public sealed record NoticeAction(string Label, Action Invoke);
 
-/// <summary>
-/// One notification for the window's NoticeHost. Key identifies the source: showing the same key replaces it.
-/// Area limits the pages that show it; Application shows on every page.
-/// Transient notices are short confirmations that close on their own after AutoDismissAfter.
-/// </summary>
-public sealed record AppNotice(
-    string Key,
-    AppNoticeSeverity Severity,
+/// <summary>What one NoticeBar shows.</summary>
+public sealed record NoticeContent(
+    NoticeSeverity Severity,
     string Title,
     string Message = "",
-    NoticeArea Area = NoticeArea.Application,
-    bool IsClosable = true,
-    IReadOnlyList<AppNoticeAction>? Actions = null,
-    TimeSpan? AutoDismissAfter = null,
-    Action? Dismissed = null)
+    IReadOnlyList<NoticeAction>? Actions = null,
+    bool IsClosable = true)
 {
-    public static AppNotice Confirmation(string message, AppNoticeAction? undo = null) => new(
-        "transient", AppNoticeSeverity.Transient, message,
-        Actions: undo is null ? null : [undo with { DismissesNotice = true }],
-        AutoDismissAfter: TimeSpan.FromSeconds(undo is null ? 2.4 : 5));
+    /// <summary>
+    /// True when a reader would see no difference: same severity, text, close button and action labels.
+    /// Action delegates are new closures on every post, so they are not compared.
+    /// </summary>
+    public bool LooksLike(NoticeContent? other) =>
+        other is not null && Severity == other.Severity && Title == other.Title && Message == other.Message &&
+        IsClosable == other.IsClosable &&
+        (Actions ?? []).Select(action => action.Label).SequenceEqual((other.Actions ?? []).Select(action => action.Label));
 }
 
 /// <summary>
-/// Window-owned notification list. Producers post keyed notices; NoticeHost renders them as floating NoticeBars.
+/// One persistent notice in the main window. Key identifies the source. Area limits the pages that show it;
+/// Application shows on every page. Dismissed runs when the user closes it, not when its source clears it.
+/// </summary>
+public sealed record AppNotice(string Key, NoticeContent Content, NoticeArea Area, Action? Dismissed);
+
+/// <summary>A short confirmation that closes on its own. Choosing Undo closes it too.</summary>
+public sealed record NoticeConfirmation(string Message, NoticeAction? Undo = null)
+{
+    public TimeSpan Duration => TimeSpan.FromSeconds(Undo is null ? 2.4 : 5);
+}
+
+/// <summary>
+/// Window-owned notices. Sources declare their current notice with Set, as often as their state changes:
+/// posting what is already shown is cheap because NoticeBar keeps the visual and the announcement.
 /// UI-thread only: callers on other threads dispatch first.
 /// </summary>
 public sealed class AppNotices
@@ -40,25 +49,48 @@ public sealed class AppNotices
 
     public IReadOnlyList<AppNotice> Current => _current;
 
-    public void Show(AppNotice notice)
+    /// <summary>The one confirmation showing now. A new confirmation replaces it.</summary>
+    public NoticeConfirmation? Confirmation { get; private set; }
+
+    /// <summary>
+    /// Declares the notice for a source. Null content removes it without running Dismissed. The newest post keeps
+    /// its actions and Dismissed callback, so callbacks can capture the state they were posted for.
+    /// </summary>
+    public void Set(string key, NoticeContent? content, NoticeArea area = NoticeArea.Application, Action? dismissed = null)
     {
-        var index = _current.FindIndex(existing => existing.Key == notice.Key);
-        if (index >= 0) _current[index] = notice;
-        else _current.Add(notice);
+        var index = _current.FindIndex(notice => notice.Key == key);
+        if (content is null)
+        {
+            if (index < 0) return;
+            _current.RemoveAt(index);
+        }
+        else if (index < 0) _current.Add(new AppNotice(key, content, area, dismissed));
+        else _current[index] = new AppNotice(key, content, area, dismissed);
         Changed?.Invoke();
     }
 
-    /// <summary>Removes a notice because its condition ended. Does not run Dismissed.</summary>
-    public void Clear(string key)
+    /// <summary>The user closed the notice: removes it, then runs its Dismissed callback.</summary>
+    public void Dismiss(string key)
     {
-        if (_current.RemoveAll(notice => notice.Key == key) > 0) Changed?.Invoke();
-    }
-
-    /// <summary>Removes a notice because the user closed it or it timed out, then runs Dismissed.</summary>
-    public void Dismiss(AppNotice notice)
-    {
-        if (!_current.Remove(notice)) return;
+        var index = _current.FindIndex(notice => notice.Key == key);
+        if (index < 0) return;
+        var notice = _current[index];
+        _current.RemoveAt(index);
         Changed?.Invoke();
         notice.Dismissed?.Invoke();
+    }
+
+    public void Confirm(string message, NoticeAction? undo = null)
+    {
+        Confirmation = new NoticeConfirmation(message, undo);
+        Changed?.Invoke();
+    }
+
+    /// <summary>Closes a confirmation that timed out or was closed. Ignores one that was already replaced.</summary>
+    public void EndConfirmation(NoticeConfirmation confirmation)
+    {
+        if (!ReferenceEquals(Confirmation, confirmation)) return;
+        Confirmation = null;
+        Changed?.Invoke();
     }
 }

@@ -18,7 +18,6 @@ public sealed partial class ModelCard : UserControl
     private ModelInstallState _state;
     private bool _removeDiscardsPartial;
     private bool _companion;
-    private string? _shownError;
     private string _behavior = "";
     private const string MemoryEstimateTip = "Memory is the admission estimate used before loading, not measured usage.";
     // Below this row width the actions move under the name so the name and chips keep readable space.
@@ -131,15 +130,9 @@ public sealed partial class ModelCard : UserControl
             ? $"File verification progress for {_name}"
             : $"Model download progress for {_name}");
 
-        // Re-showing the same error would repeat the live-region announcement on every progress tick.
-        if (snapshot.Error != _shownError)
-        {
-            _shownError = snapshot.Error;
-            if (snapshot.Error is { } error)
-                ErrorNotice.Show(new AppNotice($"model-{ModelId}", AppNoticeSeverity.Error, "Model file problem", error,
-                    NoticeArea.Models, IsClosable: false));
-            ErrorNotice.Visibility = snapshot.Error is null ? Visibility.Collapsed : Visibility.Visible;
-        }
+        if (snapshot.Error is { } error)
+            ErrorNotice.Show(new NoticeContent(NoticeSeverity.Error, "Model file problem", error, IsClosable: false));
+        ErrorNotice.Visibility = snapshot.Error is null ? Visibility.Collapsed : Visibility.Visible;
 
         // One primary action per row. While a transfer runs the primary action stops it; an installed
         // file has no primary action here because Use for dictation or the In use group covers it.
