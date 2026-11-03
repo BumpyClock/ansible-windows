@@ -1,6 +1,6 @@
 namespace Ansible.Core;
 
-internal sealed record QualificationInput(DeviceBenchmarkRequest Request, string ModelFingerprint, string? Family);
+internal sealed record QualificationInput(DeviceBenchmarkRequest Request, string ModelFingerprint);
 
 internal sealed record QualifiedDevice(DeviceBenchmarkSelection Selection, string ModelId, double? SampleMilliseconds)
 {
@@ -39,7 +39,7 @@ internal sealed class AutoDeviceQualifier(
                     // This callback releases engine residency and admits memory under the already-held gate.
                     prepareProbe();
                     token.ThrowIfCancellationRequested();
-                    selection = DeviceBenchmark.QualifyAsync(key, input.Family, request.Mode,
+                    selection = DeviceBenchmark.QualifyAsync(key,
                         backend => probe(request with { Backend = backend }, token), token).GetAwaiter().GetResult();
                     token.ThrowIfCancellationRequested();
                     _cacheWarning = DeviceBenchmark.TryUpdateCache(cachePath, key, selection);

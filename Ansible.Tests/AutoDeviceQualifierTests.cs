@@ -304,20 +304,6 @@ public sealed class AutoDeviceQualifierTests
         Assert.Contains("0.25x", qualifier.Current.Summary);
     }
 
-    [Fact]
-    public void NemotronStreamingNeverProbesVulkan()
-    {
-        using var fixture = new Fixture();
-        var qualifier = fixture.Create();
-        var input = fixture.MeetingInput with { Family = "nemotron_asr" };
-
-        var ticket = fixture.Qualify(qualifier, input);
-
-        Assert.Equal(["identity", "prepare", "Cpu"], fixture.Events);
-        Assert.Equal(NativeBackend.Cpu, ticket.Backend);
-        Assert.Contains("qualification skipped", qualifier.Current.Comparison!.GpuError);
-    }
-
     [Theory]
     [InlineData("create the native recognition session on vulkan device 0", false)]
     [InlineData("transcribe the recording", false)]
@@ -429,7 +415,7 @@ public sealed class AutoDeviceQualifierTests
             var library = Path.Combine(Directory, "native.dll");
             File.WriteAllText(library, "native");
             Input = new(new(library, "catalog", "models", Path.Combine(Directory, "sample.wav"),
-                "model", NativeBackend.Cpu, 0, 4, 512, "offline", 0), "model fingerprint", "kroko_asr");
+                "model", NativeBackend.Cpu, 0, 4, 512, "offline", 0), "model fingerprint");
             WriteSample(1);
         }
 

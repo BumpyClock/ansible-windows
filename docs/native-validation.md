@@ -266,9 +266,10 @@ calls; a blocked Windows call can delay shutdown while its owned worker is joine
 - Nemotron GPU streaming has a recorded failure on Intel Arc 140V with driver
   `32.0.101.8425` (2026-10-08): WAV transcription completed, but streaming cleanup
   terminated with native `vk::DeviceLostError` from `vk::Queue::submit`. This can
-  terminate the app. Native Auto streaming skips Nemotron Vulkan qualification
-  and uses a qualified CPU. Manual GPU has no fallback. Other
-  model/GPU combinations require separate qualification. Isolated
+  terminate the app. Auto qualifies Nemotron Vulkan like every other model, so
+  a GPU that passes isolated qualification runs live Nemotron streaming in the
+  app process. Manual GPU has no fallback. Each model/GPU combination requires
+  separate qualification. Isolated
   `Ansible.DeviceProbe` qualification cannot catch a later in-process driver
   crash; live GPU work still runs in the app process. Auto does not replay
   consumed live audio after a GPU failure.

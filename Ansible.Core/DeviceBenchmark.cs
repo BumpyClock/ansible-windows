@@ -39,16 +39,13 @@ internal static class DeviceBenchmark
     internal static readonly TimeSpan DeviceDeadline = TimeSpan.FromMinutes(5);
     private const int OutputLimit = 65536;
 
-    internal static async Task<DeviceBenchmarkSelection> QualifyAsync(string key, string? family, string mode,
+    internal static async Task<DeviceBenchmarkSelection> QualifyAsync(string key,
         Func<NativeBackend, Task<DeviceBenchmarkResult>> probe, CancellationToken token)
     {
         var cpu = await probe(NativeBackend.Cpu).ConfigureAwait(false);
         if (cpu.Fatal) throw new InvalidDataException($"CPU device qualification failed: {cpu.Error}");
         token.ThrowIfCancellationRequested();
-        // An isolated success cannot qualify a combination known to crash in-process.
-        var gpu = family == "nemotron_asr" && mode == "streaming"
-            ? new DeviceBenchmarkResult(NativeBackend.Vulkan, null, "Nemotron Vulkan streaming is unsafe in-process; qualification skipped.")
-            : await probe(NativeBackend.Vulkan).ConfigureAwait(false);
+        var gpu = await probe(NativeBackend.Vulkan).ConfigureAwait(false);
         token.ThrowIfCancellationRequested();
         return Select(key, cpu, gpu);
     }
@@ -108,7 +105,7 @@ internal static class DeviceBenchmark
         DeviceBenchmarkIdentity runtimeIdentity)
     {
         token.ThrowIfCancellationRequested();
-        var identity = $"benchmark-v4|{modelHash}|{request.ModelId}|{request.Mode}|{request.History}|" +
+        var identity = $"benchmark-v5|{modelHash}|{request.ModelId}|{request.Mode}|{request.History}|" +
             $"{request.Device}|{request.Threads}|{request.Headroom}|{request.UseDictionary}|" +
             runtimeIdentity.Read(request.Library, request.Sample, token);
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity)));

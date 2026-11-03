@@ -403,21 +403,17 @@ public sealed class DeviceBenchmarkTests
             NativeBackend.Vulkan, CancellationToken.None));
     }
 
-    [Theory]
-    [InlineData("nemotron_asr", "streaming", false)]
-    [InlineData("nemotron_asr", "offline", true)]
-    [InlineData("moonshine_asr", "streaming", true)]
-    public async Task QualificationDoesNotLaunchIneligibleGpu(string family, string mode, bool gpuEligible)
+    [Fact]
+    public async Task QualificationProbesCpuThenVulkan()
     {
         var attempts = new List<NativeBackend>();
-        var selection = await DeviceBenchmark.QualifyAsync("key", family, mode, backend =>
+        var selection = await DeviceBenchmark.QualifyAsync("key", backend =>
         {
             attempts.Add(backend);
             return Task.FromResult(new DeviceBenchmarkResult(backend, 100, null));
         }, CancellationToken.None);
-        Assert.Equal(gpuEligible ? [NativeBackend.Cpu, NativeBackend.Vulkan] : new[] { NativeBackend.Cpu }, attempts);
-        Assert.Equal(gpuEligible ? NativeBackend.Vulkan : NativeBackend.Cpu, selection.Backend);
-        if (!gpuEligible) Assert.Contains("qualification skipped", selection.Gpu.Error);
+        Assert.Equal([NativeBackend.Cpu, NativeBackend.Vulkan], attempts);
+        Assert.Equal(NativeBackend.Vulkan, selection.Backend);
     }
 
     [Fact]
