@@ -59,6 +59,12 @@ public interface IRecognitionEngine : IAsyncDisposable
         IProgress<TranscriptUpdate>? progress, CancellationToken cancellationToken, Action? onReady = null);
     /// <summary>Loads the model and a reusable streaming session so the next dictation starts without loading.</summary>
     Task PrepareAsync(AudioModel model, RecognitionOptions options, CancellationToken cancellationToken);
+    /// <summary>
+    /// Measures CPU and Vulkan again for dictation with this model, ignoring cached results, and replaces the cached
+    /// selection that Auto uses. Reports each device as its isolated probe starts.
+    /// </summary>
+    Task BenchmarkDevicesAsync(AudioModel model, RecognitionOptions options,
+        IProgress<NativeBackend>? progress, CancellationToken cancellationToken);
     /// <summary>Releases the resident model and session; the next recognition loads them again.</summary>
     Task UnloadAsync(CancellationToken cancellationToken);
 }

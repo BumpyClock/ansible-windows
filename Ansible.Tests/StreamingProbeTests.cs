@@ -342,6 +342,8 @@ public sealed class StreamingProbeTests
         public Task<IReadOnlyList<AudioModel>> ConnectAsync(CancellationToken token) => throw new NotSupportedException();
         public Task PrepareAsync(AudioModel model, RecognitionOptions options, CancellationToken token) => throw new NotSupportedException();
         public Task UnloadAsync(CancellationToken token) => throw new NotSupportedException();
+        public Task BenchmarkDevicesAsync(AudioModel model, RecognitionOptions options,
+            IProgress<NativeBackend>? progress, CancellationToken token) => throw new NotSupportedException();
         public Task<RecognitionResult> TranscribeAsync(AudioModel model, WaveAudio audio, RecognitionOptions options,
             IProgress<TranscriptUpdate>? progress, CancellationToken token) => throw new NotSupportedException();
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;

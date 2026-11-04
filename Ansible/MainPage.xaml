@@ -193,6 +193,24 @@
                             </ComboBox>
                         </local:SettingsRow>
 
+                        <!-- Fixed height and reserved ring space keep the page still while a benchmark runs. -->
+                        <Grid x:Name="BenchmarkActions" ColumnSpacing="12" MinHeight="32" Margin="0,0,0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock x:Name="BenchmarkStatusText" VerticalAlignment="Center"
+                                       Style="{StaticResource CaptionSecondaryStyle}"
+                                       MaxLines="1" TextTrimming="CharacterEllipsis"
+                                       AutomationProperties.LiveSetting="Polite" />
+                            <ProgressRing x:Name="BenchmarkProgress" Grid.Column="1" Width="16" Height="16"
+                                          IsActive="False" AutomationProperties.Name="Device benchmark running" />
+                            <Button x:Name="BenchmarkButton" Grid.Column="2" MinWidth="128" Content="Run benchmark"
+                                    AutomationProperties.AutomationId="BenchmarkButton"
+                                    Click="BenchmarkClicked" />
+                        </Grid>
+
                         <local:DeviceComparisonView x:Name="DeviceComparison" Margin="{StaticResource SettingsBenchmarkMargin}" />
                     </StackPanel>
                 </Border>

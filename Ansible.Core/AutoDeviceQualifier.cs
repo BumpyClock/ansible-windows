@@ -23,17 +23,19 @@ internal sealed class AutoDeviceQualifier(
 
     public QualificationStatus Current { get; private set; } = new();
 
-    public QualifiedDevice Qualify(QualificationInput input, Action prepareProbe, CancellationToken token)
+    // A refresh skips both cache tiers and replaces them only after a complete new measurement.
+    public QualifiedDevice Qualify(QualificationInput input, Action prepareProbe, CancellationToken token, bool refresh = false)
     {
         Current = new();
+        var published = false;
         try
         {
             var request = input.Request;
             var key = DeviceBenchmark.Key(request, input.ModelFingerprint, token, _identity);
-            if (!_devices.TryGetValue(key, out var device))
+            if (refresh || !_devices.TryGetValue(key, out var device))
             {
                 var sampleMilliseconds = request.History > 0 ? ReadSampleMilliseconds(request.Sample, token) : (double?)null;
-                var selection = DeviceBenchmark.ReadCache(cachePath).LastOrDefault(value => value.Key == key);
+                var selection = refresh ? null : DeviceBenchmark.ReadCache(cachePath).LastOrDefault(value => value.Key == key);
                 if (selection is null)
                 {
                     Current = new($"Qualifying {request.ModelId} {request.Mode} on CPU and Vulkan with the public sample.",
@@ -46,6 +48,7 @@ internal sealed class AutoDeviceQualifier(
                         sampleMilliseconds is { } sample ? DeviceBenchmark.PaceLimitMilliseconds(sample) : null).GetAwaiter().GetResult();
                     token.ThrowIfCancellationRequested();
                     _cacheWarning = DeviceBenchmark.TryUpdateCache(cachePath, key, selection);
+                    published = true;
                 }
                 else Current = new(Source: NativeDiagnosticSource.DiskCache);
                 device = new(selection, request.ModelId, input.ModelName, Kind(request), sampleMilliseconds);
@@ -60,7 +63,8 @@ internal sealed class AutoDeviceQualifier(
                     (_cacheWarning is null ? "" : " " + _cacheWarning),
                 Comparison = Comparison(device)
             };
-            token.ThrowIfCancellationRequested();
+            // A result already written to the cache is the one Auto uses next, so report it rather than a cancel.
+            if (!published) token.ThrowIfCancellationRequested();
             if (device.SampleMilliseconds is { } duration)
             {
                 var factor = DeviceBenchmark.RequireMeetingRealTime(device.Selection, duration, device.ModelId);

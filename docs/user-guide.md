@@ -399,6 +399,17 @@ timings, after a qualification runs. Each model and kind keeps its own result, s
 one model can use GPU while another uses CPU. The last device result stays in place when you change the
 choice; it updates when recognition next prepares a model.
 
+**Run benchmark** below the processor choice measures CPU and GPU again for the
+selected dictation model, whatever the processor setting is. It ignores cached
+results and uses the dictation mode and, for Kroko, the vocabulary decoder mode.
+Use it after plugging in, updating a graphics driver, or switching models. The
+status line names the device being measured, and the button becomes **Cancel**
+while it runs. A run takes about 20 to 30 seconds per model on a recent laptop.
+Dictation, replay, WAV transcription, and meetings cannot start until it
+finishes or is cancelled. A complete run replaces the cached result that Auto
+uses for that model. A cancelled, failed, or timed-out run keeps the previous
+result and comparison; errors appear on Settings.
+
 A GPU worker crash, timeout, or running out of GPU memory disqualifies GPU; a
 successful CPU result is used.
 Shared validation, integrity, host memory, protocol, or ownership errors abort
