@@ -54,6 +54,12 @@ including all three privacy formats and Shell file-path readback. Eight-file
 publication also passed. No paste input was sent. All 40 manual target cases
 remain pending. The guide provides the commands and result sheet.
 
+A later [Claude desktop check](record-chord-clipboard-results.md) accepted at
+least 16 synthetic file attachments at the tested sizes. Combined image/text
+publications dropped text. Separate bulk-file and text pastes preserved both
+in two eight-image checks. This result applies to that desktop composer only.
+The website and other acceptance targets still require their own checks.
+
 Screen recordings and native outputs stay under ignored `.runtime` paths or
 the explicitly invoked packaged spike's private local data folder. Do not
 commit captured screens or paste content into online chats automatically.

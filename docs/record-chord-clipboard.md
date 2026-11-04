@@ -75,3 +75,13 @@ On 2026-11-04, the build script published and verified a native x64 PE executabl
 Windows GDI decoded the generated three 1280 by 720 PNG fixtures and their 1920 by 1080 contact sheet. The contact sheet was visually inspected and showed readable synthetic frame labels. The generated manual result matrix has 40 rows, all pending. No target limit or fallback was established.
 
 The local native self-check log is `.runtime/record-spikes/clipboard-self-check.log`. The tested native executable SHA-256 was `9E3005B0FC681419984F1CEDE158788EC2D33983E856C177426749CCBBA18B68`. Target hand results remain pending.
+
+## Target results on 2026-11-04
+
+The initial attempt encountered UI access blockers. The later Claude desktop
+retest observed text-only insertion and at least 16 file attachments for the
+tested fixture sizes. Combined file-plus-text and composite-plus-text pastes
+omitted text. Separate bulk-file and text pastes preserved both in two
+eight-image checks. See the [results](record-chord-clipboard-results.md) for
+the observations, remaining target blockers, and limits. Website results and
+paced image-by-image delivery remain unqualified.
