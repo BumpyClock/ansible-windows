@@ -55,6 +55,7 @@ unknown. Cancellation waits for an executing native call to finish.
 | `--device-probe <executable>` | Required for `--backend auto`. Path to `Ansible.DeviceProbe.exe`. The probe does not discover the worker. |
 | `--benchmark-cache <json>` | Optional Auto cache file. Omit to keep the selection in this process only. |
 | `--dictionary <text>` | Supply newline-separated recognition hints; unsupported models reject them |
+| `--word-timings` | Print native streaming word snapshots, final unchanged-text offsets, and input sample positions. Nemotron uses token emission frames; Kroko word ends can include pauses. See the [timing spike](record-chord-word-timings.md). |
 
 Vulkan example:
 

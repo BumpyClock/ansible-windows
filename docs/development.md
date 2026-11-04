@@ -290,6 +290,15 @@ Vulkan or another model. For WinUI, interop, or deployment changes, also run
 `Publish-Ansible.ps1`. Documentation-only edits do not require downloads or
 a native rebuild.
 
+### Record chord feasibility spikes
+
+The record chord is not a product workflow yet. The
+[phase 0 report](record-chord-spikes.md) links the explicitly invoked screen
+encoder experiment, native dictation word timing checks, and manual clipboard
+acceptance harness. The harness uses synthetic images. Chat target acceptance
+must be recorded by hand before choosing the attachment cap or paste fallback.
+Do not treat a clipboard readback or successful package build as target acceptance.
+
 ## Source and ownership
 
 `DictationSession` has one admission and shutdown owner. Model replacement owns
