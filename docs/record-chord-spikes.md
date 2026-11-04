@@ -97,9 +97,11 @@ Linux qualification. The portable focused check passed separately. Capture,
 WinUI, and MSIX runtime checks run on Windows. Boat's Linux environment cannot
 qualify them.
 
-## Assumptions awaiting confirmation
+## Confirmed defaults
 
-The following are proposed defaults, not implemented product settings.
+The user confirmed these defaults on 2026-11-04. They are not implemented
+product settings. The final attachment cap and fallback still depend on target
+acceptance checks.
 
 1. Alt+Win is the opt-in record chord. Settings explains screen capture and
    input blocking. Validate conflicts with Ctrl+Win and mask Alt menu activation.
@@ -130,4 +132,4 @@ The following are proposed defaults, not implemented product settings.
     image pastes only on targets where measured successful.
 
 The settled product decisions in the implementation request remain the contract.
-Confirming these defaults does not replace the outstanding feasibility gates.
+Confirmation does not replace the outstanding feasibility gates.
