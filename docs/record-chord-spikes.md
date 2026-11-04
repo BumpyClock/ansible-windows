@@ -51,14 +51,16 @@ samples. These checks do not qualify microphone/video synchronization.
 The clipboard harness published as a native x64 executable. Exact clipboard
 readback passed text, files, combined files/text, bitmap/text, and composite/text,
 including all three privacy formats and Shell file-path readback. Eight-file
-publication also passed. No paste input was sent. All 40 manual target cases
-remain pending. The guide provides the commands and result sheet.
+publication also passed. Those self-checks sent no paste input. Later manual
+target observations are recorded separately below.
 
-A later [Claude desktop check](record-chord-clipboard-results.md) accepted at
-least 16 synthetic file attachments at the tested sizes. Combined image/text
-publications dropped text. Separate bulk-file and text pastes preserved both
-in two eight-image checks. This result applies to that desktop composer only.
-The website and other acceptance targets still require their own checks.
+Later [target checks](record-chord-clipboard-results.md) accepted at least 16
+synthetic files in Claude desktop and eight in chatgpt.com and Copilot desktop.
+Combined files/text publications dropped text. Separate bulk-file and text
+pastes preserved both. The user confirmed matching web paste behavior on
+2026-11-04. This is user-reported evidence, without additional per-target counts
+or file sizes. Paced images and cloud task limits remain unmeasured. Eight stays
+the approved provisional cap, not a measured all-target maximum.
 
 Screen recordings and native outputs stay under ignored `.runtime` paths or
 the explicitly invoked packaged spike's private local data folder. Do not
@@ -66,10 +68,11 @@ commit captured screens or paste content into online chats automatically.
 
 ## Gates before product implementation
 
-The clipboard attachment cap and fallback ladder remain undecided until the
-manual target matrix is complete. Clipboard format readback establishes
-publication only. It cannot establish attachment insertion or text preservation
-inside another app.
+The observed combined paste loses content. The implementation contract uses
+separate publications, preserving text before queuing files. Clipboard format
+readback establishes publication only. It cannot establish attachment insertion
+or text preservation inside another app. See the
+[delivery contract](record-chord-design.md#delivery).
 
 The first overhead attempt completed five baseline trials and four valid
 capture trials, then failed the fifth capture trial's overlap check. That MP4
@@ -79,10 +82,14 @@ a static scene is one possible cause, not an established diagnosis. The helper
 finalized its last sample with a fixed 1/30-second duration and omitted the quiet
 tail. The earlier short encoder success did not test this case.
 
-Correct the missing tail and distinguish held encoded images from new WGC
-updates before completing the five-pair comparison. No general latency or
-memory-overhead verdict is established by the incomplete run. Build and
-recognition smoke checks are not performance qualification.
+The helper now holds its last real image through stop and distinguishes held
+encoded images from new WGC updates. A static-input regression and fresh actual
+NativeAOT package passed. The corrected [overhead comparison](record-chord-overhead.md)
+passed five alternating trials per condition with identical speech and decoded
+video covering recognition. Observed final-tail medians were 238.3 ms without
+capture and 272.6 ms with capture. Sampled working-set medians differed by
+97.6 MiB. Uncontrolled desktop activity and system load prevent a causal or
+production performance verdict. The rejected first run remains excluded.
 
 The timing spike provides sample-relative native metadata. A future take still
 needs an explicit QPC start anchor shared with audio, ink, frames, and video.
