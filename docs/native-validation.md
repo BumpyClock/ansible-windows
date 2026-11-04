@@ -258,6 +258,12 @@ calls; a blocked Windows call can delay shutdown while its owned worker is joine
 
 ## Known limits
 
+The opt-in record chord's native capture and managed NativeAOT package checks
+are recorded in [record chord validation](record-chord-validation.md). Its
+microphone anchor is a software QPC timestamp immediately before `waveInStart`.
+Word mapping, a silent MP4, and an ink fixture do not establish measured
+microphone/video acoustic synchronization or physical multi-monitor behavior.
+
 - On 2026-10-10, a read-only `AppCapability.CheckAccess` probe ran under
   Ansible's registered package identity and returned `Allowed`. It did not
   request permission, open a capture device, or change the running app.

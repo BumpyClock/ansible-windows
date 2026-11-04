@@ -290,14 +290,23 @@ Vulkan or another model. For WinUI, interop, or deployment changes, also run
 `Publish-Ansible.ps1`. Documentation-only edits do not require downloads or
 a native rebuild.
 
-### Record chord feasibility spikes
+### Record chord and capture validation
 
-The record chord is not a product workflow yet. The
-[phase 0 report](record-chord-spikes.md) links the explicitly invoked screen
+The opt-in record chord owns a native capture worker through `RecordTakeSession`.
+The native helper builds from `tools/record-capture` during app builds and ships
+beside `audiocpp.dll`. The [phase 0 report](record-chord-spikes.md) links the screen
 encoder experiment, native dictation word timing checks, and manual clipboard
-acceptance harness. The harness uses synthetic images. Chat target acceptance
-must be recorded by hand before choosing the attachment cap or paste fallback.
+acceptance harness. The harness uses synthetic images. The
+[observed target results](record-chord-clipboard-results.md) distinguish measured
+counts from user-reported web checks. The provisional image cap is eight.
 Do not treat a clipboard readback or successful package build as target acceptance.
+
+After publishing, `Invoke-PackagedEncoderSpike.ps1 -Msix <package> -Take`
+registers a separate developer identity and runs the actual managed capture
+adapter for four seconds. It blocks mouse input during that interval and writes
+local PNG/MP4 evidence. It opens no microphone and sends no destination input.
+Use a fresh `-RunId` for each invocation. See
+[record chord validation](record-chord-validation.md) for evidence and hand checks.
 
 ## Source and ownership
 
@@ -312,13 +321,14 @@ destination. Final speech is sent at most once, only a deferred attempt
 retries, and shutdown joins inspection, press, delivery and release-tail work.
 Shortcut admission opens bounded in-memory microphone capture before Windows
 target inspection finishes. Packets stay off the recognizer until inspection
-succeeds. Rejected or failed inspection cancels or fails the operation and
+succeeds. For voice-only dictation, rejected or failed inspection cancels or fails the operation and
 discards that buffer, with no transcript, history row, or insertion. Hold-to-talk
 release still uses the 500 ms tail and may Finish while inspection is pending.
 Native model-load buffering is unchanged. The overlay waveform is shown after
 capture opens. Accessible startup status is Starting microphone. Removing the
 inspection wait does not prove a missing first word is gone, and it cannot
-remove hardware microphone startup delay or speech before the shortcut.
+remove hardware microphone startup delay or speech before the shortcut. Record
+takes permit a missing destination and keep successful bundles for manual Copy.
 
 `MeetingStore.ListAsync` returns summaries rather than transcript documents.
 The in-memory cache validates file identity on each listing and reads changed

@@ -1,7 +1,7 @@
 # Record chord feasibility
 
-This is phase 0. The record chord, ink overlay, automatic bundle delivery,
-retention, and Settings controls are not implemented by these spikes.
+This report records phase 0. The later product implementation and remaining
+hand checks are recorded in [record chord validation](record-chord-validation.md).
 The normal Ctrl+Win workflow remains voice-only.
 
 ## Source baseline
@@ -121,8 +121,7 @@ qualify them.
 
 ## Confirmed defaults
 
-The user confirmed these defaults on 2026-11-04. They are not implemented
-product settings. The final attachment cap and fallback still depend on target
+The user confirmed these defaults on 2026-11-04. The final attachment cap still depends on target
 acceptance checks.
 
 1. Alt+Win is the opt-in record chord. Settings explains screen capture and

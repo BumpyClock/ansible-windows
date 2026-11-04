@@ -2,6 +2,7 @@
 param(
     [Parameter(Mandatory)][string]$Msix,
     [switch]$Borderless,
+    [switch]$Take,
     [ValidatePattern('^[A-Za-z0-9]{1,12}$')]
     [string]$RunId = ([Guid]::NewGuid().ToString('N').Substring(0, 12))
 )
@@ -14,8 +15,8 @@ if (Get-AppxPackage -Name $packageName) {
 }
 if (Test-Path -LiteralPath $layout) { throw 'The spike layout already exists. Choose a fresh evidence directory before registering again.' }
 [IO.Compression.ZipFile]::ExtractToDirectory([IO.Path]::GetFullPath($Msix), $layout)
-$publishedHelper = Join-Path $layout 'record_encoder_spike.dll'
-$builtHelper = Join-Path $root '.runtime/record-spikes/encoder/record_encoder_spike.dll'
+$publishedHelper = Join-Path $layout $(if ($Take) { 'record_capture.dll' } else { 'record_encoder_spike.dll' })
+$builtHelper = Join-Path $root $(if ($Take) { '.runtime/record-capture/record_capture.dll' } else { '.runtime/record-spikes/encoder/record_encoder_spike.dll' })
 if ((Get-FileHash -LiteralPath $publishedHelper).Hash -ne (Get-FileHash -LiteralPath $builtHelper).Hash) {
     throw 'Published helper differs from the latest build. Republish before registering the spike.'
 }
@@ -35,11 +36,11 @@ $xml.Save($manifest)
 Add-AppxPackage -Register $manifest
 $package = Get-AppxPackage -Name $packageName
 if (-not $package) { throw 'Isolated package registration failed.' }
-$arguments = '--record-encoder-spike'
+$arguments = if ($Take) { '--record-take-spike' } else { '--record-encoder-spike' }
 if ($Borderless) { $arguments += ' --borderless' }
 Invoke-CommandInDesktopPackage -PackageFamilyName $package.PackageFamilyName -AppId App `
     -Command (Join-Path $layout 'Ansible.exe') -Args $arguments -PreventBreakaway
 $results = Join-Path $env:LOCALAPPDATA "Packages/$($package.PackageFamilyName)/LocalState/record-spikes"
 Write-Output "Package $($package.PackageFullName)"
 Write-Output "Results $results"
-Write-Output 'The explicit five-second worker exits after finalizing and inspecting its MP4. Read result.txt after it exits.'
+Write-Output $(if ($Take) { 'The explicit four-second take exits after finalizing and inspecting its MP4. Read result.txt after it exits.' } else { 'The explicit five-second encoder exits after finalizing and inspecting its MP4. Read result.txt after it exits.' })

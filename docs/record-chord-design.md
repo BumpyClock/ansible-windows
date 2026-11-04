@@ -2,8 +2,8 @@
 
 The product decisions and defaults are recorded in
 [the feasibility report](record-chord-spikes.md). This document describes the
-implementation boundary identified from the current source. It does not claim
-that the product feature exists.
+implementation boundary used by the record chord. Actual verification and
+remaining hand checks are recorded in [the validation report](record-chord-validation.md).
 
 ## Ownership
 
