@@ -2,7 +2,7 @@
 
 This standalone harness lets the tester check real chat composers before Ansible chooses a bundle delivery format. It uses clearly labeled synthetic images. It never records the screen, opens the microphone, submits a message, or changes Ansible settings. These are spike tools, not a record chord implementation.
 
-Every acceptance target is **pending**. Publishing valid Windows clipboard bytes does not prove that a chat input accepts attachments, preserves text, or finishes reading before the next paste. The proposed eight-image cap and fallback ladder remain undecided.
+Acceptance observations are recorded in [the results](record-chord-clipboard-results.md). Publishing valid Windows clipboard bytes does not prove that a chat input accepts attachments, preserves text, or finishes reading before the next paste. The proposed eight-image cap and fallback ladder remain undecided.
 
 ## Build and self-check
 
@@ -24,8 +24,8 @@ Use a disposable, unsent chat draft. Record the exact browser or desktop app ver
 | Target | Text | One image and text | Many images and text | Limits and fallback |
 | --- | --- | --- | --- | --- |
 | claude.ai | Pending | Pending | Pending | Pending |
-| chatgpt.com | Pending | Pending | Pending | Pending |
-| GitHub Copilot app chat | Pending | Pending | Pending | Pending |
+| chatgpt.com | Pass | Image only | Eight images, no combined text | One separate text paste worked; limits and repeat pending |
+| GitHub Copilot app chat | Pass | Image only | Eight images, no combined text | One separate text paste worked; limits and repeat pending |
 | Copilot coding agent task box | Pending | Pending | Pending | Pending |
 | Codex cloud task box | Pending | Pending | Pending | Pending |
 
@@ -83,5 +83,12 @@ retest observed text-only insertion and at least 16 file attachments for the
 tested fixture sizes. Combined file-plus-text and composite-plus-text pastes
 omitted text. Separate bulk-file and text pastes preserved both in two
 eight-image checks. See the [results](record-chord-clipboard-results.md) for
-the observations, remaining target blockers, and limits. Website results and
-paced image-by-image delivery remain unqualified.
+the observations, remaining target blockers, and limits. Paced image-by-image
+delivery remains unqualified.
+
+Chrome ChatGPT and GitHub Copilot desktop each showed eight synthetic file thumbnails in order and omitted text from the combined file publication. One separate text paste preserved both in each surface. ChatGPT accepted the composite text but showed no composite image. These single checks do not qualify a fallback or set a maximum. See the [results](record-chord-clipboard-results.md) for run IDs and remaining gaps.
+
+The user subsequently confirmed that web paste behavior matches the desktop
+tests. The report records this as user-reported manual verification. Browser
+automation stopped on URL-confidence enforcement; no action bypassed that stop.
+Cloud task-box attachment limits remain unmeasured.

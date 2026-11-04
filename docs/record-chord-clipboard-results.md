@@ -2,11 +2,20 @@
 
 ## Current qualification
 
-Claude desktop accepted at least 16 of the tested synthetic PNG files.
-Combined files/text and combined contact-sheet/text publications omitted text.
-Separate bulk-file and text pastes preserved both in two eight-image checks.
-This does not qualify paced image-by-image delivery, larger files, claude.ai,
-or any other target. The final draft remains unsent.
+| Observed surface | Accepted file count | Combined files/text | Separate files then text |
+| --- | --- | --- | --- |
+| Claude desktop | At least 16 | Text omitted | Preserved both; two eight-image checks, including reverse order |
+| chatgpt.com in Chrome | At least 8 | Text omitted | Preserved both; one check |
+| GitHub Copilot desktop | At least 8 | Text omitted | Preserved both; one check |
+
+These counts are lower bounds at the tested fixture sizes. They are not
+attachment maxima. Paced image-by-image delivery and larger files remain
+unqualified. No test message was sent.
+
+On 2026-11-04 the user separately confirmed that web paste behavior matches
+the desktop tests. This is user-reported manual verification. No additional
+per-surface fixture sizes, processing times, or cloud task attachment limits
+were supplied. Keep that provenance separate from the observed runs below.
 
 ## Initial access attempt on 2026-11-04
 
@@ -37,3 +46,25 @@ Claude desktop 3.6556.2.0, Windows 11 Enterprise build 26300. These are desktop 
 All individual frames were 1280 by 720. The 16-frame files ranged from 282,287 to 287,441 bytes each. The contact sheet was 1920 by 1080. Frame labels in the individual thumbnails were small. Frame 01 was verified in the expanded preview. The contact sheet labels were verified in its expanded preview. Time to usable attachment was not measured with a stopwatch. Thumbnails appeared on the next inspection after each paste, so no timing bound is claimed. No attachment error was observed.
 
 These observations establish at least 16 file attachments for these fixtures in this desktop composer. They do not establish a maximum or larger-file support. Separate file and text pastes worked twice with eight images, in opposite orders. The repeated sequence is promising, but its production reliability and paced image-by-image delivery remain untested. Bitmap alone, noisy larger files, and higher counts remain pending. No all-target conclusion is supported.
+
+## Chrome and GitHub Copilot app tests on 2026-11-04
+
+Windows 11 Enterprise build 26300. Chrome 156.0.8078.76 used the existing signed-in profile and a new chatgpt.com Chat-mode draft. GitHub Copilot desktop app 1.1.34 used a fresh Chat session on This computer. These are distinct surfaces. Neither message was sent.
+
+| Surface and case | Observation | Result |
+| --- | --- | --- |
+| chatgpt.com text, `20261104T193052004Z-ea551a` | All three lines matched `text.txt`. | Pass. |
+| chatgpt.com files plus text, one, `20261104T193126982Z-6b1b93` | One 283,648-byte 1280 by 720 PNG appeared. Expanded preview showed `SYNTHETIC FRAME 01`. Text was absent. | Partial. |
+| chatgpt.com files plus text, eight, `20261104T193212948Z-4b02c0` | Eight 1280 by 720 thumbnails appeared in order 01 to 08. PNGs totaled 2,280,560 bytes. Text was absent. | Partial. |
+| chatgpt.com separate text, `20261104T193227572Z-b0df6c` | The three fixture lines appeared after those eight images. The images remained. | Pass for this one two-paste check. |
+| chatgpt.com composite plus text, `20261104T193355146Z-468ed2` | All three text lines appeared. No image appeared on subsequent inspection. The 1920 by 1080 contact sheet was 1,163,210 bytes. | Partial. |
+| GitHub Copilot app text, `20261104T193443501Z-c858c6` | All three lines matched the fixture. | Pass. |
+| GitHub Copilot app files plus text, one, `20261104T193459497Z-ca3712` | One 283,648-byte 1280 by 720 PNG thumbnail appeared. Text was absent. The small thumbnail showed frame 01. | Partial. |
+| GitHub Copilot app files plus text, eight, `20261104T193523010Z-840c35` | Eight 1280 by 720 thumbnails appeared in numbered order. PNGs totaled 2,280,560 bytes. Text was absent. | Partial. |
+| GitHub Copilot app separate text, `20261104T193531086Z-044145` | The three fixture lines appeared after those eight images. The images remained. | Pass for this one two-paste check. |
+
+Individual frame labels 01 through 08 were visible in the ChatGPT thumbnails. Copilot thumbnails were small; their sequence was visible, but full-size label readability was not checked. No attachment error was observed. Processing time was not measured. Eight is a tested lower bound for these file fixtures, not a maximum. The separate-paste candidate was not repeated. Copilot composite, paced bitmaps, larger files, and higher counts were not tested.
+
+The new Chrome ChatGPT draft remains unsent with the composite fixture text and no image. The new GitHub Copilot draft remains unsent with eight synthetic images and fixture text. The earlier Claude desktop draft was preserved. Chrome's new claude.ai tab redirected to a login URL, so that website was not tested and the tab was closed without interacting with login. Consumer ChatGPT desktop was not identified. The installed `ChatGPT (Beta)` package was `OpenAI.CodexBeta` 26.727.4816.0, not evidence of a consumer chat app.
+
+The T3 preview profile displayed an unauthenticated ChatGPT page and said login was required to upload files. Its test tab remained open when Computer Use stopped. Existing Chrome was signed in and supplied the results above. While opening `github.com/copilot/agents` in another new Chrome tab, Computer Use returned: `Computer Use has been stopped for this turn because it could not determine the current browser URL on Windows with enough confidence to enforce policy. Stop your work and send a final message noting why Computer Use ended.` The new agents tab remains open. Copilot coding agent and Codex cloud task composers were not tested. No action was taken to bypass the stop.
