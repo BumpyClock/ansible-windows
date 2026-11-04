@@ -1,0 +1,77 @@
+# Record chord clipboard acceptance spike
+
+This standalone harness lets the tester check real chat composers before Ansible chooses a bundle delivery format. It uses clearly labeled synthetic images. It never records the screen, opens the microphone, submits a message, or changes Ansible settings. These are spike tools, not a record chord implementation.
+
+Every acceptance target is **pending**. Publishing valid Windows clipboard bytes does not prove that a chat input accepts attachments, preserves text, or finishes reading before the next paste. The proposed eight-image cap and fallback ladder remain undecided.
+
+## Build and self-check
+
+From the repository root in PowerShell:
+
+```powershell
+.\tools\record-spikes\clipboard\Build-ClipboardSpike.ps1
+.\.runtime\record-spikes\clipboard-app\ClipboardSpike.exe self-check
+```
+
+The self-check replaces the clipboard with synthetic test data. It sends no keyboard input. It reads back exact text, image bytes, `CF_HDROP` filenames through the Windows Shell, and the three privacy exclusion formats. It leaves the last contact sheet and text on the clipboard. It does not restore earlier clipboard content.
+
+All generated files and records default to ignored `.runtime/record-spikes/clipboard`. Each invocation creates a unique subdirectory. `files.csv` records PNG sizes and dimensions. `text.txt` contains the exact expected text. `publication.csv` records requested formats and queued input. `manual-results.csv` is created once and preserves the tester's entries on subsequent runs.
+
+## Test each target by hand
+
+Use a disposable, unsent chat draft. Record the exact browser or desktop app version, Windows build, date, run ID, and target. The initial matrix covers all five destinations:
+
+| Target | Text | One image and text | Many images and text | Limits and fallback |
+| --- | --- | --- | --- | --- |
+| claude.ai | Pending | Pending | Pending | Pending |
+| chatgpt.com | Pending | Pending | Pending | Pending |
+| GitHub Copilot app chat | Pending | Pending | Pending | Pending |
+| Copilot coding agent task box | Pending | Pending | Pending | Pending |
+| Codex cloud task box | Pending | Pending | Pending | Pending |
+
+First test publication only. Switch to the target yourself and press Ctrl+V once. Replace `claude.ai` with the actual destination label.
+
+```powershell
+$spike = '.\.runtime\record-spikes\clipboard-app\ClipboardSpike.exe'
+& $spike publish --case text --target claude.ai
+& $spike publish --case files --count 1 --target claude.ai
+& $spike publish --case files-text --count 1 --target claude.ai
+& $spike publish --case bitmap --target claude.ai
+& $spike publish --case files --count 8 --target claude.ai
+& $spike publish --case files-text --count 8 --target claude.ai
+& $spike publish --case composite --count 8 --target claude.ai
+```
+
+Run one command, inspect that paste, and remove the test draft before running the next command. `files` publishes `CF_HDROP` alone. `files-text` publishes `CF_HDROP` and `CF_UNICODETEXT` together. `bitmap` publishes one image as registered `PNG` plus `CF_DIBV5`, with text in the same publication. `composite` publishes one numbered contact sheet with text in the same formats. This tests whether a target drops text when image or file formats coexist.
+
+For the paced sequence, invoke `paste` deliberately. Focus the target before the countdown ends. This sends one image-only paste per fixture, followed by a text-only paste. It never presses Enter. Keep focus on the same window, release all keys and buttons, and do not use the clipboard during the sequence.
+
+```powershell
+& $spike paste --case sequential --count 8 --countdown 8 --pace 1500 --target claude.ai
+```
+
+`paste` also supports the other cases for repeatable input timing. It checks that the foreground window and clipboard sequence still match before each Ctrl+V. It stops after a focus or clipboard change. This is a manual spike and does not inspect whether the field is editable. It is not the product's destination-inspection or insert-once delivery implementation. A timer only paces publications. It is never evidence that an image was consumed. Sequential publication can replace data before a slow target reads it, which is precisely why this path needs target-specific measured success.
+
+Record actual attachments, order, readable frame numbers, preserved text, rejected formats, upload errors, and time until attachments become usable. Compare text with the generated `text.txt`; do not infer text preservation from a visible attachment. Record failure and partial success separately. A queued Ctrl+V is always unverified in the harness log.
+
+Find the count limit by repeating `files-text` with increasing `--count`, up to the harness ceiling of 32. Find size sensitivity with `--width 1920 --noise`; seeded random pixels produce much larger PNGs than flat fixtures. Record actual bytes from `files.csv`. The width range is 320 through 1920. The harness uses 16:9 images. Its safety ceilings are test limits, not measured target limits. If the target accepts every tested count or size, record a lower bound rather than inventing a maximum. Account tier, browser, and app version may affect the observed result.
+
+The eight starting frames are a provisional experiment size. The lowest successful attachment count across the five targets must set the eventual product cap. One successful target cannot qualify another. If combined text and images fail, test one composite image with text. If that also drops text, record it. Do not choose a sequential production fallback until that target passes repeated paced checks.
+
+## Clipboard contract
+
+Every text, image, and file publication includes DWORD zero payloads for `ExcludeClipboardContentFromMonitorProcessing`, `CanIncludeInClipboardHistory`, and `CanUploadToCloudClipboard`, matching Ansible's text publication. All data is rendered before input. Ownership of successful `SetClipboardData` handles transfers to Windows. Unpublished memory is freed. The clipboard remains available after the process exits. No delayed rendering, clipboard restoration, UI Automation attachment claims, HTTP service, or Python dependency is used.
+
+The bitmap path uses bottom-up 32-bit BGRA `CF_DIBV5` with explicit channel masks and sRGB, alongside a registered `PNG` format. `CF_HDROP` uses a `DROPFILES` header with a double-NUL-terminated UTF-16 filename list. These formats follow Microsoft's [clipboard format guidance](https://learn.microsoft.com/windows/win32/dataxchg/clipboard-formats), [Shell clipboard format guidance](https://learn.microsoft.com/windows/win32/shell/clipboard), and [SetClipboardData ownership contract](https://learn.microsoft.com/windows/win32/api/winuser/nf-winuser-setclipboarddata).
+
+## Reference evidence
+
+Scrawl was inspected at commit `b5fa0705f6e5724ede414727797b4b6ed274d3d2`. Its [`src/win/clipboard.rs`](https://github.com/kitlangton/scrawl/blob/b5fa0705f6e5724ede414727797b4b6ed274d3d2/src/win/clipboard.rs) publishes registered PNG, `CF_DIBV5`, and optional Unicode text together. Its [keyframe document](https://github.com/kitlangton/scrawl/blob/b5fa0705f6e5724ede414727797b4b6ed274d3d2/docs/keyframes-and-text.md) describes that as an opt-in Windows experiment checked in Claude desktop. This supports trying a contact sheet publication here. It does not establish multi-image support, the five requested targets' current behavior, or their attachment limits. No Scrawl code was copied.
+
+## Results from this session
+
+On 2026-11-04, the build script published and verified a native x64 PE executable with no managed CLR header. The NativeAOT executable passed exact clipboard readback for text, files, files plus text, bitmap plus text, and composite plus text. Every case included the three exclusion formats. Shell filename enumeration also passed. Separate no-input publications passed for eight PNG files plus text and one bitmap plus text. No paste input was sent.
+
+Windows GDI decoded the generated three 1280 by 720 PNG fixtures and their 1920 by 1080 contact sheet. The contact sheet was visually inspected and showed readable synthetic frame labels. The generated manual result matrix has 40 rows, all pending. No target limit or fallback was established.
+
+The local native self-check log is `.runtime/record-spikes/clipboard-self-check.log`. The tested native executable SHA-256 was `9E3005B0FC681419984F1CEDE158788EC2D33983E856C177426749CCBBA18B68`. Target hand results remain pending.
