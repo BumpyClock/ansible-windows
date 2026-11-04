@@ -25,10 +25,10 @@ if (-not (Test-Path -LiteralPath $vswhere)) {
 $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
 if (-not $vs) { throw "The MSVC x64 compiler workload is missing." }
 $vcvars = Join-Path $vs "VC\Auxiliary\Build\vcvars64.bat"
-$msbuild = Join-Path $vs "MSBuild\Current\Bin\MSBuild.exe"
+$msbuild = Join-Path $vs "MSBuild\Current\Bin\amd64\MSBuild.exe"
 $env:PATH = "$vsInstaller;" + ($env:PATH -replace '"', '')
 
-& $env:ComSpec /d /s /c "call `"$vcvars`" >nul && `"$msbuild`" `"$project`" -restore -t:Build -p:Configuration=Release -p:Platform=x64 -p:PublishProfile=win-x64 -p:GenerateAppxPackageOnBuild=true -p:AppxPackageDir=`"$directory\\`" -nologo -verbosity:minimal"
+& $env:ComSpec /d /s /c "call `"$vcvars`" >nul && `"$msbuild`" `"$project`" -restore -t:Build -p:Configuration=Release -p:Platform=x64 -p:PublishProfile=win-x64 -p:GenerateAppxPackageOnBuild=true -p:AppxPackageDir=`"$directory\\`" -nodeReuse:false -nologo -verbosity:minimal"
 if ($LASTEXITCODE -ne 0) {
     throw "NativeAOT MSIX packaging failed with exit code $LASTEXITCODE."
 }
