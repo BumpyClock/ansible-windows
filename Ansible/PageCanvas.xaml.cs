@@ -1,6 +1,9 @@
+using Microsoft.UI.Composition;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Markup;
+using Windows.Foundation;
 
 namespace Ansible;
 
@@ -11,12 +14,42 @@ public sealed partial class PageCanvas : UserControl
         nameof(Title), typeof(string), typeof(PageCanvas), new PropertyMetadata("", HeaderChanged));
     public static readonly DependencyProperty SubtitleProperty = DependencyProperty.Register(
         nameof(Subtitle), typeof(string), typeof(PageCanvas), new PropertyMetadata("", HeaderChanged));
-    private bool _scrollable = true;
+
+    private double _bottomInset;
+
+    private readonly List<StickyPin> _pins = [];
+    private CompositionPropertySet? _scrollProperties;
 
     public PageCanvas()
     {
         InitializeComponent();
-        Loaded += (_, _) => { UpdateLayoutBounds(); UpdateHeader(); };
+        Loaded += (_, _) =>
+        {
+            UpdateLayoutBounds();
+            UpdateHeader();
+            UpdateHeadingScrolledOut();
+            // Cached pages leave and rejoin the window; restart the pins rather than trust animations across that.
+            foreach (var pin in _pins) pin.Stop();
+            UpdatePins();
+        };
+        ContentHost.BringIntoViewRequested += ContentBringIntoViewRequested;
+    }
+
+    /// <summary>True while the page title has scrolled above the viewport. The window title bar then shows the page.</summary>
+    public bool IsHeadingScrolledOut { get; private set; }
+
+    public event EventHandler? HeadingScrolledOutChanged;
+
+    /// <summary>Extra bottom padding for floating window content, such as notices, so the last rows can scroll above it.</summary>
+    public double BottomInset
+    {
+        get => _bottomInset;
+        set
+        {
+            if (_bottomInset == value) return;
+            _bottomInset = value;
+            UpdateLayoutBounds();
+        }
     }
 
     public string Title { get => (string)GetValue(TitleProperty); set => SetValue(TitleProperty, value); }
@@ -29,24 +62,76 @@ public sealed partial class PageCanvas : UserControl
         set => BodyHost.Content = value;
     }
 
-    public bool Scrollable
+    /// <summary>
+    /// The page's only scroller. Page content flows inside it; views must not add nested vertical scrollers. Use
+    /// <see cref="Pin"/> to keep content on screen while the page scrolls.
+    /// </summary>
+    public ScrollViewer Scroller => Viewport;
+
+    /// <summary>
+    /// Keeps <paramref name="element"/> on screen while the page scrolls, without a second scroller. See
+    /// <see cref="StickyPin"/> for the rules. The element should draw above what scrolls under it (Canvas.ZIndex), and
+    /// <paramref name="indicator"/>, when given, fades in only while the element is stuck.
+    /// </summary>
+    internal StickyPin Pin(FrameworkElement element, FrameworkElement bounds, double top = 0, double bottom = 0, UIElement? indicator = null)
     {
-        get => _scrollable;
-        set { _scrollable = value; UpdateLayoutBounds(); }
+        var pin = new StickyPin(this, element, bounds, top, bottom, indicator);
+        _pins.Add(pin);
+        // Sizes and positions anywhere above the pin move it, so every layout pass rechecks the pins.
+        if (_pins.Count == 1) Viewport.LayoutUpdated += ViewportLayoutUpdated;
+        UpdatePins();
+        return pin;
     }
 
-    public double ContentWidth => Math.Max(0, ContentHost.ActualWidth - ContentHost.Padding.Left - ContentHost.Padding.Right);
+    internal void Unpin(StickyPin pin)
+    {
+        if (!_pins.Remove(pin)) return;
+        pin.Stop();
+        if (_pins.Count == 0) Viewport.LayoutUpdated -= ViewportLayoutUpdated;
+    }
+
+    public double ContentWidth =>Math.Max(0, ContentHost.ActualWidth - ContentHost.Padding.Left - ContentHost.Padding.Right);
+
+    /// <summary>
+    /// The header action the window title bar repeats once the heading scrolls out. Pages with one declare it
+    /// while they are constructed, before navigation shows them.
+    /// </summary>
+    public PageAction? PrimaryAction { get; set; }
 
     private void ViewportSizeChanged(object sender, SizeChangedEventArgs args)
     {
         UpdateLayoutBounds();
         UpdateHeader();
+        UpdateHeadingScrolledOut();
     }
 
-    private static void HeaderChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args) =>
-        ((PageCanvas)sender).UpdateHeader();
+    private void ViewportViewChanged(object? sender, ScrollViewerViewChangedEventArgs args) => UpdateHeadingScrolledOut();
 
-    private void HeaderSizeChanged(object sender, SizeChangedEventArgs args) => UpdateHeader();
+    private static void HeaderChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
+    {
+        var canvas = (PageCanvas)sender;
+        canvas.UpdateHeader();
+        canvas.UpdateHeadingScrolledOut();
+    }
+
+    private void HeaderSizeChanged(object sender, SizeChangedEventArgs args)
+    {
+        UpdateHeader();
+        UpdateHeadingScrolledOut();
+    }
+
+    private void UpdateHeadingScrolledOut()
+    {
+        var scrolledOut = false;
+        if (IsLoaded && TitleText.Visibility == Visibility.Visible && TitleText.ActualHeight > 0)
+        {
+            var bottom = TitleText.TransformToVisual(Viewport).TransformPoint(new Point(0, TitleText.ActualHeight)).Y;
+            scrolledOut = bottom <= 0;
+        }
+        if (scrolledOut == IsHeadingScrolledOut) return;
+        IsHeadingScrolledOut = scrolledOut;
+        HeadingScrolledOutChanged?.Invoke(this, EventArgs.Empty);
+    }
 
     private void UpdateHeader()
     {
@@ -74,18 +159,37 @@ public sealed partial class PageCanvas : UserControl
             ? Orientation.Vertical : Orientation.Horizontal;
     }
 
+    private void ViewportLayoutUpdated(object? sender, object args) => UpdatePins();
+
+    private void UpdatePins()
+    {
+        if (!IsLoaded || _pins.Count == 0) return;
+        _scrollProperties ??= ElementCompositionPreview.GetScrollViewerManipulationPropertySet(Viewport);
+        // Floating notices cover the bottom inset, so a tall pinned element stops above them.
+        var visibleHeight = Viewport.ActualHeight - _bottomInset;
+        foreach (var pin in _pins) pin.Update(_scrollProperties, ContentHost, visibleHeight);
+    }
+
+    // Focus inside a stuck element asks the scroller to reveal its layout position, which has scrolled away; the
+    // scroller would jump back to it. Where the element is drawn fully visible, nothing needs to scroll.
+    private void ContentBringIntoViewRequested(UIElement sender, BringIntoViewRequestedEventArgs args)
+    {
+        if (args.Handled || args.TargetElement is not { } target) return;
+        var pin = _pins.FirstOrDefault(candidate => candidate.Contains(target));
+        if (pin is null || !pin.IsStuck(Viewport.VerticalOffset)) return;
+        var drawn = target.TransformToVisual(Viewport).TransformBounds(args.TargetRect);
+        if (drawn.Top >= 0 && drawn.Bottom <= Viewport.ActualHeight - _bottomInset) args.Handled = true;
+    }
+
     private void UpdateLayoutBounds()
     {
         var resources = Application.Current.Resources;
         var width = Math.Min(Viewport.ActualWidth, (double)resources["PageContentMaxWidth"]);
-        ContentHost.Padding = (Thickness)resources[width < (double)resources["CompactPageThreshold"]
+        var padding = (Thickness)resources[width < (double)resources["CompactPageThreshold"]
             ? "CompactPagePadding" : "PagePadding"];
-        var boundedPageHeight = Math.Max(Viewport.ActualHeight, (double)resources["BoundedPageMinHeight"]);
-        var canScroll = _scrollable || boundedPageHeight > Viewport.ActualHeight;
-        Viewport.VerticalScrollBarVisibility = canScroll ? ScrollBarVisibility.Auto : ScrollBarVisibility.Disabled;
-        Viewport.VerticalScrollMode = canScroll ? ScrollMode.Auto : ScrollMode.Disabled;
-        // Full-page flows retain bottom padding. Bounded lists receive a finite viewport and own their scrolling.
-        ContentHost.Height = _scrollable ? double.NaN : boundedPageHeight;
-        ContentHost.MinHeight = _scrollable ? Viewport.ActualHeight : 0;
+        padding.Bottom += _bottomInset;
+        ContentHost.Padding = padding;
+        // The page flows in one scroller; content fills at least the viewport so footers sit at the bottom.
+        ContentHost.MinHeight = Viewport.ActualHeight;
     }
 }

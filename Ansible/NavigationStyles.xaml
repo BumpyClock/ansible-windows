@@ -15,13 +15,14 @@
     <Style x:Key="SelectedNavigationButtonStyle" TargetType="Button" BasedOn="{StaticResource NavigationButtonStyle}">
         <Setter Property="Background" Value="{ThemeResource AppActiveBrush}" />
         <Setter Property="Foreground" Value="{ThemeResource AppSelectedTextBrush}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Template">
             <Setter.Value>
-                <!-- The selected page keeps its own fill and foreground in every interactive state.
-                     Button still owns keyboard activation, automation, and system focus visuals. -->
+                <!-- The selected page keeps its own fill and foreground in every interactive state, with an accent bar
+                     at its leading edge. Button still owns keyboard activation, automation, and system focus visuals. -->
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="SelectedBackground" Background="{TemplateBinding Background}"
-                            CornerRadius="{TemplateBinding CornerRadius}" Padding="{TemplateBinding Padding}">
+                    <Grid x:Name="SelectedBackground" Background="{TemplateBinding Background}"
+                          CornerRadius="{TemplateBinding CornerRadius}">
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CommonStates">
                                 <VisualState x:Name="Normal" />
@@ -42,12 +43,16 @@
                                 </VisualState>
                             </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
+                        <Rectangle Width="{StaticResource NavSelectionBarWidth}" Margin="{StaticResource NavSelectionBarMargin}"
+                                   RadiusX="1.5" RadiusY="1.5" HorizontalAlignment="Left" Fill="{ThemeResource AppAccentBrush}" />
                         <ContentPresenter x:Name="Presenter" Content="{TemplateBinding Content}"
                                           ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Margin="{TemplateBinding Padding}"
                                           HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                                          Foreground="{TemplateBinding Foreground}" />
-                    </Border>
+                                          Foreground="{TemplateBinding Foreground}"
+                                          FontWeight="{TemplateBinding FontWeight}" />
+                    </Grid>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>

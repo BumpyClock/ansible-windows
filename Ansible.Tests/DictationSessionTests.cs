@@ -97,7 +97,7 @@ public sealed partial class DictationSessionTests : IDisposable
     public async Task ApplicationFailureIsVisibleOnEveryPageUntilDismissed()
     {
         var session = Create(new FakeEngine());
-        session.ReportUiError(new InvalidOperationException("Capture privacy unavailable"), NoticeArea.Application);
+        session.ReportError(new InvalidOperationException("Capture privacy unavailable"), NoticeArea.Application);
 
         Assert.All(
             (NoticeArea[])[NoticeArea.Dictation, NoticeArea.Settings, NoticeArea.Models, NoticeArea.Dictionary, NoticeArea.Meetings],
@@ -470,7 +470,7 @@ public sealed partial class DictationSessionTests : IDisposable
     [Fact]
     public async Task PreloadPublishesMeasuredDeviceComparisonInANewSnapshot()
     {
-        var comparison = new DeviceComparisonSnapshot(100, 80, NativeBackend.Vulkan, DateTimeOffset.UtcNow);
+        var comparison = new DeviceComparisonSnapshot("Test model", DeviceComparisonKind.Streaming, 100, 80, NativeBackend.Vulkan, DateTimeOffset.UtcNow);
         var engine = new FakeEngine { PreparedDeviceComparison = comparison };
         var session = Create(engine);
 
@@ -484,7 +484,7 @@ public sealed partial class DictationSessionTests : IDisposable
     [Fact]
     public async Task BenchmarkMeasuresAutoWithDictationOptionsAndPublishesProgressAndResult()
     {
-        var measured = new DeviceComparisonSnapshot(120, 70, NativeBackend.Vulkan, DateTimeOffset.UtcNow);
+        var measured = new DeviceComparisonSnapshot("Test model", DeviceComparisonKind.Streaming, 120, 70, NativeBackend.Vulkan, DateTimeOffset.UtcNow);
         var engine = new FakeEngine
         {
             BenchmarkedComparison = measured,
@@ -541,12 +541,12 @@ public sealed partial class DictationSessionTests : IDisposable
     [Fact]
     public async Task BenchmarkRejectsConcurrentDictationAndCancelKeepsThePreviousComparison()
     {
-        var previous = new DeviceComparisonSnapshot(100, 80, NativeBackend.Vulkan, DateTimeOffset.UtcNow);
+        var previous = new DeviceComparisonSnapshot("Test model", DeviceComparisonKind.Streaming, 100, 80, NativeBackend.Vulkan, DateTimeOffset.UtcNow);
         var probing = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var engine = new FakeEngine
         {
             PreparedDeviceComparison = previous,
-            BenchmarkedComparison = new(1, 1, NativeBackend.Cpu, DateTimeOffset.UtcNow),
+            BenchmarkedComparison = new("Test model", DeviceComparisonKind.Streaming, 1, 1, NativeBackend.Cpu, DateTimeOffset.UtcNow),
             Benchmarking = async (progress, token) =>
             {
                 progress!.Report(NativeBackend.Cpu);

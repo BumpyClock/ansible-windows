@@ -9,6 +9,45 @@ public static class CustomVocabulary
     public const int MaximumEntryCharacters = 100;
     public const int MaximumUtf8Bytes = 4096;
 
+    public abstract record Edit
+    {
+        private Edit() { }
+        public sealed record Add(string Text, bool SingleEntry = false) : Edit;
+        public sealed record Replace(string Entry, string Text) : Edit;
+        public sealed record Remove(string Entry) : Edit;
+    }
+
+    public static (string? Updated, string? Error) TryApply(string dictionary, Edit edit, AudioModel? model)
+    {
+        try
+        {
+            if (edit is Edit.Remove remove) return (RemoveEntry(dictionary, remove.Entry), null);
+            var text = Normalize(edit switch
+            {
+                Edit.Add add => add.Text,
+                Edit.Replace replace => replace.Text,
+                _ => throw new ArgumentException("Unknown dictionary edit.", nameof(edit))
+            });
+            if (edit is Edit.Add { SingleEntry: true } && (text.Length == 0 || text.Contains('\n')))
+                throw new InvalidDataException("Enter one word or phrase. Use Import to add a list.");
+            // An unchanged edit may close even when the current model cannot use the saved word.
+            if (edit is Edit.Replace unchanged && text == unchanged.Entry)
+                return (ReplaceEntry(dictionary, unchanged.Entry, text), null);
+            if (ModelCompatibilityError(model, text) is { } compatibilityError)
+                throw new InvalidDataException(compatibilityError);
+            return (edit switch
+            {
+                Edit.Add => AddEntries(dictionary, text),
+                Edit.Replace replace => ReplaceEntry(dictionary, replace.Entry, text),
+                _ => throw new ArgumentException("Unknown dictionary edit.", nameof(edit))
+            }, null);
+        }
+        catch (Exception error) when (error is InvalidDataException or ArgumentException or InvalidOperationException)
+        {
+            return (null, error.Message);
+        }
+    }
+
     public static string? ModelCompatibilityError(AudioModel? model, string dictionary)
     {
         ArgumentNullException.ThrowIfNull(dictionary);

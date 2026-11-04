@@ -16,6 +16,11 @@ internal sealed class NativeExecutionException(string message, string operation 
     : InvalidOperationException(message)
 {
     internal int StatusCode { get; } = status;
+    // The GPU cannot hold the model in its own memory; host memory is not implicated.
+    internal bool IsDeviceMemoryFailure =>
+        (Message.Contains("OUT_OF_DEVICE_MEMORY", StringComparison.OrdinalIgnoreCase) ||
+            Message.Contains("does not fit in device memory", StringComparison.OrdinalIgnoreCase)) &&
+        !Message.Contains("OUT_OF_HOST_MEMORY", StringComparison.OrdinalIgnoreCase);
     internal bool IsMemoryFailure => StatusCode == (int)NativeStatus.OutOfMemory ||
         Message.Contains("out of memory", StringComparison.OrdinalIgnoreCase) ||
         Message.Contains("OUT_OF_DEVICE_MEMORY", StringComparison.OrdinalIgnoreCase) ||

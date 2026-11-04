@@ -79,10 +79,6 @@ $typedDimensions = @{
     'ControlCornerRadius' = 'CornerRadius'
     'CardBorderThickness' = 'Thickness'
     'SettingsCardPadding' = 'Thickness'
-    'SettingsSegmentPadding' = 'Thickness'
-    'SettingsSegmentCornerRadius' = 'CornerRadius'
-    'SettingsSegmentTrackPadding' = 'Thickness'
-    'SettingsSegmentTrackCornerRadius' = 'CornerRadius'
     'SettingsRowRowSpacing' = 'Double'
     'SettingsRowDescriptionSpacing' = 'Double'
     'SettingsRowDescriptionMaxWidth' = 'Double'
@@ -128,7 +124,7 @@ foreach ($file in $xamlFiles) {
     }
 }
 $platformStyleKeys = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-foreach ($key in @('AccentButtonStyle', 'SubtleButtonStyle')) { [void]$platformStyleKeys.Add($key) }
+foreach ($key in @('AccentButtonStyle', 'SubtleButtonStyle', 'DefaultButtonStyle', 'DefaultContentDialogStyle')) { [void]$platformStyleKeys.Add($key) }
 $styleReferencePattern = '(?:Style|BasedOn)\s*=\s*"\{StaticResource\s+([A-Za-z_][A-Za-z0-9_]*)\}"'
 $semanticReferences = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
 foreach ($file in $xamlFiles) {
@@ -175,7 +171,6 @@ foreach ($themeName in @('Light', 'Dark')) {
 
 $highContrastBrushAliases = @{
     'AppTextBrush' = 'SystemColorWindowTextColor'
-    'AppSegmentSelectedBrush' = 'SystemColorHighlightColor'
     'AppSelectedTextBrush' = 'SystemColorHighlightTextColor'
     'AppSelectedIconBrush' = 'SystemColorHighlightTextColor'
     'ButtonBackgroundPointerOver' = 'SystemColorHighlightTextColor'

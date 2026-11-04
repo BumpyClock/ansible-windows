@@ -142,8 +142,8 @@ options and checks.
   runs per device. GPU wins when it is within five
   percent of CPU. A GPU worker crash or timeout keeps a working CPU; shared
   calibration errors abort without writing a device cache entry. Manual GPU has
-  no automatic fallback. Nemotron GPU streaming has a reported native crash;
-  Auto uses CPU for that path. Isolated qualification cannot catch a later
+  no automatic fallback. Nemotron GPU streaming has a recorded native crash on
+  one GPU and driver; Auto qualifies it like other models. Isolated qualification cannot catch a later
   in-process driver crash. See [native validation](docs/native-validation.md#known-limits).
 - Both VibeVoice models support shortcut dictation with speaker labels removed.
   The offline 7B model buffers microphone audio and recognizes it after Finish;

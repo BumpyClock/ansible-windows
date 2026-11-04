@@ -4,22 +4,29 @@ See the [README](../README.md#build-and-run) to build and launch the app.
 
 ## First launch
 
-A new install opens a three-step welcome lesson. An existing `settings.json`
-that has no welcome flag is treated as already complete, so current installs
-are not forced through it. **Skip for now** and finishing the lesson both save
-completion in settings.
+A new install opens a three-step welcome lesson in a dialog over Home. An
+existing `settings.json` that has no welcome flag is treated as already
+complete, so current installs are not forced through it. **Skip for now** (top
+right, or Escape) and **Done** both save completion in settings.
 
 1. Intro. Speak into a focused field. Recognition stays on this device.
-2. Shortcut. An original Windows keyboard illustration highlights your chord
-   and animates those keys. If Windows animations are off, the keys stay still.
+2. Shortcut. Keycaps for your chord press down while you hold those keys and
+   spring back on release. Pressing them here only lights the keys; nothing
+   records.
 3. Practice. Click the practice field, then use the shortcut. Final words go
-   only into that field, not the clipboard or another app. A successful
+   only into that field, not the clipboard or another app. The scene's
+   waveform pill follows the real microphone level while listening, and a
+   check mark pops in when a dictation lands in the field. A successful
    practice still stores in local dictation history.
 
+With Windows animations off, the keys change colour without moving, steps
+switch without sliding, and the check mark appears without a bounce.
+
 Practice needs microphone permission and an installed microphone-capable model.
-**Set up a speech model** opens Speech models. Returning to Home resumes the
-lesson until you finish or skip. Home **Learn your shortcut** replays it from
-the first step. Change the chord later in Settings.
+**Set up a speech model** closes the lesson without completing it and opens
+Speech models. The lesson opens again at the next launch until you finish or
+skip. **Settings > Shortcut > Practice** replays it from the first step. Change
+the chord there too.
 
 ## Close to the notification area
 
@@ -37,6 +44,9 @@ put the icon in the hidden-icons overflow.
 
 ## Home and appearance
 
+Every page scrolls as one document inside the content panel; lists and cards do
+not scroll on their own.
+
 **Home** shows the latest successful dictations, newest first, grouped as Today,
 Yesterday, and older dates. Each row shows the time, transcript, **Copy
 transcript**, and a **More** menu with **Remove from history**. Remove deletes
@@ -44,20 +54,22 @@ that entry from saved history. Removing the current dictation's row also hides
 its transcript card. Shortcut dictations keep an insertion tag across restarts:
 **Inserted** when the target field confirmed the text, **Not verified** when
 the app accepted it without confirmation, **Partially inserted**, or **Not
-inserted**. Failed injected-key release also shows **Not verified**. Check the
+inserted**. **Not verified** is quiet text. **Partially inserted** and **Not
+inserted** stay highlighted and keep **Copy transcript** visible, because that
+text did not fully reach the app. Failed injected-key release also shows **Not
+verified**. Check the
 keyboard and destination field. None, some, or all of the text may have
 arrived. The app never retries that uncertain input automatically. In-app
 dictations have no tag. History reloads after restart. It keeps at most 100
 successful dictations within a 500,000-character text budget. Large entries can
 make fewer than 100 fit. An entry larger than that budget stays in the
-current-result area only. Search covers every retained entry. WAV results stay
+current-result area only. Search covers every retained entry. While you scroll Home, the History header and search box stay at the top, and on wide windows the insights cards stay beside the list. WAV results stay
 outside dictation history and remain in the separate transcript area. Audio is
 never saved. Prior session-only transcripts from earlier app versions cannot be
-recovered. **Learn your shortcut** reopens the welcome lesson from the first
-step.
+recovered.
 
 Use **Dictate** or your configured shortcut to record. Choose the active model
-and use **Transcribe WAV file** on **Models**.
+and use **Transcribe WAV file** on **Speech models**.
 Insights show measured local counts, not estimates. The large number is
 all-time dictated words on this device. Words per microphone minute, dictation
 count, and microphone minutes sit with it. Pace and microphone time include
@@ -100,12 +112,14 @@ are not requested because these features do not use them.
 
 ## Choose a model
 
-Speech model cards keep their catalog order while files are verified and when
-you select or download a model. Compact windows show one column.
+**Speech models** lists models in three groups: **In use** (the dictation model
+and the meeting companion), **Installed**, and **Available**. Rows keep catalog
+order within each group. A **Custom words** chip marks models that use the
+Dictionary. The info button expands a row's details in place.
 
-Open **Speech models**. Select **Download** on a model card, or open **Model folder**
-and use **Choose folder** to select a folder containing catalog weights. Select
-**Use** on an installed model to make it active.
+Select **Download** on a row, or open **Model folder** and use **Choose folder** to
+select a folder containing catalog weights. Download progress shows in the row.
+Select **Use for dictation** on an installed model to make it active.
 
 Downloads start only when requested. **Pause** keeps partial files for **Resume**.
 The app verifies the length and SHA-256 before installing weights. If recognition
@@ -137,11 +151,11 @@ for that session. The saved choice is retained until you explicitly select
 another model.
 
 `nemotron-3-diarization-q8` is in the catalog and can be downloaded from
-**Speech models**. Installed diarization cards show **Meeting companion**. Use
-is hidden; the companion cannot be selected for dictation, replay, or WAV
+**Speech models**. Its row shows **Meeting companion** and never offers **Use for
+dictation**; the companion cannot be selected for dictation, replay, or WAV
 transcription. Installing only that companion leaves dictation disconnected.
-There is no meeting model picker. Start honors an explicitly saved **Use**
-selection only when that model is meeting-capable streaming ASR. An automatic
+There is no meeting model picker. Start honors an explicitly saved **Use for
+dictation** selection only when that model is meeting-capable streaming ASR. An automatic
 dictation default is not a meeting override. Unconfigured meetings use the
 companion with installed Nemotron ASR, then installed Kroko, then VibeVoice ASR
 Streaming 1.5B, including when the companion is absent.
@@ -220,7 +234,7 @@ capture stops, including after the hold-to-talk release tail. If stopping fails,
 it remains visible until capture is released. It does not show transcript text.
 Reduced-motion mode shows the same shape without bar animation.
 
-**Settings > Overlay position** chooses where the pill appears. Looking up the
+**Settings > Show overlay at the text cursor** chooses where the pill appears. Looking up the
 caret no longer delays the microphone. The pill may first appear at the bottom
 centre of the screen, then move under the verified caret when that check
 completes. By default it sits just under the text cursor of the destination
@@ -233,9 +247,15 @@ to the next dictation and persists across restarts.
 
 ### Text insertion
 
-Only warning and error notices appear, each limited to the pages for its area.
-Capture-privacy failures appear on every page. Routine success and cancel
-messages are not shown.
+Notices float over the bottom of the content panel and never move page
+content; the page gains bottom space so its last rows stay reachable. Errors
+list first, then warnings, then information. At most three show at once, and
+**N more notices** opens the rest. Only warning and error session notices
+appear, each limited to the pages for its area. Capture-privacy failures,
+microphone permission, the Teams suggestion, and tray or close failures appear
+on every page. Routine success and cancel messages are not shown. Short
+confirmations, such as a removed Dictionary word with **Undo**, close on their
+own and pause while the pointer or keyboard focus is on them.
 
 After shortcut insertion, a verified send is not announced. Open **Home** if
 delivery could not be confirmed. **Text sent; unverified**
@@ -245,7 +265,7 @@ produce warnings or errors. A notice stays until dismissed or replaced.
 
 **Settings > Text insertion** offers two methods:
 
-- **Paste (replaces clipboard)** is the default. Ansible puts the speech text on
+- **Paste text** (replaces the clipboard) is the default. Ansible puts the speech text on
   the clipboard immediately and sends the selected paste shortcut. The text remains available for
   asynchronous readers, including hosted editors. The previous clipboard content
   is replaced, not backed up or restored. It requests exclusion from Windows
@@ -256,7 +276,7 @@ produce warnings or errors. A notice stays until dismissed or replaced.
   garble text in slow targets such as Notepad. Use paced typing for apps that
   block Ctrl+V.
 
-**Destination paste shortcut** selects **Ctrl+V** (default), **Shift+Insert**, or
+**Paste shortcut**, shown while **Paste text** is selected, chooses **Ctrl+V** (default), **Shift+Insert**, or
 **Ctrl+Shift+V**. Choose the chord accepted by the actual editor or terminal;
 the choice applies to all paste dictation, not an automatically detected app.
 The same application can contain fields with different shortcut behavior.
@@ -356,14 +376,15 @@ saved list at startup.
 Entries are recognition hints, not guaranteed spellings or replacement rules.
 The app does not rewrite completed transcripts or text already inserted.
 
-### Recognition processor
+### Processor
 
 **Auto (recommended)** is the default. Settings without a processor field load
 Auto. An explicit saved CPU or GPU choice is kept until you change it. Auto
 runs CPU, then GPU, sequentially in an isolated `Ansible.DeviceProbe` process
 against the bundled public speech sample. It does not use microphone, meeting,
 or other user audio, and it does not save that audio. Compared times exclude
-loading and warmup and use the median of three runs. Each device has a five-minute deadline that includes load,
+loading and warmup and use the median of three runs. CPU has 150 seconds and GPU two minutes, so both fit inside
+the five-minute recognition operation. Each deadline includes load,
 warmup, recognition, and teardown. Cancelling stops the worker, then joins and
 drains it. Auto measures the mode required for the next work: offline WAV, live
 dictation, or meeting history. The first preparation for a model and mode takes
@@ -371,25 +392,27 @@ longer. Results are cached for model, native, and sample hashes, hardware and
 driver, mode and history, device, threads, and headroom. Malformed cache content
 is ignored; Auto qualifies the devices again.
 When both devices work
-and GPU is within five percent of CPU, Auto selects GPU. Settings shows the last
-comparison, including the selected processor and device timings, after a
-qualification runs.
+and GPU is within five percent of CPU, Auto selects GPU, except that a meeting
+prefers the device that keeps half real time when only one of them does. Settings shows the last
+comparison, including its model and kind (streaming, meeting, or whole recording), the selected processor, and device
+timings, after a qualification runs. Each model and kind keeps its own result, so
+one model can use GPU while another uses CPU. The last device result stays in place when you change the
+choice; it updates when recognition next prepares a model.
 
 **Run benchmark** below the processor choice measures CPU and GPU again for the
 selected dictation model, whatever the processor setting is. It ignores cached
-results and uses the dictation mode, language hint, and, for Kroko, the
-vocabulary decoder mode. Use it after plugging in, updating a graphics driver,
-or switching models. The status line names the device being measured, and the
-button becomes **Cancel** while it runs. A run takes about 20 to 30 seconds per
-model on a recent laptop. Dictation, replay, WAV transcription, and meetings
-cannot start until it finishes or is cancelled. A complete run replaces the
-cached result that Auto uses for that model. A cancelled, failed, or timed-out
-run keeps the previous result and comparison; errors appear on Settings.
-Nemotron dictation does not run its GPU probe because Nemotron Vulkan streaming
-is unsafe in this build; the comparison shows that reason instead of a GPU time.
+results and uses the dictation mode and, for Kroko, the vocabulary decoder mode.
+Use it after plugging in, updating a graphics driver, or switching models. The
+status line names the device being measured, and the button becomes **Cancel**
+while it runs. A run takes about 20 to 30 seconds per model on a recent laptop.
+Dictation, replay, WAV transcription, and meetings cannot start until it
+finishes or is cancelled. A complete run replaces the cached result that Auto
+uses for that model. A cancelled, failed, or timed-out run keeps the previous
+result and comparison; errors appear on Settings.
 
-A GPU worker crash or timeout disqualifies GPU; a successful CPU result is used.
-Shared validation, integrity, memory, protocol, or ownership errors abort
+A GPU worker crash, timeout, or running out of GPU memory disqualifies GPU; a
+successful CPU result is used.
+Shared validation, integrity, host memory, protocol, or ownership errors abort
 calibration and do not write a device result to the cache. If neither device
 works, the app shows an error. Auto does not replay consumed live audio. A
 failed live operation reports the error, and the next attempt may use CPU.
@@ -411,12 +434,15 @@ memory to load and decode. Keep the guard enabled.
 ### Transcript cleanup
 
 Open **Settings > Transcript cleanup**. Choose **Copilot CLI** or **OpenAI API**.
-Each provider has its own model and reasoning effort. Automatic cleanup stays
-off until you enable it and select **Save cleanup settings**. That save is the
-opt-in to send meeting text to the cloud. Enabling OpenAI automatic cleanup
+Each provider has its own model and reasoning effort. Fields save as you change
+them. Automatic cleanup stays off until you turn on **Clean up automatically**
+and confirm with **Turn on** in the dialog. That confirmation is the opt-in to send meeting
+text to the cloud. Enabling OpenAI automatic cleanup
 requires a saved API key and an OpenAI API model ID. No OpenAI model is guessed.
 Enabling it authorizes sending each new completed meeting transcript to the
-selected provider. No extra confirmation appears per meeting.
+selected provider. No extra confirmation appears per meeting. Choosing a
+different provider turns automatic cleanup off; turn it on again to confirm the
+new provider.
 
 The selected provider is used alone. There is no fallback to the other provider
 or another account. Audio is never uploaded. Only finalized local text is sent,
@@ -504,7 +530,7 @@ the folder.
 
 Default setup installs Nemotron ASR and Nemotron 3 Diarization. The Meetings
 window does not offer a model picker. If you have explicitly selected a
-meeting-capable streaming model with **Use** (Nemotron ASR, Kroko English, or
+meeting-capable streaming model with **Use for dictation** (Nemotron ASR, Kroko English, or
 VibeVoice ASR Streaming 1.5B), Start uses that ASR. Explicit Nemotron or Kroko
 requires the installed companion; a missing companion stops Start with an error
 rather than switching models. An automatic dictation default is not a meeting

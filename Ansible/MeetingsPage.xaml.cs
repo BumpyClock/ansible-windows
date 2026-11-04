@@ -8,7 +8,9 @@ namespace Ansible;
 
 public sealed partial class MeetingsPage : Page
 {
-    private readonly DictationSession _session;
+    private const string ErrorNoticeKey = "meetings-error";
+
+    private readonly AppNotices _notices;
     private readonly MeetingStore _store;
     private readonly LocalDiagnosticLog _diagnostics;
     private readonly Func<MeetingDocument?, Task> _openMeeting;
@@ -19,23 +21,21 @@ public sealed partial class MeetingsPage : Page
     private Task? _openTask;
     private IReadOnlyList<MeetingSummary> _displayedSummaries = [];
     private IReadOnlyList<MeetingReadFailure> _displayedFailures = [];
-    private UiSessionObserver? _observer;
+    private readonly List<Button> _exportButtons = [];
+    private bool _rendered;
+    private DateOnly _displayedDate;
 
-    internal MeetingsPage(DictationSession session, MeetingStore store, Func<MeetingDocument?, Task> openMeeting,
-        Func<nint> windowHandle, LocalDiagnosticLog diagnostics)
+    internal MeetingsPage(MeetingStore store, Func<MeetingDocument?, Task> openMeeting,
+        Func<nint> windowHandle, LocalDiagnosticLog diagnostics, AppNotices notices)
     {
         InitializeComponent();
-        _session = session;
+        ((PageCanvas)Content).PrimaryAction = new PageAction(NewMeetingButton, NewMeetingClicked);
+        _notices = notices;
         _store = store;
         _diagnostics = diagnostics;
         _openMeeting = openMeeting;
         _windowHandle = windowHandle;
-        Loaded += async (_, _) =>
-        {
-            _observer = new UiSessionObserver(session, DispatcherQueue, RenderNotice);
-            await RefreshAsync();
-        };
-        Unloaded += (_, _) => { _observer?.Dispose(); _observer = null; };
+        Loaded += async (_, _) => await RefreshAsync();
     }
 
     internal Task RefreshAsync()
@@ -52,15 +52,23 @@ public sealed partial class MeetingsPage : Page
             var token = _shutdown.Token;
             var result = await Task.Run(() => _store.ListAsync(token), token);
             if (_shutdown.IsCancellationRequested) return;
+            _notices.Set(ErrorNoticeKey, null);
             var summaries = result.Summaries;
-            if (_displayedSummaries.SequenceEqual(summaries) && _displayedFailures.SequenceEqual(result.Failures)) return;
+            // Day headings are relative, so a new local date re-renders even when no meeting changed.
+            var today = DateOnly.FromDateTime(DateTime.Today);
+            if (_rendered && _displayedDate == today && _displayedSummaries.SequenceEqual(summaries) &&
+                _displayedFailures.SequenceEqual(result.Failures)) return;
+            _rendered = true;
+            _displayedDate = today;
             _displayedSummaries = summaries;
             _displayedFailures = result.Failures;
-            MeetingList.ItemsSource = summaries.Select(summary => new MeetingHistoryRow(summary)).ToArray();
+            // WinRT rejects arrays of managed records as ItemsSource; a List<object> marshals as a bindable vector.
+            MeetingGroups.ItemsSource = MeetingList.Create(summaries, today);
             UnreadableMeetings.Children.Clear();
+            _exportButtons.Clear();
             foreach (var failure in result.Failures)
             {
-                var row = new StackPanel { Spacing = 8, Padding = new Thickness(12) };
+                var row = new StackPanel { Spacing = 8 };
                 row.Children.Add(new TextBlock { Text = "Saved transcript needs attention", Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"] });
                 row.Children.Add(new TextBlock { Text = $"File: {failure.Id:N}.json", TextWrapping = TextWrapping.Wrap, Style = (Style)Application.Current.Resources["CaptionSecondaryStyle"] });
                 row.Children.Add(new TextBlock { Text = failure.Message, TextWrapping = TextWrapping.Wrap });
@@ -69,11 +77,15 @@ public sealed partial class MeetingsPage : Page
                 Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(export, $"Export and remove transcript {failure.Id:N}");
                 export.Click += ExportUnreadableClicked;
                 row.Children.Add(export);
-                UnreadableMeetings.Children.Add(row);
+                _exportButtons.Add(export);
+                UnreadableMeetings.Children.Add(new Border
+                {
+                    Style = (Style)Application.Current.Resources["CardStyle"], Padding = new Thickness(16), Child = row
+                });
             }
             UnreadableMeetings.Visibility = result.Failures.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
             EmptyState.Visibility = summaries.Count == 0 && result.Failures.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-            MeetingList.Visibility = summaries.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+            MeetingGroups.Visibility = summaries.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
         }
         catch (OperationCanceledException) when (_shutdown.IsCancellationRequested) { }
         catch (Exception error) { ShowError(error); }
@@ -88,7 +100,7 @@ public sealed partial class MeetingsPage : Page
 
     private async Task ExportUnreadableAsync(Guid id)
     {
-        var buttons = UnreadableMeetings.Children.OfType<StackPanel>().SelectMany(row => row.Children.OfType<Button>()).ToArray();
+        var buttons = _exportButtons.ToArray();
         foreach (var button in buttons) button.IsEnabled = false;
         try
         {
@@ -129,11 +141,11 @@ public sealed partial class MeetingsPage : Page
         await _openTask;
     }
 
-    private async void MeetingClicked(object sender, ItemClickEventArgs args)
+    private async void MeetingClicked(object sender, RoutedEventArgs args)
     {
         if (_shutdown.IsCancellationRequested || _openTask is { IsCompleted: false } ||
-            args.ClickedItem is not MeetingHistoryRow row) return;
-        _openTask = OpenAsync(row.Summary.Id);
+            sender is not Button { Tag: Guid id }) return;
+        _openTask = OpenAsync(id);
         await _openTask;
     }
 
@@ -159,33 +171,25 @@ public sealed partial class MeetingsPage : Page
             }
             token.ThrowIfCancellationRequested();
             await _openMeeting(document);
+            _notices.Set(ErrorNoticeKey, null);
         }
         catch (OperationCanceledException) when (_shutdown.IsCancellationRequested) { }
         catch (Exception error) { ShowError(error); }
     }
 
-    private void ShowError(Exception error) =>
-        _session.Notify(NoticeKind.Error, "Meeting unavailable", error.Message, NoticeArea.Meetings);
+    private void ShowError(Exception error) => _notices.Set(ErrorNoticeKey,
+        new NoticeContent(NoticeSeverity.Error, "Meeting unavailable", error.Message), NoticeArea.Meetings);
 
-    private void RenderNotice(SessionSnapshot state)
-    {
-        var notice = state.Notice;
-        ErrorBar.Severity = notice.Kind == NoticeKind.Error ? InfoBarSeverity.Error : InfoBarSeverity.Warning;
-        ErrorBar.Title = notice.Title;
-        ErrorBar.Message = notice.Message;
-        ErrorBar.IsOpen = notice.ShouldDisplayOn(NoticeArea.Meetings);
-        ErrorBar.Visibility = ErrorBar.IsOpen ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    private void ErrorBarClosing(InfoBar sender, InfoBarClosingEventArgs args)
-    {
-        if (args.Reason == InfoBarCloseReason.CloseButton) _session.DismissNotice(_session.State.Notice);
-        sender.Visibility = Visibility.Collapsed;
-    }
+    public static Visibility VisibleIf(bool visible) => visible ? Visibility.Visible : Visibility.Collapsed;
 }
 
-public sealed record MeetingHistoryRow(MeetingSummary Summary)
+internal sealed partial class MeetingListTemplateSelector : DataTemplateSelector
 {
-    public string Title => Summary.Title;
-    public string Description => $"{Summary.CreatedAt.ToLocalTime():MMM d, yyyy \u00b7 h:mm tt} \u00b7 {Summary.Status}";
+    public DataTemplate DayTemplate { get; set; } = null!;
+    public DataTemplate RowTemplate { get; set; } = null!;
+
+    protected override DataTemplate SelectTemplateCore(object item) => item is MeetingDayHeader ? DayTemplate : RowTemplate;
+
+    // ItemsControl asks with its container; the base overload does not forward to the one above.
+    protected override DataTemplate SelectTemplateCore(object item, DependencyObject container) => SelectTemplateCore(item);
 }

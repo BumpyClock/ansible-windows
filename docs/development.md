@@ -272,8 +272,8 @@ dotnet run --project .\Ansible.Probe -- `
 ```
 
 Paced elapsed time includes audio delivery and backpressure; it is not pure
-inference latency. Nemotron Vulkan streaming remains unsafe; use CPU for that
-model. The probe rejects a `diar` model ID.
+inference latency. Nemotron Vulkan streaming has a recorded driver crash on one
+GPU; see [known limits](native-validation.md#known-limits). The probe rejects a `diar` model ID.
 
 Dictionary integration tests run for installed Qwen and VibeVoice weights,
 and skip entries with missing weights. They also accept
