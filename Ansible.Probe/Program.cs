@@ -26,7 +26,7 @@ if (args is ["--cpu-check"])
 
 if (args.Length < 4)
 {
-    Console.Error.WriteLine("Usage: Ansible.Probe --cpu-check | <native-dll> <models-directory> <catalog-json> <16k-mono-PCM16.wav> [model-id] [--file-only | --stream-only] [--repeat <1..20>] [--dictionary <one-term-per-line>] [--backend cpu|vulkan|auto] [--device <nonnegative-index>] [--device-probe <executable>] [--benchmark-cache <json>]");
+    Console.Error.WriteLine("Usage: Ansible.Probe --cpu-check | <native-dll> <models-directory> <catalog-json> <16k-mono-PCM16.wav> [model-id] [--file-only | --stream-only] [--repeat <1..20>] [--word-timings] [--dictionary <one-term-per-line>] [--backend cpu|vulkan|auto] [--device <nonnegative-index>] [--device-probe <executable>] [--benchmark-cache <json>]");
     return 2;
 }
 
@@ -38,6 +38,7 @@ try
     string? dictionary = null;
     var fileOnly = false;
     var streamOnly = false;
+    var wordTimings = false;
     int? repeat = null;
     NativeBackend? backend = null;
     int? deviceIndex = null;
@@ -47,6 +48,7 @@ try
     {
         if (args[index] == "--file-only" && !fileOnly) { fileOnly = true; }
         else if (args[index] == "--stream-only" && !streamOnly) { streamOnly = true; }
+        else if (args[index] == "--word-timings" && !wordTimings) { wordTimings = true; }
         else if (args[index] == "--repeat" && repeat is null && index + 1 < args.Length)
             repeat = int.TryParse(args[++index], out var attempts) && attempts is >= 1 and <= 20
                 ? attempts : throw new ArgumentException("Repeat must be an integer from 1 to 20.");
@@ -142,7 +144,29 @@ try
             stage = $"live stream ({model.Id}), attempt {attempt}/{repeat ?? 1}";
             Console.WriteLine($"Attempting {stage}; timeout=180 seconds.");
             clock.Restart();
-            var (transcript, measurement) = await StreamingProbe.MeasureAsync(engine, model, pcm, options);
+            SpeechWordTimings? previousTimings = null;
+            var timedPreviews = 0;
+            var revisedWords = 0;
+            var (transcript, measurement) = await StreamingProbe.MeasureAsync(engine, model, pcm, options,
+                observe: wordTimings ? update =>
+                {
+                    if (update.IsFinal)
+                    {
+                        Console.WriteLine($"Timing final callback: processedSamples={update.ProcessedSamples}; mappedWords={update.WordTimings?.Words.Count.ToString() ?? "unavailable"}");
+                        return;
+                    }
+                    var current = update.WordTimings;
+                    if (current is not null)
+                    {
+                        timedPreviews++;
+                        if (previousTimings is not null)
+                            for (var index = 0; index < Math.Min(previousTimings.Words.Count, current.Words.Count); index++)
+                                if (previousTimings.Words[index] != current.Words[index]) revisedWords++;
+                    }
+                    Console.WriteLine($"Timing snapshot: processedSamples={update.ProcessedSamples}; mappedWords={current?.Words.Count.ToString() ?? "unavailable"}; source={current?.Source.ToString() ?? "unavailable"}");
+                    // Each update replaces the snapshot. A disappearing mapping must not leave stale word times.
+                    previousTimings = current;
+                } : null);
             measurements.Add(measurement);
             Console.WriteLine($"End of input from stream start={measurement.EndOfInput.TotalMilliseconds:F1} ms (pacing + backpressure)");
             var firstPreview = measurement.FirstSpeechPreview is { } first
@@ -155,6 +179,13 @@ try
             Console.WriteLine($"Full stream elapsed={measurement.FullElapsed.TotalMilliseconds:F1} ms");
             Console.WriteLine(transcript.DisplayText);
             Console.WriteLine($"Spoken words={transcript.SpokenWords?.ToString() ?? "unknown"}");
+            if (wordTimings)
+            {
+                Console.WriteLine($"Timed non-final snapshots={timedPreviews}; revisions among overlapping mapped words={revisedWords}");
+                Console.WriteLine($"Final timing source={transcript.WordTimings?.Source.ToString() ?? "unavailable"}; mappedWords={transcript.WordTimings?.Words.Count.ToString() ?? "unavailable"}");
+                foreach (var word in transcript.WordTimings?.Words ?? [])
+                    Console.WriteLine($"WORD textStart={word.TextStart} textLength={word.TextLength} samples={word.StartSample}..{word.EndSample} seconds={word.StartSample / 16000.0:F3}..{word.EndSample / 16000.0:F3} text={transcript.SpeechText!.Substring(word.TextStart, word.TextLength)}");
+            }
             if (backend == NativeBackend.Auto) { Console.WriteLine(engine.DeviceSelectionSummary); }
         }
     }

@@ -5,6 +5,8 @@ namespace Ansible.Core;
 public sealed record RecognitionResult(string DisplayText, string? SpeechText)
 {
     public int? SpokenWords => SpeechText is null ? null : AudioMeter.CountWords(SpeechText);
+    public long? ProcessedSamples { get; init; }
+    public SpeechWordTimings? WordTimings { get; init; }
 }
 
 public enum NativeBackend

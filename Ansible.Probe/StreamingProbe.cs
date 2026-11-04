@@ -8,7 +8,8 @@ internal static class StreamingProbe
 {
     internal static async Task<(RecognitionResult Transcript, StreamMeasurement Measurement)> MeasureAsync(
         IRecognitionEngine engine, AudioModel model, byte[] pcm, RecognitionOptions options,
-        Func<TimeSpan>? elapsed = null, Func<TimeSpan, CancellationToken, Task>? delayAsync = null)
+        Func<TimeSpan>? elapsed = null, Func<TimeSpan, CancellationToken, Task>? delayAsync = null,
+        Action<TranscriptUpdate>? observe = null)
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(3));
         var audio = Channel.CreateBounded<byte[]>(8);
@@ -24,6 +25,7 @@ internal static class StreamingProbe
         var streaming = engine.StreamAsync(model, audio.Reader, options,
             new InlineProgress<TranscriptUpdate>(update =>
             {
+                observe?.Invoke(update);
                 if (update.IsFinal || string.IsNullOrWhiteSpace(update.SpeechText))
                     return;
                 lock (progressGate)
