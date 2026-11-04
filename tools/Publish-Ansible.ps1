@@ -49,7 +49,7 @@ try {
     [IO.Compression.ZipFile]::ExtractToDirectory($packagePath, $inspection)
     foreach ($resource in @(
         "AppxManifest.xml", "resources.pri", "Ansible.exe", "DeviceProbe\Ansible.DeviceProbe.exe",
-        "audiocpp.dll", "audio-models.json", "validation-sample.wav", "audio.cpp-LICENSE",
+        "audiocpp.dll", "record_capture.dll", "audio-models.json", "validation-sample.wav", "audio.cpp-LICENSE",
         "Assets\AppIcon.ico", "Assets\StoreLogo.png",
         "Assets\ModelIcons\moonshine.png", "Assets\ModelIcons\moonshine-dark.png",
         "Assets\ModelIcons\qwen.png", "Assets\ModelIcons\qwen-dark.png",

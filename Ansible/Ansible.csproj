@@ -34,6 +34,7 @@
     <Content Include="..\tools\audio-models.json" Link="audio-models.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\.runtime\native\*.dll" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\.runtime\record-spikes\encoder\record_encoder_spike.dll" Condition="Exists('..\.runtime\record-spikes\encoder\record_encoder_spike.dll')" Link="record_encoder_spike.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\.runtime\record-capture\record_capture.dll" Link="record_capture.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\.runtime\native\audio.cpp-LICENSE" Link="audio.cpp-LICENSE" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\.runtime\native\native-runtime.json" Link="native-runtime.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\.runtime\native\native-notices\**\*" Link="native-notices\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
@@ -57,6 +58,12 @@
     <PublishTrimmed Condition="'$(Configuration)' == 'Debug'">False</PublishTrimmed>
     <PublishTrimmed Condition="'$(Configuration)' != 'Debug'">True</PublishTrimmed>
   </PropertyGroup>
+
+  <Target Name="BuildRecordCapture" BeforeTargets="PrepareForBuild"
+          Inputs="..\tools\record-capture\record_capture.cpp;..\tools\record-capture\record_capture.h;..\tools\record-capture\video_encoder.h;..\tools\record-spikes\encoder\record_encoder.h;..\tools\record-capture\Build-RecordCapture.ps1"
+          Outputs="..\.runtime\record-capture\record_capture.dll">
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\tools\record-capture\Build-RecordCapture.ps1&quot;" />
+  </Target>
 
   <Target Name="RequireQualifiedDeployment" BeforeTargets="PrepareForBuild">
     <Error Condition="'$(RuntimeIdentifier)' != 'win-x64' or '$(Platform)' != 'x64' or '$(PlatformTarget)' != 'x64'" Text="Only the Windows x64 deployment is supported. x86 and ARM64 require separate native builds and qualification." />
