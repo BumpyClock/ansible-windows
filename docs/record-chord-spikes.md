@@ -71,9 +71,18 @@ manual target matrix is complete. Clipboard format readback establishes
 publication only. It cannot establish attachment insertion or text preservation
 inside another app.
 
-Capture overhead remains unmeasured. Spike 4 must compare the same recognition
-workload with and without capture and encoding, after encoder feasibility.
-Build and recognition smoke checks are not performance qualification.
+The first overhead attempt completed five baseline trials and four valid
+capture trials, then failed the fifth capture trial's overlap check. That MP4
+lasted only 3.3 seconds although its worker ran across the five-second lead-in,
+14-second speech sample, and two-second tail. WGC stopped providing new frames;
+a static scene is one possible cause, not an established diagnosis. The helper
+finalized its last sample with a fixed 1/30-second duration and omitted the quiet
+tail. The earlier short encoder success did not test this case.
+
+Correct the missing tail and distinguish held encoded images from new WGC
+updates before completing the five-pair comparison. No general latency or
+memory-overhead verdict is established by the incomplete run. Build and
+recognition smoke checks are not performance qualification.
 
 The timing spike provides sample-relative native metadata. A future take still
 needs an explicit QPC start anchor shared with audio, ink, frames, and video.
