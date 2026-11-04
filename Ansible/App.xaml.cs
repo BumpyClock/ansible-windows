@@ -16,6 +16,12 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        if (Environment.GetCommandLineArgs().Contains("--record-encoder-spike"))
+        {
+            RecordEncoderSpike.Run(this, LocalDataDirectory,
+                Environment.GetCommandLineArgs().Contains("--borderless"));
+            return;
+        }
         LocalDiagnosticLog? diagnostics = null;
         long? launchGeneration = null;
         long? launchStarted = null;

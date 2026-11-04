@@ -33,6 +33,7 @@
     <Content Update="Assets\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\tools\audio-models.json" Link="audio-models.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\.runtime\native\*.dll" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\.runtime\record-spikes\encoder\record_encoder_spike.dll" Condition="Exists('..\.runtime\record-spikes\encoder\record_encoder_spike.dll')" Link="record_encoder_spike.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\.runtime\native\audio.cpp-LICENSE" Link="audio.cpp-LICENSE" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\.runtime\native\native-runtime.json" Link="native-runtime.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\.runtime\native\native-notices\**\*" Link="native-notices\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
