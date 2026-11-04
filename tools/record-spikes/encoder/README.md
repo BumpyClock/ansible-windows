@@ -20,10 +20,21 @@ test. It is not a substitute for the packaged NativeAOT run.
   "$PWD\.runtime\record-spikes\encoder\host-capture.mp4"
 ```
 
+Run the quiet-input regression through the same encoder. It provides one
+clearly labeled synthetic image, sends no WGC updates, and requires a decoded
+four-second silent video with held encoder samples.
+
+```powershell
+.\.runtime\record-spikes\encoder\record_encoder_host.exe `
+  "$PWD\.runtime\record-spikes\encoder\synthetic-static-fixture.mp4" --static-fixture
+```
+
 Run the published package through a separate developer identity. Windows
 Developer Mode must already be enabled. The script does not enable it or change
 certificate trust. Registration leaves the existing Ansible identities alone.
-It refuses to replace an earlier spike registration or its evidence.
+Each invocation creates a fresh suffixed RecordSpike identity and layout. A
+specific `-RunId` can be supplied; existing registrations or evidence for that
+ID are never replaced.
 
 ```powershell
 .\tools\record-spikes\encoder\Invoke-PackagedEncoderSpike.ps1 `
@@ -33,19 +44,24 @@ It refuses to replace an earlier spike registration or its evidence.
 The invocation captures the monitor under the pointer for five seconds. It opens
 no microphone. `ApplicationData.Current.LocalFolder/record-spikes/<run>/` holds
 the silent MP4 and `result.txt`. The report records the package identity,
-NativeAOT dynamic-code status, real WGC frame times, input frame count, decoded
-H.264 frame count, video duration, and audio stream count. Its `outcome=passed`
-requires readable H.264 with at least one decoded video frame and zero audio
-streams. Screen contents stay local. Delete the generated files explicitly when
+NativeAOT dynamic-code status, real WGC update times/count, successful encoder
+submissions, held-image count, real stop clock, decoded H.264 count, duration,
+and audio stream count. Its `outcome=passed` requires decoded silent video that
+covers the real stop clock within one output frame. Screen contents stay local.
+Delete the generated files explicitly when
 they are no longer needed. The product retention policy is not implemented.
 
 The helper uses `IGraphicsCaptureItemInterop.CreateForMonitor`, a free-threaded
-two-frame WGC pool, D3D11 staging readback, and an MF sink writer. It holds at most
-one pending sample in addition to the pool and conversion buffers. Capture and
+two-frame WGC pool, D3D11 staging readback, and an MF sink writer. It holds one
+latest immutable image and one pending sample in addition to the pool and
+conversion buffers. The encoder continues at its bounded target cadence when
+WGC supplies no new frame and extends the final sample through its real stop.
+Held samples are not reported as fresh WGC updates. Capture and
 encoding execute on the caller's worker. Closing the session and finalizing the
 writer complete before that worker returns. A passed native cancellation event
 ends the loop. The app spike has a fixed five-second lifetime and exits only
-after the worker joins. Monitor size changes fail the take.
+after the worker joins. Monitor size changes, the capture item's Closed event,
+and device HRESULT failures fail the take.
 
 The spike uses a 1920-pixel long-edge cap, even dimensions, a requested 30 fps
 media type, and 6 Mbps. These are test parameters, not settled product defaults.

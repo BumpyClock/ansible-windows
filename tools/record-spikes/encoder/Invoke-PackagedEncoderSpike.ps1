@@ -1,12 +1,14 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string]$Msix,
-    [switch]$Borderless
+    [switch]$Borderless,
+    [ValidatePattern('^[A-Za-z0-9]{1,12}$')]
+    [string]$RunId = ([Guid]::NewGuid().ToString('N').Substring(0, 12))
 )
 $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
-$packageName = 'BumpyClock.Ansible.RecordSpike'
-$layout = Join-Path $root '.runtime/record-spikes/package-layout'
+$packageName = "BumpyClock.Ansible.RecordSpike.$RunId"
+$layout = Join-Path $root ".runtime/record-spikes/package-layout-$RunId"
 if (Get-AppxPackage -Name $packageName) {
     throw 'The isolated spike identity is already registered. Keep its evidence or unregister it explicitly before another package registration.'
 }
@@ -22,7 +24,7 @@ $evidence = @(
     "executable-sha256=$((Get-FileHash -LiteralPath (Join-Path $layout 'Ansible.exe')).Hash)",
     "helper-sha256=$((Get-FileHash -LiteralPath $publishedHelper).Hash)"
 )
-$evidence | Set-Content -LiteralPath (Join-Path $root '.runtime/record-spikes/package-hashes.txt')
+$evidence | Set-Content -LiteralPath (Join-Path $root ".runtime/record-spikes/package-hashes-$RunId.txt")
 $manifest = Join-Path $layout 'AppxManifest.xml'
 [xml]$xml = Get-Content -LiteralPath $manifest
 $xml.Package.Identity.Name = $packageName

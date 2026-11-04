@@ -1,5 +1,6 @@
 [CmdletBinding()]
-param([Parameter(Mandatory)][string]$Video, [Parameter(Mandatory)][string]$Image)
+param([Parameter(Mandatory)][string]$Video, [Parameter(Mandatory)][string]$Image,
+    [ValidateRange(0,300000)][int]$AtMilliseconds = 0)
 $ErrorActionPreference = 'Stop'
 $videoPath = [IO.Path]::GetFullPath($Video)
 $imagePath = [IO.Path]::GetFullPath($Image)
@@ -19,6 +20,6 @@ Push-Location $output
 try {
     & $compiler /nologo /std:c++20 /EHsc /O2 /MD (Join-Path $PSScriptRoot 'extract_frame.cpp') /Fe:extract_frame.exe /link windowsapp.lib
     if ($LASTEXITCODE -ne 0) { throw 'Frame extractor build failed.' }
-    & (Join-Path $output 'extract_frame.exe') $videoPath $imagePath
+    & (Join-Path $output 'extract_frame.exe') $videoPath $imagePath $AtMilliseconds
     if ($LASTEXITCODE -ne 0) { throw 'Frame extraction failed.' }
 } finally { Pop-Location }

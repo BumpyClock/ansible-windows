@@ -29,7 +29,9 @@ internal static partial class RecordEncoderSpike
                 int hr = RunNative(output, 5, borderless ? 1 : 0, 0, ref result);
                 report.AppendLine($"capture-hresult=0x{hr:X8}");
                 report.AppendLine($"wall-ms={Stopwatch.GetElapsedTime(started).TotalMilliseconds:F1}");
-                report.AppendLine($"frames={result.Frames}");
+                report.AppendLine($"wgc-updates={result.Frames}");
+                report.AppendLine($"encoded-samples={result.EncodedSamples}");
+                report.AppendLine($"held-samples={result.HeldSamples}");
                 report.AppendLine($"size={result.Width}x{result.Height}");
                 report.AppendLine($"border-required={result.BorderRequired}");
                 report.AppendLine($"borderless-setter-hresult=0x{result.BorderlessHResult:X8}");
@@ -37,6 +39,9 @@ internal static partial class RecordEncoderSpike
                 report.AppendLine($"qpc-frequency={result.QpcFrequency}");
                 report.AppendLine($"first-frame-100ns={result.FirstFrame100ns}");
                 report.AppendLine($"last-frame-100ns={result.LastFrame100ns}");
+                report.AppendLine($"first-encode-qpc={result.FirstEncodeQpc}");
+                report.AppendLine($"last-encode-qpc={result.LastEncodeQpc}");
+                report.AppendLine($"stop-qpc={result.StopQpc}");
                 Marshal.ThrowExceptionForHR(hr);
                 hr = InspectNative(output, out uint frames, out uint audio, out long duration);
                 report.AppendLine($"inspect-hresult=0x{hr:X8}");
@@ -45,7 +50,11 @@ internal static partial class RecordEncoderSpike
                 report.AppendLine($"duration-100ns={duration}");
                 report.AppendLine($"bytes={new FileInfo(output).Length}");
                 Marshal.ThrowExceptionForHR(hr);
-                if (frames == 0 || audio != 0) throw new IOException("Silent H.264 validation failed.");
+                if (frames == 0 || audio != 0 || result.EncodedSamples == 0)
+                    throw new IOException("Silent H.264 validation failed.");
+                double stop100ns = result.StopQpc * (10000000.0 / result.QpcFrequency);
+                if (duration + result.FirstFrame100ns < stop100ns - 10000000.0 / 30)
+                    throw new IOException("Video does not cover its actual stop clock within one output frame.");
             });
             report.AppendLine("outcome=passed");
         }
@@ -67,6 +76,8 @@ internal static partial class RecordEncoderSpike
         public uint Size, Frames, Width, Height;
         public int BorderRequired, BorderlessHResult;
         public long StartQpc, QpcFrequency, FirstFrame100ns, LastFrame100ns;
+        public uint EncodedSamples, HeldSamples;
+        public long FirstEncodeQpc, LastEncodeQpc, StopQpc;
     }
 
     [LibraryImport("record_encoder_spike.dll", EntryPoint = "record_encoder_run", StringMarshalling = StringMarshalling.Utf16)]

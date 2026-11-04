@@ -5,16 +5,18 @@
 #include <winrt/Windows.Storage.Streams.h>
 #include <filesystem>
 #include <cstdio>
+#include <cstdlib>
 using namespace winrt;
 int wmain(int argc, wchar_t** argv) {
-    if (argc != 3) return 2;
+    if (argc != 3 && argc != 4) return 2;
     init_apartment(apartment_type::multi_threaded);
     try {
         auto input = Windows::Storage::StorageFile::GetFileFromPathAsync(argv[1]).get();
         auto clip = Windows::Media::Editing::MediaClip::CreateFromFileAsync(input).get();
         Windows::Media::Editing::MediaComposition composition;
         composition.Clips().Append(clip);
-        auto image = composition.GetThumbnailAsync(Windows::Foundation::TimeSpan{0}, 0, 0,
+        auto milliseconds = argc == 4 ? std::wcstoll(argv[3], nullptr, 10) : 0;
+        auto image = composition.GetThumbnailAsync(Windows::Foundation::TimeSpan{milliseconds * 10000}, 0, 0,
             Windows::Media::Editing::VideoFramePrecision::NearestFrame).get();
         std::filesystem::path path{argv[2]};
         auto folder = Windows::Storage::StorageFolder::GetFolderFromPathAsync(path.parent_path().c_str()).get();
