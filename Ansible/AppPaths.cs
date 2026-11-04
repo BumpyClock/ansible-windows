@@ -5,6 +5,8 @@ internal sealed record AppPaths(
     string Usage, string StartupLog, string PublicSample, string Settings,
     string DeviceProbe, string DeviceBenchmarks)
 {
+    public string Captures => Path.Combine(Path.GetDirectoryName(Settings)!, "captures");
+
     public static AppPaths Create(string baseDirectory, string localDataDirectory)
     {
         return new(

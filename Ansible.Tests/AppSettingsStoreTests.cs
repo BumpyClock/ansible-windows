@@ -11,6 +11,26 @@ public sealed class AppSettingsStoreTests : IDisposable
     private AppSettingsStore CreateStore() => new(Path.Combine(_directory, "settings.json"));
 
     [Fact]
+    public void RecordCaptureIsOptInAndPreferencesRoundTrip()
+    {
+        var store = CreateStore();
+        Assert.False(store.Load().RecordChordEnabled);
+        Assert.True(store.Load().IncludeVideoLink);
+        Assert.Equal(DictationShortcut.RecordDefault, store.Load().RecordShortcut);
+        var settings = new AppSettings { RecordChordEnabled = true, RecordShortcut = new(2, 0x52), IncludeVideoLink = false };
+        store.Save(settings);
+        Assert.Equal(settings, CreateStore().Load());
+    }
+
+    [Fact]
+    public void EnablingRecordRejectsOverlappingChords()
+    {
+        Assert.Throws<InvalidDataException>(() => CreateStore().Save(new()
+            { RecordChordEnabled = true, RecordShortcut = new(10, 0x44) }));
+        CreateStore().Save(new() { RecordChordEnabled = false, RecordShortcut = DictationShortcut.Default });
+    }
+
+    [Fact]
     public void FreshInstallShowsWelcomeAndCompletionSurvivesRestart()
     {
         var store = CreateStore();

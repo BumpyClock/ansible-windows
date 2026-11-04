@@ -9,6 +9,24 @@ public sealed class HomeDictationHistoryTests : IDisposable
     public void Dispose() => _history.Dispose();
 
     [Fact]
+    public void PreparedBundleTextPersistsWithoutChangingSpeechCountOrStoringMedia()
+    {
+        var completion = Completion(1, "two words");
+        var prepared = completion with
+        {
+            Result = completion.Result with
+            {
+                Payload = new("two [ink 1 @0:07] words", [new(@"C:\captures\1.png", 1, TimeSpan.FromSeconds(7))])
+            }
+        };
+        Assert.True(_history.Add(prepared));
+        var row = Assert.Single(_history.Snapshot());
+        Assert.Equal("two [ink 1 @0:07] words", row.Text);
+        Assert.Equal(2, row.Words);
+        Assert.DoesNotContain("captures", row.Text);
+    }
+
+    [Fact]
     public async Task HistoryDiagnosticsNeverContainTranscriptOrPath()
     {
         var path = TemporaryPath();

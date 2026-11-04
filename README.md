@@ -16,6 +16,13 @@ model downloads, custom vocabulary for supported models, and local usage insight
 Microphone permission is checked at launch. Ansible requests missing consent
 before recording and offers Windows Settings guidance when access is blocked.
 
+Enable **Record chord** in Settings to dictate with screen context. Hold
+**Alt + Win** to capture the pointer's monitor, draw with the left mouse button,
+then release. The result includes numbered ink markers, up to eight pictures,
+and a local link to a silent MP4. The record chord uses the same hold or latch
+mode as voice dictation. Ctrl + Win stays voice-only. See the
+[record chord workflow](docs/user-guide.md#record-chord).
+
 Closing the main window with X or Alt+F4 hides Ansible to a Windows
 notification-area icon. Recognition, global dictation shortcuts, downloads, and
 meetings keep running. Click the icon to reopen the window. Right-click it for

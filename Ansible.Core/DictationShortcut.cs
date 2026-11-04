@@ -5,7 +5,7 @@ namespace Ansible.Core;
 
 /// <summary>
 /// A global activation chord: RegisterHotKey modifier bits (<see cref="Modifiers"/>: Alt=1, Ctrl=2,
-/// Shift=4, Win=8) plus a primary virtual-key (<see cref="Key"/>). Ctrl+Win alone uses Key=0.
+/// Shift=4, Win=8) plus a primary virtual-key (<see cref="Key"/>). Modifier-only chords use Key=0.
 /// </summary>
 public readonly record struct DictationShortcut(uint Modifiers, uint Key)
 {
@@ -22,9 +22,10 @@ public readonly record struct DictationShortcut(uint Modifiers, uint Key)
     private const uint VkL = 0x4C;
     private const uint VkF1 = 0x70, VkF11 = 0x7A;   // F12 (0x7B) is intentionally excluded.
     public static DictationShortcut Default => new(ModControl | ModWin, 0);
+    public static DictationShortcut RecordDefault => new(ModAlt | ModWin, 0);
 
     [JsonIgnore]
-    public bool IsModifierOnly => Modifiers == (ModControl | ModWin) && Key == 0;
+    public bool IsModifierOnly => Key == 0 && (Modifiers == (ModControl | ModWin) || Modifiers == (ModAlt | ModWin));
 
     /// <summary>
     /// Validates chord structure and known exclusions, not whether RegisterHotKey succeeds.
@@ -37,6 +38,8 @@ public readonly record struct DictationShortcut(uint Modifiers, uint Key)
         (Modifiers & ~ValidModifierMask) == 0 &&
         IsSupportedPrimaryKey(Key) &&
         !(Modifiers == ModWin && Key == VkL) &&
+        !(Modifiers == (ModAlt | ModWin) && Key == 0x52) &&
+        !(Modifiers == (ModControl | ModWin) && Key == VkSpace) &&
         (!IsPrintableKey(Key) || (Modifiers & NonShiftModifierMask) != 0));
 
     /// <summary>Stable label with a fixed modifier order (Ctrl, Win, Shift, Alt), e.g. "Ctrl + Alt + D" or "F9".</summary>
@@ -55,6 +58,14 @@ public readonly record struct DictationShortcut(uint Modifiers, uint Key)
         }
     }
 
+    /// <summary>True when either chord's physical keys contain all keys of the other.</summary>
+    public bool ConflictsWith(DictationShortcut other) =>
+        ContainsKeys(this, other) || ContainsKeys(other, this);
+
+    private static bool ContainsKeys(DictationShortcut larger, DictationShortcut smaller) =>
+        (larger.Modifiers & smaller.Modifiers) == smaller.Modifiers &&
+        (smaller.Key == 0 || larger.Key == smaller.Key);
+
     private static bool IsPrintableKey(uint vk) =>
         (vk >= VkDigit0 && vk <= VkDigit9) || (vk >= VkA && vk <= VkZ) || vk == VkSpace;
 
@@ -71,15 +82,23 @@ public readonly record struct DictationShortcut(uint Modifiers, uint Key)
 }
 
 /// <summary>
-/// Qualifies the modifier-only chord before starting, so ordinary Ctrl+Win+key shortcuts pass through.
+/// Qualifies a modifier-only chord before starting, so ordinary three-key shortcuts pass through.
 /// A third key arriving after qualification ends the hold; future input cannot be predicted.
 /// </summary>
-public sealed class CtrlWinShortcutState
+public sealed class ModifierShortcutState
 {
     public const int QualificationMilliseconds = 200;
     private readonly HashSet<uint> _down = [];
     private long? _candidateAt;
     private bool _blocked;
+    private readonly uint _modifiers;
+
+    public ModifierShortcutState(uint modifiers)
+    {
+        if (!new DictationShortcut(modifiers, 0).IsModifierOnly)
+            throw new ArgumentOutOfRangeException(nameof(modifiers));
+        _modifiers = modifiers;
+    }
 
     public bool IsPressed { get; private set; }
     public bool IsPending => _candidateAt is not null;
@@ -97,7 +116,7 @@ public sealed class CtrlWinShortcutState
     {
         _down.RemoveWhere(key => !isPhysicallyDown(key));
         if (_down.Count == 0) _blocked = false;
-        if (!(_down.Any(IsControl) && _down.Any(IsWindows)))
+        if (!ChordHeld())
         {
             _candidateAt = null;
             IsPressed = false;
@@ -115,7 +134,7 @@ public sealed class CtrlWinShortcutState
             _blocked = true;
         }
 
-        var held = _down.Any(IsControl) && _down.Any(IsWindows);
+        var held = ChordHeld();
         if (!held || _blocked)
         {
             _candidateAt = null;
@@ -144,5 +163,8 @@ public sealed class CtrlWinShortcutState
 
     public static bool IsControl(uint key) => key is 0x11 or 0xA2 or 0xA3;
     public static bool IsWindows(uint key) => key is 0x5B or 0x5C;
-    private static bool IsChordKey(uint key) => IsControl(key) || IsWindows(key);
+    public static bool IsAlt(uint key) => key is 0x12 or 0xA4 or 0xA5;
+    private bool ChordHeld() => _down.Any(IsWindows) &&
+        (_modifiers == 10 ? _down.Any(IsControl) : _down.Any(IsAlt));
+    public bool IsChordKey(uint key) => IsWindows(key) || (_modifiers == 10 ? IsControl(key) : IsAlt(key));
 }

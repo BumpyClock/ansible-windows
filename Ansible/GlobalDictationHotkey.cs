@@ -44,7 +44,7 @@ internal sealed partial class GlobalDictationHotkey : IDisposable
     private readonly nint _subclassProcPtr;
     private readonly DispatcherTimer _pollTimer;
     private readonly uint _ownerThread;
-    private readonly CtrlWinShortcutState _modifierState = new();
+    private readonly ModifierShortcutState _modifierState;
     private readonly KeyboardHookCallback _keyboardCallback;
     // Keep callbacks rooted even if Windows fails to release a hook.
     [ThreadStatic] private static HashSet<GlobalDictationHotkey>? s_hookOwners;
@@ -69,6 +69,7 @@ internal sealed partial class GlobalDictationHotkey : IDisposable
         _id = NextId();
         _subclassId = (nuint)_id;
         _shortcut = shortcut;
+        _modifierState = new ModifierShortcutState(shortcut.IsModifierOnly ? shortcut.Modifiers : 10);
         _ownerThread = GetCurrentThreadId();
         if (GetWindowThreadProcessId(hwnd, out _) != _ownerThread)
             throw new ArgumentException("The hotkey must be created on its window's message thread.", nameof(hwnd));
@@ -228,14 +229,14 @@ internal sealed partial class GlobalDictationHotkey : IDisposable
             {
                 try
                 {
-                    MaskWindowsMenu();
+                    MaskModifierMenus();
                     _pressed = true;
                     SafeInvoke(true);
                 }
                 catch (Exception error)
                 {
                     _modifierState.Reset(PhysicalKeysDown());
-                    Trace.TraceWarning($"Ctrl + Win could not suppress Start; dictation was not started: {error.Message}");
+                    Trace.TraceWarning($"Modifier shortcut could not suppress menus; dictation was not started: {error.Message}");
                 }
             }
             if (!_modifierState.IsPressed && !_modifierState.IsPending) _pollTimer.Stop();
@@ -313,7 +314,7 @@ internal sealed partial class GlobalDictationHotkey : IDisposable
             _modifierState.Reset(PhysicalKeysDown());
             _keyboardHook = SetWindowsHookExW(13, Marshal.GetFunctionPointerForDelegate(_keyboardCallback), GetModuleHandleW(null), 0);
             if (_keyboardHook == 0)
-                throw new Win32Exception(Marshal.GetLastWin32Error(), "Failed to install the Ctrl + Win global keyboard hook.");
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "Failed to install the modifier shortcut keyboard hook.");
             (s_hookOwners ??= []).Add(this);
         }
         else if (!RegisterHotKey(_hwnd, _id, _shortcut.Modifiers | MOD_NOREPEAT, _shortcut.Key))
@@ -348,7 +349,7 @@ internal sealed partial class GlobalDictationHotkey : IDisposable
                     var wasPressed = _modifierState.IsPressed;
                     var injected = (input.Flags & 0x12) != 0;
                     if (down && !injected &&
-                        (CtrlWinShortcutState.IsControl(input.Key) || CtrlWinShortcutState.IsWindows(input.Key)))
+                        _modifierState.IsChordKey(input.Key))
                     {
                         // The current event precedes its GetAsyncKeyState update, so retain that key.
                         _modifierState.Reconcile(key => key == input.Key || IsKeyDown((int)key));
@@ -375,12 +376,12 @@ internal sealed partial class GlobalDictationHotkey : IDisposable
         .Where(key => key is not VK_CONTROL and not VK_SHIFT and not VK_MENU and not 0xE8 && IsKeyDown(key))
         .Select(key => (uint)key);
 
-    private void MaskWindowsMenu()
+    private void MaskModifierMenus()
     {
         ReleaseMenuMaskKey();
         // VK_E8 is unassigned. Unlike dropping Win-up, a complete mask leaves physical modifier state intact.
         // https://www.autohotkey.com/docs/v2/lib/A_MenuMaskKey.htm documents this menu-masking key.
-        // Send the pair together, while Ctrl+Win are still down, before reporting the qualified press.
+        // Send the pair together, while the chord modifiers are still down, before reporting the qualified press.
         var release = new[] { WindowsTextTarget.KeyboardEvent.Virtual(0xE8, 2) };
         var inputs = new[] { WindowsTextTarget.KeyboardEvent.Virtual(0xE8, 0), release[0] };
         var sent = SendMenuMaskInput(inputs);
@@ -392,14 +393,14 @@ internal sealed partial class GlobalDictationHotkey : IDisposable
             ReleaseMenuMaskKey();
             return;
         }
-        throw new Win32Exception(error, "Windows did not queue the balanced Start-menu mask.");
+        throw new Win32Exception(error, "Windows did not queue the balanced modifier-menu mask.");
     }
 
     private void ReleaseMenuMaskKey()
     {
         if (_pendingMenuMaskRelease is not { } release) return;
         if (!WindowsTextTarget.ReleaseOwnedKeys(release, SendMenuMaskInput))
-            throw new Win32Exception(Marshal.GetLastWin32Error(), "Windows could not release the Start-menu mask key.");
+            throw new Win32Exception(Marshal.GetLastWin32Error(), "Windows could not release the modifier-menu mask key.");
         _pendingMenuMaskRelease = null;
     }
 

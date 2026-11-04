@@ -107,8 +107,8 @@ administrator. File transcription and model management remain available.
 This check does not open a microphone or capture audio. Recording checks access
 again to catch permission changes, without opening another consent prompt.
 Older Windows versions without the capability-request API show Settings guidance
-when access cannot be confirmed. Camera, screen-recording, and calendar access
-are not requested because these features do not use them.
+when access cannot be confirmed. The opt-in record chord uses Windows screen
+capture. Camera and calendar access are not requested.
 
 ## Choose a model
 
@@ -197,8 +197,8 @@ The default activation mode is **Hold to talk**. In **Settings > Activation mode
 choose **Press to start and stop** to finish with a second shortcut press instead.
 Click the shortcut field to record a different key or key combination; Esc
 cancels the change. **Reset** restores Ctrl + Win. Saved F9 and other custom
-shortcuts stay until you change or reset them. The only modifier-only chord is
-Ctrl + Win. Other shortcuts still need a primary key, including F9. A short
+shortcuts stay until you change or reset them. Modifier-only chords support
+Ctrl + Win and Alt + Win. Other shortcuts still need a primary key, including F9. A short
 Ctrl + Win tap does not start dictation. A quick third key still goes to
 Windows and does not activate Ansible. **Press to start and stop** uses that
 same brief hold to start, then a second press to finish. It does not require
@@ -244,6 +244,53 @@ the pill would leave the work area it moves above the cursor line. When Windows
 cannot report a cursor position, for dictation started from the app window, or
 when the option is off, the pill stays at the bottom centre. The option applies
 to the next dictation and persists across restarts.
+
+### Record chord
+
+Enable **Record chord** in Settings. Its default is **Alt + Win**. It starts
+dictation, a silent screen recording, and an ink overlay together. The pointer's
+monitor at activation stays fixed for the take. The ordinary dictation shortcut
+stays voice-only. Both use **Activation mode**, including the 500 ms release
+tail in hold mode. Only the chord that started the take can stop it.
+
+Left-drag draws on the recorded monitor. A click makes a numbered ping. Mouse
+input is blocked on all monitors during capture, including right-click, middle
+button, and the wheel. Escape discards a pending take. Once input has already
+been queued, it cannot be recalled; check the destination. The limit is five
+minutes. The pill and recording indicator are excluded from capture. Ink stays
+visible in the recording.
+
+An ink burst ends after 1.5 seconds without drawing. Its picture is captured
+before the marks fade over one second. The first seven burst pictures and a
+final summary are retained. The summary shows all numbered marks once over the
+final screen. Later bursts keep their numbers in the text and summary. With no
+ink, the result contains one final screen picture. Pictures have burned-in
+labels and a maximum 1920-pixel long edge. Eight is a provisional cap; it is not
+a measured attachment maximum across every destination.
+
+Nemotron uses its native word anchors to place ink markers in the final speech.
+These anchors are token emission times, not forced acoustic alignment. Kroko
+and VibeVoice streaming use partial-text lengths and label markers approximate.
+Buffered or final-only models use a trailing **Ink timeline** and a warning.
+Unavailable timing stays unavailable. The app never changes models for a take.
+
+Chat inputs tested so far drop text from a combined files/text paste. The app
+pastes text first. It queues one bulk picture paste only after exact insertion
+is observed in the same field. Attachment insertion cannot be verified through
+accessibility. If text verification is unavailable, its clipboard publication
+stays available and pictures remain in Dictation for **Copy pictures**. No timer
+or clipboard callback counts as proof of insertion. Record bundles use Ctrl+V
+regardless of the voice-only insertion preference.
+
+The Dictation result offers Copy text, Copy pictures, and Copy video link. With
+no editable destination, use these manual actions. Media failures warn and leave
+authoritative speech available. History stores the prepared text with markers,
+never the pictures or MP4. Media stays in private package storage.
+
+**Include video link in pasted text** defaults on. The video is never attached
+through the clipboard. Its `file:///` URL reveals a local path. Web and cloud
+agents generally cannot open it. A genuine video startup gap is reported as an
+offset on the shared take clock.
 
 ### Text insertion
 
@@ -653,6 +700,13 @@ camera. The app reports an app-wide warning if Windows cannot apply or verify
 the setting.
 
 Captured audio always stays in memory and is never saved or uploaded.
+The opt-in record chord saves PNGs and silent H.264 video locally. It captures
+the screen contents of one monitor. Automatic cleanup runs at launch and after
+each take, removing captures older than seven days, then oldest first above
+2 GiB. Active writers, the current media result, and files still referenced by
+the app's current clipboard publication are protected. Settings shows total
+size and **Delete all captures**. In-use takes are retained with a warning.
+Deleting captures does not remove transcript history.
 Successful dictation transcripts persist as text and metadata in
 `dictation-history.json`. Meeting transcripts, titles, and speaker names save
 locally. Recognition does
@@ -681,6 +735,7 @@ Per-user files are in Windows package storage, normally
 | `meetings\<id>.json` | Titles, dates, transcript turns, timing quality, manual/automatic names, and original wording after cleanup; no audio |
 | `diagnostics\local-diagnostics.jsonl` | Opt-in operational metadata beside `settings.json`. Rotates to `local-diagnostics.jsonl.previous` at 1 MiB. No audio or transcript text |
 | `models\` | Default location for downloaded model weights |
+| `captures\<take>\` | Record chord PNG pictures and silent MP4; never captured audio |
 
 If `dictation-history.json` is corrupt or unreadable, Ansible leaves the file
 unchanged, shows a warning, and keeps new rows in memory until storage can be

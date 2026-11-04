@@ -61,6 +61,7 @@ internal sealed class HomeDictationHistory : IDisposable, IAsyncDisposable
     {
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _session.DictationCompleted += OnDictationCompleted;
+        _session.DictationDiscarded += OnDictationDiscarded;
     }
 
     internal event Action? Changed;
@@ -90,9 +91,9 @@ internal sealed class HomeDictationHistory : IDisposable, IAsyncDisposable
     /// <summary>Accepts a completion only once and retains at most the newest bounded entries.</summary>
     internal bool Add(DictationCompletion completion)
     {
-        var text = (string.IsNullOrWhiteSpace(completion.Result.SpeechText)
+        var text = (completion.Result.Payload?.Text ?? (string.IsNullOrWhiteSpace(completion.Result.SpeechText)
             ? completion.Result.DisplayText
-            : completion.Result.SpeechText).Trim();
+            : completion.Result.SpeechText)).Trim();
         if (text.Length == 0) { return false; }
 
         bool accepted;
@@ -148,6 +149,7 @@ internal sealed class HomeDictationHistory : IDisposable, IAsyncDisposable
     }
 
     private void OnDictationCompleted(DictationCompletion completion) => Add(completion);
+    private void OnDictationDiscarded(Guid operationId) => Remove(operationId);
 
     private void Trim()
     {
@@ -303,7 +305,11 @@ internal sealed class HomeDictationHistory : IDisposable, IAsyncDisposable
             // Loading may still need to admit one merged snapshot before completion.
             if (_loadFinished) _writer?.Complete();
         }
-        if (_session is not null) { _session.DictationCompleted -= OnDictationCompleted; }
+        if (_session is not null)
+        {
+            _session.DictationCompleted -= OnDictationCompleted;
+            _session.DictationDiscarded -= OnDictationDiscarded;
+        }
     }
 
     public async ValueTask DisposeAsync()

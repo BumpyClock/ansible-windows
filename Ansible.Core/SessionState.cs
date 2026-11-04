@@ -24,6 +24,8 @@ public sealed record SessionNotice(
 public sealed record SessionOutcome(SessionOutcomeKind Kind, RecognitionResult? Result = null, Exception? Error = null)
 {
     internal long? DiagnosticResultTimestamp { get; init; }
+    /// <summary>Only screen media remains owned; microphone and recognition have completed and released.</summary>
+    public bool MediaResourcesRetained { get; init; }
 }
 
 /// <summary>
@@ -58,6 +60,8 @@ public sealed record SessionSnapshot
     /// <summary>Identifies the recognition operation that owns the current transcript and result.</summary>
     public Guid? TranscriptOperationId { get; init; }
     public RecognitionResult? Result { get; init; }
+    public BundlePayload? Payload => Result?.Payload;
+    public bool IsRecordTake { get; init; }
     public UsageDocument? Usage { get; init; }
     public string? UsageError { get; init; }
     public AudioModel? SelectedModel => SelectedIndex >= 0 && SelectedIndex < Models.Count ? Models[SelectedIndex] : null;

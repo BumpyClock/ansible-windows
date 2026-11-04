@@ -112,14 +112,22 @@ public sealed partial class DictationPage : Page
         RenderStatus();
         RenderClock();
         RenderHomeData();
-        if (TranscriptBox.Text != _state.Transcript) { TranscriptBox.Text = _state.Transcript; }
-        var empty = string.IsNullOrWhiteSpace(_state.Transcript);
+        var payload = _state.Payload;
+        var text = payload?.Text ?? _state.Transcript;
+        if (TranscriptBox.Text != text) { TranscriptBox.Text = text; }
+        var empty = string.IsNullOrWhiteSpace(text);
         var retainedInHistory = _state.TranscriptOperationId is { } operationId &&
             (_history.Contains(operationId) || operationId == _removedTranscriptOperationId);
-        var showTranscript = !empty && !retainedInHistory;
+        var hasMedia = payload is { Frames.Count: > 0 } || payload?.VideoPath is not null;
+        var showTranscript = !empty && (!retainedInHistory || hasMedia);
         TranscriptCard.Visibility = showTranscript ? Visibility.Visible : Visibility.Collapsed;
         TranscriptHeader.Visibility = showTranscript ? Visibility.Visible : Visibility.Collapsed;
         CopyButton.IsEnabled = _state.IsIdle || _state.Phase == DictationPhase.RecoveryRequired;
+        TranscriptTitle.Text = payload is null ? "Transcript" : "Dictation bundle";
+        CopyPicturesButton.Visibility = payload is { Frames.Count: > 0 } ? Visibility.Visible : Visibility.Collapsed;
+        CopyVideoButton.Visibility = payload?.VideoPath is not null ? Visibility.Visible : Visibility.Collapsed;
+        CopyPicturesButton.IsEnabled = CopyButton.IsEnabled;
+        CopyVideoButton.IsEnabled = CopyButton.IsEnabled;
     }
 
     private async Task LoadHomeCatalogNamesAsync()
@@ -406,11 +414,35 @@ public sealed partial class DictationPage : Page
         try
         {
             var package = new DataPackage();
-            package.SetText(_state.Transcript);
+            package.SetText(_state.Payload?.Text ?? _state.Transcript);
             Clipboard.SetContent(package);
             CopyLabel.Text = "Copied";
             _copiedTimer.Stop();
             _copiedTimer.Start();
+            _notices.Set(ErrorNoticeKey, null);
+        }
+        catch (Exception error) { ShowError(error); }
+    }
+
+    private void CopyPicturesClicked(object sender, RoutedEventArgs args)
+    {
+        try
+        {
+            if (_state.Payload is not { Frames.Count: > 0 } payload) return;
+            WindowsTextTarget.CopyPictures(payload.Frames);
+            _notices.Set(ErrorNoticeKey, null);
+        }
+        catch (Exception error) { ShowError(error); }
+    }
+
+    private void CopyVideoClicked(object sender, RoutedEventArgs args)
+    {
+        try
+        {
+            if (_state.Payload?.VideoPath is not { } path) return;
+            var package = new DataPackage();
+            package.SetText(new Uri(path).AbsoluteUri);
+            Clipboard.SetContent(package);
             _notices.Set(ErrorNoticeKey, null);
         }
         catch (Exception error) { ShowError(error); }

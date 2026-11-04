@@ -23,6 +23,8 @@ public sealed partial class MainWindow : Window
     private const string StartupNoticeKey = "startup";
     private const string ShortcutNoticeKey = "shortcut";
     private const string ShortcutRegistrationNoticeKey = "shortcut-registration";
+    private const string RecordRegistrationNoticeKey = "record-shortcut-registration";
+    private const string CaptureStorageNoticeKey = "capture-storage";
     private const string ShortcutLessonNoticeKey = "shortcut-lesson";
     internal const string CapturePrivacyNoticeKey = "capture-privacy";
     private const string TrayErrorNoticeKey = "tray-error";
@@ -43,8 +45,14 @@ public sealed partial class MainWindow : Window
     private readonly UiSessionObserver _observer;
     private readonly AppNotices _notices = new();
     private GlobalDictationHotkey? _hotkey;
+    private GlobalDictationHotkey? _recordHotkey;
+    private readonly CaptureStore _captures;
+    private readonly WindowsRecordTakeFactory _recordFactory;
+    private RecordEscapeKey? _recordEscape;
+    private Task? _recordCancelTask;
     private SystemTrayIcon? _tray;
     private DictationShortcut _configuredHotkey = DictationShortcut.Default;
+    private DictationShortcut _configuredRecordHotkey = DictationShortcut.RecordDefault;
     private readonly ShortcutDictation _shortcut;
     private FloatingDictationWindow? _floating;
     private bool _initialized;
@@ -72,7 +80,7 @@ public sealed partial class MainWindow : Window
     private readonly ShellPages _pages;
 
     internal MainWindow(DictationSession session, AppPaths paths, HttpClient modelDownloads, MicrophonePermissionPreflight microphonePermission,
-        LocalDiagnosticLog diagnostics)
+        LocalDiagnosticLog diagnostics, CaptureStore captures, WindowsRecordTakeFactory recordFactory)
     {
         InitializeComponent();
         Notices.Attach(_notices);
@@ -80,6 +88,9 @@ public sealed partial class MainWindow : Window
         _session = session;
         _microphonePermission = microphonePermission;
         _paths = paths;
+        _captures = captures;
+        _recordFactory = recordFactory;
+        _recordFactory.BeforeCapture = PrepareRecordCapture;
         _meetingStore = new MeetingStore(Path.Combine(Path.GetDirectoryName(paths.Settings)!, "meetings"));
         _meetingDiagnostics = diagnostics;
         _meetingCleanup = new(diagnostics);
@@ -93,6 +104,7 @@ public sealed partial class MainWindow : Window
                 _overlayAnchor = anchor;
                 if (FloatingPreviewPresentation.ShouldShowWaveform(_session.State)) { _floating?.ShowPreview(_overlayAnchor); }
             });
+        _shortcut.RecordAttemptChanged += RecordAttemptChanged;
         _suggestions = new MeetingSuggestions(new Ansible.Core.Windows.TeamsMeetingDetector(),
             () => _session.State.Settings.AutoDetectMeetings, () => MeetingSuggestionsBlocked,
             candidate => _meetingWindows.Any(meeting => meeting.session.IsActive && meeting.window.SelectedMeetingIdentity == candidate),
@@ -103,7 +115,8 @@ public sealed partial class MainWindow : Window
         _welcome = new WelcomeDialog(session, () => _shortcut.IsBusy, _notices);
         _dictation = new DictationPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this), _history, _notices);
         _settings = new MainPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this),
-            ChangeHotkey, ChangeDictationMode, CaptureShortcut, diagnostics, _notices);
+            ChangeHotkey, ChangeDictationMode, CaptureShortcut, diagnostics, _notices,
+            ChangeRecordHotkey, EnableRecordChord, captures);
         _settings.ShortcutLessonRequested += OpenShortcutLesson;
         _models = new ModelManagementPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this), modelDownloads,
             () => { Navigate(_pages!.Home); return _dictation.TranscribeFileAsync(); }, diagnostics, _notices);
@@ -179,6 +192,9 @@ public sealed partial class MainWindow : Window
             token.ThrowIfCancellationRequested();
             _permissionCheckComplete = true;
             RenderMicrophonePermission();
+            try { await WindowsRecordTakeFactory.RefreshClipboardProtectionAsync(); await _captures.CleanupAsync(token); }
+            catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+            catch (Exception error) { _notices.SetError(CaptureStorageNoticeKey, error, NoticeArea.Settings); }
             await _history.InitializeAsync();
             await _session.InitializeAsync();
             var diagnosticsGeneration = _meetingDiagnostics.CurrentGeneration;
@@ -202,6 +218,16 @@ public sealed partial class MainWindow : Window
                 LogApplication(ApplicationDiagnosticStage.Hotkey, DiagnosticOutcome.Failed, diagnosticsGeneration, hotkeyStarted, error);
                 _notices.Set(ShortcutRegistrationNoticeKey, new NoticeContent(NoticeSeverity.Error, "Shortcut unavailable", error.Message),
                     NoticeArea.Settings | NoticeArea.Dictation);
+            }
+            if (_session.State.Settings.RecordChordEnabled)
+            {
+                try
+                {
+                    _configuredRecordHotkey = _session.State.Settings.RecordShortcut;
+                    _recordHotkey = new GlobalDictationHotkey(WinRT.Interop.WindowNative.GetWindowHandle(this),
+                        _configuredRecordHotkey, RecordHotkeyChanged);
+                }
+                catch (Exception error) { _notices.SetError(RecordRegistrationNoticeKey, error, NoticeArea.Settings | NoticeArea.Dictation); }
             }
             if (!_session.State.Settings.WelcomeCompleted) ShowWelcome();
             else if (_session.State.Phase == DictationPhase.Disconnected && _session.State.Models.Count == 0) Navigate(_pages.Models);
@@ -509,13 +535,58 @@ public sealed partial class MainWindow : Window
     {
         if (!_session.State.IsIdle || _shortcut.IsBusy)
             throw new InvalidOperationException("Finish dictation before changing its shortcut.");
+        var settings = _session.State.Settings;
+        (settings with { Shortcut = choice }).Validate();
+        if (_configuredHotkey == choice && _hotkey is not null) return;
         var replacement = new GlobalDictationHotkey(WinRT.Interop.WindowNative.GetWindowHandle(this),
             choice, HotkeyChanged);
+        try { _session.SetShortcut(choice); }
+        catch { replacement.Dispose(); throw; }
         _hotkey?.Dispose();
         _hotkey = replacement;
         _configuredHotkey = choice;
         _notices.Set(ShortcutRegistrationNoticeKey, null);
-        _session.SetShortcut(choice);
+    }
+
+    private void ChangeRecordHotkey(DictationShortcut choice)
+    {
+        if (!_session.State.IsIdle || _shortcut.IsBusy)
+            throw new InvalidOperationException("Finish dictation before changing its shortcut.");
+        var settings = _session.State.Settings;
+        (settings with { RecordShortcut = choice }).Validate();
+        if (!settings.RecordChordEnabled) { _session.SetRecordShortcut(choice); _configuredRecordHotkey = choice; return; }
+        if (_configuredRecordHotkey == choice && _recordHotkey is not null) return;
+        var replacement = new GlobalDictationHotkey(WinRT.Interop.WindowNative.GetWindowHandle(this), choice, RecordHotkeyChanged);
+        try { _session.SetRecordShortcut(choice); }
+        catch { replacement.Dispose(); throw; }
+        _recordHotkey?.Dispose();
+        _recordHotkey = replacement;
+        _configuredRecordHotkey = choice;
+        _notices.Set(RecordRegistrationNoticeKey, null);
+    }
+
+    private void EnableRecordChord(bool enabled)
+    {
+        if (!_session.State.IsIdle || _shortcut.IsBusy)
+            throw new InvalidOperationException("Finish dictation before changing its shortcut.");
+        var settings = _session.State.Settings;
+        (settings with { RecordChordEnabled = enabled }).Validate();
+        if (enabled)
+        {
+            var replacement = _recordHotkey ?? new GlobalDictationHotkey(WinRT.Interop.WindowNative.GetWindowHandle(this),
+                settings.RecordShortcut, RecordHotkeyChanged);
+            try { _session.SetRecordChordEnabled(true); }
+            catch { if (_recordHotkey is null) replacement.Dispose(); throw; }
+            _recordHotkey = replacement;
+            _configuredRecordHotkey = settings.RecordShortcut;
+        }
+        else
+        {
+            _recordHotkey?.Dispose();
+            _recordHotkey = null;
+            _session.SetRecordChordEnabled(false);
+        }
+        _notices.Set(RecordRegistrationNoticeKey, null);
     }
 
     private void ChangeDictationMode(bool pushToTalk)
@@ -532,8 +603,16 @@ public sealed partial class MainWindow : Window
             if (!_session.State.IsIdle || _shortcut.IsBusy)
                 throw new InvalidOperationException("Finish dictation before recording a shortcut.");
             _hotkey?.Suspend();
+            try { _recordHotkey?.Suspend(); }
+            catch { _hotkey?.Resume(); throw; }
         }
-        else { _hotkey?.Resume(); }
+        else
+        {
+            var failures = new List<Exception>();
+            try { _hotkey?.Resume(); } catch (Exception error) { failures.Add(error); }
+            try { _recordHotkey?.Resume(); } catch (Exception error) { failures.Add(error); }
+            if (failures.Count > 0) throw new AggregateException("A shortcut could not be restored.", failures);
+        }
     }
 
     private void SessionChanged(SessionSnapshot state)
@@ -602,6 +681,60 @@ public sealed partial class MainWindow : Window
         finally { CurrentWelcome()?.RefreshAfterShortcut(); }
     }
 
+    private async void RecordHotkeyChanged(bool pressed)
+    {
+        try
+        {
+            if (pressed && _welcome.IsShowing) return;
+            if (pressed) await _shortcut.PressedAsync(_configuredRecordHotkey, ShortcutActivation.Record);
+            else await _shortcut.ReleasedAsync(ShortcutActivation.Record);
+        }
+        catch (Exception error) { _notices.SetError(ShortcutNoticeKey, error); }
+    }
+
+    private void PrepareRecordCapture()
+    {
+        // Snapshot runs synchronously on accepted activation, before the native capture worker can see a frame.
+        try { _floating?.ForceRecordPrivacy(true); }
+        catch (Exception error) { ShowCapturePrivacyFailure(error.Message); throw; }
+    }
+
+    private void RecordAttemptChanged()
+    {
+        try
+        {
+            if (_shortcut.HasRecordAttempt)
+            {
+                _recordEscape ??= new RecordEscapeKey(RecordEscapePressed);
+            }
+            else
+            {
+                _recordEscape?.Dispose();
+                _recordEscape = null;
+                _floating?.ForceRecordPrivacy(false);
+            }
+        }
+        catch (Exception error) { _notices.SetError(ShortcutNoticeKey, error); }
+    }
+
+    private void RecordEscapePressed()
+    {
+        if (!_shortcut.HasRecordAttempt || _recordCancelTask is { IsCompleted: false }) return;
+        _recordCancelTask = CancelRecordAttemptAsync();
+    }
+
+    private async Task CancelRecordAttemptAsync()
+    {
+        var origin = _recordFactory.TakeOriginTimestamp;
+        try
+        {
+            await _shortcut.CancelRecordAsync();
+            if (_session.State.Result?.Payload?.IsRecordTake != true)
+                await _recordFactory.DiscardResultAsync(origin);
+        }
+        catch (Exception error) { _notices.SetError(ShortcutNoticeKey, error); }
+    }
+
     private void CloseRequested(AppWindow sender, AppWindowClosingEventArgs args)
     {
         if (_allowClose) { return; }
@@ -666,8 +799,9 @@ public sealed partial class MainWindow : Window
             await Task.WhenAll(meetings.Select(meeting => meeting.window.BeginShutdownAsync()));
             foreach (var meeting in meetings) await meeting.session.DisposeAsync();
             foreach (var meeting in _meetingWindows.ToArray()) meeting.window.Close();
-            await Task.WhenAll(_session.CloseAsync(), _models.DisposeAsync().AsTask(), _dictation.FinishBackgroundWorkAsync());
+            await Task.WhenAll(_session.CloseAsync(), _models.DisposeAsync().AsTask(), _dictation.FinishBackgroundWorkAsync(), _settings.JoinAsync());
             await _shortcut.JoinAsync();
+            if (_recordCancelTask is { } recordCancel) await recordCancel;
             if (_floating is not null) { await _floating.ClosePreviewAsync(); }
             await _history.DisposeAsync();
             LogApplication(ApplicationDiagnosticStage.Shutdown, DiagnosticOutcome.Completed, diagnosticGeneration, diagnosticStartedAt);
@@ -696,6 +830,7 @@ public sealed partial class MainWindow : Window
                 if (joined.Exception is { } joinError) failures.AddRange(joinError.Flatten().InnerExceptions);
             }
             _shortcut.ResumeAfterFailedShutdown();
+            _settings.ResumeAfterFailedShutdown();
             _startupCancellation.Dispose();
             _startupCancellation = new CancellationTokenSource();
             var failure = failures.Count == 1 ? error : new AggregateException("Shutdown and recovery reported failures.", failures);
@@ -720,6 +855,10 @@ public sealed partial class MainWindow : Window
         _dictation.Dispose();
         _history.Dispose();
         _hotkey?.Dispose();
+        _recordHotkey?.Dispose();
+        _recordFactory.BeforeCapture = null;
+        _shortcut.RecordAttemptChanged -= RecordAttemptChanged;
+        _recordEscape?.Dispose();
         _shortcut.Dispose();
         _startupCancellation.Dispose();
         _suggestions.Dispose();

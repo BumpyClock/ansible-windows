@@ -68,14 +68,16 @@ internal static unsafe partial class WindowsTextTarget
 
     internal static TextDeliveryOutcome Insert(
         CapturedTextTarget target, string text, TextInsertionMethod method, int typingGapMilliseconds,
-        PasteShortcut pasteShortcut, CancellationToken cancellationToken, Func<bool> stillCurrent)
+        PasteShortcut pasteShortcut, CancellationToken cancellationToken, Func<bool> stillCurrent,
+        Action<uint>? clipboardPublished = null)
     {
         if (string.IsNullOrWhiteSpace(text))
             return TextDeliveryOutcome.Rejected("The recognition result contains no speech text. Use Copy transcript if needed.", TextDeliveryReason.NoSpeech);
         // Never mask physical modifiers with synthetic releases. Deferral is safe only before delivery.
         for (var attempt = 0; attempt < 8 && !ShortcutModifiersReleased(); attempt++)
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            if (cancellationToken.IsCancellationRequested)
+                return TextDeliveryOutcome.Rejected("The operation was cancelled before input.", TextDeliveryReason.Superseded);
             if (!stillCurrent())
                 return TextDeliveryOutcome.Rejected("Another operation started before the text could be sent. Use Copy transcript instead.", TextDeliveryReason.Superseded);
             Thread.Sleep(25);
@@ -85,12 +87,14 @@ internal static unsafe partial class WindowsTextTarget
         TextSnapshot? before = null;
         TextDeliveryOutcome? Recheck()
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            if (cancellationToken.IsCancellationRequested)
+                return TextDeliveryOutcome.Rejected("The operation was cancelled before input.", TextDeliveryReason.Superseded);
             if (!stillCurrent())
                 return TextDeliveryOutcome.Rejected("Another operation started before the text could be sent. Use Copy transcript instead.", TextDeliveryReason.Superseded);
             if (!TryRecheckTarget(target, out var reason))
                 return TextDeliveryOutcome.Rejected($"{reason} Use Copy transcript instead.", TextDeliveryReason.TargetInvalid);
-            cancellationToken.ThrowIfCancellationRequested();
+            if (cancellationToken.IsCancellationRequested)
+                return TextDeliveryOutcome.Rejected("The operation was cancelled before input.", TextDeliveryReason.Superseded);
             if (!stillCurrent())
                 return TextDeliveryOutcome.Rejected("Another operation started before the text could be sent. Use Copy transcript instead.", TextDeliveryReason.Superseded);
             if (!InsertionKeysReleased(method, ShortcutModifiersReleased(), PasteTriggerReleased(pasteShortcut)))
@@ -106,7 +110,7 @@ internal static unsafe partial class WindowsTextTarget
 
         if (Recheck() is { } early) { return early; }
         var failure = method == TextInsertionMethod.Paste
-            ? Paste(text, pasteShortcut, cancellationToken, stillCurrent, Recheck, PrepareSend)
+            ? Paste(text, pasteShortcut, cancellationToken, stillCurrent, Recheck, PrepareSend, clipboardPublished)
             : Type(text, typingGapMilliseconds, Recheck, PrepareSend);
         if (failure is { } outcome) { return outcome; }
         return VerifyDelivery(target, text, before, cancellationToken, stillCurrent);

@@ -27,6 +27,9 @@ public sealed record AppSettings
     public NativeBackend Backend { get; init; } = NativeBackend.Auto;
     public string? ModelsDirectory { get; init; }
     public DictationShortcut Shortcut { get; init; } = DictationShortcut.Default;
+    public bool RecordChordEnabled { get; init; }
+    public DictationShortcut RecordShortcut { get; init; } = DictationShortcut.RecordDefault;
+    public bool IncludeVideoLink { get; init; } = true;
     public bool PushToTalk { get; init; } = true;
     public bool WelcomeCompleted { get; init; }
     public bool CollectUsage { get; init; } = true;
@@ -51,11 +54,13 @@ public sealed record AppSettings
         MeetingCleanup.Validate();
         if (Language is null || CustomDictionary is null || ModelId is not null && string.IsNullOrWhiteSpace(ModelId) ||
             ModelsDirectory is not null && !Path.IsPathFullyQualified(ModelsDirectory) ||
-            !Shortcut.IsValid || Backend is not NativeBackend.Auto and not NativeBackend.Cpu and not NativeBackend.Vulkan ||
+            !Shortcut.IsValid || !RecordShortcut.IsValid || Backend is not NativeBackend.Auto and not NativeBackend.Cpu and not NativeBackend.Vulkan ||
             !Enum.IsDefined(InsertionMethod) || !Enum.IsDefined(PasteShortcut) ||
             TypingGapMilliseconds is < 0 or > MaxTypingGapMilliseconds ||
             MicrophoneBoostDecibels is < 0 or > MicrophoneBoost.MaxDecibels)
             throw new InvalidDataException("The app settings contain invalid values.");
+        if (RecordChordEnabled && Shortcut.ConflictsWith(RecordShortcut))
+            throw new InvalidDataException("Dictation and record shortcuts must not contain each other's keys. Choose separate chords.");
         if (CustomVocabulary.Normalize(CustomDictionary) != CustomDictionary)
             throw new InvalidDataException("The saved dictionary must contain normalized, unique entries.");
     }

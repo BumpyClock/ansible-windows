@@ -26,7 +26,7 @@ public sealed partial class DictationSessionTests
         var delivery = new FinalTextDelivery((text, _) =>
         {
             Assert.True(!dictation || capture.IsReleased);
-            inserted.Add(text);
+            inserted.Add(text.Text);
             return Task.FromResult(TextDeliveryOutcome.Sent("sent"));
         }, () => true, () => false);
         var closed = false;
@@ -153,7 +153,7 @@ public sealed partial class DictationSessionTests
         var delivery = new FinalTextDelivery((text, _) =>
         {
             Assert.True(capture.IsReleased);
-            inserted.Add(text);
+            inserted.Add(text.Text);
             return Task.FromResult(TextDeliveryOutcome.Sent("sent"));
         }, () => true, () => false);
         try

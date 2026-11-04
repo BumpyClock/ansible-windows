@@ -7,6 +7,7 @@ public sealed record RecognitionResult(string DisplayText, string? SpeechText)
     public int? SpokenWords => SpeechText is null ? null : AudioMeter.CountWords(SpeechText);
     public long? ProcessedSamples { get; init; }
     public SpeechWordTimings? WordTimings { get; init; }
+    public BundlePayload? Payload { get; init; }
 }
 
 public enum NativeBackend
@@ -70,6 +71,8 @@ public interface IAudioCapture : IAsyncDisposable
     ChannelReader<byte[]> Audio { get; }
     double CapturedSeconds { get; }
     bool IsReleased { get; }
+    /// <summary>Software QPC anchor immediately before capture starts. Null when the source has no such anchor.</summary>
+    long? SampleZeroTimestamp { get; }
     event Action<double>? LevelChanged;
     Task StopAsync();
 }

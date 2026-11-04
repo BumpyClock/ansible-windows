@@ -27,7 +27,9 @@ internal sealed class WindowsShortcutTarget(
 {
     public CaretBounds? Caret => target.Caret;
 
-    public Task<TextDeliveryOutcome> InsertAsync(string text, Func<bool> isCurrent, CancellationToken cancellationToken) =>
-        Task.Run(() => WindowsTextTarget.Insert(target, text, method, typingGapMilliseconds, pasteShortcut,
-            cancellationToken, isCurrent), cancellationToken);
+    public Task<TextDeliveryOutcome> InsertAsync(BundlePayload payload, Func<bool> isCurrent, CancellationToken cancellationToken) =>
+        Task.Run(() => payload.IsRecordTake
+            ? WindowsTextTarget.InsertBundle(target, payload, cancellationToken, isCurrent)
+            : WindowsTextTarget.Insert(target, payload.Text, method, typingGapMilliseconds, pasteShortcut,
+                cancellationToken, isCurrent));
 }

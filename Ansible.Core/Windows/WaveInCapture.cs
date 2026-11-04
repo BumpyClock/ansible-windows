@@ -41,6 +41,7 @@ internal sealed class WaveInCapture(IWaveInApi api, MicrophoneBoost boost, bool 
     public ChannelReader<byte[]> Audio => _audio.Reader;
     public double CapturedSeconds => Interlocked.Read(ref _capturedBytes) / 32000.0;
     public bool IsReleased => Volatile.Read(ref _released) != 0;
+    public long? SampleZeroTimestamp { get; private set; }
     public event Action<double>? LevelChanged;
 
     internal unsafe void Initialize(CancellationToken cancellationToken)
@@ -80,6 +81,7 @@ internal sealed class WaveInCapture(IWaveInApi api, MicrophoneBoost boost, bool 
             {
                 throw new IOException("Microphone capture failed before recording started.");
             }
+            SampleZeroTimestamp = Stopwatch.GetTimestamp();
             Check(api.Start(_device), "start recording");
         }
         cancellationToken.ThrowIfCancellationRequested();

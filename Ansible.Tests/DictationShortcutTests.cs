@@ -14,6 +14,29 @@ public sealed class DictationShortcutTests
         Assert.True(DictationShortcut.Default.IsValid);
     }
 
+    [Fact]
+    public void RecordDefaultUsesSeparateAltWindowsKeys()
+    {
+        Assert.Equal(new DictationShortcut(9, 0), DictationShortcut.RecordDefault);
+        Assert.Equal("Win + Alt", DictationShortcut.RecordDefault.DisplayText);
+        Assert.True(DictationShortcut.RecordDefault.IsModifierOnly);
+        Assert.True(DictationShortcut.RecordDefault.IsValid);
+        Assert.False(DictationShortcut.Default.ConflictsWith(DictationShortcut.RecordDefault));
+    }
+
+    [Theory]
+    [InlineData(10, 0, 10, 0)]
+    [InlineData(10, 0, 10, 0x44)]
+    [InlineData(2, 0x44, 6, 0x44)]
+    [InlineData(0, 0x78, 2, 0x78)]
+    public void SubsetsSupersetsAndEqualChordsConflict(uint leftModifiers, uint leftKey, uint rightModifiers, uint rightKey)
+    {
+        var left = new DictationShortcut(leftModifiers, leftKey);
+        var right = new DictationShortcut(rightModifiers, rightKey);
+        Assert.True(left.ConflictsWith(right));
+        Assert.True(right.ConflictsWith(left));
+    }
+
     [Theory]
     [InlineData(0, 0x41)]
     [InlineData(4, 0x41)]
@@ -30,6 +53,8 @@ public sealed class DictationShortcutTests
     [InlineData(11, 0)]
     [InlineData(10, 0x11)]
     [InlineData(2, 0x5B)]
+    [InlineData(9, 0x52)]
+    [InlineData(10, 0x20)]
     public void CannotConsumeOrdinaryTypingOrReservedKeys(uint modifiers, uint key) =>
         Assert.False(new DictationShortcut(modifiers, key).IsValid);
 

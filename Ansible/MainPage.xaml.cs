@@ -14,11 +14,19 @@ public sealed partial class MainPage : Page
 
     private readonly DictationSession _session;
     private readonly Action<DictationShortcut> _changeHotkey;
+    private readonly Action<DictationShortcut> _changeRecordHotkey;
+    private readonly Action<bool> _enableRecordChord;
+    private readonly CaptureStore _captures;
     private readonly Action<bool> _changeMode;
     private readonly Action<bool> _captureShortcut;
     private readonly LocalDiagnosticLog _diagnostics;
     private readonly DispatcherTimer _diagnosticStatusTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private bool _recordingShortcut;
+    private bool _editingRecordShortcut;
+    private Task? _captureSizeTask;
+    private Task? _captureDeleteTask;
+    private bool _wasRecordTake;
+    private bool _joining;
     private DictationShortcut? _pendingShortcut;
     private bool _shortcutPrimarySeen;
     private UiSessionObserver? _observer;
@@ -33,13 +41,17 @@ public sealed partial class MainPage : Page
 
     internal MainPage(DictationSession session, AppPaths paths, Func<nint> windowHandle,
         Action<DictationShortcut> changeHotkey, Action<bool> changeMode, Action<bool> captureShortcut,
-        LocalDiagnosticLog diagnostics, AppNotices notices)
+        LocalDiagnosticLog diagnostics, AppNotices notices, Action<DictationShortcut> changeRecordHotkey,
+        Action<bool> enableRecordChord, CaptureStore captures)
     {
         _rendering = true;
         InitializeComponent();
         _session = session;
         _notices = notices;
         _changeHotkey = changeHotkey;
+        _changeRecordHotkey = changeRecordHotkey;
+        _enableRecordChord = enableRecordChord;
+        _captures = captures;
         _changeMode = changeMode;
         _captureShortcut = captureShortcut;
         _diagnostics = diagnostics;
@@ -53,7 +65,8 @@ public sealed partial class MainPage : Page
         ToolTipService.SetToolTip(HotkeyCaptureBox, typingHelp);
         AutomationProperties.SetHelpText(HotkeyCaptureBox, typingHelp);
         // TextBox handles pointer presses itself, so listen for handled presses to restart capture on click.
-        HotkeyCaptureBox.AddHandler(PointerPressedEvent, new PointerEventHandler((_, _) => StartShortcutCapture()), true);
+        HotkeyCaptureBox.AddHandler(PointerPressedEvent, new PointerEventHandler((_, _) => StartShortcutCapture(HotkeyCaptureBox)), true);
+        RecordHotkeyCaptureBox.AddHandler(PointerPressedEvent, new PointerEventHandler((_, _) => StartShortcutCapture(RecordHotkeyCaptureBox)), true);
         _rendering = true;
         SetShortcutDisplay(_state.Settings.Shortcut.DisplayText);
         PushToTalkChoice.SelectedIndex = _state.Settings.PushToTalk ? 0 : 1;
@@ -62,6 +75,7 @@ public sealed partial class MainPage : Page
         Loaded += (_, _) =>
         {
             _observer = new UiSessionObserver(session, DispatcherQueue, state => { _state = state; Render(); });
+            if (!_joining) _captureSizeTask = RefreshCaptureSizeAsync();
             if (_state.Settings.LocalDiagnostics) _diagnosticStatusTimer.Start();
         };
         Unloaded += (_, _) =>
@@ -123,6 +137,19 @@ public sealed partial class MainPage : Page
             ResetShortcutButton.Visibility = _state.Settings.Shortcut != DictationShortcut.Default ? Visibility.Visible : Visibility.Collapsed;
             ResetShortcutButton.IsEnabled = idle;
             ChangeShortcutButton.IsEnabled = idle;
+            RecordChordToggle.IsOn = _state.Settings.RecordChordEnabled;
+            RecordChordToggle.IsEnabled = idle;
+            IncludeVideoLinkToggle.IsOn = _state.Settings.IncludeVideoLink;
+            IncludeVideoLinkToggle.IsEnabled = idle;
+            RecordHotkeyCaptureBox.IsEnabled = idle;
+            ChangeRecordShortcutButton.IsEnabled = idle;
+            ResetRecordShortcutButton.IsEnabled = idle;
+            ResetRecordShortcutButton.Visibility = _state.Settings.RecordShortcut != DictationShortcut.RecordDefault ? Visibility.Visible : Visibility.Collapsed;
+            if (!_recordingShortcut || !_editingRecordShortcut) RecordHotkeyCaptureBox.Text = _state.Settings.RecordShortcut.DisplayText;
+            DeleteCapturesButton.IsEnabled = !_joining && idle && _captureSizeTask is not { IsCompleted: false } && _captureDeleteTask is not { IsCompleted: false };
+            if (!_joining && _wasRecordTake && !_state.IsRecordTake && _captureSizeTask is not { IsCompleted: false })
+                _captureSizeTask = RefreshCaptureSizeAsync();
+            _wasRecordTake = _state.IsRecordTake;
             PushToTalkChoice.IsEnabled = idle;
             PushToTalkChoice.SelectedIndex = _state.Settings.PushToTalk ? 0 : 1;
             OverlayFollowsCaretToggle.IsOn = _state.Settings.OverlayFollowsCaret;
@@ -402,20 +429,84 @@ public sealed partial class MainPage : Page
     private void ChangeShortcutClicked(object sender, RoutedEventArgs args) =>
         HotkeyCaptureBox.Focus(FocusState.Programmatic);
 
+    private void ChangeRecordShortcutClicked(object sender, RoutedEventArgs args) =>
+        RecordHotkeyCaptureBox.Focus(FocusState.Programmatic);
+
+    private void ResetRecordShortcutClicked(object sender, RoutedEventArgs args) =>
+        Try(() => _changeRecordHotkey(DictationShortcut.RecordDefault), "Record shortcut unavailable");
+
+    private void RecordChordToggled(object sender, RoutedEventArgs args)
+    {
+        if (_rendering || RecordChordToggle.IsOn == _state.Settings.RecordChordEnabled) return;
+        if (!Try(() => _enableRecordChord(RecordChordToggle.IsOn), "Record shortcut unavailable")) Render();
+    }
+
+    private void IncludeVideoLinkToggled(object sender, RoutedEventArgs args)
+    {
+        if (_rendering || IncludeVideoLinkToggle.IsOn == _state.Settings.IncludeVideoLink) return;
+        if (!Try(() => _session.SetIncludeVideoLink(IncludeVideoLinkToggle.IsOn))) Render();
+    }
+
+    private async Task RefreshCaptureSizeAsync()
+    {
+        DeleteCapturesButton.IsEnabled = false;
+        try
+        {
+            await WindowsRecordTakeFactory.RefreshClipboardProtectionAsync();
+            var bytes = await _captures.GetSizeAsync();
+            CaptureStorageRow.Description = $"{bytes / (1024.0 * 1024):N1} MB on this device. Oldest takes are removed after seven days or above 2 GB.";
+        }
+        catch (Exception error) { ReportError(error, "Capture storage unavailable"); }
+        finally { DeleteCapturesButton.IsEnabled = !_joining && _state.IsIdle; }
+    }
+
+    private async void DeleteCapturesClicked(object sender, RoutedEventArgs args)
+    {
+        if (_joining || !_state.IsIdle || _captureDeleteTask is { IsCompleted: false }) return;
+        _captureDeleteTask = DeleteCapturesAsync();
+        await _captureDeleteTask;
+    }
+
+    private async Task DeleteCapturesAsync()
+    {
+        DeleteCapturesButton.IsEnabled = false;
+        try
+        {
+            await WindowsRecordTakeFactory.RefreshClipboardProtectionAsync();
+            var result = await _captures.DeleteAllAsync();
+            await RefreshCaptureSizeAsync();
+            _notices.Set("capture-delete", result.ProtectedTakes > 0
+                ? new NoticeContent(NoticeSeverity.Warning, "Some captures are in use", "The current bundle and clipboard pictures were kept. Other saved captures were deleted.")
+                : null, NoticeArea.Settings);
+        }
+        catch (Exception error) { ReportError(error, "Captures could not be deleted"); }
+        finally { DeleteCapturesButton.IsEnabled = !_joining && _state.IsIdle; }
+    }
+
+    internal async Task JoinAsync()
+    {
+        _joining = true;
+        if (_captureSizeTask is { } task) await task;
+        if (_captureDeleteTask is { } deletion) await deletion;
+    }
+
+    internal void ResumeAfterFailedShutdown() => _joining = false;
+
     private void PracticeShortcutClicked(object sender, RoutedEventArgs args) => ShortcutLessonRequested?.Invoke();
 
     private void ResetShortcutClicked(object sender, RoutedEventArgs args) =>
         Try(() => _changeHotkey(DictationShortcut.Default), "Shortcut unavailable");
 
-    private void ShortcutGotFocus(object sender, RoutedEventArgs args) => StartShortcutCapture();
+    private void ShortcutGotFocus(object sender, RoutedEventArgs args) => StartShortcutCapture((TextBox)sender);
 
     // Focus, click, or Enter on the shortcut box records a new shortcut.
-    private void StartShortcutCapture()
+    private void StartShortcutCapture(TextBox box)
     {
-        if (_recordingShortcut || !HotkeyCaptureBox.IsEnabled) { return; }
+        if (_recordingShortcut || !box.IsEnabled) { return; }
         try
         {
             _captureShortcut(true);
+            _editingRecordShortcut = box == RecordHotkeyCaptureBox;
             _recordingShortcut = true;
             _pendingShortcut = null;
             _shortcutPrimarySeen = false;
@@ -428,7 +519,7 @@ public sealed partial class MainPage : Page
     {
         if (!_recordingShortcut)
         {
-            if (args.Key == VirtualKey.Enter) { args.Handled = true; StartShortcutCapture(); }
+            if (args.Key == VirtualKey.Enter) { args.Handled = true; StartShortcutCapture((TextBox)sender); }
             return;
         }
         // Tab is never a valid shortcut. Let it move focus; LostFocus ends the capture.
@@ -444,7 +535,8 @@ public sealed partial class MainPage : Page
         {
             if (!_shortcutPrimarySeen)
             {
-                _pendingShortcut = modifiers == 10 ? DictationShortcut.Default : null;
+                var candidate = new DictationShortcut(modifiers, 0);
+                _pendingShortcut = candidate.IsModifierOnly ? candidate : null;
                 if (_pendingShortcut is { } modifierOnly)
                     SetShortcutDisplay($"{modifierOnly.DisplayText} (release to apply)");
             }
@@ -455,7 +547,7 @@ public sealed partial class MainPage : Page
         var shortcut = new DictationShortcut(modifiers, (uint)args.Key);
         if (!shortcut.IsValid)
         {
-            SetShortcutDisplay("Use Ctrl + Win, F1-F11, or Ctrl/Alt/Win with a letter or digit");
+            SetShortcutDisplay("Use Ctrl + Win, Alt + Win, F1-F11, or a modified letter or digit");
             return;
         }
         _pendingShortcut = shortcut;
@@ -474,11 +566,11 @@ public sealed partial class MainPage : Page
         }
         if (shortcut.IsModifierOnly)
         {
-            if (!CtrlWinShortcutState.IsControl((uint)args.Key) && !CtrlWinShortcutState.IsWindows((uint)args.Key)) return;
+            if (!new ModifierShortcutState(shortcut.Modifiers).IsChordKey((uint)args.Key)) return;
         }
         else if ((uint)args.Key != shortcut.Key) { return; }
         args.Handled = true;
-        Try(() => _changeHotkey(shortcut), "Shortcut unavailable");
+        Try(() => { if (_editingRecordShortcut) _changeRecordHotkey(shortcut); else _changeHotkey(shortcut); }, "Shortcut unavailable");
         EndShortcutCapture();
     }
 
@@ -502,10 +594,17 @@ public sealed partial class MainPage : Page
         try { _captureShortcut(false); }
         catch (Exception error) { ReportError(error, "Shortcut unavailable"); }
         SetShortcutDisplay(_session.State.Settings.Shortcut.DisplayText);
+        RecordHotkeyCaptureBox.Text = _session.State.Settings.RecordShortcut.DisplayText;
+        _editingRecordShortcut = false;
     }
 
     private void SetShortcutDisplay(string text)
     {
+        if (_recordingShortcut && _editingRecordShortcut)
+        {
+            RecordHotkeyCaptureBox.Text = text;
+            return;
+        }
         HotkeyCaptureBox.Text = text;
         if (_recordingShortcut)
         {

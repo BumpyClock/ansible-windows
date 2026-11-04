@@ -1466,9 +1466,9 @@ public sealed partial class DictationSessionTests : IDisposable
     private static DictationSession Create(
         FakeEngine engine, FakeCaptureFactory? capture = null,
         FakeUsageStore? usage = null, FakeInput? input = null,
-        IAppSettingsStore? settings = null) =>
+        IAppSettingsStore? settings = null, IRecordTakeFactory? recordTakeFactory = null) =>
         new(_ => engine, capture ?? new FakeCaptureFactory(), input ?? new FakeInput(),
-            usage ?? new FakeUsageStore(), "models", settingsStore: settings ?? new FakeSettingsStore());
+            usage ?? new FakeUsageStore(), "models", settingsStore: settings ?? new FakeSettingsStore(), recordTakeFactory: recordTakeFactory);
 
     [Fact]
     public async Task RecognitionPreviewsPublishBeforeCaptureEndsAndCompletionWaitsForFinalResult()
@@ -1655,9 +1655,11 @@ public sealed partial class DictationSessionTests : IDisposable
         public Channel<byte[]> Packets { get; } = Channel.CreateUnbounded<byte[]>();
         public ChannelReader<byte[]> Audio => Packets.Reader;
         public double Seconds { get; init; }
+        public long? SampleZeroTimestamp => null;
         public double CapturedSeconds => Seconds;
         public bool IsReleased { get; private set; }
         public bool FailDisposal { get; set; }
+        public bool KeepOwnershipOnDispose { get; set; }
         public int Disposals;
         public Func<Task>? Stopping { get; set; }
         public event Action<double>? LevelChanged { add { } remove { } }
@@ -1674,6 +1676,7 @@ public sealed partial class DictationSessionTests : IDisposable
             if (IsReleased) { return; }
             await StopAsync();
             if (FailDisposal) { throw new IOException("driver still owns capture"); }
+            if (KeepOwnershipOnDispose) return;
             IsReleased = true;
         }
     }

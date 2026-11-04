@@ -62,7 +62,7 @@ public sealed class FinalTextDeliveryTests
         var inserted = new List<string>();
         var delivery = new FinalTextDelivery((text, _) =>
         {
-            inserted.Add(text);
+            inserted.Add(text.Text);
             return Task.FromResult(TextDeliveryOutcome.Sent("ok"));
         }, () => true, () => false);
         await delivery.RunAsync(Task.FromResult(new SessionOutcome(SessionOutcomeKind.Completed, result)), CancellationToken.None);
@@ -77,7 +77,7 @@ public sealed class FinalTextDeliveryTests
         var inserted = new List<string>();
         var delivery = new FinalTextDelivery((text, _) =>
         {
-            inserted.Add(text);
+            inserted.Add(text.Text);
             return Task.FromResult(TextDeliveryOutcome.Sent("ok"));
         }, () => true, () => false);
 
@@ -115,7 +115,7 @@ public sealed class FinalTextDeliveryTests
         var calls = new List<string>();
         var delivery = new FinalTextDelivery((text, _) =>
         {
-            calls.Add(text);
+            calls.Add(text.Text);
             return Task.FromResult(calls.Count == 1
                 ? TextDeliveryOutcome.Deferred("modifier held") : TextDeliveryOutcome.Sent("ok"));
         }, () => true, () => held);
