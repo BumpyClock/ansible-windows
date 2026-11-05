@@ -64,10 +64,6 @@ Every text, image, and file publication includes DWORD zero payloads for `Exclud
 
 The bitmap path uses bottom-up 32-bit BGRA `CF_DIBV5` with explicit channel masks and sRGB, alongside a registered `PNG` format. `CF_HDROP` uses a `DROPFILES` header with a double-NUL-terminated UTF-16 filename list. These formats follow Microsoft's [clipboard format guidance](https://learn.microsoft.com/windows/win32/dataxchg/clipboard-formats), [Shell clipboard format guidance](https://learn.microsoft.com/windows/win32/shell/clipboard), and [SetClipboardData ownership contract](https://learn.microsoft.com/windows/win32/api/winuser/nf-winuser-setclipboarddata).
 
-## Reference evidence
-
-Scrawl was inspected at commit `b5fa0705f6e5724ede414727797b4b6ed274d3d2`. Its [`src/win/clipboard.rs`](https://github.com/kitlangton/scrawl/blob/b5fa0705f6e5724ede414727797b4b6ed274d3d2/src/win/clipboard.rs) publishes registered PNG, `CF_DIBV5`, and optional Unicode text together. Its [keyframe document](https://github.com/kitlangton/scrawl/blob/b5fa0705f6e5724ede414727797b4b6ed274d3d2/docs/keyframes-and-text.md) describes that as an opt-in Windows experiment checked in Claude desktop. This supports trying a contact sheet publication here. It does not establish multi-image support, the five requested targets' current behavior, or their attachment limits. No Scrawl code was copied.
-
 ## Results from this session
 
 On 2026-11-04, the build script published and verified a native x64 PE executable with no managed CLR header. The NativeAOT executable passed exact clipboard readback for text, files, files plus text, bitmap plus text, and composite plus text. Every case included the three exclusion formats. Shell filename enumeration also passed. Separate no-input publications passed for eight PNG files plus text and one bitmap plus text. No paste input was sent.

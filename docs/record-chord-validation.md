@@ -2,7 +2,7 @@
 
 The opt-in record chord is implemented. The user workflow is documented in
 [the user guide](user-guide.md#record-chord). The normal Ctrl+Win chord remains
-voice-only. The reference clone and feasibility evidence are recorded in
+voice-only. Feasibility evidence is recorded in
 [the phase 0 report](record-chord-spikes.md).
 
 ## Implemented ownership and delivery

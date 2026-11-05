@@ -7,22 +7,10 @@ The normal Ctrl+Win workflow remains voice-only.
 ## Source baseline
 
 - Ansible starts from `origin/main` at `66e7a6a`.
-- The reference clone is `~/Projects/references/scrawl` at
-  `b5fa0705f6e5724ede414727797b4b6ed274d3d2`.
-- Scrawl's Windows `src/win/media.rs` uses monitor capture, a two-frame WGC
-  pool, GPU conversion to NV12, and a Media Foundation H.264 sink writer.
-  Its frame timestamps use the QPC clock.
-- Scrawl's Windows `src/win/clipboard.rs` publishes PNG and DIBV5 alongside
-  Unicode text. Its bundle handoff uses one contact sheet. This source does
-  not establish multi-image acceptance in any requested target.
-- Scrawl is MIT licensed. These are architectural references, not evidence
-  that Ansible's capture or target integration passes.
 
 ## Reproduction and findings
 
 The encoder spike is under `tools/record-spikes/encoder`.
-The [Scrawl implementation notes](record-chord-scrawl-reference.md) trace its
-Windows capture, input, frame selection, timing, and clipboard paths.
 The [word timing report](record-chord-word-timings.md) describes the native
 dictation timing checks. The [clipboard guide](record-chord-clipboard.md)
 contains the manual acceptance procedure and result matrix.
