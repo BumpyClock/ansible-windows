@@ -31,7 +31,7 @@ public sealed partial class DictationSessionTests
             Assert.Equal(SessionOutcomeKind.Completed, result.Kind);
             Assert.Equal("hello world", result.Result!.SpeechText);
             Assert.Equal(2, result.Result.SpokenWords);
-            Assert.Equal("hello world\n\nFrames in order: final screen.", result.Result.Payload!.Text);
+            Assert.Equal("hello world\nFrames in order: final screen.", result.Result.Payload!.Text);
             Assert.Same(result.Result.Payload, Assert.Single(completions).Result.Payload);
             Assert.False(session.State.IsRecordTake);
         }

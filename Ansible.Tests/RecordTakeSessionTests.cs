@@ -23,7 +23,7 @@ public sealed class RecordTakeSessionTests
                 [new(0, 5, 0, 1000), new(6, 4, 16000, 17000), new(11, 6, 32000, 33000)])
         };
         var payload = await take.PrepareAsync(result);
-        Assert.Equal("click [ink 1 @0:01] this button", payload.Text);
+        Assert.Equal("click [ink 1 at 0:01] this button", payload.Text);
         Assert.Equal("click this button", result.SpeechText);
         Assert.True(payload.IsRecordTake);
         Assert.True(factory.Capture.IsReleased);
@@ -40,7 +40,7 @@ public sealed class RecordTakeSessionTests
         {
             WordTimings = new(SpeechWordTimingSource.NativeTokenEmission, [new(0, 5, 0, 1000)])
         });
-        Assert.Equal("click\n\nInk timeline\n[ink 1 @0:07]", payload.Text);
+        Assert.Equal("click\nInk timeline\n[ink 1 at 0:07]", payload.Text);
         Assert.Contains(take.Warnings, value => value.Contains("no usable word timing"));
     }
 
@@ -56,7 +56,7 @@ public sealed class RecordTakeSessionTests
         take.Update(new("click", false, "click"));
         factory.Burst!(new(1, At(7)));
         var payload = await take.PrepareAsync(new("click this button", "click this button"));
-        Assert.Equal("click [ink 1 @0:07, approximate] this button", payload.Text);
+        Assert.Equal("click [ink 1 at 0:07, approximate] this button", payload.Text);
     }
 
     [Fact]
@@ -71,8 +71,8 @@ public sealed class RecordTakeSessionTests
         factory.Burst!(new(1, inkAt));
         factory.Burst!(new(2, inkAt));
         var text = (await take.PrepareAsync(new("click", "click"))).Text;
-        Assert.StartsWith("click [ink 1 @", text);
-        Assert.Contains(", approximate] [ink 2 @", text);
+        Assert.StartsWith("click [ink 1 at ", text);
+        Assert.Contains(", approximate] [ink 2 at ", text);
         Assert.EndsWith(", approximate]", text);
     }
 
@@ -88,7 +88,7 @@ public sealed class RecordTakeSessionTests
         take.Update(new("click this button", false, "click this button"));
         factory.Burst!(new(1, inkAt));
         var text = (await take.PrepareAsync(new("click this button", "click this button"))).Text;
-        Assert.StartsWith("click [ink 1 @", text);
+        Assert.StartsWith("click [ink 1 at ", text);
         Assert.EndsWith(", approximate] this button", text);
     }
 
@@ -101,8 +101,8 @@ public sealed class RecordTakeSessionTests
         await factory.Started.Task;
         for (var n = 1; n <= 12; n++) factory.Burst!(new(n, At(n * 2)));
         var payload = await take.PrepareAsync(new("look here", "look here"));
-        Assert.StartsWith("look here\n\nInk timeline\n[ink 1 @0:02]", payload.Text);
-        Assert.Contains("[ink 12 @0:24]", payload.Text);
+        Assert.StartsWith("look here\nInk timeline\n[ink 1 at 0:02]", payload.Text);
+        Assert.Contains("[ink 12 at 0:24]", payload.Text);
         Assert.DoesNotContain("approximate", payload.Text);
     }
 
@@ -118,7 +118,7 @@ public sealed class RecordTakeSessionTests
         Assert.Equal(path, payload.VideoPath);
         Assert.Contains("Frames in order: final screen.", payload.Text);
         Assert.Equal(include, payload.Text.Contains("Video: file:///"));
-        if (include) Assert.Contains("video begins @0.125 s on the take clock", payload.Text);
+        if (include) Assert.Contains("video begins at 0.125 s on the take clock", payload.Text);
     }
 
     [Fact]

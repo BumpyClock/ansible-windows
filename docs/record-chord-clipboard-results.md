@@ -2,11 +2,12 @@
 
 ## Current qualification
 
-| Observed surface | Accepted file count | Combined files/text | Separate files then text |
+| Observed surface | Accepted file count | Combined files/text | Separate file and text pastes |
 | --- | --- | --- | --- |
 | Claude desktop | At least 16 | Text omitted | Preserved both; two eight-image checks, including reverse order |
 | chatgpt.com in Chrome | At least 8 | Text omitted | Preserved both; one check |
 | GitHub Copilot desktop | At least 8 | Text omitted | Preserved both; one check |
+| T3 Code desktop | At least 8 | Not tested | Corrected bundle text followed by eight PNGs preserved both |
 
 These counts are lower bounds at the tested fixture sizes. They are not
 attachment maxima. Paced image-by-image delivery and larger files remain
@@ -16,6 +17,33 @@ On 2026-11-04 the user separately confirmed that web paste behavior matches
 the desktop tests. This is user-reported manual verification. No additional
 per-surface fixture sizes, processing times, or cloud task attachment limits
 were supplied. Keep that provenance separate from the observed runs below.
+
+## Bundle verification regression on 2026-11-04
+
+The installed app pasted text without pictures in T3 Code and Claude desktop.
+Pictures are gated on exact text insertion, so attachment acceptance alone had
+not qualified the app's automatic two-paste path.
+
+A production UIA readback probe reproduced an empty Chromium composer as one
+newline and a collapsed final caret beyond `DocumentRange`. T3 also converted
+`@0:03` to a file mention and changed blank-paragraph readback. The verifier
+continues to require stable field identity, bounded complete content, selection,
+and an exact insertion. The reader now handles Chromium's sole empty paragraph
+and terminal caret. Generated text uses `at 0:03` and single line separators.
+
+The corrected 110-character synthetic bundle passed exact same-field comparison
+in both T3 Code and Claude desktop. Claude's production bounded observer also
+returned `Verified`. Each subsequent single `CF_HDROP` paste visibly attached
+eight numbered PNGs in order while preserving that text. Claude's horizontal
+strip was inspected through frame 08. No message was sent. Both drafts remain
+unsent with synthetic text and eight images.
+
+T3 files run `20261105T032926150Z-6ec3ac` and Claude files run
+`20261105T033128992Z-cfbbe8` used 1280 by 720 fixtures from the harness. The
+readback probe is ignored under `.runtime/record-spikes/target-readback`.
+These checks exercise actual accessibility and clipboard paths with separate
+paste input. They do not yet qualify a physical record-chord take through the
+installed update, larger files, paced bitmaps, contact sheets, or a maximum.
 
 ## Initial access attempt on 2026-11-04
 

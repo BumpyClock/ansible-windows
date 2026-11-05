@@ -174,7 +174,8 @@ public sealed class RecordTakeSession
         foreach (var item in bursts)
         {
             var time = Stopwatch.GetElapsedTime(_options.OriginTimestamp, item.Burst.Timestamp);
-            var label = $"ink {item.Burst.Number} @{FormatTime(time)}";
+            // An @ timestamp becomes a file mention in composers such as T3 Code.
+            var label = $"ink {item.Burst.Number} at {FormatTime(time)}";
             if (native)
             {
                 var sample = (item.Burst.Timestamp - audioOrigin!.Value) * (16000d / Stopwatch.Frequency);
@@ -199,21 +200,21 @@ public sealed class RecordTakeSession
         }
         if (timeline.Count > 0)
         {
-            text.Append("\n\nInk timeline\n").AppendJoin('\n', timeline);
+            text.Append("\nInk timeline\n").AppendJoin('\n', timeline);
             lock (_gate) _warnings.Add("This model has no usable word timing. Ink times are listed in the trailing timeline.");
         }
         if (media.Frames.Count > 0)
         {
-            text.Append("\n\nFrames in order: ");
+            text.Append("\nFrames in order: ");
             text.AppendJoin(", ", media.Frames.Select(frame => frame.IsSummary ? "summary (all ink)" :
-                frame.BurstNumber is { } number ? $"{number} @{FormatTime(frame.Time)}" : "final screen"));
+                frame.BurstNumber is { } number ? $"{number} at {FormatTime(frame.Time)}" : "final screen"));
             text.Append('.');
         }
         if (_options.IncludeVideoLink && media.VideoPath is { } path)
         {
             text.Append("\nVideo: ").Append(new Uri(Path.GetFullPath(path)).AbsoluteUri);
             if (media.VideoStartOffset is { } offset && offset > TimeSpan.Zero)
-                text.Append(" (video begins @").Append(offset.TotalSeconds.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture))
+                text.Append(" (video begins at ").Append(offset.TotalSeconds.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture))
                     .Append(" s on the take clock)");
         }
         return new(text.ToString(), media.Frames, media.VideoPath) { IsRecordTake = true };

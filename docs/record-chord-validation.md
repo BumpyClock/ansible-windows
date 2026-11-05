@@ -149,6 +149,42 @@ through the app's exact-text verifier in every target. The silent recording
 and ink fixtures do not replace those checks. The overhead comparison remains
 [inconclusive for production performance](record-chord-overhead.md).
 
+## Live ink and bundle corrections
+
+The reported take saved stroke geometry in its summary but no live ink in its
+burst picture. Native ink now publishes a reusable premultiplied BGRA surface
+through `UpdateLayeredWindow`. The stronger fixture observes red ink before
+mouse-up, isolated burst pictures, and the numbered summary. Native lifecycle
+and input checks pass. Both the prior renderer and replacement pass that
+fixture, so it does not reproduce or prove resolution of the packaged-only
+failure. Physical drawing in the updated installed app remains a hand check.
+Ignored evidence is `.runtime/record-capture/held-drag-per-pixel-20261105`.
+
+The missing image paste was gated by unverified text. Actual T3 Code UIA reads
+exposed Chromium's sole empty paragraph and final caret beyond DocumentRange.
+T3 also turned generated `@` timestamps into file mentions and changed blank
+paragraph readback. The reader now supports the observed paragraph and caret
+representations while retaining bounded, stable same-field exact comparison.
+Bundle text uses `at` timestamps and single line separators. Actual corrected
+fixture text passed exact comparison in T3 Code and Claude desktop. Subsequent
+bulk file pastes visibly attached eight numbered PNGs in both with text intact.
+See the [clipboard report](record-chord-clipboard-results.md#bundle-verification-regression-on-2026-11-04).
+Neither draft was sent. The full automatic record-chord flow still needs an
+installed-app hand check.
+
+The corrected core suite passes 1528 tests. The NativeAOT MSIX publish for
+`1.0.1.19` passes, including native import closure and packaged UI resources.
+Sixty focused record-session and clipboard reliability checks also pass in a
+Boat Linux sandbox. That sandbox does not validate Windows rendering or input.
+Logs are `.runtime/record-spikes/tests/record-ink-and-bundle-verified.trx` and
+`.runtime/record-spikes/publish-record-ink-clipboard-final.log`.
+
+Signed development package `1.0.1.19` was installed and restarted. The installed
+native helper hash matches the tested helper. Settings, history, and usage
+hashes matched immediately after installation. Disk readback retained enabled
+record capture and record toggle mode. The restarted app exposed its enabled
+Start dictation action without a startup failure notice.
+
 ## Reproduce the isolated package check
 
 Run `tools/Publish-Ansible.ps1`, then:

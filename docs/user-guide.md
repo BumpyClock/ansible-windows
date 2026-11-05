@@ -274,6 +274,9 @@ labels and a maximum 1920-pixel long edge. Eight is a provisional cap; it is not
 a measured attachment maximum across every destination.
 
 Nemotron uses its native word anchors to place ink markers in the final speech.
+Pasted markers use `[ink 1 at 0:07]`. Frame legends use single line breaks.
+This keeps timestamps as text in chat composers that turn `@0:07` into a file
+mention or collapse empty paragraphs. Picture labels still use `1 @0:07`.
 These anchors are token emission times, not forced acoustic alignment. Kroko
 and VibeVoice streaming use partial-text lengths and label markers approximate.
 Buffered or final-only models use a trailing **Ink timeline** and a warning.

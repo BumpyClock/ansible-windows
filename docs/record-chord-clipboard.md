@@ -92,3 +92,8 @@ The user subsequently confirmed that web paste behavior matches the desktop
 tests. The report records this as user-reported manual verification. Browser
 automation stopped on URL-confidence enforcement; no action bypassed that stop.
 Cloud task-box attachment limits remain unmeasured.
+
+The subsequent [bundle regression check](record-chord-clipboard-results.md#bundle-verification-regression-on-2026-11-04)
+observed corrected bundle text followed by eight PNGs in T3 Code and Claude
+desktop. It also tested actual same-field text readback. This does not yet
+qualify the updated app's physical record-chord workflow.

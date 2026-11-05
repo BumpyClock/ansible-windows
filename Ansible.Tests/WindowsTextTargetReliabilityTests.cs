@@ -94,6 +94,30 @@ public sealed class WindowsTextTargetReliabilityTests
         Assert.False(ExactInsertion(new("ab", 0, 0), new("axb", 2, 2), "x"));
     }
 
+    [Fact]
+    public void ChromiumEmptyParagraphAndTerminalCaretPreserveExactVerification()
+    {
+        var before = SnapshotFromTextRanges("\n", "", "", false, true);
+        const string text = "speech [ink 1 at 0:03]\nFrames in order: 1, summary.\nVideo: file:///C:/take.mp4";
+        var after = SnapshotFromTextRanges(text, text, text, true, false);
+        Assert.NotNull(before);
+        Assert.NotNull(after);
+        Assert.True(ExactInsertion(before, after, text));
+        Assert.False(ExactInsertion(before, after, text + "!"));
+        Assert.Null(SnapshotFromTextRanges(text, "speech", "speech", true, false));
+        Assert.Null(SnapshotFromTextRanges(text, text, text + "extra", true, false));
+        Assert.Equal("\n\n", SnapshotFromTextRanges("\n\n", "", "", false, true)!.Document);
+    }
+
+    [Fact]
+    public void RealOrUnprovenNewlineIsPreserved()
+    {
+        var before = SnapshotFromTextRanges("\n", "", "", false, false);
+        Assert.Equal("\n", before!.Document);
+        Assert.False(ExactInsertion(before, new("speech", 6, 6), "speech"));
+        Assert.True(ExactInsertion(before, new("speech\n", 6, 6), "speech"));
+    }
+
     [Theory]
     [InlineData(false, 1, 2, 2)]
     [InlineData(true, 2, 2, 2)]

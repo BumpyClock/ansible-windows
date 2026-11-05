@@ -12,6 +12,18 @@ internal static unsafe partial class WindowsTextTarget
     internal sealed record TextSnapshot(string Document, int SelectionStart, int SelectionEnd,
         bool Complete = true, int SelectionCount = 1);
 
+    internal static TextSnapshot? SnapshotFromTextRanges(string content, string start, string end,
+        bool terminalCaret, bool emptyParagraph)
+    {
+        if (content.Length > VerificationTextBudget || start.Length > end.Length ||
+            !content.StartsWith(start, StringComparison.Ordinal) || !content.StartsWith(end, StringComparison.Ordinal) ||
+            (terminalCaret && (start != content || end != content))) return null;
+        // Chromium represents its sole empty paragraph as a newline, removed by the first paste.
+        // Keep ordinary newlines and every nonempty document intact.
+        return content == "\n" && start.Length == 0 && end.Length == 0 && emptyParagraph
+            ? new("", 0, 0) : new(content, start.Length, end.Length);
+    }
+
     internal static string FieldSafetyReason(FocusedField field) =>
         field.Password ? "Automatic insertion is disabled for password fields." :
         field.ReadOnly ? "The selected field is read-only." :
@@ -327,8 +339,11 @@ internal static unsafe partial class WindowsTextTarget
                 selection = Selection(selections);
                 if (selection == 0) { return null; }
                 if (CompareEndpoint(selection, 0, document, 0) < 0 ||
-                    CompareEndpoint(selection, 1, document, 1) > 0 ||
                     CompareEndpoint(selection, 0, selection, 1) > 0) { return null; }
+                var terminalCaret = CompareEndpoint(selection, 1, document, 1) > 0;
+                // Chromium may put a collapsed final caret in an empty node after DocumentRange.
+                // It is usable only if its stable prefixes equal the complete bounded document.
+                if (terminalCaret && (CompareEndpoint(selection, 0, selection, 1) != 0 || Text(selection) != "")) return null;
                 var content = Text(document);
                 if (content is null) { return null; }
                 prefix = Pointer(document, 3);
@@ -337,8 +352,11 @@ internal static unsafe partial class WindowsTextTarget
                 var start = Text(prefix);
                 SetEnd(prefix, selection, 1);
                 var end = Text(prefix);
-                if (start is null || end is null || !content.StartsWith(start, StringComparison.Ordinal) ||
-                    !content.StartsWith(end, StringComparison.Ordinal) || start.Length > end.Length) { return null; }
+                if (start is null || end is null) { return null; }
+                var emptyParagraph = content == "\n" && start.Length == 0 && end.Length == 0 &&
+                    ReadStringProperty(40) == "Chrome" && ReadValue() == "\n";
+                var snapshot = SnapshotFromTextRanges(content, start, end, terminalCaret, emptyParagraph);
+                if (snapshot is null) { return null; }
                 // Reject document or selection mutation instead of accepting a stitched snapshot.
                 freshSelections = Pointer(pattern, 5);
                 if (freshSelections == 0 || Integer(freshSelections, 3) != 1) { return null; }
@@ -351,7 +369,8 @@ internal static unsafe partial class WindowsTextTarget
                 SetEnd(prefix, freshSelection, 1);
                 if (Text(prefix) != end) { return null; }
                 if (Text(document) != content) { return null; }
-                return new(content, start.Length, end.Length);
+                if (emptyParagraph && ReadValue() != "\n") { return null; }
+                return snapshot;
             }
             finally
             {
@@ -361,6 +380,38 @@ internal static unsafe partial class WindowsTextTarget
                 if (selection != 0) { Release(selection); }
                 if (selections != 0) { Release(selections); }
                 if (document != 0) { Release(document); }
+                Release(pattern);
+            }
+        }
+
+        private string? ReadStringProperty(int slot)
+        {
+            nint value = 0;
+            try
+            {
+                BeforeCall();
+                Marshal.ThrowExceptionForHR(((delegate* unmanaged[Stdcall]<nint, nint*, int>)Method(_element, slot))(_element, &value));
+                return value == 0 ? null : Marshal.PtrToStringBSTR(value);
+            }
+            finally { if (value != 0) SysFreeString(value); }
+        }
+
+        private string? ReadValue()
+        {
+            var pattern = Pattern(ValuePattern, ValuePatternInterface);
+            if (pattern == 0) return null;
+            nint value = 0;
+            try
+            {
+                BeforeCall();
+                Marshal.ThrowExceptionForHR(((delegate* unmanaged[Stdcall]<nint, nint*, int>)Method(pattern, 4))(pattern, &value));
+                if (value == 0) return "";
+                var length = SysStringLen(value);
+                return length > VerificationTextBudget ? null : new string((char*)value, 0, (int)length);
+            }
+            finally
+            {
+                if (value != 0) SysFreeString(value);
                 Release(pattern);
             }
         }
