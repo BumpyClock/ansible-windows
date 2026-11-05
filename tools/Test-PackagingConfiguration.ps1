@@ -45,4 +45,12 @@ foreach ($arguments in @(
         throw "Invalid deployment was not rejected by the architecture gate ($arguments): $result"
     }
 }
-Write-Host 'Packaging configuration passed for Debug/Release x64 and ARM64; x86 and mixed architectures are rejected.'
+$bundleRequired = $false
+try {
+    & (Join-Path $PSScriptRoot 'Publish-Ansible.ps1') -Architecture x64,arm64
+} catch {
+    if ($_.Exception.Message -ne 'Pass -Bundle when selecting multiple architectures.') { throw }
+    $bundleRequired = $true
+}
+if (-not $bundleRequired) { throw 'Multiple architectures were accepted without -Bundle.' }
+Write-Host 'Packaging configuration passed for Debug/Release x64 and ARM64; x86 and mixed architectures are rejected; multiple architectures require a bundle.'

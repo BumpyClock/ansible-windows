@@ -22,7 +22,6 @@ $source = Join-Path $runtime "audio-native-src"
 $build = Join-Path $runtime "audio-native-build-$Backend"
 $output = Join-Path $runtime "native"
 if ($Architecture -eq "arm64") {
-    if ($Backend -ne "cpu") { throw "ARM64 Vulkan is not supported. Use -Architecture arm64 -Backend cpu. No backend fallback is performed." }
     $build = Join-Path $runtime "audio-native-build-arm64-$Backend"
     $output = Join-Path $runtime "native-arm64"
 }
@@ -88,8 +87,8 @@ if ($StageRuntimeOnly -or $VerifyRuntimeOnly) {
         @($runtimeBackends | Where-Object { $_ -notin @("cpu", "vulkan") }).Count -ne 0) {
         throw "The native runtime has an invalid backend record. Rebuild it with .\tools\Build-AudioNative.ps1."
     }
-    if ($Architecture -eq "arm64" -and ($runtimeBackends.Count -ne 1 -or $runtimeBackends[0] -ne "cpu")) {
-        throw "ARM64 runtime records must describe CPU only. Use -Architecture arm64 -Backend cpu."
+    if ("vulkan" -in $runtimeBackends -and [string]::IsNullOrWhiteSpace($record.vulkan_sdk)) {
+        throw "The Vulkan runtime record is missing its Vulkan SDK version. Rebuild the requested runtime."
     }
     if ($PSBoundParameters.ContainsKey("Backend") -and $Backend -notin $runtimeBackends) {
         throw "The native runtime does not include '$Backend'. Rebuild with .\tools\Build-AudioNative.ps1 -Backend $Backend. To package an intentional CPU-only build, pass -Backend cpu to .\tools\Publish-Ansible.ps1."
@@ -320,6 +319,41 @@ if ($Backend -eq "vulkan") {
     $env:VULKAN_SDK = $VulkanSdk
     $sdkVersion = Split-Path $VulkanSdk -Leaf
     $vulkanFlags = "-DENGINE_ENABLE_VULKAN=ON"
+    if ($Architecture -eq "arm64") {
+        $glslc = (Join-Path $VulkanSdk "Bin\glslc.exe").Replace('\', '/')
+        $shaderCompilerHeaders = & $dumpbin /nologo /headers $glslc
+        if ($LASTEXITCODE -ne 0 -or -not ($shaderCompilerHeaders -match '^\s+8664 machine \(')) {
+            throw "ARM64 cross-compilation requires an x64-hosted Vulkan SDK shader compiler. The executable was not run: $glslc."
+        }
+        # GGML's shader generator runs during the build. The outer vcvars environment targets
+        # ARM64, so its host sub-build needs explicit x64 compilers AND x64 library search paths.
+        $hostCompiler = (Join-Path $toolset.FullName "bin\Hostx64\x64\cl.exe").Replace('\', '/')
+        $hostLinker = (Join-Path $toolset.FullName "bin\Hostx64\x64\link.exe").Replace('\', '/')
+        $hostArchiver = (Join-Path $toolset.FullName "bin\Hostx64\x64\lib.exe").Replace('\', '/')
+        $hostVcvars = Join-Path $vs "VC\Auxiliary\Build\vcvars64.bat"
+        $hostEnvironment = & $env:ComSpec /d /s /c "call `"$hostVcvars`" >nul && set LIB"
+        $hostLibraries = @($hostEnvironment | Where-Object { $_ -match '^LIB=' })
+        if ($LASTEXITCODE -ne 0 -or $hostLibraries.Count -ne 1) {
+            throw "Cannot obtain Visual Studio x64 libraries for the Vulkan shader generator."
+        }
+        $hostLinkFlags = ($hostLibraries[0].Substring(4) -split ';' | Where-Object { $_ } | ForEach-Object {
+            '/LIBPATH:\"' + $_.Replace('\', '/') + '\"'
+        }) -join ' '
+        New-Item -ItemType Directory -Force -Path $build | Out-Null
+        $hostToolchain = (Join-Path $build "vulkan-host-x64.cmake").Replace('\', '/')
+        @(
+            "set(CMAKE_C_COMPILER `"$hostCompiler`")",
+            "set(CMAKE_CXX_COMPILER `"$hostCompiler`")",
+            "set(CMAKE_LINKER `"$hostLinker`")",
+            "set(CMAKE_AR `"$hostArchiver`")",
+            'set(CMAKE_MSVC_RUNTIME_LIBRARY MultiThreaded)',
+            "set(CMAKE_EXE_LINKER_FLAGS_INIT `"$hostLinkFlags`")"
+        ) | Set-Content -LiteralPath $hostToolchain -Encoding utf8
+        # The tracked optional-loader patch uses SDK headers, not Vulkan::Vulkan, on Windows.
+        # No target import library or SDK loader DLL is linked or shipped.
+        $vulkanFlags += " -DGGML_VULKAN_SHADERS_GEN_TOOLCHAIN:FILEPATH=`"$hostToolchain`" " +
+            "-DVulkan_GLSLC_EXECUTABLE:FILEPATH=`"$glslc`""
+    }
 }
 
 $vcvars = Join-Path $vs "VC\Auxiliary\Build\vcvars64.bat"

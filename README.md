@@ -109,9 +109,11 @@ runtime recorded with Vulkan support and rejects a CPU-only artifact. Pass
 and certificate trust.
 
 For an x64-only MSIX bundle, use `tools\Publish-Ansible.ps1 -Bundle`.
-A bundle does not require x86 or ARM64 packages. ARM64 CPU cross-builds are also
-available, but recognition and capture still need ARM64 hardware qualification.
-See the [development guide](docs/development.md#arm64-cpu-cross-build) for ARM64
+A bundle does not require x86 or ARM64 packages. Use
+`tools\Publish-Ansible.ps1 -Architecture x64,arm64 -Bundle` to include both.
+ARM64 CPU/Vulkan cross-builds are available, but recognition and capture still
+need ARM64 hardware qualification.
+See the [development guide](docs/development.md#arm64-cross-build) for ARM64
 toolchains, commands, and precompiled runtime storage.
 
 ## Current limits
@@ -143,9 +145,9 @@ toolchains, commands, and precompiled runtime storage.
   installed authenticated CLI account. OpenAI API uses a Credential Locker key
   and OpenAI model IDs. There is no provider fallback. Originals are kept.
 
-- x64 CPU/Vulkan is the default build. ARM64 CPU binaries and NativeAOT packages
-  cross-compile, but have not been run on ARM64 hardware. ARM64 Vulkan, x86,
-  and NPU inference are not supported.
+- x64 CPU/Vulkan is the default build. ARM64 CPU/Vulkan binaries and NativeAOT packages
+  cross-compile, but have not been run on ARM64 hardware. x86 and NPU inference
+  are not supported.
 - File transcription accepts WAV only, up to five minutes, 100 MiB on disk,
   and 64 MiB decoded audio.
   App recognition operations have a five-minute timeout.

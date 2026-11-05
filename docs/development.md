@@ -16,7 +16,7 @@ and known backend failures.
 The x64 native runtime requires AVX2, FMA, F16C, BMI1/BMI2, and OS-enabled AVX
 state, including when GPU inference is selected. A compatible Vulkan driver is
 required for GPU recognition; a CPU-only build does not need the Vulkan SDK.
-ARM64 CPU cross-builds require additional tools listed below. x86 is unsupported.
+ARM64 cross-builds require additional tools listed below. x86 is unsupported.
 
 ## Prepare the runtime
 
@@ -63,7 +63,7 @@ folder. The app package includes the runtime and public sample; it excludes
 model weights. Select `.runtime\models` through **Speech models > Model folder >
 Choose folder** to use setup's weights in the packaged app.
 
-## ARM64 CPU cross-build
+## ARM64 cross-build
 
 Build on Windows x64 with the Visual Studio C++ ARM64 build tools and an
 x64-hosted `clang-cl.exe`. Pinned GGML rejects MSVC's ARM compiler. The native
@@ -85,13 +85,20 @@ For the portable compiler used in the initial cross-build, the native command is
 
 ARM64 uses baseline ARMv8-A/NEON, with OpenMP disabled. It does not use x64 AVX
 flags, ARM dot-product instructions, FP16 arithmetic, or host CPU tuning.
-Vulkan is rejected for ARM64 rather than silently replaced with CPU.
 All six configured model families remain compiled.
+
+For CPU plus Vulkan, use `-Backend vulkan` instead. The build uses the x64
+Vulkan SDK shader compiler and builds GGML's shader generator with a separate
+x64 toolchain. The tracked optional-loader patch needs SDK headers rather than
+an ARM64 Vulkan import library. The target device supplies the Vulkan loader and
+compatible GPU driver. No SDK installation is needed on that device to run the app.
 
 The runtime lives in `.runtime\native-arm64`; x64 stays in `.runtime\native`.
 The app selects matching native content and publishes a matching DeviceProbe.
 Capture builds automatically into `.runtime\record-capture-arm64`.
 DeviceProbe output is `.runtime\device-probe\<architecture>\<configuration>`.
+Its nested build intermediates live under that directory's `build` folder,
+separate from app and test intermediates to avoid shared core assembly locks.
 The optional encoder validation helper can be cross-built separately with
 `tools\record-spikes\encoder\Build-EncoderSpike.ps1 -Architecture arm64`.
 It stays in `.runtime\record-spikes\encoder-arm64`, separate from x64.
@@ -174,10 +181,17 @@ To also create an x64-only bundle from the verified package:
 ```
 
 The bundle is `Ansible_<version>_x64.msixbundle` directly under the output directory.
-ARM64 uses the same naming with `arm64`. `-Bundle` includes only the selected
-architecture. It verifies the bundle identity, architecture, and embedded MSIX hash.
-The script explicitly builds a single MSIX first, regardless of Visual Studio's
-bundle setting. Neither x86 nor ARM64 is needed for an x64 bundle.
+ARM64 uses the same naming with `arm64`. To include both architectures, prepare
+both native runtimes and run:
+
+```powershell
+.\tools\Publish-Ansible.ps1 -Architecture x64,arm64 -Bundle
+```
+
+This produces `Ansible_<version>_x64_arm64.msixbundle`. The script builds and
+verifies each MSIX sequentially, then verifies both bundle entries against those
+packages by SHA-256. Its explicit package builds ignore Visual Studio's bundle
+setting. A single architecture still produces a single-architecture bundle.
 
 `tools\Test-PackagingConfiguration.ps1` checks evaluated Debug/Release paths and
 bundle settings for both architectures, plus rejection of x86 and mixed targets.

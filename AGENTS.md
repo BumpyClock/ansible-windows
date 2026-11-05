@@ -26,7 +26,7 @@ The code map below describes the current layout, not required module boundaries.
 ## Current implementation
 
 - The app targets .NET 10 and uses single-project MSIX with self-contained .NET NativeAOT and Windows App SDK deployment.
-- Build on Windows x64. x64 targets CPU/Vulkan; `Build-AudioNative.ps1 -Architecture arm64 -Backend cpu` cross-compiles baseline ARMv8-A/NEON through clang-cl and VS ARM64 tools, without OpenMP. ARM64 binaries and NativeAOT packages compile but are not hardware-qualified. Keep architectures in separate runtime directories. ARM64 Vulkan, x86, and NPU are unsupported. Qualify each model/device combination separately.
+- Build on Windows x64. Both x64 and ARM64 target CPU/Vulkan. ARM64 cross-compiles baseline ARMv8-A/NEON through clang-cl and VS ARM64 tools, without OpenMP. Vulkan shaders use x64 host tools. ARM64 binaries and NativeAOT packages compile but are not hardware-qualified. Keep architectures in separate runtime directories. x86 and NPU are unsupported. Qualify each model/device combination separately.
 - Recognition runs in-process through the audio.cpp C ABI, using `audiocpp.dll`.
 - The native build pins audio.cpp v0.9.0. It applies tracked patches, including the Nemotron cumulative streaming timestamp patch, and compiles `nemotron_3_diar`. Upstream support does not imply support in this compiled backend.
 - Catalog entries carry an `asr` or `diar` task. Omitted task means ASR. Only family `nemotron_3_diar` may be `diar`.
@@ -95,8 +95,8 @@ Build and verify an unsigned NativeAOT MSIX after changes to the WinUI app, nati
 ```
 
 The default publish requires a Vulkan runtime record. Pass `-Backend cpu` for an intentional CPU-only package.
-Add `-Bundle` for a verified single-architecture MSIX bundle; x64 does not require ARM64 or x86.
-ARM64 publishing requires `-Architecture arm64 -Backend cpu`. See `docs/development.md` for toolchains and qualification limits.
+Add `-Bundle` for a verified MSIX bundle. Select `-Architecture x64,arm64` for both architectures or `-Architecture arm64` for ARM64 alone. x64 does not require ARM64 or x86.
+Each selected architecture needs a matching native runtime with the requested backend. See `docs/development.md` for toolchains and qualification limits.
 Run `tools\Test-PackagingConfiguration.ps1` and `tools\Test-NativeBuildRecipe.ps1` after architecture or packaging changes.
 Use the packaged Visual Studio launch profile for development. Package signing, certificate trust, and installation are separate operations.
 

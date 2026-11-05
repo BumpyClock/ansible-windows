@@ -47,8 +47,9 @@ Run these commands on that device, not the x64 cross-build host:
 The second command checks WAV and paced streaming recognition. Successful
 cross-compilation is not evidence that either check passes on ARM64.
 Follow with packaged microphone, meeting loopback, insertion, and record-chord
-checks. Keep model memory safeguards enabled. ARM64 GPU qualification requires
-separate Vulkan build support and a compatible ARM64 driver.
+checks. Keep model memory safeguards enabled. For an ARM64 CPU/Vulkan runtime,
+repeat the recognition command with `--backend vulkan` on a device with a
+compatible ARM64 Vulkan driver. CPU success does not qualify GPU recognition.
 
 ## Run the probe
 
@@ -339,12 +340,12 @@ microphone/video acoustic synchronization or physical multi-monitor behavior.
 - Dictation/file recognition operations have a five-minute timeout; the probe uses three
   minutes. WAV input is limited to five minutes, 100 MiB on disk, and 64 MiB of
   decoded floats. Native calls can outlast these deadlines while cleanup waits.
-- ARM64 CPU audio.cpp, capture helpers, DeviceProbe, and the NativeAOT MSIX bundle
+- ARM64 CPU/Vulkan audio.cpp, capture helpers, DeviceProbe, and the NativeAOT MSIX bundle
   cross-compiled successfully on Windows x64. No ARM64 executable was run.
   ARM64 uses ARMv8-A/NEON without OpenMP; model throughput is unmeasured.
   Run recognition, capture, insertion, and clean-machine checks on ARM64 before
-  shipping that architecture. See [ARM64 builds](development.md#arm64-cpu-cross-build).
-  ARM64 Vulkan and NPU inference are not implemented. Clean-machine deployment
+  shipping that architecture. See [ARM64 builds](development.md#arm64-cross-build).
+  ARM64 Vulkan execution remains unqualified. NPU inference is not implemented. Clean-machine deployment
   and physical microphone-driver failure behavior remain unqualified.
 
 See [model behavior](user-guide.md#model-behavior) for the supported app workflows

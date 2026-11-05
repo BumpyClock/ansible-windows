@@ -105,12 +105,22 @@ try {
                 "$architecture Stage=$stage current recipe did not reach PE inspection. Got: $($result.Message)"
         }
     }
-    $directory = New-SyntheticRuntime @{ backends = @('cpu', 'vulkan') } 'arm64'
-    $result = Invoke-RuntimeCheck $directory 'arm64'
-    Assert-Condition ($result.Threw -and $result.Message -match 'CPU only') "ARM64 accepted a Vulkan record. Got: $($result.Message)"
-    $result = Invoke-RuntimeCheck $directory 'arm64' $false 'vulkan'
-    Assert-Condition ($result.Threw -and $result.Message -match 'Use -Architecture arm64 -Backend cpu') `
-        "ARM64 Vulkan did not direct callers to CPU. Got: $($result.Message)"
+    foreach ($architecture in @('x64', 'arm64')) {
+        $directory = New-SyntheticRuntime @{ backends = @('cpu', 'vulkan'); vulkan_sdk = '1.4.363.0' } $architecture
+        foreach ($stage in @($false, $true)) {
+            $result = Invoke-RuntimeCheck $directory $architecture $stage 'vulkan'
+            Assert-Condition ($result.Threw -and $result.Message -match '^(Cannot inspect PE imports|Native deployment contains a non-)') `
+                "$architecture Stage=$stage Vulkan recipe did not reach PE inspection. Got: $($result.Message)"
+        }
+        $directory = New-SyntheticRuntime @{} $architecture
+        $result = Invoke-RuntimeCheck $directory $architecture $false 'vulkan'
+        Assert-Condition ($result.Threw -and $result.Message -match "does not include 'vulkan'") `
+            "$architecture accepted a CPU-only record for a requested Vulkan build. Got: $($result.Message)"
+        $directory = New-SyntheticRuntime @{ backends = @('cpu', 'vulkan') } $architecture
+        $result = Invoke-RuntimeCheck $directory $architecture $false 'vulkan'
+        Assert-Condition ($result.Threw -and $result.Message -match 'missing its Vulkan SDK version') `
+            "$architecture accepted a Vulkan record without an SDK version. Got: $($result.Message)"
+    }
 
     foreach ($architecture in @('x64', 'arm64')) {
         $runtimeName = if ($architecture -eq 'arm64') { 'native-arm64' } else { 'native' }

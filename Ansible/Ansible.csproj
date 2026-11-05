@@ -76,7 +76,7 @@
   <Target Name="RequireQualifiedDeployment" BeforeTargets="PrepareForBuild">
     <Error Condition="('$(Platform)' != 'x64' and '$(Platform)' != 'ARM64') or '$(RuntimeIdentifier)' != 'win-$(NativeArchitecture)' or '$(PlatformTarget)' != '$(Platform)'" Text="Use matching x64/win-x64 or ARM64/win-arm64 app and native builds. x86 is not supported." />
     <Error Condition="'$(WindowsPackageType)' != 'MSIX' or '$(EnableMsixTooling)' != 'true' or '$(WindowsAppSDKSelfContained)' != 'true' or '$(SelfContained)' != 'true' or '$(PublishAot)' != 'true'" Text="Use the packaged, self-contained NativeAOT deployment path." />
-    <Error Condition="!Exists('$(NativeRuntimeDirectory)\audiocpp.dll') or !Exists('$(NativeRuntimeDirectory)\audio.cpp-LICENSE') or !Exists('$(NativeRuntimeDirectory)\native-runtime.json') or !Exists('..\.runtime\validation\sample_16k.wav')" Text="Native runtime files or the public validation sample are missing. Run tools\Build-AudioNative.ps1 -Architecture $(NativeArchitecture) (ARM64 also requires -Backend cpu)." />
+    <Error Condition="!Exists('$(NativeRuntimeDirectory)\audiocpp.dll') or !Exists('$(NativeRuntimeDirectory)\audio.cpp-LICENSE') or !Exists('$(NativeRuntimeDirectory)\native-runtime.json') or !Exists('..\.runtime\validation\sample_16k.wav')" Text="Native runtime files or the public validation sample are missing. Run tools\Build-AudioNative.ps1 -Architecture $(NativeArchitecture), or add -Backend cpu for an intentional CPU-only runtime." />
   </Target>
 
   <Target Name="RequireOptimizedNativeAot" BeforeTargets="IlcCompile">
@@ -89,7 +89,8 @@
       <DeviceProbeAot Condition="'$(Configuration)' == 'Release'">true</DeviceProbeAot>
       <DeviceProbeAot Condition="'$(Configuration)' != 'Release'">false</DeviceProbeAot>
     </PropertyGroup>
-    <Exec Command="dotnet publish &quot;$(MSBuildProjectDirectory)\..\Ansible.DeviceProbe\Ansible.DeviceProbe.csproj&quot; -c $(Configuration) -r $(RuntimeIdentifier) --self-contained true -p:PublishAot=$(DeviceProbeAot) -p:Platform=AnyCPU -o &quot;$(DeviceProbeOutput)&quot; --verbosity quiet" />
+    <!-- Keep the nested publish's core intermediates separate from app and test builds. -->
+    <Exec Command="dotnet publish &quot;$(MSBuildProjectDirectory)\..\Ansible.DeviceProbe\Ansible.DeviceProbe.csproj&quot; -c $(Configuration) -r $(RuntimeIdentifier) --self-contained true -p:PublishAot=$(DeviceProbeAot) -p:Platform=AnyCPU --artifacts-path &quot;$(DeviceProbeOutput)\build&quot; -o &quot;$(DeviceProbeOutput)&quot; --verbosity quiet" />
     <ItemGroup>
       <_DeviceProbeFile Include="$(DeviceProbeOutput)\*" Exclude="$(DeviceProbeOutput)\*.pdb" />
       <Content Include="@(_DeviceProbeFile)"
