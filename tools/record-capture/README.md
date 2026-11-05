@@ -24,8 +24,8 @@ self-check opens the overlay, captures the screen, or injects OS input.
 The following checks display capture UI and block buttons and scrolling on every monitor.
 Pointer movement remains available.
 The first saves the real desktop. The second displays a clearly labeled synthetic
-background and supplies synthetic geometry directly on the production input
-thread. Neither injects operating-system input, records audio, pastes, or sends a
+background and supplies synthetic mouse metadata through the production input
+handler on its actual input thread. Neither injects operating-system input, records audio, pastes, or sends a
 message. Coordinate these checks with the person using the computer.
 
 ```powershell
@@ -35,7 +35,9 @@ message. Coordinate these checks with the person using the computer.
 
 The fixture requires a monitor at least 1600 by 800 physical pixels. It checks
 two burst pictures independently and checks that the summary contains both
-bursts. Its pixel checks fail if the second picture retains the first burst.
+bursts. It also reads the composed desktop into `during-drag.png` before sending
+the synthetic button-up. Its pixel checks require visible red ink while the drag
+is still held, and fail if the second picture retains the first burst.
 Both hosts independently decode the actual MP4 and reject an audio stream.
 Output directories should be unique when preserving evidence.
 
@@ -54,6 +56,16 @@ Only geometry
 on the recorded monitor is accepted. Esc discards the take. Neither ink nor the
 recording indicator activates a window. The indicator requires display-affinity
 exclusion. The ink window is deliberately included in capture.
+
+Live ink is drawn into one monitor-sized, reusable premultiplied BGRA DIB and
+published with `UpdateLayeredWindow`. Transparent pixels remain transparent;
+the fade changes the published surface's constant alpha. The ink HWND never
+mixes this path with `SetLayeredWindowAttributes` or window-DC painting. The
+indicator retains its separate window-DC renderer. Surface allocation has the
+same 33,554,432-pixel bound as WGC, and teardown releases the selected bitmap and
+DC after joining capture. The C ABI remains unchanged. The pixel format follows
+the [Windows alpha blend contract](https://learn.microsoft.com/en-us/windows/win32/api/wingdi/ns-wingdi-blendfunction)
+and [layered-window publishing API](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-updatelayeredwindow).
 
 A burst ends after 1.5 seconds without drawing. Its window is held through a
 WGC presentation fence before saving its picture. New points arriving during
@@ -106,3 +118,18 @@ Ignored evidence is under `.runtime/record-capture/actual-no-ink-30fps`,
 `.runtime/record-capture/synthetic-ink-fixture`, and
 `.runtime/record-capture/shared-encoder-static.mp4`. The fixture's inspected video
 frame is `synthetic-ink-fixture/video-ink.jpg`. No captured screen is committed.
+
+The strengthened held-drag fixture passed on 2026-11-04 with both the prior
+window-DC renderer and the per-pixel renderer. The per-pixel run saved two burst
+pictures and one summary, with left/right red checks `(true,false)`,
+`(false,true)`, and `(true,true)`. The composed desktop read before button-up
+contained `(true,false)`, and visual inspection confirmed a red rectangle.
+Every capture, ink, frame and video HRESULT was zero. The silent MP4 decoded to
+107 frames and 3566.63 ms. Native lifecycle and input self-checks also passed.
+Ignored evidence is under `held-drag-baseline-20261105` and
+`held-drag-per-pixel-20261105` inside `.runtime/record-capture`.
+
+The old renderer's passing held-drag test does not reproduce the reported
+packaged-app failure. The per-pixel run proves native live presentation and WGC
+capture in this fixture; it does not establish that physical drawing in the
+installed WinUI app is fixed. That requires a packaged-app check.

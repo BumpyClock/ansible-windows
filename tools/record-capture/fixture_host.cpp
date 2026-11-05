@@ -8,6 +8,42 @@ namespace {
 int64_t fixture_started{};
 int fixture_stage{};
 
+void save_visible_drag(take& state) {
+    // Read the composed desktop while the production input handler still owns
+    // the drag. A saved summary alone cannot prove that live ink was visible.
+    auto width = state.bounds.right - state.bounds.left;
+    auto height = state.bounds.bottom - state.bounds.top;
+    std::vector<BYTE> pixels(static_cast<size_t>(width) * height * 4);
+    struct desktop_image {
+        HDC screen{GetDC(nullptr)};
+        HDC memory{};
+        HBITMAP bitmap{};
+        HGDIOBJ previous{};
+        ~desktop_image() {
+            if (previous) SelectObject(memory, previous);
+            if (bitmap) DeleteObject(bitmap);
+            if (memory) DeleteDC(memory);
+            if (screen) ReleaseDC(nullptr, screen);
+        }
+    } image;
+    check_pointer(image.screen);
+    image.memory = CreateCompatibleDC(image.screen);
+    check_pointer(image.memory);
+    image.bitmap = CreateCompatibleBitmap(image.screen, width, height);
+    check_pointer(image.bitmap);
+    image.previous = SelectObject(image.memory, image.bitmap);
+    check_pointer(image.previous);
+    check_bool(BitBlt(image.memory, 0, 0, width, height, image.screen,
+        state.bounds.left, state.bounds.top, SRCCOPY | CAPTUREBLT));
+    SelectObject(image.memory, image.previous);
+    image.previous = nullptr;
+    BITMAPINFO info{};
+    info.bmiHeader = {sizeof(BITMAPINFOHEADER), width, -height, 1, 32, BI_RGB};
+    check_bool(GetDIBits(image.memory, image.bitmap, 0, height, pixels.data(), &info, DIB_RGB_COLORS) == height);
+    if (!state.drawing) throw hresult_error(E_FAIL, L"Fixture released its drag before inspecting live ink.");
+    save_png(state.file(L"during-drag.png"), pixels, width, height, L"Synthetic drag is still held");
+}
+
 LRESULT CALLBACK fixture_proc(HWND window, UINT message, WPARAM wparam, LPARAM lparam) {
     if (message == WM_MOUSEACTIVATE) return MA_NOACTIVATE;
     if (message == WM_PAINT) {
@@ -39,20 +75,28 @@ VOID CALLBACK fixture_timer(HWND, UINT, UINT_PTR, DWORD) {
     auto state = active.load();
     if (!state || !fixture_started) return;
     auto elapsed = state->seconds_since(fixture_started);
-    auto point = [&](LONG x, LONG y, bool start) { add_point(*state, POINT{state->bounds.left + x, state->bounds.top + y}, start); };
+    auto send = [&](WPARAM message, LONG x, LONG y) {
+        MSLLHOOKSTRUCT input{};
+        input.pt = POINT{state->bounds.left + x, state->bounds.top + y};
+        handle_mouse_input(*state, message, input, []() -> LRESULT { return 0; });
+    };
     try {
         if (fixture_stage == 0 && elapsed > 0.2) {
-            state->drawing = true;
-            point(250, 400, true); point(600, 400, false); point(600, 700, false);
-            point(250, 700, false); point(250, 400, false);
-            state->drawing = false;
+            send(WM_LBUTTONDOWN, 250, 400);
+            send(WM_MOUSEMOVE, 600, 400); send(WM_MOUSEMOVE, 600, 700);
+            send(WM_MOUSEMOVE, 250, 700); send(WM_MOUSEMOVE, 250, 400);
             fixture_stage = 1;
-        } else if (fixture_stage == 1 && elapsed > 2.0) {
-            state->drawing = true;
-            point(1100, 550, true); point(1500, 550, false); point(1400, 450, false);
-            point(1500, 550, false); point(1400, 650, false);
-            state->drawing = false;
+        } else if (fixture_stage == 1 && elapsed > 0.8) {
+            save_visible_drag(*state);
             fixture_stage = 2;
+        } else if (fixture_stage == 2 && elapsed > 0.9) {
+            send(WM_LBUTTONUP, 250, 400);
+            fixture_stage = 3;
+        } else if (fixture_stage == 3 && elapsed > 2.6) {
+            send(WM_LBUTTONDOWN, 1100, 550);
+            send(WM_MOUSEMOVE, 1500, 550); send(WM_MOUSEMOVE, 1400, 450);
+            send(WM_MOUSEMOVE, 1500, 550); send(WM_LBUTTONUP, 1400, 650);
+            fixture_stage = 4;
         } else if (elapsed > 4.2) state->halt(false);
     } catch (...) { state->set_error(&record_take_status::ink_error, to_hresult()); state->halt(false); }
 }
@@ -151,10 +195,13 @@ int wmain(int argc, wchar_t** argv) {
         bool first_left = inspect(L"burst-1.png", 450, 400), first_right = inspect(L"burst-1.png", 1250, 550);
         bool second_left = inspect(L"burst-2.png", 450, 400), second_right = inspect(L"burst-2.png", 1250, 550);
         bool summary_left = inspect(L"summary.png", 450, 400), summary_right = inspect(L"summary.png", 1250, 550);
+        bool drag_left = red_at((output / L"during-drag.png").wstring(), 450, 400);
+        bool drag_right = red_at((output / L"during-drag.png").wstring(), 1250, 550);
         GdiplusShutdown(token);
         std::cout << "red-geometry first=" << first_left << "," << first_right << " second=" << second_left << "," << second_right
-            << " summary=" << summary_left << "," << summary_right << "\n";
-        if (!first_left || first_right || second_left || !second_right || !summary_left || !summary_right) return 1;
+            << " summary=" << summary_left << "," << summary_right
+            << " held-drag=" << drag_left << "," << drag_right << "\n";
+        if (!first_left || first_right || second_left || !second_right || !summary_left || !summary_right || !drag_left || drag_right) return 1;
         uint32_t frames{}, audio{}; int64_t duration{};
         check_hresult(record_encoder_inspect((output / L"take.mp4").c_str(), &frames, &audio, &duration));
         std::cout << "decoded=" << frames << " audio=" << audio << " duration-ms=" << duration / 10000.0 << "\n";

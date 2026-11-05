@@ -47,6 +47,11 @@ struct take {
     // Only the input thread accesses the fields below. Shared snapshots use mutex.
     HWND overlay{};
     HWND indicator{};
+    HDC ink_dc{};
+    HBITMAP ink_bitmap{};
+    HGDIOBJ ink_previous{};
+    BYTE* ink_pixels{};
+    SIZE ink_size{};
     HHOOK mouse_hook{};
     HHOOK keyboard_hook{};
     std::thread capture_worker;
@@ -170,15 +175,8 @@ LRESULT CALLBACK overlay_proc(HWND window, UINT message, WPARAM wparam, LPARAM l
         auto state = reinterpret_cast<take*>(GetWindowLongPtrW(window, GWLP_USERDATA));
         RECT area{};
         GetClientRect(window, &area);
-        FillRect(dc, &area, static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
-        if (state && window == state->overlay && state->shown) {
-            try {
-                std::vector<burst> visible;
-                { std::lock_guard guard(state->mutex); visible.push_back(state->bursts[*state->shown]); }
-                Graphics graphics(dc);
-                draw_marks(graphics, visible, 1, false);
-            } catch (...) { state->set_error(&record_take_status::ink_error, to_hresult()); state->halt(false); }
-        } else if (state && window == state->indicator) {
+        if (state && window == state->indicator) {
+            FillRect(dc, &area, static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
             SetBkMode(dc, TRANSPARENT);
             SetTextColor(dc, RGB(255, 255, 255));
             auto font = CreateFontW(-18, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
@@ -195,9 +193,26 @@ LRESULT CALLBACK overlay_proc(HWND window, UINT message, WPARAM wparam, LPARAM l
 }
 
 void present(take& state) {
-    check_bool(SetLayeredWindowAttributes(state.overlay, RGB(0, 0, 0), 255, LWA_COLORKEY | LWA_ALPHA));
-    InvalidateRect(state.overlay, nullptr, TRUE);
-    check_bool(UpdateWindow(state.overlay));
+    Bitmap bitmap(state.ink_size.cx, state.ink_size.cy, state.ink_size.cx * 4,
+        PixelFormat32bppPARGB, state.ink_pixels);
+    check_gdi(bitmap.GetLastStatus());
+    {
+        Graphics graphics(&bitmap);
+        check_gdi(graphics.Clear(Color(0, 0, 0, 0)));
+        if (state.shown) {
+            std::vector<burst> visible;
+            { std::lock_guard guard(state.mutex); visible.push_back(state.bursts[*state.shown]); }
+            draw_marks(graphics, visible, 1, false);
+        }
+        graphics.Flush(FlushIntentionSync);
+        check_gdi(graphics.GetLastStatus());
+    }
+    POINT destination{state.bounds.left, state.bounds.top}, source{};
+    BLENDFUNCTION blend{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    // Publish actual premultiplied pixels. The ink HWND never uses the separate
+    // SetLayeredWindowAttributes/WM_PAINT redirection path used by the indicator.
+    check_bool(UpdateLayeredWindow(state.overlay, nullptr, &destination, &state.ink_size,
+        state.ink_dc, &source, 0, &blend, ULW_ALPHA));
     state.last_render = qpc_now();
     state.dirty = false;
 }
@@ -449,7 +464,21 @@ void create_input(take& state) {
         nullptr, nullptr, module, nullptr);
     check_pointer(state.overlay);
     SetWindowLongPtrW(state.overlay, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(&state));
-    check_bool(SetLayeredWindowAttributes(state.overlay, RGB(0, 0, 0), 255, LWA_COLORKEY | LWA_ALPHA));
+    state.ink_size = SIZE{state.bounds.right - state.bounds.left, state.bounds.bottom - state.bounds.top};
+    if (state.ink_size.cx <= 0 || state.ink_size.cy <= 0 ||
+        static_cast<int64_t>(state.ink_size.cx) * state.ink_size.cy > 33554432)
+        throw hresult_error(E_BOUNDS, L"The monitor exceeds the ink allocation limit.");
+    state.ink_dc = CreateCompatibleDC(nullptr);
+    check_pointer(state.ink_dc);
+    BITMAPINFO info{};
+    info.bmiHeader = {sizeof(BITMAPINFOHEADER), state.ink_size.cx, -state.ink_size.cy, 1, 32, BI_RGB};
+    void* pixels{};
+    state.ink_bitmap = CreateDIBSection(state.ink_dc, &info, DIB_RGB_COLORS, &pixels, nullptr, 0);
+    check_pointer(state.ink_bitmap);
+    state.ink_pixels = static_cast<BYTE*>(pixels);
+    state.ink_previous = SelectObject(state.ink_dc, state.ink_bitmap);
+    check_pointer(state.ink_previous);
+    present(state);
     check_bool(SetWindowPos(state.overlay, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW));
     state.indicator = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         type.lpszClassName, L"Ansible recording", WS_POPUP, state.bounds.left + 16, state.bounds.top + 16,
@@ -483,6 +512,18 @@ void release_input(take& state) noexcept {
     }
     if (state.indicator) {
         if (DestroyWindow(state.indicator)) state.indicator = nullptr;
+        else failed();
+    }
+    if (state.ink_previous) {
+        if (SelectObject(state.ink_dc, state.ink_previous)) state.ink_previous = nullptr;
+        else failed();
+    }
+    if (state.ink_bitmap && !state.ink_previous) {
+        if (DeleteObject(state.ink_bitmap)) { state.ink_bitmap = nullptr; state.ink_pixels = nullptr; }
+        else failed();
+    }
+    if (state.ink_dc && !state.ink_previous) {
+        if (DeleteDC(state.ink_dc)) state.ink_dc = nullptr;
         else failed();
     }
 }
@@ -571,8 +612,12 @@ extern "C" int32_t __cdecl record_take_run(void* instance) {
                         if (!state.fade_started) state.fade_started = qpc_now();
                         auto remaining = 1.0 - state.seconds_since(state.fade_started);
                         if (remaining <= 0) { state.shown.reset(); present(state); state.fade_started = 0; }
-                        else check_bool(SetLayeredWindowAttributes(state.overlay, RGB(0, 0, 0),
-                            static_cast<BYTE>(255 * remaining), LWA_COLORKEY | LWA_ALPHA));
+                        else {
+                            BLENDFUNCTION blend{AC_SRC_OVER, 0, static_cast<BYTE>(255 * remaining), AC_SRC_ALPHA};
+                            POINT source{};
+                            check_bool(UpdateLayeredWindow(state.overlay, nullptr, nullptr, nullptr,
+                                state.ink_dc, &source, 0, &blend, ULW_ALPHA));
+                        }
                     }
                 }
                 MsgWaitForMultipleObjects(0, nullptr, FALSE, 16, QS_ALLINPUT);
@@ -626,7 +671,8 @@ extern "C" int32_t __cdecl record_take_destroy(void* instance) {
     auto state = static_cast<take*>(instance);
     if (state->executing.load()) return E_PENDING;
     // Do not free an object whose hooks or windows failed to release. Managed ownership blocks admission.
-    if (state->mouse_hook || state->keyboard_hook || state->overlay || state->indicator) return E_PENDING;
+    if (state->mouse_hook || state->keyboard_hook || state->overlay || state->indicator ||
+        state->ink_dc || state->ink_bitmap || state->ink_previous) return E_PENDING;
     delete state;
     return S_OK;
 }
