@@ -58,6 +58,7 @@ struct take {
     std::optional<size_t> current;
     std::optional<size_t> shown;
     bool drawing{};
+    bool left_monitor{};
     bool dirty{};
     size_t point_count{};
     size_t stroke_count{};
@@ -192,7 +193,12 @@ LRESULT CALLBACK overlay_proc(HWND window, UINT message, WPARAM wparam, LPARAM l
     return DefWindowProcW(window, message, wparam, lparam);
 }
 
-void present(take& state) {
+uint32_t elapsed_units(take const& state, int64_t started, int64_t units) {
+    return static_cast<uint32_t>((qpc_now() - started) * units / state.frequency);
+}
+
+int64_t present(take& state) {
+    auto started = qpc_now();
     Bitmap bitmap(state.ink_size.cx, state.ink_size.cy, state.ink_size.cx * 4,
         PixelFormat32bppPARGB, state.ink_pixels);
     check_gdi(bitmap.GetLastStatus());
@@ -215,6 +221,9 @@ void present(take& state) {
         state.ink_dc, &source, 0, &blend, ULW_ALPHA));
     state.last_render = qpc_now();
     state.dirty = false;
+    { std::lock_guard guard(state.mutex);
+      state.status.max_present_us = std::max(state.status.max_present_us, elapsed_units(state, started, 1000000)); }
+    return state.last_render;
 }
 
 // The burst overlay is frozen until WGC acknowledges a frame after this fence.
@@ -223,8 +232,7 @@ void finish_burst(take& state) {
     if (!state.current) return;
     { std::lock_guard guard(state.mutex); if (state.request) return; }
     state.shown = state.current;
-    auto fence = qpc_now();
-    present(state);
+    auto fence = present(state);
     check_hresult(DwmFlush());
     { std::lock_guard guard(state.mutex);
       state.request = frame_request{state.bursts[*state.current].number, fence}; }
@@ -233,7 +241,9 @@ void finish_burst(take& state) {
 }
 
 void add_point(take& state, POINT point, bool new_stroke) {
-    if (!PtInRect(&state.bounds, point)) return;
+    if (!PtInRect(&state.bounds, point)) { state.left_monitor = true; return; }
+    new_stroke |= state.left_monitor;
+    state.left_monitor = false;
     std::lock_guard guard(state.mutex);
     if (state.point_count >= max_points || (new_stroke && state.stroke_count >= max_strokes))
         throw hresult_error(E_BOUNDS, L"Ink reached the take's geometry limit.");
@@ -272,7 +282,14 @@ LRESULT handle_mouse_input(take& state, WPARAM message, MSLLHOOKSTRUCT const& mo
 LRESULT CALLBACK mouse_proc(int code, WPARAM message, LPARAM data) {
     auto state = active.load();
     if (code < 0 || !state || state->stop.load()) return CallNextHookEx(nullptr, code, message, data);
-    return handle_mouse_input(*state, message, *reinterpret_cast<MSLLHOOKSTRUCT const*>(data),
+    auto const& mouse = *reinterpret_cast<MSLLHOOKSTRUCT const*>(data);
+    { std::lock_guard guard(state->mutex);
+      auto delay = static_cast<uint32_t>(GetTickCount() - mouse.time);
+      ++state->status.mouse_events;
+      if (message == WM_MOUSEMOVE) ++state->status.mouse_moves;
+      state->status.max_hook_delay_ms = std::max(state->status.max_hook_delay_ms, delay);
+      if (delay > 100) ++state->status.hook_delays_over_100ms; }
+    return handle_mouse_input(*state, message, mouse,
         [&] { return CallNextHookEx(nullptr, code, message, data); });
 }
 
@@ -286,6 +303,27 @@ LRESULT CALLBACK keyboard_proc(int code, WPARAM message, LPARAM data) {
         }
     }
     return CallNextHookEx(nullptr, code, message, data);
+}
+
+// The capture worker owns the matched pixels until this synchronous save returns.
+// Release the presentation hold before PNG work so the next burst can be shown.
+template <typename Save>
+void save_burst_frame(take& state, frame_request const& request, Save save) {
+    int64_t timestamp;
+    { std::lock_guard guard(state.mutex);
+      timestamp = state.bursts[request.number - 1].timestamp;
+      state.status.max_fence_wait_ms = std::max(state.status.max_fence_wait_ms,
+          elapsed_units(state, request.after_qpc, 1000));
+      state.request.reset(); }
+    if (auto thread = state.input_thread.load()) PostThreadMessageW(thread, capture_message, 0, 0);
+    bool saved{};
+    if (request.number <= max_burst_pictures) {
+        try { save(request.number, timestamp); saved = true; }
+        catch (...) { state.set_error(&record_take_status::frame_error, to_hresult()); }
+    }
+    { std::lock_guard guard(state.mutex);
+      state.bursts[request.number - 1].frame_saved = saved;
+      if (saved) ++state.status.picture_count; }
 }
 
 void capture_worker(take& state) {
@@ -329,6 +367,7 @@ void capture_worker(take& state) {
         bool video_finished{};
         try {
             for (;;) {
+                if (state.discard.load() || state.abort_media.load()) break;
                 if (closed->load()) throw hresult_error(RO_E_CLOSED, L"The recorded monitor closed.");
                 auto frame = pool.TryGetNextFrame();
                 if (frame) {
@@ -377,7 +416,7 @@ void capture_worker(take& state) {
                     }
                     frame.Close();
                 }
-                if (encoder && !video_finished) {
+                if (encoder && !video_finished && !state.discard.load() && !state.abort_media.load()) {
                     try {
                         auto tick_clock = qpc_now();
                         if (state.stop.load()) {
@@ -385,6 +424,7 @@ void capture_worker(take& state) {
                             { std::lock_guard guard(state.mutex); stopped = state.status.stop_qpc; }
                             encoder->finish(stopped);
                             video_finished = true;
+                            { std::lock_guard guard(state.mutex); state.status.video_finalized = 1; }
                         } else if (!last_encode_tick || tick_clock - last_encode_tick >= state.frequency / 30) {
                             encoder->tick(tick_clock);
                             last_encode_tick = tick_clock;
@@ -399,21 +439,10 @@ void capture_worker(take& state) {
                 int64_t summary_after;
                 { std::lock_guard guard(state.mutex); request = state.request; summary_after = state.summary_after; }
                 if (request && latest_qpc >= request->after_qpc) {
-                    bool saved{};
-                    if (request->number <= max_burst_pictures) {
-                        try {
-                            burst b;
-                            { std::lock_guard guard(state.mutex); b = state.bursts[request->number - 1]; }
-                            save_png(state.file(L"burst-" + std::to_wstring(b.number) + L".png"), pixels, width, height,
-                                std::to_wstring(b.number) + L" @" + clock_label(b.timestamp, state));
-                            saved = true;
-                        } catch (...) { state.set_error(&record_take_status::frame_error, to_hresult()); }
-                    }
-                    { std::lock_guard guard(state.mutex);
-                      state.bursts[request->number - 1].frame_saved = saved;
-                      if (saved) ++state.status.picture_count;
-                      state.request.reset(); }
-                    PostThreadMessageW(state.input_thread.load(), capture_message, 0, 0);
+                    save_burst_frame(state, *request, [&](uint32_t number, int64_t timestamp) {
+                        save_png(state.file(L"burst-" + std::to_wstring(number) + L".png"), pixels, width, height,
+                            std::to_wstring(number) + L" @" + clock_label(timestamp, state));
+                    });
                 } else if (request && state.seconds_since(request->after_qpc) > 3) {
                     state.set_error(&record_take_status::frame_error, HRESULT_FROM_WIN32(ERROR_TIMEOUT));
                     { std::lock_guard guard(state.mutex); state.request.reset(); }
@@ -496,16 +525,24 @@ void create_input(take& state) {
     check_pointer(state.keyboard_hook);
 }
 
+template <typename Unhook, typename LastError>
+void release_hook(take& state, HHOOK& hook, Unhook unhook, LastError last_error) noexcept {
+    if (!hook) return;
+    if (unhook(hook)) { hook = nullptr; return; }
+    auto error = last_error();
+    // A timed-out hook can already have been removed by Windows.
+    if (error == ERROR_INVALID_HOOK_HANDLE) hook = nullptr;
+    else state.set_error(&record_take_status::ink_error, HRESULT_FROM_WIN32(error));
+}
+
+void release_hooks(take& state) noexcept {
+    release_hook(state, state.mouse_hook, UnhookWindowsHookEx, GetLastError);
+    release_hook(state, state.keyboard_hook, UnhookWindowsHookEx, GetLastError);
+}
+
 void release_input(take& state) noexcept {
     auto failed = [&state] { state.set_error(&record_take_status::ink_error, HRESULT_FROM_WIN32(GetLastError())); };
-    if (state.mouse_hook) {
-        if (UnhookWindowsHookEx(state.mouse_hook)) state.mouse_hook = nullptr;
-        else failed();
-    }
-    if (state.keyboard_hook) {
-        if (UnhookWindowsHookEx(state.keyboard_hook)) state.keyboard_hook = nullptr;
-        else failed();
-    }
+    release_hooks(state);
     if (state.overlay) {
         if (DestroyWindow(state.overlay)) state.overlay = nullptr;
         else failed();
@@ -572,6 +609,7 @@ extern "C" int32_t __cdecl record_take_run(void* instance) {
             create_input(state);
             state.capture_worker = std::thread([&state] { capture_worker(state); });
             while (!state.capture_done.load()) {
+                auto iteration_started = qpc_now();
                 while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
                     if (message.message == WM_QUIT) state.halt(false);
                     TranslateMessage(&message);
@@ -590,14 +628,12 @@ extern "C" int32_t __cdecl record_take_run(void* instance) {
                             GetWindowLongPtrW(state.indicator, GWL_EXSTYLE) | WS_EX_TRANSPARENT) != 0);
                         state.input_released = true;
                     }
-                    if (state.mouse_hook && UnhookWindowsHookEx(state.mouse_hook)) state.mouse_hook = nullptr;
-                    if (state.keyboard_hook && UnhookWindowsHookEx(state.keyboard_hook)) state.keyboard_hook = nullptr;
+                    release_hooks(state);
                     state.drawing = false;
                     if (!pending && state.current) { finish_burst(state); pending = true; }
                     if (!pending && !state.summary_requested) {
                         state.shown.reset();
-                        auto fence = qpc_now();
-                        present(state);
+                        auto fence = present(state);
                         check_hresult(DwmFlush());
                         { std::lock_guard guard(state.mutex); state.summary_after = fence; }
                         state.summary_requested = true;
@@ -620,18 +656,23 @@ extern "C" int32_t __cdecl record_take_run(void* instance) {
                         }
                     }
                 }
+                { std::lock_guard guard(state.mutex);
+                  state.status.max_loop_us = std::max(state.status.max_loop_us,
+                      elapsed_units(state, iteration_started, 1000000)); }
                 MsgWaitForMultipleObjects(0, nullptr, FALSE, 16, QS_ALLINPUT);
             }
         }
     } catch (...) { outcome = to_hresult(); state.set_error(&record_take_status::ink_error, outcome); state.halt(false); }
-    // Scope-owned capture sees stop and joins before hooks/windows/GDI+ are released.
+    // A discarded/failed pump must release input before any blocking media teardown.
     state.halt(state.discard.load());
     if (state.discard.load() || FAILED(outcome)) {
         // A failed input pump cannot provide the final presentation fence.
         state.abort_media.store(true);
     }
-    if (state.capture_worker.joinable()) state.capture_worker.join();
     release_input(state);
+    { std::lock_guard guard(state.mutex);
+      state.status.hooks_released_before_join = !state.mouse_hook && !state.keyboard_hook ? 1u : 0u; }
+    if (state.capture_worker.joinable()) state.capture_worker.join();
     active.store(nullptr);
     state.input_thread.store(0);
     if (gdi_token) GdiplusShutdown(gdi_token);

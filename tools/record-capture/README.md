@@ -13,6 +13,7 @@ MSIX. To build its native test hosts separately:
 .\tools\record-capture\Build-RecordCapture.ps1 -TestHost
 .\.runtime\record-capture\record_capture_host.exe --self-check .runtime\record-capture\self-check
 .\.runtime\record-capture\record_capture_fixture.exe --input-self-check
+.\.runtime\record-capture\record_capture_fixture.exe --reliability-self-check
 ```
 
 The self-check validates ABI sizes, pre-run cancellation, and single-use
@@ -20,6 +21,11 @@ ownership. The input self-check calls the production input handler with syntheti
 mouse metadata. It verifies movement forwarding while hover stays ink-free,
 dragging records geometry, and button/wheel events never forward. Neither
 self-check opens the overlay, captures the screen, or injects OS input.
+
+The reliability self-check also supplies controlled PNG-save and unhook results.
+It verifies that live presentation is acknowledged before encoding, a following
+request is not cleared by that save, PNG errors surface, and invalid hook handles
+release ownership while other errors remain owned. It opens no UI.
 
 The following checks display capture UI and block buttons and scrolling on every monitor.
 Pointer movement remains available.
@@ -31,6 +37,7 @@ message. Coordinate these checks with the person using the computer.
 ```powershell
 .\.runtime\record-capture\record_capture_host.exe --capture .runtime\record-capture\actual-no-ink 4
 .\.runtime\record-capture\record_capture_fixture.exe .runtime\record-capture\synthetic-ink-fixture
+.\.runtime\record-capture\record_capture_fixture.exe --discard .runtime\record-capture\synthetic-discard-fixture
 ```
 
 The fixture requires a monitor at least 1600 by 800 physical pixels. It checks
@@ -63,13 +70,18 @@ the fade changes the published surface's constant alpha. The ink HWND never
 mixes this path with `SetLayeredWindowAttributes` or window-DC painting. The
 indicator retains its separate window-DC renderer. Surface allocation has the
 same 33,554,432-pixel bound as WGC, and teardown releases the selected bitmap and
-DC after joining capture. The C ABI remains unchanged. The pixel format follows
+DC before the capture-worker join. The worker owns separate frame pixels; GDI+
+stays initialized until it exits. The status ABI is 112 bytes, including ink
+diagnostic counters and an explicit successful-video-finalization flag. The
+burst ABI remains 24 bytes. The pixel format follows
 the [Windows alpha blend contract](https://learn.microsoft.com/en-us/windows/win32/api/wingdi/ns-wingdi-blendfunction)
 and [layered-window publishing API](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-updatelayeredwindow).
 
 A burst ends after 1.5 seconds without drawing. Its window is held through a
 WGC presentation fence before saving its picture. New points arriving during
-that short fence are retained for the next burst. Strokes then fade for one
+that short fence are retained for the next burst. The hold ends when a matching
+WGC frame is retained, before PNG encoding. Fences use the QPC time immediately
+after surface publication and before `DwmFlush`. Strokes then fade for one
 second, interrupted when a new burst starts. Finalization clears the live ink,
 waits for a clean captured frame, and draws all retained geometry exactly once
 with numbered markers. With no ink, the final frame remains plain. The first
@@ -88,6 +100,18 @@ not replaced with a later image backdated to the chord. Quiet screens repeat a
 real held image through the real stop time. Source updates, encoded inputs, and
 held inputs are counted separately. `video_encoder.h` is shared with the
 published NativeAOT encoder spike, including its quiet-tail regression.
+
+Every exit releases hooks and destroys the ink windows before waiting for media
+teardown. Discard skips MP4 finalization. Only successful finalization qualifies
+a video link. Invalid hook handles count as already released; other unhook
+failures surface and retain ownership. Re-entry after leaving the monitor starts
+a new stroke instead of connecting across the excluded area.
+
+Native hosts report event age, event counts, presentation and loop work maxima,
+frame-fence wait, and pre-join hook release. The production app uses its existing
+opt-in local diagnostics writer for these numeric counters. Synthetic metadata
+does not qualify physical hook delivery or recognition-load performance. See
+[the reliability report](../../docs/record-chord-ink-reliability.md).
 
 ## Recorded validation
 

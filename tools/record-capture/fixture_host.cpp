@@ -7,6 +7,7 @@
 namespace {
 int64_t fixture_started{};
 int fixture_stage{};
+bool fixture_discard{};
 
 void save_visible_drag(take& state) {
     // Read the composed desktop while the production input handler still owns
@@ -91,6 +92,12 @@ VOID CALLBACK fixture_timer(HWND, UINT, UINT_PTR, DWORD) {
             fixture_stage = 2;
         } else if (fixture_stage == 2 && elapsed > 0.9) {
             send(WM_LBUTTONUP, 250, 400);
+            if (fixture_discard) {
+                KBDLLHOOKSTRUCT escape{};
+                escape.vkCode = VK_ESCAPE;
+                if (keyboard_proc(HC_ACTION, WM_KEYDOWN, reinterpret_cast<LPARAM>(&escape)) != 1)
+                    throw hresult_error(E_FAIL, L"Esc was not consumed.");
+            }
             fixture_stage = 3;
         } else if (fixture_stage == 3 && elapsed > 2.6) {
             send(WM_LBUTTONDOWN, 1100, 550);
@@ -117,6 +124,40 @@ bool red_at(std::wstring const& path, UINT x, UINT y) {
 }
 
 int wmain(int argc, wchar_t** argv) {
+    if (argc == 2 && std::wstring(argv[1]) == L"--reliability-self-check") {
+        take state;
+        LARGE_INTEGER frequency{};
+        check_bool(QueryPerformanceFrequency(&frequency));
+        state.frequency = frequency.QuadPart;
+        state.origin = qpc_now();
+        state.bounds = RECT{0, 0, 1000, 1000};
+        add_point(state, POINT{20, 30}, true);
+        state.current.reset();
+        state.request = frame_request{1, qpc_now()};
+        auto request = *state.request;
+        save_burst_frame(state, request, [&](uint32_t number, int64_t timestamp) {
+            if (state.request || number != 1 || timestamp != state.bursts[0].timestamp)
+                throw hresult_error(E_FAIL, L"PNG work still holds live presentation.");
+            add_point(state, POINT{40, 50}, true);
+            // A following burst's request must survive completion of this PNG.
+            state.request = frame_request{2, qpc_now()};
+        });
+        if (state.status.frame_error || !state.bursts[0].frame_saved || !state.request ||
+            state.request->number != 2 || state.bursts.size() != 2) return 1;
+        request = *state.request;
+        save_burst_frame(state, request, [&](uint32_t, int64_t) {
+            throw hresult_error(E_ACCESSDENIED, L"Synthetic PNG failure.");
+        });
+        if (state.request || state.bursts[1].frame_saved || state.status.frame_error != E_ACCESSDENIED) return 1;
+        auto stale = reinterpret_cast<HHOOK>(static_cast<uintptr_t>(1));
+        release_hook(state, stale, [](HHOOK) { return FALSE; }, [] { return ERROR_INVALID_HOOK_HANDLE; });
+        if (stale || state.status.ink_error) return 1;
+        auto retained = reinterpret_cast<HHOOK>(static_cast<uintptr_t>(2));
+        release_hook(state, retained, [](HHOOK) { return FALSE; }, [] { return ERROR_ACCESS_DENIED; });
+        if (!retained || state.status.ink_error != HRESULT_FROM_WIN32(ERROR_ACCESS_DENIED)) return 1;
+        std::cout << "RELIABILITY SELF-CHECK PASS. PNG acknowledgement precedes saving; next request survives; failures surface; removed hooks release ownership. No UI or OS input.\n";
+        return 0;
+    }
     if (argc == 2 && std::wstring(argv[1]) == L"--input-self-check") {
         take state;
         state.bounds = RECT{0, 0, 1000, 1000};
@@ -142,12 +183,19 @@ int wmain(int argc, wchar_t** argv) {
                 WM_XBUTTONDOWN, WM_XBUTTONUP, WM_MOUSEWHEEL, WM_MOUSEHWHEEL})
             if (send(message, 60, 70) != 1 || forwarded != 2) return 1;
         if (send(WM_MOUSEMOVE, 1200, 1200) != 12345 || forwarded != 3) return 1;
+        send(WM_LBUTTONDOWN, 20, 30);
+        send(WM_MOUSEMOVE, 1200, 1200);
+        send(WM_MOUSEMOVE, 40, 50);
+        send(WM_LBUTTONUP, 60, 70);
+        auto const& strokes = state.bursts[0].strokes;
+        if (strokes.size() != 3 || strokes[1].points.size() != 1 || strokes[2].points.size() != 2) return 1;
         std::cout << "INPUT SELF-CHECK PASS. Movement forwards while hover and drag ink stay distinct; buttons and wheels are consumed. No OS input injected.\n";
         return 0;
     }
-    if (argc != 2) return 2;
+    fixture_discard = argc == 3 && std::wstring(argv[1]) == L"--discard";
+    if (argc != 2 && !fixture_discard) return 2;
     try {
-        auto output = std::filesystem::absolute(argv[1]);
+        auto output = std::filesystem::absolute(argv[fixture_discard ? 2 : 1]);
         std::filesystem::create_directories(output);
         POINT pointer{};
         check_bool(GetCursorPos(&pointer));
@@ -184,8 +232,20 @@ int wmain(int argc, wchar_t** argv) {
             << " video=0x" << static_cast<uint32_t>(state.video_error) << " frame=0x" << static_cast<uint32_t>(state.frame_error)
             << std::dec << " bursts=" << state.burst_count << " pictures=" << state.picture_count
             << " summary=" << state.summary_saved << " encoded=" << state.encoded_samples << " held=" << state.held_samples << "\n";
+        std::cout << "hook-events=" << state.mouse_events << " moves=" << state.mouse_moves
+            << " max-hook-delay-ms=" << state.max_hook_delay_ms << " over-100ms=" << state.hook_delays_over_100ms
+            << " max-present-us=" << state.max_present_us << " max-loop-us=" << state.max_loop_us
+            << " max-fence-wait-ms=" << state.max_fence_wait_ms
+            << " hooks-released-before-join=" << state.hooks_released_before_join << "\n";
         check_hresult(hr); check_hresult(state.capture_error); check_hresult(state.ink_error);
         check_hresult(state.video_error); check_hresult(state.frame_error);
+        if (!state.hooks_released_before_join) return 1;
+        if (fixture_discard) {
+            if (!state.discarded || state.summary_saved || state.running || state.video_finalized) return 1;
+            std::cout << "DISCARD FIXTURE PASS. Esc metadata traversed the real handler; hooks/windows released before media join; no summary. No OS input injected.\n";
+            return 0;
+        }
+        if (!state.video_finalized) return 1;
         if (state.burst_count != 2 || state.picture_count != 3 || !state.summary_saved || state.discarded) return 1;
         ULONG_PTR token{};
         GdiplusStartupInput input;

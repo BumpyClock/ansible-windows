@@ -185,6 +185,16 @@ hashes matched immediately after installation. Disk readback retained enabled
 record capture and record toggle mode. The restarted app exposed its enabled
 Start dictation action without a startup failure notice.
 
+## Ink reliability follow-up
+
+The [Opus review and verified corrections](record-chord-ink-reliability.md)
+cover acknowledgement before PNG encoding, publication-before-fence ordering,
+hook release before media join, invalid-hook cleanup, monitor re-entry, and
+consent-gated numeric diagnostics. The status ABI is now 112 bytes. Only a
+finalized MP4 qualifies for a video link. Core tests pass 1532 checks and the
+NativeAOT MSIX publish passes for 1.0.1.20. Synthetic capture and Esc checks
+pass; physical hook loss and reliability under ASR load remain unmeasured.
+
 ## Reproduce the isolated package check
 
 Run `tools/Publish-Ansible.ps1`, then:

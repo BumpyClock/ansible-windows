@@ -22,7 +22,15 @@ struct record_take_status {
     uint32_t source_frames;
     uint32_t encoded_samples;
     uint32_t held_samples;
-    uint32_t reserved;
+    uint32_t video_finalized;
+    uint32_t mouse_events;
+    uint32_t mouse_moves;
+    uint32_t max_hook_delay_ms;
+    uint32_t hook_delays_over_100ms;
+    uint32_t max_present_us;
+    uint32_t max_loop_us;
+    uint32_t max_fence_wait_ms;
+    uint32_t hooks_released_before_join;
 };
 struct record_take_burst {
     uint32_t size;
@@ -31,7 +39,7 @@ struct record_take_burst {
     uint32_t reserved;
     int64_t timestamp;
 };
-static_assert(sizeof(record_take_status) == 80);
+static_assert(sizeof(record_take_status) == 112);
 static_assert(sizeof(record_take_burst) == 24);
 
 extern "C" __declspec(dllexport) int32_t __cdecl record_take_create(

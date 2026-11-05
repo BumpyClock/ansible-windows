@@ -273,6 +273,10 @@ ink, the result contains one final screen picture. Pictures have burned-in
 labels and a maximum 1920-pixel long edge. Eight is a provisional cap; it is not
 a measured attachment maximum across every destination.
 
+If ink is unreliable, **Local diagnostics** in Settings can record input-delay,
+drawing, and frame-wait counters for a take. It remains opt-in and records no
+stroke coordinates, pictures, audio, or transcript text in the diagnostic log.
+
 Nemotron uses its native word anchors to place ink markers in the final speech.
 Pasted markers use `[ink 1 at 0:07]`. Frame legends use single line breaks.
 This keeps timestamps as text in chat composers that turn `@0:07` into a file

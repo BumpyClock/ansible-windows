@@ -34,11 +34,11 @@ public partial class App : Application
         {
             var paths = AppPaths.Create(AppContext.BaseDirectory, LocalDataDirectory);
             var captures = new CaptureStore(paths.Captures);
-            var recordFactory = new WindowsRecordTakeFactory(captures);
             var microphonePermission = new MicrophonePermissionPreflight(new WindowsMicrophonePermission());
             var packageVersion = Windows.ApplicationModel.Package.Current.Id.Version;
             diagnostics = new LocalDiagnosticLog(Path.Combine(Path.GetDirectoryName(paths.Settings)!, "diagnostics"),
                 new Version(packageVersion.Major, packageVersion.Minor, packageVersion.Build, packageVersion.Revision));
+            var recordFactory = new WindowsRecordTakeFactory(captures, diagnostics);
             var session = new DictationSession(
                 directory => new NativeAudioEngine(paths.NativeLibrary, paths.ModelCatalog, directory,
                     deviceProbePath: paths.DeviceProbe, benchmarkSamplePath: paths.PublicSample,

@@ -68,8 +68,13 @@ int wmain(int argc, wchar_t** argv) {
         << " video-start-offset-ms=" << (state.first_video_qpc ? (state.first_video_qpc - origin.QuadPart) * 1000.0 / frequency.QuadPart : -1)
         << "\n";
     require(record_take_destroy(take), "destroy");
+    std::cout << "hook-events=" << state.mouse_events << " moves=" << state.mouse_moves
+        << " max-hook-delay-ms=" << state.max_hook_delay_ms << " over-100ms=" << state.hook_delays_over_100ms
+        << " max-present-us=" << state.max_present_us << " max-loop-us=" << state.max_loop_us
+        << " max-fence-wait-ms=" << state.max_fence_wait_ms
+        << " hooks-released-before-join=" << state.hooks_released_before_join << "\n";
     if (state.discarded) return 3;
-    if (hr < 0 || state.capture_error < 0 || state.ink_error < 0 || state.video_error < 0 || state.frame_error < 0 || !state.summary_saved) return 1;
+    if (hr < 0 || state.capture_error < 0 || state.ink_error < 0 || state.video_error < 0 || state.frame_error < 0 || !state.summary_saved || !state.video_finalized) return 1;
     uint32_t frames{}, audio{};
     int64_t duration{};
     require(record_encoder_inspect((output / L"take.mp4").c_str(), &frames, &audio, &duration), "independent video decode");

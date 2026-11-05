@@ -7,9 +7,24 @@ using Ansible.Core;
 namespace Ansible;
 
 /// <summary>Snapshots the pointer monitor; the admitted operation owns all running native work.</summary>
-internal sealed partial class WindowsRecordTakeFactory(CaptureStore store) : IRecordTakeFactory
+internal sealed partial class WindowsRecordTakeFactory(CaptureStore store, LocalDiagnosticLog? diagnostics) : IRecordTakeFactory
 {
     internal Action? BeforeCapture { get; set; }
+    internal RecordCaptureDiagnostic? LastDiagnostics { get; private set; }
+    internal long? DiagnosticGeneration => diagnostics?.CurrentGeneration;
+
+    internal void ReportDiagnostics(RecordCaptureApi.Status status, long? generation)
+    {
+        LastDiagnostics = new(status.MouseEvents, status.MouseMoves, status.MaxHookDelayMs,
+            status.HookDelaysOver100Ms, status.MaxPresentUs, status.MaxLoopUs,
+            status.MaxFenceWaitMs, status.HooksReleasedBeforeJoin != 0);
+        if (generation is { } consent)
+            diagnostics?.Write(new ApplicationDiagnostic(DateTimeOffset.UtcNow, ApplicationDiagnosticStage.RecordCapture,
+                status.Discarded != 0 ? DiagnosticOutcome.Cancelled :
+                status.CaptureError < 0 || status.InkError < 0 || status.VideoError < 0 || status.FrameError < 0
+                    ? DiagnosticOutcome.Failed : DiagnosticOutcome.Completed)
+                { RecordCapture = LastDiagnostics }, consent);
+    }
     private CaptureLease? _currentResult;
     private long _currentResultOrigin;
     internal long TakeOriginTimestamp { get; private set; }
@@ -123,6 +138,7 @@ internal sealed class WindowsRecordTake : IRecordTakeCapture
     private readonly Task<int> _running;
     private readonly Task _observing;
     private readonly CancellationTokenRegistration _cancellation;
+    private readonly long? _diagnosticGeneration;
     private nint _handle;
     private Task<RecordMediaResult>? _stopping;
     private bool _discard;
@@ -133,6 +149,7 @@ internal sealed class WindowsRecordTake : IRecordTakeCapture
         Action<RecordInkBurst> onBurst, Action onDiscard, CancellationToken cancellationToken)
     {
         _owner = owner;
+        _diagnosticGeneration = owner.DiagnosticGeneration;
         _lease = lease;
         _options = options;
         Marshal.ThrowExceptionForHR(RecordCaptureApi.Create(options.Monitor, lease.Directory, options.OriginTimestamp, out _handle));
@@ -190,6 +207,7 @@ internal sealed class WindowsRecordTake : IRecordTakeCapture
         if (_running.IsCompletedSuccessfully && _running.Result < 0)
             warnings.Add($"Screen capture failed (0x{_running.Result:X8}).");
         var status = ReadStatus();
+        _owner.ReportDiagnostics(status, _diagnosticGeneration);
         _discard |= status.Discarded != 0;
         var discarded = _discard || status.Discarded != 0;
         foreach (var (error, part) in new[] { (status.CaptureError, "Screen capture"), (status.InkError, "Ink"),
@@ -211,7 +229,7 @@ internal sealed class WindowsRecordTake : IRecordTakeCapture
         }
         var video = Path.Combine(_lease.Directory, "take.mp4");
         string? videoPath = !discarded && status.VideoError >= 0 && status.CaptureError >= 0 &&
-            status.EncodedSamples > 0 && File.Exists(video) ? video : null;
+            status.VideoFinalized != 0 && status.EncodedSamples > 0 && File.Exists(video) ? video : null;
         if (!discarded && (frames.Count > 0 || videoPath is not null))
         {
             await _owner.RetainResultAsync(_lease, _options.OriginTimestamp).ConfigureAwait(false);
@@ -252,7 +270,7 @@ internal sealed class WindowsRecordTake : IRecordTakeCapture
 
     private RecordCaptureApi.Status ReadStatus()
     {
-        var status = new RecordCaptureApi.Status { Size = 80 };
+        var status = new RecordCaptureApi.Status { Size = 112 };
         Marshal.ThrowExceptionForHR(RecordCaptureApi.GetStatus(_handle, ref status));
         if (status.BurstCount > 256) throw new InvalidDataException("Capture returned too many ink bursts.");
         return status;
@@ -274,7 +292,9 @@ internal static partial class RecordCaptureApi
         public uint Size, Running, Discarded, BurstCount, PictureCount, Width, Height, SummarySaved;
         public int CaptureError, InkError, VideoError, FrameError;
         public long FirstVideoQpc, StopQpc;
-        public uint SourceFrames, EncodedSamples, HeldSamples, Reserved;
+        public uint SourceFrames, EncodedSamples, HeldSamples, VideoFinalized;
+        public uint MouseEvents, MouseMoves, MaxHookDelayMs, HookDelaysOver100Ms;
+        public uint MaxPresentUs, MaxLoopUs, MaxFenceWaitMs, HooksReleasedBeforeJoin;
     }
     [StructLayout(LayoutKind.Sequential)]
     internal struct Burst

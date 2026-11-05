@@ -20,7 +20,7 @@ internal static partial class RecordTakeValidation
             report.AppendLine($"executable={Environment.ProcessPath}");
             report.AppendLine($"dynamic-code={System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported}");
             var store = new CaptureStore(Path.Combine(directory, "captures"));
-            var factory = new WindowsRecordTakeFactory(store);
+            var factory = new WindowsRecordTakeFactory(store, null);
             var options = factory.Snapshot(true);
             var burstCount = 0;
             var discarded = false;
@@ -33,6 +33,7 @@ internal static partial class RecordTakeValidation
                 media = await capture.StopAsync(false);
             }
             finally { await capture.DisposeAsync(); }
+            report.AppendLine($"ink-diagnostics={factory.LastDiagnostics}");
             report.AppendLine($"released={capture.IsReleased}");
             report.AppendLine($"discarded={discarded || media.Discarded}");
             report.AppendLine($"bursts={burstCount}");
