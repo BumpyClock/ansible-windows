@@ -257,12 +257,27 @@ setting is independent of voice dictation's **Activation mode** and persists
 across restarts. With it off, hold the record shortcut; release uses the 500 ms
 tail. Only the chord that started the take can stop it.
 
+Recording never pastes automatically and needs no editable field. Finish the
+take, wait for recognition, then focus the chat or text field where you want the
+result. Press **Alt + Shift + W** and release to paste the latest capture's text,
+ink markers, pictures, and optional video link. Change **Settings > Record chord >
+Paste capture shortcut** to another chord, such as **Ctrl + Shift + V**. This is
+separate from both the record shortcut and voice dictation's paste-key preference.
+Plain **Ctrl + V** cannot activate Paste capture because it delivers the bundle.
+**Ctrl + Shift + V** is available only when voice dictation is not also configured
+to send that paste key.
+
+Paste is unavailable during recording or another delivery. Ordinary voice
+dictation still inserts automatically. The latest take remains pasteable after
+voice dictation, until a new record take starts or Ansible exits. Each new paste
+press intentionally pastes that take again. Captured media is not reloaded into
+the shortcut after restarting Ansible.
+
 Left-drag draws on the recorded monitor. A click makes a numbered ping. Pointer
 movement stays available during capture. Mouse buttons and scrolling are blocked
 on all monitors, including right-click, middle button, and the wheel. Escape
-discards a pending take. Once input has already
-been queued, it cannot be recalled; check the destination. The limit is five
-minutes. The pill and recording indicator are excluded from capture. Ink stays
+discards a pending take before it becomes available to Paste capture. The limit
+is five minutes. The pill and recording indicator are excluded from capture. Ink stays
 visible in the recording.
 
 An ink burst ends after 1.5 seconds without drawing. Its picture is captured
@@ -286,17 +301,21 @@ and VibeVoice streaming use partial-text lengths and label markers approximate.
 Buffered or final-only models use a trailing **Ink timeline** and a warning.
 Unavailable timing stays unavailable. The app never changes models for a take.
 
-Chat inputs tested so far drop text from a combined files/text paste. The app
-pastes text first. It queues one bulk picture paste only after exact insertion
+Chat inputs tested so far drop text from a combined files/text paste. When you
+use Paste capture, the app inspects the field focused at that press and pastes
+text first. It queues one bulk picture paste only after exact insertion
 is observed in the same field. Attachment insertion cannot be verified through
 accessibility. If text verification is unavailable, its clipboard publication
 stays available and pictures remain in Dictation for **Copy pictures**. No timer
 or clipboard callback counts as proof of insertion. Record bundles use Ctrl+V
 regardless of the voice-only insertion preference.
 
-The Dictation result offers Copy text, Copy pictures, and Copy video link. With
-no editable destination, use these manual actions. Media failures warn and leave
-authoritative speech available. History stores the prepared text with markers,
+The Dictation result also offers Copy text, Copy pictures, and Copy video link.
+Use these manual actions when a destination cannot accept the bundle paste.
+After another voice or WAV result, **Latest screen and ink capture** keeps these
+Copy actions available without repeating text that has already been sent.
+Media failures warn and leave authoritative speech available. History stores
+the prepared text with markers,
 never the pictures or MP4. Media stays in private package storage.
 
 **Include video link in pasted text** defaults on. The video is never attached

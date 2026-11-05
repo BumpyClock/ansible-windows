@@ -24,6 +24,7 @@ public sealed partial class MainWindow : Window
     private const string ShortcutNoticeKey = "shortcut";
     private const string ShortcutRegistrationNoticeKey = "shortcut-registration";
     private const string RecordRegistrationNoticeKey = "record-shortcut-registration";
+    private const string RecordPasteRegistrationNoticeKey = "record-paste-shortcut-registration";
     private const string CaptureStorageNoticeKey = "capture-storage";
     private const string ShortcutLessonNoticeKey = "shortcut-lesson";
     internal const string CapturePrivacyNoticeKey = "capture-privacy";
@@ -46,6 +47,7 @@ public sealed partial class MainWindow : Window
     private readonly AppNotices _notices = new();
     private GlobalDictationHotkey? _hotkey;
     private GlobalDictationHotkey? _recordHotkey;
+    private GlobalDictationHotkey? _recordPasteHotkey;
     private readonly CaptureStore _captures;
     private readonly WindowsRecordTakeFactory _recordFactory;
     private RecordEscapeKey? _recordEscape;
@@ -113,10 +115,10 @@ public sealed partial class MainWindow : Window
         _suggestions.Changed += RenderMeetingSuggestion;
         // Page callbacks run after _pages is assigned below.
         _welcome = new WelcomeDialog(session, () => _shortcut.IsBusy, _notices);
-        _dictation = new DictationPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this), _history, _notices);
+        _dictation = new DictationPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this), _history, _notices, _shortcut);
         _settings = new MainPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this),
             ChangeHotkey, ChangeDictationMode, CaptureShortcut, diagnostics, _notices,
-            ChangeRecordHotkey, EnableRecordChord, captures);
+            ChangeRecordHotkey, EnableRecordChord, captures, ChangeRecordPasteHotkey);
         _settings.ShortcutLessonRequested += OpenShortcutLesson;
         _models = new ModelManagementPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this), modelDownloads,
             () => { Navigate(_pages!.Home); return _dictation.TranscribeFileAsync(); }, diagnostics, _notices);
@@ -228,6 +230,12 @@ public sealed partial class MainWindow : Window
                         _configuredRecordHotkey, RecordHotkeyChanged);
                 }
                 catch (Exception error) { _notices.SetError(RecordRegistrationNoticeKey, error, NoticeArea.Settings | NoticeArea.Dictation); }
+                try
+                {
+                    _recordPasteHotkey = new GlobalDictationHotkey(WinRT.Interop.WindowNative.GetWindowHandle(this),
+                        _session.State.Settings.RecordPasteShortcut, RecordPasteHotkeyChanged);
+                }
+                catch (Exception error) { _notices.SetError(RecordPasteRegistrationNoticeKey, error, NoticeArea.Settings | NoticeArea.Dictation); }
             }
             if (!_session.State.Settings.WelcomeCompleted) ShowWelcome();
             else if (_session.State.Phase == DictationPhase.Disconnected && _session.State.Models.Count == 0) Navigate(_pages.Models);
@@ -565,6 +573,22 @@ public sealed partial class MainWindow : Window
         _notices.Set(RecordRegistrationNoticeKey, null);
     }
 
+    private void ChangeRecordPasteHotkey(DictationShortcut choice)
+    {
+        if (!_session.State.IsIdle || _shortcut.IsBusy)
+            throw new InvalidOperationException("Finish dictation and paste before changing its shortcut.");
+        var settings = _session.State.Settings;
+        (settings with { RecordPasteShortcut = choice }).Validate();
+        if (!settings.RecordChordEnabled) { _session.SetRecordPasteShortcut(choice); return; }
+        if (settings.RecordPasteShortcut == choice && _recordPasteHotkey is not null) return;
+        var replacement = new GlobalDictationHotkey(WinRT.Interop.WindowNative.GetWindowHandle(this), choice, RecordPasteHotkeyChanged);
+        try { _session.SetRecordPasteShortcut(choice); }
+        catch { replacement.Dispose(); throw; }
+        _recordPasteHotkey?.Dispose();
+        _recordPasteHotkey = replacement;
+        _notices.Set(RecordPasteRegistrationNoticeKey, null);
+    }
+
     private void EnableRecordChord(bool enabled)
     {
         if (!_session.State.IsIdle || _shortcut.IsBusy)
@@ -573,20 +597,36 @@ public sealed partial class MainWindow : Window
         (settings with { RecordChordEnabled = enabled }).Validate();
         if (enabled)
         {
-            var replacement = _recordHotkey ?? new GlobalDictationHotkey(WinRT.Interop.WindowNative.GetWindowHandle(this),
-                settings.RecordShortcut, RecordHotkeyChanged);
-            try { _session.SetRecordChordEnabled(true); }
-            catch { if (_recordHotkey is null) replacement.Dispose(); throw; }
-            _recordHotkey = replacement;
+            GlobalDictationHotkey? record = null;
+            GlobalDictationHotkey? paste = null;
+            try
+            {
+                record = _recordHotkey ?? new GlobalDictationHotkey(WinRT.Interop.WindowNative.GetWindowHandle(this),
+                    settings.RecordShortcut, RecordHotkeyChanged);
+                paste = _recordPasteHotkey ?? new GlobalDictationHotkey(WinRT.Interop.WindowNative.GetWindowHandle(this),
+                    settings.RecordPasteShortcut, RecordPasteHotkeyChanged);
+                _session.SetRecordChordEnabled(true);
+            }
+            catch
+            {
+                if (_recordHotkey is null) record?.Dispose();
+                if (_recordPasteHotkey is null) paste?.Dispose();
+                throw;
+            }
+            _recordHotkey = record;
+            _recordPasteHotkey = paste;
             _configuredRecordHotkey = settings.RecordShortcut;
         }
         else
         {
+            _session.SetRecordChordEnabled(false);
             _recordHotkey?.Dispose();
             _recordHotkey = null;
-            _session.SetRecordChordEnabled(false);
+            _recordPasteHotkey?.Dispose();
+            _recordPasteHotkey = null;
         }
         _notices.Set(RecordRegistrationNoticeKey, null);
+        _notices.Set(RecordPasteRegistrationNoticeKey, null);
     }
 
     private void ChangeDictationMode(bool pushToTalk)
@@ -602,15 +642,30 @@ public sealed partial class MainWindow : Window
         {
             if (!_session.State.IsIdle || _shortcut.IsBusy)
                 throw new InvalidOperationException("Finish dictation before recording a shortcut.");
-            _hotkey?.Suspend();
-            try { _recordHotkey?.Suspend(); }
-            catch { _hotkey?.Resume(); throw; }
+            var suspended = new List<GlobalDictationHotkey>();
+            try
+            {
+                foreach (var hotkey in new[] { _hotkey, _recordHotkey, _recordPasteHotkey })
+                {
+                    if (hotkey is null) continue;
+                    hotkey.Suspend();
+                    suspended.Add(hotkey);
+                }
+            }
+            catch (Exception error)
+            {
+                var failures = new List<Exception> { error };
+                foreach (var hotkey in suspended)
+                    try { hotkey.Resume(); } catch (Exception restoreError) { failures.Add(restoreError); }
+                throw new AggregateException("A shortcut could not be released for capture.", failures);
+            }
         }
         else
         {
             var failures = new List<Exception>();
             try { _hotkey?.Resume(); } catch (Exception error) { failures.Add(error); }
             try { _recordHotkey?.Resume(); } catch (Exception error) { failures.Add(error); }
+            try { _recordPasteHotkey?.Resume(); } catch (Exception error) { failures.Add(error); }
             if (failures.Count > 0) throw new AggregateException("A shortcut could not be restored.", failures);
         }
     }
@@ -688,6 +743,17 @@ public sealed partial class MainWindow : Window
             if (pressed && _welcome.IsShowing) return;
             if (pressed) await _shortcut.PressedAsync(_configuredRecordHotkey, ShortcutActivation.Record);
             else await _shortcut.ReleasedAsync(ShortcutActivation.Record);
+        }
+        catch (Exception error) { _notices.SetError(ShortcutNoticeKey, error); }
+    }
+
+    private async void RecordPasteHotkeyChanged(bool pressed)
+    {
+        try
+        {
+            if (pressed && (_closing || _closed || _welcome.IsShowing)) return;
+            if (pressed) await _shortcut.PasteRecordPressedAsync();
+            else _shortcut.PasteRecordReleased();
         }
         catch (Exception error) { _notices.SetError(ShortcutNoticeKey, error); }
     }
@@ -856,6 +922,7 @@ public sealed partial class MainWindow : Window
         _history.Dispose();
         _hotkey?.Dispose();
         _recordHotkey?.Dispose();
+        _recordPasteHotkey?.Dispose();
         _recordFactory.BeforeCapture = null;
         _shortcut.RecordAttemptChanged -= RecordAttemptChanged;
         _recordEscape?.Dispose();

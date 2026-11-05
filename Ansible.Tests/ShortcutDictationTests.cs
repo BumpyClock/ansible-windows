@@ -484,6 +484,9 @@ public sealed partial class DictationSessionTests
     {
         public CaretBounds? Caret => caret;
         public ConcurrentQueue<string> Inserts { get; } = new();
+        public ConcurrentQueue<BundlePayload> Payloads { get; } = new();
+        public ConcurrentQueue<CancellationToken> InsertionTokens { get; } = new();
+        public ConcurrentQueue<Func<bool>> CurrencyChecks { get; } = new();
         public ConcurrentQueue<bool> CurrentAtInsert { get; } = new();
         public TaskCompletionSource InsertEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public Func<int, TextDeliveryOutcome>? Inserting { get; set; }
@@ -492,6 +495,9 @@ public sealed partial class DictationSessionTests
         public Task<TextDeliveryOutcome> InsertAsync(BundlePayload payload, Func<bool> isCurrent, CancellationToken cancellationToken)
         {
             CurrentAtInsert.Enqueue(isCurrent());
+            Payloads.Enqueue(payload);
+            InsertionTokens.Enqueue(cancellationToken);
+            CurrencyChecks.Enqueue(isCurrent);
             Inserts.Enqueue(payload.Text);
             InsertEntered.TrySetResult();
             var attempt = Inserts.Count;

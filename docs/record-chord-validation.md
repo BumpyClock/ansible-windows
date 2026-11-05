@@ -23,18 +23,45 @@ Speech text and speech-word counts stay separate from bundle formatting.
 
 Prepared text is published before the successful completion signal consumed by
 history. History stores this text without media. Current-result Copy uses the
-same payload. Escape before possible input retracts the result and history;
-after possibly queued input the app retains evidence and warns to check the
-destination. No input is recalled or replayed.
+same payload. Escape during capture or finalization discards the take. Completed
+record takes release Escape ownership and remain available for explicit paste.
+No input is recalled or replayed.
 
-Combined file/text publications dropped text in the observed targets. Automatic
-delivery therefore uses text first, then one bulk CF_HDROP paste only after
+Record takes do not inspect a destination or automatically paste. The separate
+Paste capture shortcut defaults to Alt+Shift+W and chooses the field focused at
+that press. The latest completed bundle survives later voice or WAV results;
+Dictation keeps its manual Copy actions available. A new record admission clears
+it, and restarting the app does not restore it.
+
+Combined file/text publications dropped text in the observed targets. Explicit
+bundle delivery uses text first, then one bulk CF_HDROP paste only after
 exact same-field text insertion is observed. If verification is unavailable,
 text stays on the clipboard and pictures require manual Copy. The picture
 stage never reports attachment verification and cannot cause text to retry.
-All automatic publications request the same three clipboard exclusions.
+All shortcut-triggered publications request the same three clipboard exclusions.
 Manual Copy uses the ordinary clipboard. File leases protect delayed readers
 until the clipboard publication changes.
+
+## Explicit paste verification on 2026-11-05
+
+The Windows non-native suite passed 1564 tests with no failures or skips.
+`.runtime/paste-tests/paste-capture.trx` records the run. Regression checks cover
+no destination inspection or automatic record delivery, fresh paste-time focus,
+full retained payloads after voice results, held-key and busy-press handling,
+retry limits, cancel/discard, session currency, and joined shutdown. Preference
+checks cover saved defaults and collisions with voice and bundle paste keys.
+
+A Boat Linux sandbox passed 291 focused session, settings, and shortcut checks
+using the .NET 10 SDK container. `.runtime/paste-boat-tests.log` records that run.
+The Windows-specific settings-file replacement-lock test is excluded on Linux;
+it passed in the full Windows run. The earlier broad Boat run exposed that
+platform difference and remains in `.runtime/paste-boat-tests-broad.log`.
+
+`tools/Publish-Ansible.ps1` verified the unsigned x64 NativeAOT MSIX, native
+runtime closure, and packaged XAML resources. Its log is
+`.runtime/paste-publish.log`. This package was not installed. Physical shortcut
+use, visual inspection of the updated pages, and real composer text/picture
+acceptance remain hand checks. The tests do not qualify those Windows workflows.
 
 ## Verification on 2026-11-04
 

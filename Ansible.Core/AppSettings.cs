@@ -30,6 +30,7 @@ public sealed record AppSettings
     public bool RecordChordEnabled { get; init; }
     public bool RecordToggleMode { get; init; }
     public DictationShortcut RecordShortcut { get; init; } = DictationShortcut.RecordDefault;
+    public DictationShortcut RecordPasteShortcut { get; init; } = DictationShortcut.RecordPasteDefault;
     public bool IncludeVideoLink { get; init; } = true;
     public bool PushToTalk { get; init; } = true;
     public bool WelcomeCompleted { get; init; }
@@ -55,13 +56,20 @@ public sealed record AppSettings
         MeetingCleanup.Validate();
         if (Language is null || CustomDictionary is null || ModelId is not null && string.IsNullOrWhiteSpace(ModelId) ||
             ModelsDirectory is not null && !Path.IsPathFullyQualified(ModelsDirectory) ||
-            !Shortcut.IsValid || !RecordShortcut.IsValid || Backend is not NativeBackend.Auto and not NativeBackend.Cpu and not NativeBackend.Vulkan ||
+            !Shortcut.IsValid || !RecordShortcut.IsValid || !RecordPasteShortcut.IsValid ||
+            Backend is not NativeBackend.Auto and not NativeBackend.Cpu and not NativeBackend.Vulkan ||
             !Enum.IsDefined(InsertionMethod) || !Enum.IsDefined(PasteShortcut) ||
             TypingGapMilliseconds is < 0 or > MaxTypingGapMilliseconds ||
             MicrophoneBoostDecibels is < 0 or > MicrophoneBoost.MaxDecibels)
             throw new InvalidDataException("The app settings contain invalid values.");
-        if (RecordChordEnabled && Shortcut.ConflictsWith(RecordShortcut))
-            throw new InvalidDataException("Dictation and record shortcuts must not contain each other's keys. Choose separate chords.");
+        if (RecordPasteShortcut == new DictationShortcut(2, 0x56))
+            throw new InvalidDataException("Ctrl + V is used to deliver capture text and pictures. Choose another Paste capture shortcut.");
+        if (RecordChordEnabled && InsertionMethod == TextInsertionMethod.Paste &&
+            PasteShortcut == PasteShortcut.ControlShiftV && RecordPasteShortcut == new DictationShortcut(6, 0x56))
+            throw new InvalidDataException("Paste capture cannot use the same Ctrl + Shift + V chord sent by voice dictation. Choose another capture shortcut or voice paste key.");
+        if (RecordChordEnabled && (Shortcut.ConflictsWith(RecordShortcut) ||
+            Shortcut.ConflictsWith(RecordPasteShortcut) || RecordShortcut.ConflictsWith(RecordPasteShortcut)))
+            throw new InvalidDataException("Dictation, record, and paste capture shortcuts must not contain each other's keys. Choose separate chords.");
         if (CustomVocabulary.Normalize(CustomDictionary) != CustomDictionary)
             throw new InvalidDataException("The saved dictionary must contain normalized, unique entries.");
     }

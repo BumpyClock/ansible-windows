@@ -185,6 +185,9 @@ public sealed class DictationSession
     public void SetRecordShortcut(DictationShortcut shortcut) =>
         ChangeSettings(state => state with { Settings = state.Settings with { RecordShortcut = shortcut } },
             new(NoticeKind.Success, "Record shortcut updated", "The record shortcut was saved.", NoticeArea.Settings));
+    public void SetRecordPasteShortcut(DictationShortcut shortcut) =>
+        ChangeSettings(state => state with { Settings = state.Settings with { RecordPasteShortcut = shortcut } },
+            new(NoticeKind.Success, "Paste capture shortcut updated", "Focus a text field and use the shortcut to paste your latest screen and ink take.", NoticeArea.Settings));
     public void SetIncludeVideoLink(bool enabled) =>
         ChangeSettings(state => state with { Settings = state.Settings with { IncludeVideoLink = enabled } },
             new(NoticeKind.Success, "Video link updated", "The video link setting applies to the next take.", NoticeArea.Settings));

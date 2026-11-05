@@ -18,7 +18,9 @@ public sealed class AppSettingsStoreTests : IDisposable
         Assert.False(store.Load().RecordToggleMode);
         Assert.True(store.Load().IncludeVideoLink);
         Assert.Equal(DictationShortcut.RecordDefault, store.Load().RecordShortcut);
-        var settings = new AppSettings { RecordChordEnabled = true, RecordToggleMode = true, RecordShortcut = new(2, 0x52), IncludeVideoLink = false };
+        Assert.Equal(new DictationShortcut(5, 0x57), store.Load().RecordPasteShortcut);
+        var settings = new AppSettings { RecordChordEnabled = true, RecordToggleMode = true,
+            RecordShortcut = new(2, 0x52), RecordPasteShortcut = new(6, 0x56), IncludeVideoLink = false };
         store.Save(settings);
         Assert.Equal(settings, CreateStore().Load());
     }
@@ -31,6 +33,47 @@ public sealed class AppSettingsStoreTests : IDisposable
         CreateStore().Save(new() { RecordChordEnabled = false, RecordShortcut = DictationShortcut.Default });
     }
 
+    [Theory]
+    [InlineData(10, 0)]
+    [InlineData(9, 0)]
+    [InlineData(10, 0x57)]
+    [InlineData(9, 0x57)]
+    public void PasteCaptureCannotOverlapVoiceOrRecord(uint modifiers, uint key)
+    {
+        var settings = new AppSettings { RecordChordEnabled = true, RecordPasteShortcut = new(modifiers, key) };
+        Assert.Throws<InvalidDataException>(() => CreateStore().Save(settings));
+        CreateStore().Save(settings with { RecordChordEnabled = false });
+    }
+
+    [Fact]
+    public void PasteCaptureCannotInterceptItsOwnControlVPaste()
+    {
+        Assert.Throws<InvalidDataException>(() => CreateStore().Save(new()
+            { RecordPasteShortcut = new(2, 0x56) }));
+    }
+
+    [Fact]
+    public void PasteCaptureCannotInterceptVoiceControlShiftVPaste()
+    {
+        var settings = new AppSettings { RecordChordEnabled = true, RecordPasteShortcut = new(6, 0x56),
+            PasteShortcut = PasteShortcut.ControlShiftV };
+        Assert.Throws<InvalidDataException>(() => CreateStore().Save(settings));
+        CreateStore().Save(settings with { RecordChordEnabled = false });
+        CreateStore().Save(settings with { InsertionMethod = TextInsertionMethod.Type });
+    }
+
+    [Fact]
+    public void ExistingSettingsGetPasteCaptureDefaultWithoutChangingTheirShortcuts()
+    {
+        var store = CreateStore();
+        var saved = new AppSettings { RecordChordEnabled = true, Shortcut = new(2, 0x20), RecordShortcut = new(2, 0x52) };
+        store.Save(saved);
+        var document = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(store.Path))!.AsObject();
+        Assert.True(document.Remove("RecordPasteShortcut"));
+        File.WriteAllText(store.Path, document.ToJsonString());
+        Assert.Equal(saved, store.Load());
+    }
+
     [Fact]
     public void SettingsWithoutRecordFieldsKeepVoicePreferencesAndReceiveValidRecordDefaults()
     {
@@ -38,7 +81,7 @@ public sealed class AppSettingsStoreTests : IDisposable
         var saved = new AppSettings { Shortcut = new(2, 0x20), MicrophoneBoostDecibels = 6, WelcomeCompleted = true };
         store.Save(saved);
         var document = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(store.Path))!.AsObject();
-        foreach (var field in new[] { "RecordChordEnabled", "RecordToggleMode", "RecordShortcut", "IncludeVideoLink" })
+        foreach (var field in new[] { "RecordChordEnabled", "RecordToggleMode", "RecordShortcut", "RecordPasteShortcut", "IncludeVideoLink" })
             document.Remove(field);
         File.WriteAllText(store.Path, document.ToJsonString());
         Assert.Equal(saved, store.Load());

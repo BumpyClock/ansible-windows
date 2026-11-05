@@ -21,10 +21,10 @@ public interface IShortcutTargetInspector
 }
 
 /// <summary>
-/// Owns one shortcut dictation attempt: press and release, the push-to-talk tail, admission, destination
-/// inspection, recognition start, insert-once delivery, warnings, diagnostics, and the shutdown join.
+/// Owns shortcut dictation and explicit record paste: press and release, the push-to-talk tail, admission,
+/// destination inspection, recognition, retained record bundles, delivery, diagnostics, and the shutdown join.
 /// Call every member on the UI thread. Continuations return to the caller's synchronization context, so fields
-/// stay single-threaded; only the held flag and <see cref="IsDeliveryCurrent"/> are read from delivery threads.
+/// stay single-threaded; only the hold flags and <see cref="IsDeliveryCurrent"/> are read from delivery threads.
 /// </summary>
 public sealed class ShortcutDictation : IDisposable
 {
@@ -45,29 +45,84 @@ public sealed class ShortcutDictation : IDisposable
     private FinalTextDelivery? _delivery;
     private Task<SessionOutcome>? _deliveryOperation;
     private Guid? _deliveryOperationId;
+    private Guid? _deliveryCurrencyId;
+    private (Guid OperationId, SessionOutcome Outcome)? _recordResult;
+    private volatile bool _pasteHeld;
     private ShortcutActivation? _owner;
     private bool _pushToTalk;
     private volatile bool _discarded;
     private CancellationTokenSource? _attemptCancellation;
     public bool HasRecordAttempt => _owner == ShortcutActivation.Record;
     public event Action? RecordAttemptChanged;
+    public BundlePayload? RecordPayload => _recordResult?.Outcome.Result?.Payload;
+    public event Action? RecordResultChanged;
 
     public async Task CancelRecordAsync()
     {
         if (!HasRecordAttempt) return;
         var id = _deliveryOperationId;
-        var delivery = _delivery;
         var work = _deliveryTask;
         _discarded = true;
         _attemptCancellation?.Cancel();
         if (id is not null && _session.State.OperationId == id)
             await _session.CancelAsync();
         if (work is not null) await work;
-        if (id is { } completedId && delivery?.MayHaveInserted != true)
+        if (id is { } completedId)
             _session.DiscardRecordResult(completedId);
-        else if (delivery?.MayHaveInserted == true && _session.State.OperationId == id)
-            _session.Notify(NoticeKind.Warning, "Check the destination",
-                "Insertion may have started before Esc. The result is retained. Check the destination before copying again.");
+    }
+
+    /// <summary>Pastes the latest completed record take into the destination focused at this press.</summary>
+    public Task PasteRecordPressedAsync()
+    {
+        if (_closed || _closing || _pasteHeld) return Task.CompletedTask;
+        _pasteHeld = true;
+        var state = _session.State;
+        if (!state.Settings.RecordChordEnabled)
+            _session.Notify(NoticeKind.Warning, "Record paste unavailable", "Enable Record chord in Settings before pasting a record take.");
+        else if (IsBusy || !state.IsIdle && !(state.Phase == DictationPhase.RecoveryRequired &&
+                     _recordResult?.Outcome.MediaResourcesRetained == true))
+            _session.Notify(NoticeKind.Warning, "Record paste busy", "Finish capture, recognition, or insertion before pasting the record take.");
+        else if (_recordResult is not { } result)
+            _session.Notify(NoticeKind.Warning, "No record take", "Complete a record take before using the paste shortcut.");
+        else
+        {
+            _pushToTalk = false;
+            _deliveryOperation = Task.FromResult(result.Outcome);
+            _deliveryOperationId = result.OperationId;
+            // Currency belongs to this press, not the old record operation. Voice results never replace the bundle.
+            _deliveryCurrencyId = state.OperationId;
+            _attemptCancellation = CancellationTokenSource.CreateLinkedTokenSource(_cancellation.Token);
+            _deliveryTask = PasteRecordAsync(state.Settings);
+        }
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Releases the paste chord so its admitted delivery may send input.</summary>
+    public void PasteRecordReleased() => _pasteHeld = false;
+
+    private async Task PasteRecordAsync(AppSettings settings)
+    {
+        var token = _attemptCancellation!.Token;
+        Task<IShortcutTextTarget>? inspection = null;
+        try
+        {
+            inspection = _inspector.InspectAsync(settings, token);
+            _captureTask = inspection;
+            await inspection;
+            token.ThrowIfCancellationRequested();
+            _delivery = CreateDelivery(inspection, settings, record: true, () => _pasteHeld);
+            await DeliverAsync(_deliveryOperation!, _delivery);
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        catch (Exception error)
+        {
+            _session.Notify(NoticeKind.Warning, "Record paste unavailable", error.Message);
+        }
+        finally
+        {
+            if (ReferenceEquals(_captureTask, inspection)) _captureTask = null;
+            if (_attemptCancellation is not null) ClearAttempt();
+        }
     }
 
     private void SetOwner(ShortcutActivation? owner)
@@ -122,9 +177,9 @@ public sealed class ShortcutDictation : IDisposable
         {
             var state = _session.State;
             var release = _coordinator.NoteReleased();
-            if (_pushToTalk && _delivery is not null)
+            if (_pushToTalk && _deliveryOperation is not null)
             {
-                var task = FinishReleasedDictationAsync(release, _delivery, state.OperationId);
+                var task = FinishReleasedDictationAsync(release, _deliveryOperation, state.OperationId);
                 _releaseTailTask = _releaseTailTask is { IsCompleted: false } previous
                     ? Task.WhenAll(previous, task) : task;
                 await task;
@@ -173,13 +228,13 @@ public sealed class ShortcutDictation : IDisposable
     }
 
     private async Task FinishReleasedDictationAsync(
-        ShortcutCaptureCoordinator.Release release, FinalTextDelivery delivery, Guid? operationId)
+        ShortcutCaptureCoordinator.Release release, Task<SessionOutcome> operation, Guid? operationId)
     {
         var token = _cancellation.Token;
         try
         {
             if (!await _coordinator.WaitForReleaseTailAsync(release, token)) { return; }
-            if (_closing || _closed || _held || !ReferenceEquals(_delivery, delivery)) { return; }
+            if (_closing || _closed || _held || !ReferenceEquals(_deliveryOperation, operation)) { return; }
             var state = _session.State;
             if (state.OperationId != operationId || !_pushToTalk) { return; }
             if (state.CanFinish) { await _session.FinishAsync(); }
@@ -189,8 +244,8 @@ public sealed class ShortcutDictation : IDisposable
         catch (Exception error) { _session.ReportError(error); }
     }
 
-    // Recording and destination inspection start together. The session buffers speech until the destination
-    // is accepted; insertion still requires the original field identity when recognition finishes.
+    // Voice recording and destination inspection start together. Record takes never inspect a destination;
+    // only an explicit later paste press may choose one.
     private async Task HandlePressAsync(DictationShortcut shortcut, ShortcutActivation activation)
     {
         var token = _cancellation.Token;
@@ -246,10 +301,24 @@ public sealed class ShortcutDictation : IDisposable
             if (!current.CanStart || current.SelectedModel?.CanInsertDictation != true)
             { Record(ShortcutDiagnosticOutcome.AdmissionRejected); return; }
             if (!_coordinator.TryStartDelivery(capture)) { Record(ShortcutDiagnosticOutcome.Stale); return; }
+            var shortcutTimestamp = generation == _diagnostics?.CurrentGeneration && generation is not null ? started : (long?)null;
+            if (recordOptions is not null)
+            {
+                // A new take releases the factory's prior media lease. Never keep that old bundle pasteable.
+                _recordResult = null;
+                RecordResultChanged?.Invoke();
+                _attemptCancellation = CancellationTokenSource.CreateLinkedTokenSource(_cancellation.Token);
+                _anchorChanged(null);
+                _deliveryOperation = _session.StartShortcutDictationAsync(shortcutTimestamp, recordTakeOptions: recordOptions);
+                _deliveryOperationId = _session.State.OperationId;
+                _deliveryCurrencyId = _deliveryOperationId;
+                _deliveryTask = RetainRecordAsync(_deliveryOperation, _deliveryOperationId!.Value);
+                Record(ShortcutDiagnosticOutcome.Admitted, _deliveryOperationId);
+                return;
+            }
             inspection = _inspector.InspectAsync(current.Settings, token);
             _captureTask = inspection;
-            StartDelivery(inspection, generation == _diagnostics?.CurrentGeneration && generation is not null ? started : null,
-                shortcut, current.Settings, recordOptions);
+            StartDelivery(inspection, shortcutTimestamp, shortcut, current.Settings);
             var operationId = _deliveryOperationId;
             var inspected = await inspection;
             if (token.IsCancellationRequested || _closing || _closed) { Record(ShortcutDiagnosticOutcome.Cancelled); return; }
@@ -259,37 +328,35 @@ public sealed class ShortcutDictation : IDisposable
         catch (Exception error)
         {
             Record(ShortcutDiagnosticOutcome.AdmissionRejected, error: error);
-            if (recordOptions is null) throw;
-            _session.Notify(NoticeKind.Warning, "Use manual Copy", $"The record take has no editable destination. {error.Message}");
+            if (_deliveryOperation is null && _attemptCancellation is not null) ClearAttempt();
+            throw;
         }
         finally
         {
             _coordinator.Abandon(capture);
             if (ReferenceEquals(_captureTask, inspection)) { _captureTask = null; }
-            if (_delivery is null) SetOwner(null);
+            if (_deliveryOperation is null) SetOwner(null);
         }
     }
 
-    private void StartDelivery(Task<IShortcutTextTarget> target, long? shortcutTimestamp,
-        DictationShortcut shortcut, AppSettings settings, RecordTakeOptions? recordOptions)
+    private FinalTextDelivery CreateDelivery(Task<IShortcutTextTarget> target, AppSettings settings,
+        bool record, Func<bool> typingDeferred)
     {
-        var modifiers = shortcut.Modifiers;
-        var method = recordOptions is null ? settings.InsertionMethod : TextInsertionMethod.Paste;
-        var pasteShortcut = recordOptions is null ? settings.PasteShortcut : PasteShortcut.ControlV;
+        var method = record ? TextInsertionMethod.Paste : settings.InsertionMethod;
+        var pasteShortcut = record ? PasteShortcut.ControlV : settings.PasteShortcut;
         var diagnostics = _diagnostics;
         var diagnosticGeneration = diagnostics?.CurrentGeneration;
-        Guid? diagnosticOperationId = null;
-        var delivery = new FinalTextDelivery(
+        return new FinalTextDelivery(
             insert: async (pending, token) =>
             {
                 var inspected = await target.WaitAsync(token);
                 return await inspected.InsertAsync(pending, IsDeliveryCurrent, token);
             },
             isCurrent: IsDeliveryCurrent,
-            typingDeferred: () => _held && modifiers != 0,
+            typingDeferred: typingDeferred,
             diagnostic: diagnosticGeneration is { } generation ? trace =>
             {
-                if (diagnosticOperationId is { } id)
+                if (_deliveryOperationId is { } id)
                     diagnostics!.Write(new DeliveryDiagnostic(id, DateTimeOffset.UtcNow, trace.Outcome, method,
                         method == TextInsertionMethod.Paste ? pasteShortcut : null,
                         trace.ResultToDeliveryMilliseconds, trace.DeferredMilliseconds, trace.ErrorHResult)
@@ -298,15 +365,21 @@ public sealed class ShortcutDictation : IDisposable
                         VerificationMilliseconds = trace.VerificationMilliseconds
                     }, generation);
             } : null);
+    }
+
+    private void StartDelivery(Task<IShortcutTextTarget> target, long? shortcutTimestamp,
+        DictationShortcut shortcut, AppSettings settings)
+    {
+        var delivery = CreateDelivery(target, settings, record: false, () => _held && shortcut.Modifiers != 0);
         _delivery = delivery;
         _attemptCancellation = CancellationTokenSource.CreateLinkedTokenSource(_cancellation.Token);
         _anchorChanged(null);
         try
         {
-            var operation = _session.StartShortcutDictationAsync(shortcutTimestamp, target, recordOptions);
+            var operation = _session.StartShortcutDictationAsync(shortcutTimestamp, target);
             _deliveryOperation = operation;
             _deliveryOperationId = _session.State.OperationId;
-            diagnosticOperationId = _deliveryOperationId;
+            _deliveryCurrencyId = _deliveryOperationId;
             _deliveryTask = DeliverAsync(operation, delivery);
         }
         catch
@@ -321,17 +394,50 @@ public sealed class ShortcutDictation : IDisposable
         }
     }
 
-    // The completed operation must still own the session before any target insertion.
+    // Delivery must still own the session currency captured at admission before any target insertion.
     private bool IsDeliveryCurrent()
     {
         var operation = _deliveryOperation;
-        var operationId = _deliveryOperationId;
-        if (operation is null || operationId is null || _closing || _closed || _discarded) { return false; }
+        if (operation is null || _closing || _closed || _discarded) { return false; }
         var state = _session.State;
-        return state.OperationId == operationId &&
+        return state.OperationId == _deliveryCurrencyId &&
             (state.IsIdle || state.Phase == DictationPhase.RecoveryRequired && operation.IsCompletedSuccessfully && operation.Result.MediaResourcesRetained) &&
             operation.IsCompletedSuccessfully
             && operation.Result.Kind == SessionOutcomeKind.Completed;
+    }
+
+    private async Task RetainRecordAsync(Task<SessionOutcome> operation, Guid operationId)
+    {
+        try
+        {
+            var outcome = await operation;
+            if (!_discarded && !_closing && !_closed && outcome.Kind == SessionOutcomeKind.Completed &&
+                outcome.Result is { SpeechText: { } speech, Payload: { } payload } && !string.IsNullOrWhiteSpace(speech))
+            {
+                // Freeze the externally supplied frame list while retaining the complete recognition outcome.
+                var retainedResult = outcome.Result with
+                {
+                    Payload = payload with { Frames = Array.AsReadOnly(payload.Frames.ToArray()) },
+                    WordTimings = outcome.Result.WordTimings is { } timings
+                        ? timings with { Words = Array.AsReadOnly(timings.Words.ToArray()) } : null
+                };
+                _recordResult = (operationId, outcome with { Result = retainedResult });
+                RecordResultChanged?.Invoke();
+            }
+        }
+        catch (Exception error) { _session.ReportError(error); }
+        finally { ClearAttempt(); }
+    }
+
+    private void ClearAttempt()
+    {
+        _delivery = null;
+        _deliveryOperation = null;
+        _deliveryOperationId = null;
+        _deliveryCurrencyId = null;
+        _attemptCancellation?.Dispose();
+        _attemptCancellation = null;
+        SetOwner(null);
     }
 
     private async Task DeliverAsync(Task<SessionOutcome> operation, FinalTextDelivery delivery)
@@ -358,12 +464,7 @@ public sealed class ShortcutDictation : IDisposable
         {
             if (ReferenceEquals(_delivery, delivery))
             {
-                _delivery = null;
-                _deliveryOperation = null;
-                _deliveryOperationId = null;
-                _attemptCancellation!.Dispose();
-                _attemptCancellation = null;
-                SetOwner(null);
+                ClearAttempt();
             }
         }
     }

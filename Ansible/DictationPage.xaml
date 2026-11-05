@@ -59,8 +59,22 @@
         </local:PageCanvas.HeaderActions>
         <!-- Content height follows history; the PageCanvas scroller is the only vertical scroller. -->
         <Grid VerticalAlignment="Top">
-            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-            <Grid x:Name="HomeColumns" Grid.Row="1" ColumnSpacing="{StaticResource HomeGridGap}" RowSpacing="{StaticResource HomeGridGap}" SizeChanged="HomeColumnsSizeChanged">
+            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+            <Border x:Name="RetainedCaptureCard" Margin="{StaticResource PageSectionBottomMargin}" Style="{StaticResource CardStyle}" Visibility="Collapsed">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Latest screen and ink capture" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                    <TextBlock x:Name="RetainedCaptureHint" Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap" />
+                    <StackPanel x:Name="RetainedCaptureActions" Orientation="Horizontal" Spacing="8">
+                        <Button x:Name="CopyRetainedTextButton" Content="Copy text" Click="CopyClicked" MinHeight="32"
+                                AutomationProperties.Name="Copy latest capture text" />
+                        <Button x:Name="CopyRetainedPicturesButton" Content="Copy pictures" Click="CopyPicturesClicked" MinHeight="32"
+                                AutomationProperties.Name="Copy latest capture pictures" />
+                        <Button x:Name="CopyRetainedVideoButton" Content="Copy video link" Click="CopyVideoClicked" MinHeight="32"
+                                AutomationProperties.Name="Copy latest capture video link" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+            <Grid x:Name="HomeColumns" Grid.Row="2" ColumnSpacing="{StaticResource HomeGridGap}" RowSpacing="{StaticResource HomeGridGap}" SizeChanged="HomeColumnsSizeChanged">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="{StaticResource HomeRailColumnWidth}" />
@@ -71,7 +85,7 @@
                 <local:HomeInsightsView x:Name="HomeInsightsColumn" Grid.Column="1" VerticalAlignment="Top" Canvas.ZIndex="1" />
             </Grid>
             <!-- A result that is not in saved history (WAV, oversized) sits above history so a long list cannot bury it. -->
-            <Border x:Name="TranscriptCard" Margin="{StaticResource PageSectionBottomMargin}" Style="{StaticResource CardStyle}" MinHeight="160" Visibility="Collapsed">
+            <Border x:Name="TranscriptCard" Grid.Row="1" Margin="{StaticResource PageSectionBottomMargin}" Style="{StaticResource CardStyle}" MinHeight="160" Visibility="Collapsed">
                 <Grid RowSpacing="8">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />

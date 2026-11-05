@@ -25,6 +25,8 @@ public sealed class AppSettingsStore(string path) : IAppSettingsStore
             settings = settings with { MeetingCleanup = new() };
         if (!document.RootElement.TryGetProperty(nameof(AppSettings.RecordShortcut), out _))
             settings = settings with { RecordShortcut = DictationShortcut.RecordDefault };
+        if (!document.RootElement.TryGetProperty(nameof(AppSettings.RecordPasteShortcut), out _))
+            settings = settings with { RecordPasteShortcut = DictationShortcut.RecordPasteDefault };
         if (!document.RootElement.TryGetProperty(nameof(AppSettings.IncludeVideoLink), out _))
             settings = settings with { IncludeVideoLink = true };
         settings.Validate();

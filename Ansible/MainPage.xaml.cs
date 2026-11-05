@@ -15,6 +15,7 @@ public sealed partial class MainPage : Page
     private readonly DictationSession _session;
     private readonly Action<DictationShortcut> _changeHotkey;
     private readonly Action<DictationShortcut> _changeRecordHotkey;
+    private readonly Action<DictationShortcut> _changeRecordPasteHotkey;
     private readonly Action<bool> _enableRecordChord;
     private readonly CaptureStore _captures;
     private readonly Action<bool> _changeMode;
@@ -22,7 +23,7 @@ public sealed partial class MainPage : Page
     private readonly LocalDiagnosticLog _diagnostics;
     private readonly DispatcherTimer _diagnosticStatusTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private bool _recordingShortcut;
-    private bool _editingRecordShortcut;
+    private TextBox? _shortcutCaptureBox;
     private Task? _captureSizeTask;
     private Task? _captureDeleteTask;
     private bool _wasRecordTake;
@@ -42,7 +43,7 @@ public sealed partial class MainPage : Page
     internal MainPage(DictationSession session, AppPaths paths, Func<nint> windowHandle,
         Action<DictationShortcut> changeHotkey, Action<bool> changeMode, Action<bool> captureShortcut,
         LocalDiagnosticLog diagnostics, AppNotices notices, Action<DictationShortcut> changeRecordHotkey,
-        Action<bool> enableRecordChord, CaptureStore captures)
+        Action<bool> enableRecordChord, CaptureStore captures, Action<DictationShortcut> changeRecordPasteHotkey)
     {
         _rendering = true;
         InitializeComponent();
@@ -50,6 +51,7 @@ public sealed partial class MainPage : Page
         _notices = notices;
         _changeHotkey = changeHotkey;
         _changeRecordHotkey = changeRecordHotkey;
+        _changeRecordPasteHotkey = changeRecordPasteHotkey;
         _enableRecordChord = enableRecordChord;
         _captures = captures;
         _changeMode = changeMode;
@@ -67,6 +69,7 @@ public sealed partial class MainPage : Page
         // TextBox handles pointer presses itself, so listen for handled presses to restart capture on click.
         HotkeyCaptureBox.AddHandler(PointerPressedEvent, new PointerEventHandler((_, _) => StartShortcutCapture(HotkeyCaptureBox)), true);
         RecordHotkeyCaptureBox.AddHandler(PointerPressedEvent, new PointerEventHandler((_, _) => StartShortcutCapture(RecordHotkeyCaptureBox)), true);
+        RecordPasteHotkeyCaptureBox.AddHandler(PointerPressedEvent, new PointerEventHandler((_, _) => StartShortcutCapture(RecordPasteHotkeyCaptureBox)), true);
         _rendering = true;
         SetShortcutDisplay(_state.Settings.Shortcut.DisplayText);
         PushToTalkChoice.SelectedIndex = _state.Settings.PushToTalk ? 0 : 1;
@@ -147,7 +150,12 @@ public sealed partial class MainPage : Page
             ChangeRecordShortcutButton.IsEnabled = idle;
             ResetRecordShortcutButton.IsEnabled = idle;
             ResetRecordShortcutButton.Visibility = _state.Settings.RecordShortcut != DictationShortcut.RecordDefault ? Visibility.Visible : Visibility.Collapsed;
-            if (!_recordingShortcut || !_editingRecordShortcut) RecordHotkeyCaptureBox.Text = _state.Settings.RecordShortcut.DisplayText;
+            if (_shortcutCaptureBox != RecordHotkeyCaptureBox) RecordHotkeyCaptureBox.Text = _state.Settings.RecordShortcut.DisplayText;
+            RecordPasteHotkeyCaptureBox.IsEnabled = idle;
+            ChangeRecordPasteShortcutButton.IsEnabled = idle;
+            ResetRecordPasteShortcutButton.IsEnabled = idle;
+            ResetRecordPasteShortcutButton.Visibility = _state.Settings.RecordPasteShortcut != DictationShortcut.RecordPasteDefault ? Visibility.Visible : Visibility.Collapsed;
+            if (_shortcutCaptureBox != RecordPasteHotkeyCaptureBox) RecordPasteHotkeyCaptureBox.Text = _state.Settings.RecordPasteShortcut.DisplayText;
             DeleteCapturesButton.IsEnabled = !_joining && idle && _captureSizeTask is not { IsCompleted: false } && _captureDeleteTask is not { IsCompleted: false };
             if (!_joining && _wasRecordTake && !_state.IsRecordTake && _captureSizeTask is not { IsCompleted: false })
                 _captureSizeTask = RefreshCaptureSizeAsync();
@@ -437,6 +445,12 @@ public sealed partial class MainPage : Page
     private void ResetRecordShortcutClicked(object sender, RoutedEventArgs args) =>
         Try(() => _changeRecordHotkey(DictationShortcut.RecordDefault), "Record shortcut unavailable");
 
+    private void ChangeRecordPasteShortcutClicked(object sender, RoutedEventArgs args) =>
+        RecordPasteHotkeyCaptureBox.Focus(FocusState.Programmatic);
+
+    private void ResetRecordPasteShortcutClicked(object sender, RoutedEventArgs args) =>
+        Try(() => _changeRecordPasteHotkey(DictationShortcut.RecordPasteDefault), "Paste capture shortcut unavailable");
+
     private void RecordChordToggled(object sender, RoutedEventArgs args)
     {
         if (_rendering || RecordChordToggle.IsOn == _state.Settings.RecordChordEnabled) return;
@@ -514,7 +528,7 @@ public sealed partial class MainPage : Page
         try
         {
             _captureShortcut(true);
-            _editingRecordShortcut = box == RecordHotkeyCaptureBox;
+            _shortcutCaptureBox = box;
             _recordingShortcut = true;
             _pendingShortcut = null;
             _shortcutPrimarySeen = false;
@@ -578,7 +592,12 @@ public sealed partial class MainPage : Page
         }
         else if ((uint)args.Key != shortcut.Key) { return; }
         args.Handled = true;
-        Try(() => { if (_editingRecordShortcut) _changeRecordHotkey(shortcut); else _changeHotkey(shortcut); }, "Shortcut unavailable");
+        Try(() =>
+        {
+            if (_shortcutCaptureBox == RecordPasteHotkeyCaptureBox) _changeRecordPasteHotkey(shortcut);
+            else if (_shortcutCaptureBox == RecordHotkeyCaptureBox) _changeRecordHotkey(shortcut);
+            else _changeHotkey(shortcut);
+        }, "Shortcut unavailable");
         EndShortcutCapture();
     }
 
@@ -603,14 +622,15 @@ public sealed partial class MainPage : Page
         catch (Exception error) { ReportError(error, "Shortcut unavailable"); }
         SetShortcutDisplay(_session.State.Settings.Shortcut.DisplayText);
         RecordHotkeyCaptureBox.Text = _session.State.Settings.RecordShortcut.DisplayText;
-        _editingRecordShortcut = false;
+        RecordPasteHotkeyCaptureBox.Text = _session.State.Settings.RecordPasteShortcut.DisplayText;
+        _shortcutCaptureBox = null;
     }
 
     private void SetShortcutDisplay(string text)
     {
-        if (_recordingShortcut && _editingRecordShortcut)
+        if (_recordingShortcut && _shortcutCaptureBox is { } box && box != HotkeyCaptureBox)
         {
-            RecordHotkeyCaptureBox.Text = text;
+            box.Text = text;
             return;
         }
         HotkeyCaptureBox.Text = text;

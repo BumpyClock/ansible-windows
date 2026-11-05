@@ -23,6 +23,7 @@ public readonly record struct DictationShortcut(uint Modifiers, uint Key)
     private const uint VkF1 = 0x70, VkF11 = 0x7A;   // F12 (0x7B) is intentionally excluded.
     public static DictationShortcut Default => new(ModControl | ModWin, 0);
     public static DictationShortcut RecordDefault => new(ModAlt | ModWin, 0);
+    public static DictationShortcut RecordPasteDefault => new(ModAlt | ModShift, 0x57);
 
     [JsonIgnore]
     public bool IsModifierOnly => Key == 0 && (Modifiers == (ModControl | ModWin) || Modifiers == (ModAlt | ModWin));

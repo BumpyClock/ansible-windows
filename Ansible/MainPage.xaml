@@ -153,7 +153,7 @@
                 <Border Style="{StaticResource SettingsCardStyle}">
                     <StackPanel>
                         <local:SettingsRow Title="Dictate with screen and ink" ShowDivider="False" CompactAlignment="Left"
-                                           Description="Records the monitor under the pointer with silent video. Move the pointer and drag to draw. Clicks and scrolling are blocked on all monitors. Esc discards the take. Images are pasted into chat; recordings stay on this device for up to seven days or 2 GB.">
+                                           Description="Records the monitor under the pointer with silent video. Drag to draw. Clicks and scrolling are blocked on all monitors. Esc discards the take. Nothing is pasted until you use Paste capture. Recordings stay on this device for up to seven days or 2 GB.">
                             <ToggleSwitch x:Name="RecordChordToggle" AutomationProperties.Name="Enable record chord"
                                           Toggled="RecordChordToggled" />
                         </local:SettingsRow>
@@ -166,6 +166,17 @@
                                 <Button x:Name="ChangeRecordShortcutButton" Content="Change" Click="ChangeRecordShortcutClicked" />
                                 <HyperlinkButton x:Name="ResetRecordShortcutButton" Content="Reset" Click="ResetRecordShortcutClicked"
                                                  AutomationProperties.Name="Reset record shortcut" />
+                            </StackPanel>
+                        </local:SettingsRow>
+                        <local:SettingsRow Title="Paste capture shortcut" Description="After recording finishes, focus a chat or text field and press this shortcut to paste the latest take's text, ink markers, pictures, and optional video link.">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBox x:Name="RecordPasteHotkeyCaptureBox" IsReadOnly="True" MinWidth="150"
+                                         AutomationProperties.Name="Paste capture shortcut" TextAlignment="Center"
+                                         GotFocus="ShortcutGotFocus" KeyDown="ShortcutKeyDown" KeyUp="ShortcutKeyUp"
+                                         LostFocus="ShortcutLostFocus" />
+                                <Button x:Name="ChangeRecordPasteShortcutButton" Content="Change" Click="ChangeRecordPasteShortcutClicked" />
+                                <HyperlinkButton x:Name="ResetRecordPasteShortcutButton" Content="Reset" Click="ResetRecordPasteShortcutClicked"
+                                                 AutomationProperties.Name="Reset paste capture shortcut" />
                             </StackPanel>
                         </local:SettingsRow>
                         <local:SettingsRow Title="Press once to start and stop" CompactAlignment="Left"

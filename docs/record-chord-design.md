@@ -25,8 +25,21 @@ and prepared bundle. It does not own the hotkey or destination input. This leave
 an independent recording toggle possible without making the hook a session owner.
 
 Target inspection is fatal for the existing voice-only shortcut. Record takes
-need optional destination inspection. Failure to find an editable destination
-must retain successful speech and media for manual Copy.
+never inspect a destination or automatically deliver. A separate configurable
+Paste capture shortcut defaults to Alt+Shift+W and inspects the field focused
+when that shortcut is pressed. It is registered only while Record chord is
+enabled. All three activation chords must be nonoverlapping. Paste capture must
+not intercept Ctrl+V bundle delivery or the configured voice paste chord.
+
+`ShortcutDictation` retains one completed record outcome, including its original
+operation ID and immutable bundle. Voice results do not replace it. Admission of
+the next record take clears it, matching the native factory's capture lease
+lifetime. It is not restored after app restart. Paste cannot queue during capture
+or other delivery. A new explicit paste press can reuse the retained take; held
+keys defer input, never choose a different destination. Shutdown cancels and
+joins paste inspection and input through the same coordinator. `RecordPayload`
+and `RecordResultChanged` expose that same retained bundle to Dictation's manual
+Copy actions, including after a voice or WAV result replaces the current result.
 
 ## Clocks and media
 
@@ -68,7 +81,7 @@ clipboard picture files.
 Finalize the take and prepare its text before successful dictation completion is
 published. `HomeDictationHistory` currently subscribes before shortcut delivery
 and immediately saves the result. Formatting only after awaiting recognition is
-too late. Completion, current-result Copy, automatic delivery, and history must
+too late. Completion, current-result Copy, explicit bundle delivery, and history must
 consume the same prepared text. History must never serialize the media.
 
 The current Dictation result must keep its media Copy actions visible even when
@@ -82,7 +95,7 @@ images and text from one combined clipboard publication. Separate bulk-file and
 text publications are the starting candidate. Retain the user-confirmed
 provisional eight-picture cap without calling it an all-target measured limit.
 
-The safe automatic ordering is text first, followed by one bulk-file paste only
+The explicit paste operation sends text first, followed by one bulk-file paste only
 after exact same-field text verification. This proves the text has been consumed
 before replacing its clipboard publication. A timer, render callback, or queued
 Ctrl+V is not that proof. The image stage is queued, never attachment-verified.
@@ -106,8 +119,8 @@ verifier works in every composer.
 ## Failure and release
 
 Ordinary frame, ink, or encode failures degrade media and allow authoritative
-text. Esc before delivery commitment discards the take and suppresses automatic
-delivery. Cancellation and shutdown join every owned startup, capture, inference,
+text. Esc during the record attempt discards the take and leaves no pending
+paste. Cancellation and shutdown join every owned startup, capture, inference,
 finalization, and input operation.
 
 A retained native resource still blocks new work and must remain owned. Do not
@@ -123,7 +136,9 @@ be handled together; returning from `SendInput` is not permission to delete file
 ## Behavioral checks
 
 Cover cross-chord ownership, Alt/Win qualification and menu-mask cleanup, hold
-tails and latch mode, Esc during startup/finalization, optional destinations,
+tails and latch mode, Esc during startup/finalization, destination-free recording,
+fresh paste-time destinations, no automatic record insertion, retained bundle
+reuse, rejected busy paste presses,
 unchanged speech counts, identical payload/history/Copy text, real timing versus
 approximate/timeline fallbacks, burst and summary isolation, picture caps,
 retention, media degradation, exact-text verification before file publication,
