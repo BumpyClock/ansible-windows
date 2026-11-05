@@ -38,6 +38,7 @@ message. Coordinate these checks with the person using the computer.
 .\.runtime\record-capture\record_capture_host.exe --capture .runtime\record-capture\actual-no-ink 4
 .\.runtime\record-capture\record_capture_fixture.exe .runtime\record-capture\synthetic-ink-fixture
 .\.runtime\record-capture\record_capture_fixture.exe --discard .runtime\record-capture\synthetic-discard-fixture
+.\.runtime\record-capture\record_capture_fixture.exe --foreground .runtime\record-capture\foreground-ink-fixture
 ```
 
 The fixture requires a monitor at least 1600 by 800 physical pixels. It checks
@@ -47,6 +48,13 @@ the synthetic button-up. Its pixel checks require visible red ink while the drag
 is still held, and fail if the second picture retains the first burst.
 Both hosts independently decode the actual MP4 and reject an audio stream.
 Output directories should be unique when preserving evidence.
+
+`--foreground` leaves the actual focused app visible instead of creating the
+synthetic backdrop. It requires the ink HWND to remain topmost before and during
+the held drag, checks visible ink and real WGC pictures, and fails if foreground
+identity changes. It captures the current app locally, blocks buttons briefly,
+and sends no OS input or chat message. This case is required for ink visibility
+changes; a backdrop-only pass can hide foreground occlusion.
 
 ## Ownership and bounds
 
@@ -63,6 +71,12 @@ Only geometry
 on the recorded monitor is accepted. Esc discards the take. Neither ink nor the
 recording indicator activates a window. The indicator requires display-affinity
 exclusion. The ink window is deliberately included in capture.
+
+Ink and indicator HWNDs are created with `WS_EX_TOPMOST`, alongside their
+no-activate and tool-window styles. In the foreground regression, a later
+`SetWindowPos(HWND_TOPMOST)` returned success without promoting an initially
+ordinary ink window. Explicit topmost creation keeps ink above the focused app
+while preserving that app's keyboard focus.
 
 Live ink is drawn into one monitor-sized, reusable premultiplied BGRA DIB and
 published with `UpdateLayeredWindow`. Transparent pixels remain transparent;

@@ -8,6 +8,8 @@ namespace {
 int64_t fixture_started{};
 int fixture_stage{};
 bool fixture_discard{};
+bool fixture_foreground{};
+HWND fixture_foreground_window{};
 
 void save_visible_drag(take& state) {
     // Read the composed desktop while the production input handler still owns
@@ -83,11 +85,18 @@ VOID CALLBACK fixture_timer(HWND, UINT, UINT_PTR, DWORD) {
     };
     try {
         if (fixture_stage == 0 && elapsed > 0.2) {
+            if (fixture_foreground) {
+                if (!(GetWindowLongPtrW(state->overlay, GWL_EXSTYLE) & WS_EX_TOPMOST))
+                    throw hresult_error(E_FAIL, L"Ink was not created topmost over the foreground app.");
+            }
             send(WM_LBUTTONDOWN, 250, 400);
             send(WM_MOUSEMOVE, 600, 400); send(WM_MOUSEMOVE, 600, 700);
             send(WM_MOUSEMOVE, 250, 700); send(WM_MOUSEMOVE, 250, 400);
             fixture_stage = 1;
         } else if (fixture_stage == 1 && elapsed > 0.8) {
+            if (fixture_foreground && (GetForegroundWindow() != fixture_foreground_window ||
+                !(GetWindowLongPtrW(state->overlay, GWL_EXSTYLE) & WS_EX_TOPMOST)))
+                throw hresult_error(E_FAIL, L"Ink lost its ordering or activated over the target app.");
             save_visible_drag(*state);
             fixture_stage = 2;
         } else if (fixture_stage == 2 && elapsed > 0.9) {
@@ -193,9 +202,10 @@ int wmain(int argc, wchar_t** argv) {
         return 0;
     }
     fixture_discard = argc == 3 && std::wstring(argv[1]) == L"--discard";
-    if (argc != 2 && !fixture_discard) return 2;
+    fixture_foreground = argc == 3 && std::wstring(argv[1]) == L"--foreground";
+    if (argc != 2 && !fixture_discard && !fixture_foreground) return 2;
     try {
-        auto output = std::filesystem::absolute(argv[fixture_discard ? 2 : 1]);
+        auto output = std::filesystem::absolute(argv[argc == 3 ? 2 : 1]);
         std::filesystem::create_directories(output);
         POINT pointer{};
         check_bool(GetCursorPos(&pointer));
@@ -210,11 +220,16 @@ int wmain(int argc, wchar_t** argv) {
         type.lpfnWndProc = fixture_proc; type.hInstance = module; type.lpszClassName = L"AnsibleInkSyntheticFixture";
         check_bool(RegisterClassW(&type));
         auto old_dpi = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-        auto background = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, type.lpszClassName, L"Synthetic ink fixture",
-            WS_POPUP, info.rcMonitor.left, info.rcMonitor.top, w, h, nullptr, nullptr, module, nullptr);
-        check_pointer(background);
-        check_bool(SetWindowPos(background, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW));
-        UpdateWindow(background);
+        auto foreground = GetForegroundWindow();
+        fixture_foreground_window = foreground;
+        HWND background{};
+        if (!fixture_foreground) {
+            background = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, type.lpszClassName, L"Synthetic ink fixture",
+                WS_POPUP, info.rcMonitor.left, info.rcMonitor.top, w, h, nullptr, nullptr, module, nullptr);
+            check_pointer(background);
+            check_bool(SetWindowPos(background, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW));
+            UpdateWindow(background);
+        }
         fixture_started = qpc_now();
         void* instance{};
         check_hresult(record_take_create(monitor, output.c_str(), fixture_started, &instance));
@@ -222,11 +237,14 @@ int wmain(int argc, wchar_t** argv) {
         check_bool(timer != 0);
         auto hr = record_take_run(instance);
         KillTimer(nullptr, timer);
-        DestroyWindow(background);
+        if (background) DestroyWindow(background);
         if (old_dpi) SetThreadDpiAwarenessContext(old_dpi);
         record_take_status state{sizeof(state)};
         check_hresult(record_take_get_status(instance, &state));
         check_hresult(record_take_destroy(instance));
+        if (fixture_foreground && foreground != GetForegroundWindow())
+            throw hresult_error(E_FAIL, L"The foreground target changed during the fixture.");
+        if (fixture_foreground) std::cout << "Foreground identity preserved. Ink topmost before and during the held drag.\n";
         std::cout << "run=0x" << std::hex << static_cast<uint32_t>(hr)
             << " capture=0x" << static_cast<uint32_t>(state.capture_error) << " ink=0x" << static_cast<uint32_t>(state.ink_error)
             << " video=0x" << static_cast<uint32_t>(state.video_error) << " frame=0x" << static_cast<uint32_t>(state.frame_error)

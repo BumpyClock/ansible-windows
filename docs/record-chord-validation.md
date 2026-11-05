@@ -197,11 +197,17 @@ pass; physical hook loss and reliability under ASR load remain unmeasured.
 
 ## Reproduce the isolated package check
 
+The foreground visibility follow-up for 1.0.1.21 reproduces the focused app
+covering ink when the synthetic backdrop is omitted. Creating the ink HWND as
+topmost fixes that case. The foreground fixture now verifies both live pixels
+and WGC burst ink over an actual app, along with preserved focus. See the
+[foreground correction](record-chord-ink-reliability.md#foreground-occlusion-reproduced-and-corrected-in-10121).
+
 Run `tools/Publish-Ansible.ps1`, then:
 
 ```powershell
 .\tools\record-spikes\encoder\Invoke-PackagedEncoderSpike.ps1 `
-  -Msix .\Ansible\bin\AppPackages\Ansible_1.0.1.14_x64_Test\Ansible_1.0.1.14_x64.msix `
+  -Msix .\Ansible\bin\AppPackages\Ansible_1.0.1.21_x64_Test\Ansible_1.0.1.21_x64.msix `
   -Take -RunId <fresh-alphanumeric-id>
 ```
 

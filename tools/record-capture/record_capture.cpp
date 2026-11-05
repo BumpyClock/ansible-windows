@@ -487,7 +487,9 @@ void create_input(take& state) {
     type.lpszClassName = L"AnsibleRecordInk";
     type.hCursor = LoadCursorW(nullptr, IDC_CROSS);
     if (!RegisterClassExW(&type) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) throw_last_error();
-    state.overlay = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+    // Start in the topmost group. A later HWND_TOPMOST promotion reported success
+    // but left this inactive HWND ordinary in the foreground-app regression.
+    state.overlay = CreateWindowExW(WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         type.lpszClassName, L"Ansible ink", WS_POPUP, state.bounds.left, state.bounds.top,
         state.bounds.right - state.bounds.left, state.bounds.bottom - state.bounds.top,
         nullptr, nullptr, module, nullptr);
@@ -509,7 +511,7 @@ void create_input(take& state) {
     check_pointer(state.ink_previous);
     present(state);
     check_bool(SetWindowPos(state.overlay, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW));
-    state.indicator = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+    state.indicator = CreateWindowExW(WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         type.lpszClassName, L"Ansible recording", WS_POPUP, state.bounds.left + 16, state.bounds.top + 16,
         280, 38, nullptr, nullptr, module, nullptr);
     check_pointer(state.indicator);

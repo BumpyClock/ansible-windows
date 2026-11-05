@@ -33,6 +33,47 @@ physical problem. This work does not establish a single cause for every report.
 The changes are in `tools/record-capture/record_capture.cpp`. No replacement
 renderer, hook thread split, polling-based ink, or model change was introduced.
 
+## Foreground occlusion reproduced and corrected in 1.0.1.21
+
+The user narrowed the symptom to ink being covered by whichever app had focus.
+A new `--foreground` native fixture left the focused app visible. The earlier
+fixture's synthetic backdrop had hidden this case. The unfixed run reproduced
+missing live ink and missing burst ink, while the separately composited summary
+contained both strokes. Runtime window metadata showed an ordinary ink HWND
+behind the foreground app and a topmost recording indicator.
+
+A further probe found `SetWindowPos(HWND_TOPMOST)` reported success while the
+inactive ink HWND still lacked `WS_EX_TOPMOST`. The production change creates
+both ink and indicator HWNDs with `WS_EX_TOPMOST` from the start. No focus
+activation, repeated restacking timer, or renderer rewrite was added.
+
+The corrected foreground fixture passes over Chrome and T3 Code. The final T3
+run checks topmost state before/during a held drag and preserves foreground
+identity. Desktop pixels contain ink before mouse-up; WGC burst pictures remain
+isolated and the summary contains both marks. Runtime metadata also places the
+topmost ink HWND above T3. The actual silent MP4 decodes successfully. Evidence
+is ignored under `.runtime/record-capture/foreground-app-baseline-20261105`,
+`foreground-create-topmost-20261105`, and `foreground-t3-fixed-20261105`, with
+window-order traces in `.runtime/record-spikes`.
+
+These tests use synthetic geometry through production input handling. They
+prove foreground presentation and capture for those runs, not every physical
+touchpad sequence or a performance improvement under inference load.
+
+The final 1.0.1.21 published NativeAOT package passes an isolated capture under
+identity `BumpyClock.Ansible.RecordSpike.ink21f1`, with dynamic code disabled,
+released resources, and an independently decoded silent MP4. Concurrent
+read-only window metadata confirms its topmost ink HWND is above the foreground
+app. Core tests pass 1532 checks; 17 focused portable checks pass on Boat. The
+synthetic desktop fixture supplies the visible stroke checks; the isolated
+package entry point itself supplies no ink.
+
+Signed development package 1.0.1.21 was installed and restarted. Its native
+helper matches the tested helper. Settings, dictation history, and usage hashes
+were preserved during installation. The desktop app exposes its enabled Start
+dictation action after restart. Physical drawing with inference active remains
+a hand check.
+
 ## Remaining hypotheses and limits
 
 The hook/message thread still performs rendering and presentation. Long work
@@ -46,7 +87,7 @@ qualify physical touchpad delivery or behavior with ASR active.
 Drawing failures still stop the native input pump and abort remaining media.
 The transcript and completed media remain available through the existing
 failure path. Lock-screen, secure-desktop, RDP, and display-change triggers were
-not reproduced. Overlay z-order competition is also unmeasured. These remain
+not reproduced. Competition from another topmost app activated later is also unmeasured. These remain
 separate investigation paths if the physical failure persists.
 
 ## Diagnostics
