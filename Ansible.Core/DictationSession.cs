@@ -177,6 +177,11 @@ public sealed class DictationSession
     public void SetRecordChordEnabled(bool enabled) =>
         ChangeSettings(state => state with { Settings = state.Settings with { RecordChordEnabled = enabled } },
             new(NoticeKind.Success, "Record chord updated", "The record chord setting was saved.", NoticeArea.Settings));
+    public void SetRecordToggleMode(bool enabled) =>
+        ChangeSettings(state => state with { Settings = state.Settings with { RecordToggleMode = enabled } },
+            new(NoticeKind.Success, "Record activation updated", enabled
+                ? "Press the record shortcut once to start and again to finish."
+                : "Hold the record shortcut to record.", NoticeArea.Settings));
     public void SetRecordShortcut(DictationShortcut shortcut) =>
         ChangeSettings(state => state with { Settings = state.Settings with { RecordShortcut = shortcut } },
             new(NoticeKind.Success, "Record shortcut updated", "The record shortcut was saved.", NoticeArea.Settings));

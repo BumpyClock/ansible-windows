@@ -232,7 +232,7 @@ public sealed class ShortcutDictation : IDisposable
         var recordOptions = activation == ShortcutActivation.Record ? _session.SnapshotRecordTake() : null;
         _discarded = false;
         SetOwner(activation);
-        _pushToTalk = state.Settings.PushToTalk;
+        _pushToTalk = activation == ShortcutActivation.Record ? !state.Settings.RecordToggleMode : state.Settings.PushToTalk;
         var capture = _coordinator.TryBeginCapture(_pushToTalk, _deliveryTask is { IsCompleted: false });
         if (capture is null) { SetOwner(null); Record(ShortcutDiagnosticOutcome.AdmissionRejected); return; }
         Task<IShortcutTextTarget>? inspection = null;

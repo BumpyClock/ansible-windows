@@ -12,6 +12,12 @@ An admitted attempt records its owning chord. Only that chord can stop it,
 release it, or replace its release tail. A second independent coordinator would
 allow one chord to finish the other's dictation under the current latch logic.
 
+Each attempt snapshots its activation mode. Voice uses `PushToTalk`; Record
+uses the independent `RecordToggleMode` setting. Record toggle mode starts with
+one qualified press and finishes with the next. Releasing its keys keeps the
+take open and schedules no release tail, allowing touchpad inking without held
+keyboard keys.
+
 `DictationSession` remains the only microphone and recognition admission owner.
 The admitted dictation operation owns a distinct `RecordTakeSession`. The take
 owns its immutable options, media adapter, ink/burst timeline, frame finalization,

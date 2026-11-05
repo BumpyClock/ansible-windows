@@ -23,6 +23,10 @@ public sealed class AppSettingsStore(string path) : IAppSettingsStore
             settings = settings with { OverlayFollowsCaret = true };
         if (!document.RootElement.TryGetProperty(nameof(AppSettings.MeetingCleanup), out _))
             settings = settings with { MeetingCleanup = new() };
+        if (!document.RootElement.TryGetProperty(nameof(AppSettings.RecordShortcut), out _))
+            settings = settings with { RecordShortcut = DictationShortcut.RecordDefault };
+        if (!document.RootElement.TryGetProperty(nameof(AppSettings.IncludeVideoLink), out _))
+            settings = settings with { IncludeVideoLink = true };
         settings.Validate();
         return settings;
     }

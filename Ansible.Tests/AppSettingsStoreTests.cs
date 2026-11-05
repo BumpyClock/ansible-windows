@@ -15,9 +15,10 @@ public sealed class AppSettingsStoreTests : IDisposable
     {
         var store = CreateStore();
         Assert.False(store.Load().RecordChordEnabled);
+        Assert.False(store.Load().RecordToggleMode);
         Assert.True(store.Load().IncludeVideoLink);
         Assert.Equal(DictationShortcut.RecordDefault, store.Load().RecordShortcut);
-        var settings = new AppSettings { RecordChordEnabled = true, RecordShortcut = new(2, 0x52), IncludeVideoLink = false };
+        var settings = new AppSettings { RecordChordEnabled = true, RecordToggleMode = true, RecordShortcut = new(2, 0x52), IncludeVideoLink = false };
         store.Save(settings);
         Assert.Equal(settings, CreateStore().Load());
     }
@@ -28,6 +29,19 @@ public sealed class AppSettingsStoreTests : IDisposable
         Assert.Throws<InvalidDataException>(() => CreateStore().Save(new()
             { RecordChordEnabled = true, RecordShortcut = new(10, 0x44) }));
         CreateStore().Save(new() { RecordChordEnabled = false, RecordShortcut = DictationShortcut.Default });
+    }
+
+    [Fact]
+    public void SettingsWithoutRecordFieldsKeepVoicePreferencesAndReceiveValidRecordDefaults()
+    {
+        var store = CreateStore();
+        var saved = new AppSettings { Shortcut = new(2, 0x20), MicrophoneBoostDecibels = 6, WelcomeCompleted = true };
+        store.Save(saved);
+        var document = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(store.Path))!.AsObject();
+        foreach (var field in new[] { "RecordChordEnabled", "RecordToggleMode", "RecordShortcut", "IncludeVideoLink" })
+            document.Remove(field);
+        File.WriteAllText(store.Path, document.ToJsonString());
+        Assert.Equal(saved, store.Load());
     }
 
     [Fact]

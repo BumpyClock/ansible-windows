@@ -157,7 +157,7 @@
                             <ToggleSwitch x:Name="RecordChordToggle" AutomationProperties.Name="Enable record chord"
                                           Toggled="RecordChordToggled" />
                         </local:SettingsRow>
-                        <local:SettingsRow Title="Record shortcut" Description="Uses the same hold or press behavior as dictation.">
+                        <local:SettingsRow Title="Record shortcut" Description="Captures dictation, screen, and ink together.">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <TextBox x:Name="RecordHotkeyCaptureBox" IsReadOnly="True" MinWidth="150"
                                          AutomationProperties.Name="Record shortcut" TextAlignment="Center"
@@ -167,6 +167,13 @@
                                 <HyperlinkButton x:Name="ResetRecordShortcutButton" Content="Reset" Click="ResetRecordShortcutClicked"
                                                  AutomationProperties.Name="Reset record shortcut" />
                             </StackPanel>
+                        </local:SettingsRow>
+                        <local:SettingsRow Title="Press once to start and stop" CompactAlignment="Left"
+                                           Description="Release the keys to draw with your touchpad. Press the record shortcut again to finish. Independent of voice dictation's activation mode.">
+                            <ToggleSwitch x:Name="RecordToggleModeToggle"
+                                          AutomationProperties.AutomationId="RecordToggleModeToggle"
+                                          AutomationProperties.Name="Press record shortcut once to start and stop"
+                                          Toggled="RecordToggleModeToggled" />
                         </local:SettingsRow>
                         <local:SettingsRow Title="Include video link in pasted text" CompactAlignment="Left"
                                            Description="Adds a local file URL. Web and cloud agents cannot open it. The URL reveals this device's local path.">

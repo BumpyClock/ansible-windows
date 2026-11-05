@@ -250,8 +250,12 @@ to the next dictation and persists across restarts.
 Enable **Record chord** in Settings. Its default is **Alt + Win**. It starts
 dictation, a silent screen recording, and an ink overlay together. The pointer's
 monitor at activation stays fixed for the take. The ordinary dictation shortcut
-stays voice-only. Both use **Activation mode**, including the 500 ms release
-tail in hold mode. Only the chord that started the take can stop it.
+stays voice-only. Enable **Settings > Record chord > Press once to start and stop**
+to start with one press, release the keys while dictating and drawing, then press
+again to finish. This keeps held keys from disabling a laptop touchpad. The
+setting is independent of voice dictation's **Activation mode** and persists
+across restarts. With it off, hold the record shortcut; release uses the 500 ms
+tail. Only the chord that started the take can stop it.
 
 Left-drag draws on the recorded monitor. A click makes a numbered ping. Mouse
 input is blocked on all monitors during capture, including right-click, middle

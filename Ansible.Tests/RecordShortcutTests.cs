@@ -10,7 +10,7 @@ public sealed partial class DictationSessionTests
     public Task OtherChordCannotReleaseOrStopTheHeldRecordTake() => UiThread.RunAsync(async () =>
     {
         var media = new RecordTakeSessionTests.TakeFactory();
-        await using var harness = new ShortcutHarness(new AppSettings { PushToTalk = true, RecordChordEnabled = true }, recordTakeFactory: media);
+        await using var harness = new ShortcutHarness(new AppSettings { PushToTalk = false, RecordToggleMode = false, RecordChordEnabled = true }, recordTakeFactory: media);
         await harness.InitializeAsync();
         await harness.Shortcut.PressedAsync(RecordChord, ShortcutActivation.Record);
         await WaitForStateAsync(harness.Session, DictationPhase.Recording);
@@ -34,11 +34,12 @@ public sealed partial class DictationSessionTests
     public Task LatchModeStopsOnlyForItsOwningChord() => UiThread.RunAsync(async () =>
     {
         var media = new RecordTakeSessionTests.TakeFactory();
-        await using var harness = new ShortcutHarness(new AppSettings { PushToTalk = false, RecordChordEnabled = true }, recordTakeFactory: media);
+        await using var harness = new ShortcutHarness(new AppSettings { PushToTalk = true, RecordToggleMode = true, RecordChordEnabled = true }, recordTakeFactory: media);
         await harness.InitializeAsync();
         await harness.Shortcut.PressedAsync(RecordChord, ShortcutActivation.Record);
         await harness.Shortcut.ReleasedAsync(ShortcutActivation.Record);
         await WaitForStateAsync(harness.Session, DictationPhase.Recording);
+        Assert.Empty(harness.Tails);
         await harness.Shortcut.PressedAsync(PlainShortcut, ShortcutActivation.Voice);
         await harness.Shortcut.ReleasedAsync(ShortcutActivation.Voice);
         Assert.Equal(DictationPhase.Recording, harness.Session.State.Phase);
@@ -48,6 +49,39 @@ public sealed partial class DictationSessionTests
         await harness.Shortcut.JoinAsync();
         Assert.Single(harness.Inspector.Target.Inserts);
         Assert.Equal(1, media.Capture.Stops);
+    });
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public Task RecordToggleDoesNotChangeVoiceActivation(bool holdVoice) => UiThread.RunAsync(async () =>
+    {
+        var media = new RecordTakeSessionTests.TakeFactory();
+        await using var harness = new ShortcutHarness(new AppSettings
+        {
+            PushToTalk = holdVoice, RecordToggleMode = holdVoice, RecordChordEnabled = true
+        }, recordTakeFactory: media);
+        await harness.InitializeAsync();
+        await harness.Shortcut.PressedAsync(PlainShortcut);
+        await WaitForStateAsync(harness.Session, DictationPhase.Recording);
+        var release = harness.Shortcut.ReleasedAsync();
+        if (holdVoice)
+        {
+            Assert.True(harness.Tails.TryDequeue(out var tail));
+            tail.SetResult();
+            await release;
+        }
+        else
+        {
+            await release;
+            Assert.Empty(harness.Tails);
+            Assert.Equal(DictationPhase.Recording, harness.Session.State.Phase);
+            await harness.Shortcut.PressedAsync(PlainShortcut);
+        }
+        await harness.NextRecordAsync();
+        await harness.Shortcut.JoinAsync();
+        Assert.Single(harness.Inspector.Target.Inserts);
+        Assert.False(media.Started.Task.IsCompleted);
     });
 
     [Fact]
@@ -76,7 +110,7 @@ public sealed partial class DictationSessionTests
     public Task EscAfterInputWaitsForOwnedInputAndPreservesTheResult() => UiThread.RunAsync(async () =>
     {
         var media = new RecordTakeSessionTests.TakeFactory();
-        await using var harness = new ShortcutHarness(new AppSettings { PushToTalk = false, RecordChordEnabled = true }, recordTakeFactory: media);
+        await using var harness = new ShortcutHarness(new AppSettings { PushToTalk = false, RecordToggleMode = true, RecordChordEnabled = true }, recordTakeFactory: media);
         var finishInput = new TaskCompletionSource<TextDeliveryOutcome>(TaskCreationOptions.RunContinuationsAsynchronously);
         harness.Inspector.Target.InsertingAsync = _ => finishInput.Task;
         var discarded = new List<Guid>();

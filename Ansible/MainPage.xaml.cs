@@ -139,6 +139,8 @@ public sealed partial class MainPage : Page
             ChangeShortcutButton.IsEnabled = idle;
             RecordChordToggle.IsOn = _state.Settings.RecordChordEnabled;
             RecordChordToggle.IsEnabled = idle;
+            RecordToggleModeToggle.IsOn = _state.Settings.RecordToggleMode;
+            RecordToggleModeToggle.IsEnabled = idle;
             IncludeVideoLinkToggle.IsOn = _state.Settings.IncludeVideoLink;
             IncludeVideoLinkToggle.IsEnabled = idle;
             RecordHotkeyCaptureBox.IsEnabled = idle;
@@ -445,6 +447,12 @@ public sealed partial class MainPage : Page
     {
         if (_rendering || IncludeVideoLinkToggle.IsOn == _state.Settings.IncludeVideoLink) return;
         if (!Try(() => _session.SetIncludeVideoLink(IncludeVideoLinkToggle.IsOn))) Render();
+    }
+
+    private void RecordToggleModeToggled(object sender, RoutedEventArgs args)
+    {
+        if (_rendering || RecordToggleModeToggle.IsOn == _state.Settings.RecordToggleMode) return;
+        if (!Try(() => _session.SetRecordToggleMode(RecordToggleModeToggle.IsOn))) Render();
     }
 
     private async Task RefreshCaptureSizeAsync()

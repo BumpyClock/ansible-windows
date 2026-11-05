@@ -28,6 +28,7 @@ public sealed record AppSettings
     public string? ModelsDirectory { get; init; }
     public DictationShortcut Shortcut { get; init; } = DictationShortcut.Default;
     public bool RecordChordEnabled { get; init; }
+    public bool RecordToggleMode { get; init; }
     public DictationShortcut RecordShortcut { get; init; } = DictationShortcut.RecordDefault;
     public bool IncludeVideoLink { get; init; } = true;
     public bool PushToTalk { get; init; } = true;

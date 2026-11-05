@@ -99,6 +99,22 @@ The extracted verified package is
 
 ## Target evidence and remaining hand checks
 
+The independent record-toggle update passed 1526 Windows core tests and six
+focused Boat checks. Its NativeAOT publish log is
+`.runtime/record-spikes/publish-record-toggle-settings.log`. Signed development
+package `1.0.1.17` was installed over the existing identity and opened. Existing
+settings, history, and usage hashes matched immediately after installation.
+The new Settings switch was then enabled through the actual app UI; disk
+readback confirmed `RecordToggleMode=true` and the existing voice activation
+and shortcut values. Physical Win+Alt and laptop touchpad behavior remain hand
+checks.
+
+This validation exposed a saved-settings load failure when record fields were
+absent. The loader now supplies the record-shortcut and video-link defaults at
+that boundary. A regression preserves the existing voice shortcut and microphone
+boost while loading a document without record fields. The app subsequently
+loaded its existing preferences without the fallback warning.
+
 [Clipboard results](record-chord-clipboard-results.md) record at least 16
 synthetic files in Claude desktop and eight in chatgpt.com and Copilot desktop.
 Separate file and text pastes preserved both. The user separately confirmed
