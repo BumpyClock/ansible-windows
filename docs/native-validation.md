@@ -23,6 +23,33 @@ SHA-256, license, task, and capabilities. Use those capabilities rather than ass
 that an upstream model feature exists in this backend. Omitted task means ASR.
 Only family `nemotron_3_diar` may be `diar`.
 
+## ARM64 qualification
+
+Cross-publish the probe on the x64 build host with the VS ARM64 toolchain installed:
+
+```powershell
+dotnet publish .\Ansible.Probe -c Release -r win-arm64 --self-contained true `
+  -p:PublishAot=true -o .\.runtime\arm64-probe
+```
+
+On an ARM64 Windows device, copy the published probe directory, the complete
+`.runtime\native-arm64` directory, the public sample, catalog, and selected model
+weights. Keep the relative layout below, or adjust the paths explicitly.
+Run these commands on that device, not the x64 cross-build host:
+
+```powershell
+.\.runtime\arm64-probe\Ansible.Probe.exe --cpu-check
+.\.runtime\arm64-probe\Ansible.Probe.exe `
+  .\.runtime\native-arm64\audiocpp.dll .\.runtime\models .\tools\audio-models.json `
+  .\.runtime\validation\sample_16k.wav nemotron-asr-0.6b-q8 --backend cpu
+```
+
+The second command checks WAV and paced streaming recognition. Successful
+cross-compilation is not evidence that either check passes on ARM64.
+Follow with packaged microphone, meeting loopback, insertion, and record-chord
+checks. Keep model memory safeguards enabled. ARM64 GPU qualification requires
+separate Vulkan build support and a compatible ARM64 driver.
+
 ## Run the probe
 
 This command selects Moonshine explicitly, transcribes the WAV, then feeds the
@@ -81,7 +108,7 @@ or ownership errors abort calibration and do not write a device cache entry:
 dotnet run --project .\Ansible.Probe -- `
   .\.runtime\native\audiocpp.dll .\.runtime\models .\tools\audio-models.json `
   .\.runtime\validation\sample_16k.wav moonshine-tiny --backend auto `
-  --device-probe .\.runtime\device-probe\Release\Ansible.DeviceProbe.exe `
+  --device-probe .\.runtime\device-probe\x64\Release\Ansible.DeviceProbe.exe `
   --benchmark-cache .\.runtime\device-benchmarks.json
 ```
 
@@ -312,8 +339,13 @@ microphone/video acoustic synchronization or physical multi-monitor behavior.
 - Dictation/file recognition operations have a five-minute timeout; the probe uses three
   minutes. WAV input is limited to five minutes, 100 MiB on disk, and 64 MiB of
   decoded floats. Native calls can outlast these deadlines while cleanup waits.
-- ARM64, NPU, clean-machine deployment, and physical microphone-driver failure
-  behavior require separate qualification.
+- ARM64 CPU audio.cpp, capture helpers, DeviceProbe, and the NativeAOT MSIX bundle
+  cross-compiled successfully on Windows x64. No ARM64 executable was run.
+  ARM64 uses ARMv8-A/NEON without OpenMP; model throughput is unmeasured.
+  Run recognition, capture, insertion, and clean-machine checks on ARM64 before
+  shipping that architecture. See [ARM64 builds](development.md#arm64-cpu-cross-build).
+  ARM64 Vulkan and NPU inference are not implemented. Clean-machine deployment
+  and physical microphone-driver failure behavior remain unqualified.
 
 See [model behavior](user-guide.md#model-behavior) for the supported app workflows
 and [tests](development.md#tests) for the separate native integration test.

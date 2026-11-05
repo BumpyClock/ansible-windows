@@ -1,8 +1,12 @@
 [CmdletBinding()]
-param()
+param(
+    [ValidateSet('x64', 'arm64')]
+    [string]$Architecture = 'x64'
+)
 $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
-$output = Join-Path $root '.runtime/record-spikes/encoder'
+$Architecture = $Architecture.ToLowerInvariant()
+$output = Join-Path $root $(if ($Architecture -eq 'x64') { '.runtime/record-spikes/encoder' } else { '.runtime/record-spikes/encoder-arm64' })
 New-Item -ItemType Directory -Path $output -Force | Out-Null
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
 $env:PATH = (Split-Path $vswhere -Parent) + ';' + ($env:PATH -replace '"', '')
@@ -11,9 +15,10 @@ if (-not $vs) { throw 'MSVC x64 workload is required.' }
 $msvc = Get-ChildItem (Join-Path $vs 'VC/Tools/MSVC') -Directory | Sort-Object Name -Descending | Select-Object -First 1
 $kits = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits/10'
 $sdk = Get-ChildItem (Join-Path $kits 'Include') -Directory | Sort-Object Name -Descending | Select-Object -First 1
-$compiler = Join-Path $msvc.FullName 'bin/Hostx64/x64/cl.exe'
+$compiler = Join-Path $msvc.FullName "bin/Hostx64/$Architecture/cl.exe"
+if (-not (Test-Path -LiteralPath $compiler)) { throw "Install the Visual Studio C++ $Architecture build tools." }
 $env:INCLUDE = (@((Join-Path $msvc.FullName 'include')) + @('ucrt','shared','um','winrt','cppwinrt' | ForEach-Object { Join-Path $sdk.FullName $_ })) -join ';'
-$env:LIB = (@((Join-Path $msvc.FullName 'lib/x64')) + @('ucrt/x64','um/x64' | ForEach-Object { Join-Path (Join-Path $kits "Lib/$($sdk.Name)") $_ })) -join ';'
+$env:LIB = (@((Join-Path $msvc.FullName "lib/$Architecture")) + @("ucrt/$Architecture","um/$Architecture" | ForEach-Object { Join-Path (Join-Path $kits "Lib/$($sdk.Name)") $_ })) -join ';'
 $source = Join-Path $PSScriptRoot 'record_encoder.cpp'
 $hostSource = Join-Path $PSScriptRoot 'host.cpp'
 Push-Location $output

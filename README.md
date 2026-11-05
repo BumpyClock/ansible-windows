@@ -50,7 +50,7 @@ and saved transcripts. See [local data and diagnostics](docs/user-guide.md#local
 Run these commands in PowerShell from the repository root. You need:
 
 - Windows x64 with AVX2, FMA, F16C, BMI1/BMI2, and OS-enabled AVX state.
-- The .NET 10 SDK.
+- The .NET 10 SDK and PowerShell 7 for native build and publish scripts.
 - Visual Studio with Desktop development with C++ and single-project MSIX tools.
 - Git and `curl.exe` for source and model downloads.
 - The Vulkan SDK, including `glslc`, for the default CPU/Vulkan native build.
@@ -106,8 +106,13 @@ The MSIX is written under `Ansible\bin\AppPackages`. This command builds and
 verifies the package; it does not install it. The default path requires a native
 runtime recorded with Vulkan support and rejects a CPU-only artifact. Pass
 `-Backend cpu` for an intentional CPU-only package. Sideloading requires signing
-and certificate trust. See the [development guide](docs/development.md) for build
-options and checks.
+and certificate trust.
+
+For an x64-only MSIX bundle, use `tools\Publish-Ansible.ps1 -Bundle`.
+A bundle does not require x86 or ARM64 packages. ARM64 CPU cross-builds are also
+available, but recognition and capture still need ARM64 hardware qualification.
+See the [development guide](docs/development.md#arm64-cpu-cross-build) for ARM64
+toolchains, commands, and precompiled runtime storage.
 
 ## Current limits
 
@@ -138,7 +143,9 @@ options and checks.
   installed authenticated CLI account. OpenAI API uses a Credential Locker key
   and OpenAI model IDs. There is no provider fallback. Originals are kept.
 
-- Windows x64 only. ARM64 and NPU support are separate work.
+- x64 CPU/Vulkan is the default build. ARM64 CPU binaries and NativeAOT packages
+  cross-compile, but have not been run on ARM64 hardware. ARM64 Vulkan, x86,
+  and NPU inference are not supported.
 - File transcription accepts WAV only, up to five minutes, 100 MiB on disk,
   and 64 MiB decoded audio.
   App recognition operations have a five-minute timeout.

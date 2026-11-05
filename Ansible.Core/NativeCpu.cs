@@ -16,12 +16,24 @@ internal static partial class NativeCpu
     // Windows SDK winnt.h: PF_AVX_INSTRUCTIONS_AVAILABLE and PF_AVX2_INSTRUCTIONS_AVAILABLE.
     internal const uint ProcessorFeatureAvx = 39;
     internal const uint ProcessorFeatureAvx2 = 40;
+    internal const uint ProcessorFeatureArmNeon = 19;
 
-    public static void RequireSupported() => Validate(ReadFeatures());
-
-    public static NativeCpuFeatures ReadFeatures()
+    public static void RequireSupported()
     {
-        ValidatePlatform(OperatingSystem.IsWindows(), RuntimeInformation.ProcessArchitecture == Architecture.X64);
+        var architecture = RuntimeInformation.ProcessArchitecture;
+        ValidatePlatform(OperatingSystem.IsWindows(), architecture);
+        if (architecture == Architecture.Arm64)
+        {
+            ValidateArm64(IsProcessorFeaturePresent(ProcessorFeatureArmNeon));
+            return;
+        }
+        Validate(ReadX64Features());
+    }
+
+    public static NativeCpuFeatures ReadX64Features()
+    {
+        if (!OperatingSystem.IsWindows() || RuntimeInformation.ProcessArchitecture != Architecture.X64)
+            throw new PlatformNotSupportedException("CPUID feature inspection requires a Windows x64 process.");
         // CPUID is baseline on x64. IsSupported describes managed AOT code, not the native DLL's CPU eligibility.
         var maximumLeaf = X86Base.CpuId(0, 0).Eax;
         var leaf1Ecx = maximumLeaf >= 1 ? X86Base.CpuId(1, 0).Ecx : 0;
@@ -47,10 +59,16 @@ internal static partial class NativeCpu
             OsAvx2: osAvx2);
     }
 
-    internal static void ValidatePlatform(bool windows, bool x64)
+    internal static void ValidatePlatform(bool windows, Architecture architecture)
     {
-        if (!windows || !x64)
-            throw new PlatformNotSupportedException("The native CPU backend requires Windows x64. ARM64 and x86 are not qualified.");
+        if (!windows || architecture is not (Architecture.X64 or Architecture.Arm64))
+            throw new PlatformNotSupportedException("The native CPU backend requires Windows x64 or ARM64.");
+    }
+
+    internal static void ValidateArm64(bool neonAvailable)
+    {
+        if (!neonAvailable)
+            throw new PlatformNotSupportedException("The native CPU backend requires Windows ARM64 with NEON support.");
     }
 
     internal static void Validate(NativeCpuFeatures features)

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Ansible.Core;
 using Ansible.Probe;
 
@@ -6,14 +7,17 @@ if (args is ["--cpu-check"])
 {
     try
     {
-        var features = NativeCpu.ReadFeatures();
-        Console.WriteLine($"Hardware and OS features: {features}");
-        Console.WriteLine(
-            $"Managed intrinsic availability (not hardware eligibility): " +
-            $"AVX2={System.Runtime.Intrinsics.X86.Avx2.IsSupported}, " +
-            $"FMA={System.Runtime.Intrinsics.X86.Fma.IsSupported}, " +
-            $"BMI1={System.Runtime.Intrinsics.X86.Bmi1.IsSupported}, BMI2={System.Runtime.Intrinsics.X86.Bmi2.IsSupported}");
-        NativeCpu.Validate(features);
+        Console.WriteLine($"Process architecture: {RuntimeInformation.ProcessArchitecture}");
+        if (RuntimeInformation.ProcessArchitecture == Architecture.X64)
+        {
+            Console.WriteLine($"Hardware and OS features: {NativeCpu.ReadX64Features()}");
+            Console.WriteLine(
+                $"Managed intrinsic availability (not hardware eligibility): " +
+                $"AVX2={System.Runtime.Intrinsics.X86.Avx2.IsSupported}, " +
+                $"FMA={System.Runtime.Intrinsics.X86.Fma.IsSupported}, " +
+                $"BMI1={System.Runtime.Intrinsics.X86.Bmi1.IsSupported}, BMI2={System.Runtime.Intrinsics.X86.Bmi2.IsSupported}");
+        }
+        NativeCpu.RequireSupported();
         Console.WriteLine("Native CPU eligibility: supported.");
         return 0;
     }
