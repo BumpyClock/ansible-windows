@@ -73,6 +73,34 @@ bool red_at(std::wstring const& path, UINT x, UINT y) {
 }
 
 int wmain(int argc, wchar_t** argv) {
+    if (argc == 2 && std::wstring(argv[1]) == L"--input-self-check") {
+        take state;
+        state.bounds = RECT{0, 0, 1000, 1000};
+        LARGE_INTEGER frequency{};
+        check_bool(QueryPerformanceFrequency(&frequency));
+        state.frequency = frequency.QuadPart;
+        state.origin = qpc_now();
+        unsigned forwarded{};
+        auto forward = [&]() -> LRESULT { ++forwarded; return 12345; };
+        auto send = [&](WPARAM message, LONG x, LONG y) {
+            MSLLHOOKSTRUCT input{};
+            input.pt = POINT{x, y};
+            return handle_mouse_input(state, message, input, forward);
+        };
+        if (send(WM_MOUSEMOVE, 10, 10) != 12345 || forwarded != 1 || !state.bursts.empty()) return 1;
+        if (send(WM_LBUTTONDOWN, 20, 30) != 1 || forwarded != 1 || !state.drawing) return 1;
+        if (send(WM_MOUSEMOVE, 40, 50) != 12345 || forwarded != 2) return 1;
+        if (state.bursts.size() != 1 || state.bursts[0].strokes[0].points.size() != 2) return 1;
+        if (send(WM_LBUTTONUP, 60, 70) != 1 || forwarded != 2 || state.drawing) return 1;
+        auto const& points = state.bursts[0].strokes[0].points;
+        if (points.size() != 3 || points[1].X != 40 || points[1].Y != 50 || points[2].X != 60) return 1;
+        for (auto message : {WM_RBUTTONDOWN, WM_RBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP,
+                WM_XBUTTONDOWN, WM_XBUTTONUP, WM_MOUSEWHEEL, WM_MOUSEHWHEEL})
+            if (send(message, 60, 70) != 1 || forwarded != 2) return 1;
+        if (send(WM_MOUSEMOVE, 1200, 1200) != 12345 || forwarded != 3) return 1;
+        std::cout << "INPUT SELF-CHECK PASS. Movement forwards while hover and drag ink stay distinct; buttons and wheels are consumed. No OS input injected.\n";
+        return 0;
+    }
     if (argc != 2) return 2;
     try {
         auto output = std::filesystem::absolute(argv[1]);

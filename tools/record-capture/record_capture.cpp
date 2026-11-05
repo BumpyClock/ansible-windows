@@ -241,17 +241,24 @@ void add_point(take& state, POINT point, bool new_stroke) {
     state.dirty = true;
 }
 
+template <typename Forward>
+LRESULT handle_mouse_input(take& state, WPARAM message, MSLLHOOKSTRUCT const& mouse, Forward forward) {
+    try {
+        if (message == WM_LBUTTONDOWN) { state.drawing = true; add_point(state, mouse.pt, true); }
+        else if (message == WM_LBUTTONUP) { if (state.drawing) add_point(state, mouse.pt, false); state.drawing = false; }
+        else if (message == WM_MOUSEMOVE && state.drawing) add_point(state, mouse.pt, false);
+    } catch (...) { state.set_error(&record_take_status::ink_error, to_hresult()); state.halt(false); }
+    // Windows must process movement to update the pointer, including while dragging to ink.
+    // Consume buttons and wheels globally so clicks and scrolling cannot reach the UI underneath.
+    if (message == WM_MOUSEMOVE) return forward();
+    return 1;
+}
+
 LRESULT CALLBACK mouse_proc(int code, WPARAM message, LPARAM data) {
     auto state = active.load();
     if (code < 0 || !state || state->stop.load()) return CallNextHookEx(nullptr, code, message, data);
-    auto mouse = reinterpret_cast<MSLLHOOKSTRUCT const*>(data);
-    try {
-        if (message == WM_LBUTTONDOWN) { state->drawing = true; add_point(*state, mouse->pt, true); }
-        else if (message == WM_LBUTTONUP) { if (state->drawing) add_point(*state, mouse->pt, false); state->drawing = false; }
-        else if (message == WM_MOUSEMOVE && state->drawing) add_point(*state, mouse->pt, false);
-    } catch (...) { state->set_error(&record_take_status::ink_error, to_hresult()); state->halt(false); }
-    // Every mouse event is blocked on every monitor, including wheel and extra buttons.
-    return 1;
+    return handle_mouse_input(*state, message, *reinterpret_cast<MSLLHOOKSTRUCT const*>(data),
+        [&] { return CallNextHookEx(nullptr, code, message, data); });
 }
 
 LRESULT CALLBACK keyboard_proc(int code, WPARAM message, LPARAM data) {

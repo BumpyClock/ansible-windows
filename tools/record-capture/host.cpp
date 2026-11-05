@@ -17,7 +17,7 @@ int wmain(int argc, wchar_t** argv) {
     if (!capture && !check) {
         std::cerr << "Usage: record_capture_host --self-check <output-directory>\n"
             "       record_capture_host --capture <output-directory> <seconds1..10>\n"
-            "Capture visibly blocks mouse input on every monitor until stop. Esc discards. No keys or clicks are injected.\n";
+            "Capture blocks buttons and scrolling on every monitor until stop; the pointer can move. Esc discards. No keys or clicks are injected.\n";
         return 2;
     }
     auto output = std::filesystem::absolute(argv[2]);

@@ -99,6 +99,20 @@ The extracted verified package is
 
 ## Target evidence and remaining hand checks
 
+The pointer freeze reported during recording was traced to the mouse hook
+consuming `WM_MOUSEMOVE` along with button events. The handler now records drag
+geometry and forwards movement to Windows, while consuming buttons and wheels
+on all monitors. A nonzero hook return suppresses downstream processing under
+the [Windows callback contract](https://learn.microsoft.com/en-us/windows/win32/winmsg/lowlevelmouseproc).
+
+The native input regression passes hover, drag, release, outside-monitor motion,
+all mouse buttons, and both wheel directions through the production handler.
+It verifies forwarding and ink geometry independently, without injecting OS
+input. The lifecycle self-check and 1526 core tests passed. The NativeAOT publish
+for `1.0.1.18` passed. Logs are under `.runtime/record-spikes`, including
+`pointer-input-self-check.txt`, `pointer-lifecycle-check.txt`,
+`tests/record-pointer-fix.trx`, and `publish-pointer-fix.log`.
+
 The independent record-toggle update passed 1526 Windows core tests and six
 focused Boat checks. Its NativeAOT publish log is
 `.runtime/record-spikes/publish-record-toggle-settings.log`. Signed development

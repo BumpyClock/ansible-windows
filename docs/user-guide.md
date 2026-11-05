@@ -257,9 +257,10 @@ setting is independent of voice dictation's **Activation mode** and persists
 across restarts. With it off, hold the record shortcut; release uses the 500 ms
 tail. Only the chord that started the take can stop it.
 
-Left-drag draws on the recorded monitor. A click makes a numbered ping. Mouse
-input is blocked on all monitors during capture, including right-click, middle
-button, and the wheel. Escape discards a pending take. Once input has already
+Left-drag draws on the recorded monitor. A click makes a numbered ping. Pointer
+movement stays available during capture. Mouse buttons and scrolling are blocked
+on all monitors, including right-click, middle button, and the wheel. Escape
+discards a pending take. Once input has already
 been queued, it cannot be recalled; check the destination. The limit is five
 minutes. The pill and recording indicator are excluded from capture. Ink stays
 visible in the recording.

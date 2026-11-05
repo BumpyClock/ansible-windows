@@ -12,12 +12,17 @@ MSIX. To build its native test hosts separately:
 .\tools\record-spikes\encoder\Build-EncoderSpike.ps1
 .\tools\record-capture\Build-RecordCapture.ps1 -TestHost
 .\.runtime\record-capture\record_capture_host.exe --self-check .runtime\record-capture\self-check
+.\.runtime\record-capture\record_capture_fixture.exe --input-self-check
 ```
 
 The self-check validates ABI sizes, pre-run cancellation, and single-use
-ownership. It does not open the overlay or capture anything.
+ownership. The input self-check calls the production input handler with synthetic
+mouse metadata. It verifies movement forwarding while hover stays ink-free,
+dragging records geometry, and button/wheel events never forward. Neither
+self-check opens the overlay, captures the screen, or injects OS input.
 
-The following checks display capture UI and block mouse input on every monitor.
+The following checks display capture UI and block buttons and scrolling on every monitor.
+Pointer movement remains available.
 The first saves the real desktop. The second displays a clearly labeled synthetic
 background and supplies synthetic geometry directly on the production input
 thread. Neither injects operating-system input, records audio, pastes, or sends a
@@ -43,7 +48,9 @@ even before `run` enters. `get_status` and `get_burst` read bounded snapshots.
 `destroy` refuses an executing handle. A second executing native take is rejected.
 
 Mouse hooks apply only while the take is active. Left input supplies geometry;
-all mouse buttons and the wheel are swallowed on every monitor. Only geometry
+all mouse buttons and the wheel are swallowed on every monitor. Movement is
+forwarded to Windows so the cursor can move during hover and ink dragging.
+Only geometry
 on the recorded monitor is accepted. Esc discards the take. Neither ink nor the
 recording indicator activates a window. The indicator requires display-affinity
 exclusion. The ink window is deliberately included in capture.

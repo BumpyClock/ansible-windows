@@ -153,7 +153,7 @@
                 <Border Style="{StaticResource SettingsCardStyle}">
                     <StackPanel>
                         <local:SettingsRow Title="Dictate with screen and ink" ShowDivider="False" CompactAlignment="Left"
-                                           Description="Records the monitor under the pointer with silent video. Drag to draw while mouse input is blocked on all monitors. Esc discards the take. Images are pasted into chat; recordings stay on this device for up to seven days or 2 GB.">
+                                           Description="Records the monitor under the pointer with silent video. Move the pointer and drag to draw. Clicks and scrolling are blocked on all monitors. Esc discards the take. Images are pasted into chat; recordings stay on this device for up to seven days or 2 GB.">
                             <ToggleSwitch x:Name="RecordChordToggle" AutomationProperties.Name="Enable record chord"
                                           Toggled="RecordChordToggled" />
                         </local:SettingsRow>
