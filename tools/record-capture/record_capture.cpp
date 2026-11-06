@@ -17,6 +17,10 @@ constexpr size_t max_strokes = 4096;
 constexpr uint32_t max_burst_pictures = 7;
 constexpr int64_t maximum_seconds = 300;
 
+constexpr bool run_limit_reached(int64_t run_started, int64_t now, int64_t frequency) {
+    return now - run_started >= maximum_seconds * frequency;
+}
+
 struct stroke { std::vector<PointF> points; };
 struct burst {
     uint32_t number{};
@@ -595,6 +599,9 @@ extern "C" int32_t __cdecl record_take_run(void* instance) {
     if (state.ran.exchange(true)) return E_ILLEGAL_METHOD_CALL;
     take* expected{};
     if (!active.compare_exchange_strong(expected, &state)) return HRESULT_FROM_WIN32(ERROR_BUSY);
+    // The managed operation owns the take deadline and cancels both speech and media.
+    // This standalone-native safety limit must not expire earlier because admission was delayed.
+    auto run_started = qpc_now();
     state.executing.store(true);
     { std::lock_guard guard(state.mutex); state.status.running = 1; }
     HRESULT outcome = S_OK;
@@ -617,7 +624,7 @@ extern "C" int32_t __cdecl record_take_run(void* instance) {
                     TranslateMessage(&message);
                     DispatchMessageW(&message);
                 }
-                if (!state.stop.load() && state.seconds_since(state.origin) >= maximum_seconds) state.halt(false);
+                if (!state.stop.load() && run_limit_reached(run_started, qpc_now(), state.frequency)) state.halt(false);
                 if (state.discard.load()) break;
                 bool pending;
                 { std::lock_guard guard(state.mutex); pending = state.request.has_value(); }

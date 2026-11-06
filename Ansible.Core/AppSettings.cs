@@ -64,15 +64,24 @@ public sealed record AppSettings
             throw new InvalidDataException("The app settings contain invalid values.");
         if (RecordPasteShortcut == new DictationShortcut(2, 0x56))
             throw new InvalidDataException("Ctrl + V is used to deliver capture text and pictures. Choose another Paste capture shortcut.");
-        if (RecordChordEnabled && InsertionMethod == TextInsertionMethod.Paste &&
-            PasteShortcut == PasteShortcut.ControlShiftV && RecordPasteShortcut == new DictationShortcut(6, 0x56))
-            throw new InvalidDataException("Paste capture cannot use the same Ctrl + Shift + V chord sent by voice dictation. Choose another capture shortcut or voice paste key.");
-        if (RecordChordEnabled && (Shortcut.ConflictsWith(RecordShortcut) ||
-            Shortcut.ConflictsWith(RecordPasteShortcut) || RecordShortcut.ConflictsWith(RecordPasteShortcut)))
+        if (IsDeliveryShortcut(Shortcut) || RecordChordEnabled &&
+            (IsDeliveryShortcut(RecordShortcut) || IsDeliveryShortcut(RecordPasteShortcut)))
+            throw new InvalidDataException("An activation shortcut cannot use a paste key sent by dictation or capture delivery. Choose another activation shortcut or voice paste key.");
+        if (RecordChordEnabled && ActivationShortcutsOverlap)
             throw new InvalidDataException("Dictation, record, and paste capture shortcuts must not contain each other's keys. Choose separate chords.");
         if (CustomVocabulary.Normalize(CustomDictionary) != CustomDictionary)
             throw new InvalidDataException("The saved dictionary must contain normalized, unique entries.");
     }
+
+    internal bool ActivationShortcutsOverlap => Shortcut.ConflictsWith(RecordShortcut) ||
+        Shortcut.ConflictsWith(RecordPasteShortcut) || RecordShortcut.ConflictsWith(RecordPasteShortcut);
+
+    internal bool IsDeliveryShortcut(DictationShortcut shortcut) =>
+        RecordChordEnabled && shortcut == new DictationShortcut(2, 0x56) ||
+        InsertionMethod == TextInsertionMethod.Paste &&
+        (PasteShortcut == PasteShortcut.ControlV && shortcut == new DictationShortcut(2, 0x56) ||
+         PasteShortcut == PasteShortcut.ControlShiftV && shortcut == new DictationShortcut(6, 0x56) ||
+         PasteShortcut == PasteShortcut.ShiftInsert && shortcut == new DictationShortcut(4, 0x2D));
 }
 
 public interface IAppSettingsStore

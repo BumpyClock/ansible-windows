@@ -35,6 +35,7 @@
     <Compile Include="..\Ansible\WindowsTextTarget.Paste.cs" Link="WindowsTextTarget.Paste.cs" />
     <Compile Include="..\Ansible\WindowsTextTarget.Bundle.cs" Link="WindowsTextTarget.Bundle.cs" />
     <Compile Include="..\Ansible\WindowsRecordTake.cs" Link="WindowsRecordTake.cs" />
+    <Compile Include="..\Ansible\WindowsCaptureClipboard.cs" Link="WindowsCaptureClipboard.cs" />
     <Compile Include="..\Ansible\WindowsTextTarget.Input.cs" Link="WindowsTextTarget.Input.cs" />
     <Compile Include="..\Ansible\WindowsTextTarget.Automation.cs" Link="WindowsTextTarget.Automation.cs" />
   </ItemGroup>

@@ -5,6 +5,12 @@
 #include <iostream>
 
 namespace {
+// A delayed native start must not use the earlier accepted-chord origin as its safety deadline.
+static_assert(run_limit_reached(0, 300, 1));
+static_assert(!run_limit_reached(20, 300, 1));
+static_assert(!run_limit_reached(20, 319, 1));
+static_assert(run_limit_reached(20, 320, 1));
+
 int64_t fixture_started{};
 int fixture_stage{};
 bool fixture_discard{};

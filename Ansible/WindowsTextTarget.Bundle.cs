@@ -10,11 +10,11 @@ namespace Ansible;
 internal static unsafe partial class WindowsTextTarget
 {
     internal static TextDeliveryOutcome InsertBundle(CapturedTextTarget target, BundlePayload payload,
-        CancellationToken cancellationToken, Func<bool> stillCurrent)
+        uint activationPrimaryKey, CancellationToken cancellationToken, Func<bool> stillCurrent)
     {
         uint textSequence = 0;
         var text = Insert(target, payload.Text, TextInsertionMethod.Paste, 0, PasteShortcut.ControlV,
-            cancellationToken, stillCurrent, sequence => textSequence = sequence);
+            activationPrimaryKey, cancellationToken, stillCurrent, sequence => textSequence = sequence);
         return DeliverBundlePictures(text, payload.Frames.Count > 0, () =>
         {
             var expectedSequence = textSequence;
@@ -26,9 +26,8 @@ internal static unsafe partial class WindowsTextTarget
                     return TextDeliveryOutcome.Rejected("The clipboard changed before pictures could be pasted.");
                 if (!TryRecheckTarget(target, out var reason))
                     return TextDeliveryOutcome.Rejected(reason);
-                if (!ShortcutModifiersReleased() || !PasteTriggerReleased(PasteShortcut.ControlV))
-                    return TextDeliveryOutcome.Deferred("Release the keys before copying pictures.");
-                return null;
+                return RecheckInsertionKeys(TextInsertionMethod.Paste, ShortcutModifiersReleased(),
+                    PasteTriggerReleased(PasteShortcut.ControlV), activationPrimaryKey, GetAsyncKeyState);
             }
 
             var window = CreatePasteWindow();
@@ -174,7 +173,7 @@ internal static unsafe partial class WindowsTextTarget
             foreach (var handle in handles)
                 if (handle != 0) GlobalFree(handle);
             if (filesPublished)
-                WindowsRecordTakeFactory.RememberPictureClipboardAsync(lease, GetClipboardSequenceNumber()).GetAwaiter().GetResult();
+                WindowsRecordTakeFactory.RememberPictureClipboardAsync(lease).GetAwaiter().GetResult();
             else lease?.DisposeAsync().AsTask().GetAwaiter().GetResult();
         }
     }

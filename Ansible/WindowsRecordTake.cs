@@ -7,8 +7,18 @@ using Ansible.Core;
 namespace Ansible;
 
 /// <summary>Snapshots the pointer monitor; the admitted operation owns all running native work.</summary>
-internal sealed partial class WindowsRecordTakeFactory(CaptureStore store, LocalDiagnosticLog? diagnostics) : IRecordTakeFactory
+internal sealed partial class WindowsRecordTakeFactory : IRecordTakeFactory
 {
+    private readonly CaptureStore store;
+    private readonly LocalDiagnosticLog? diagnostics;
+    private static CaptureClipboardProtection? s_clipboard;
+
+    internal WindowsRecordTakeFactory(CaptureStore store, LocalDiagnosticLog? diagnostics)
+    {
+        this.store = store;
+        this.diagnostics = diagnostics;
+        s_clipboard = new(store, new WindowsCaptureClipboard());
+    }
     internal Action? BeforeCapture { get; set; }
     internal RecordCaptureDiagnostic? LastDiagnostics { get; private set; }
     internal long? DiagnosticGeneration => diagnostics?.CurrentGeneration;
@@ -28,10 +38,6 @@ internal sealed partial class WindowsRecordTakeFactory(CaptureStore store, Local
     private CaptureLease? _currentResult;
     private long _currentResultOrigin;
     internal long TakeOriginTimestamp { get; private set; }
-    private static readonly SemaphoreSlim ClipboardGate = new(1, 1);
-    private static CaptureLease? s_clipboardLease;
-    private static uint s_clipboardSequence;
-    private static CaptureStore? s_store;
 
     public RecordTakeOptions Snapshot(bool includeVideoLink)
     {
@@ -48,8 +54,6 @@ internal sealed partial class WindowsRecordTakeFactory(CaptureStore store, Local
     {
         if (options.Monitor == 0)
             throw new IOException("The screen monitor or capture privacy could not be prepared. This take contains text only.");
-        s_store = store;
-        await RefreshClipboardProtectionAsync().ConfigureAwait(false);
         if (_currentResult is { } old)
         {
             _currentResult = null;
@@ -81,42 +85,26 @@ internal sealed partial class WindowsRecordTakeFactory(CaptureStore store, Local
 
     internal Task<bool> DeleteDiscardedAsync(string directory) => store.DeleteTakeAsync(directory);
 
-    internal Task<CaptureCleanupResult> CleanupAsync() => store.CleanupAsync();
-
-    // This observes clipboard replacement only for file lifetime, never as evidence of insertion.
-    internal static async Task RefreshClipboardProtectionAsync()
-    {
-        await ClipboardGate.WaitAsync().ConfigureAwait(false);
-        try
-        {
-            if (s_clipboardLease is not null && GetClipboardSequenceNumber() != s_clipboardSequence)
-            {
-                await s_clipboardLease.DisposeAsync().ConfigureAwait(false);
-                s_clipboardLease = null;
-            }
-        }
-        finally { ClipboardGate.Release(); }
-    }
-
-    internal static async Task<CaptureLease?> ProtectPictureFilesAsync(IReadOnlyList<RecordFrame> frames)
+    internal async Task<CaptureCleanupResult> CleanupAsync()
     {
         await RefreshClipboardProtectionAsync().ConfigureAwait(false);
-        return s_store is { } storage && frames.Count > 0
-            ? await storage.ProtectAsync(Path.GetDirectoryName(frames[0].Path)!).ConfigureAwait(false) : null;
+        return await store.CleanupAsync().ConfigureAwait(false);
     }
 
-    internal static async Task RememberPictureClipboardAsync(CaptureLease? lease, uint sequence)
-    {
-        if (lease is null) return;
-        await ClipboardGate.WaitAsync().ConfigureAwait(false);
-        try
-        {
-            if (s_clipboardLease is { } old) await old.DisposeAsync().ConfigureAwait(false);
-            s_clipboardLease = lease;
-            s_clipboardSequence = sequence;
-        }
-        finally { ClipboardGate.Release(); }
-    }
+    // Clipboard ownership protects files, never proves insertion. The factory exists before startup cleanup.
+    private static CaptureClipboardProtection ClipboardProtection => s_clipboard ??
+        throw new InvalidOperationException("Capture clipboard storage has not been initialized.");
+
+    internal static Task RefreshClipboardProtectionAsync() => ClipboardProtection.RefreshAsync();
+
+    internal static Task<CaptureLease?> ProtectPictureFilesAsync(IReadOnlyList<RecordFrame> frames) =>
+        ClipboardProtection.ProtectPicturesAsync(frames);
+
+    internal static Task RememberPictureClipboardAsync(CaptureLease? lease) =>
+        ClipboardProtection.RememberAsync(lease);
+
+    internal static Task CopyPicturesAsync(IReadOnlyList<RecordFrame> frames) =>
+        ClipboardProtection.PublishAsync(frames, WindowsTextTarget.CopyPictures);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct Point { public int X, Y; }
@@ -125,8 +113,6 @@ internal sealed partial class WindowsRecordTakeFactory(CaptureStore store, Local
     private static partial bool GetCursorPos(out Point point);
     [LibraryImport("user32.dll")]
     private static partial nint MonitorFromPoint(Point point, uint flags);
-    [LibraryImport("user32.dll")]
-    private static partial uint GetClipboardSequenceNumber();
 }
 
 internal sealed class WindowsRecordTake : IRecordTakeCapture
@@ -238,7 +224,6 @@ internal sealed class WindowsRecordTake : IRecordTakeCapture
         else await _lease.DisposeAsync().ConfigureAwait(false);
         try
         {
-            await WindowsRecordTakeFactory.RefreshClipboardProtectionAsync().ConfigureAwait(false);
             var cleanup = await _owner.CleanupAsync().ConfigureAwait(false);
             if (cleanup.FailedTakes > 0) warnings.Add("Some saved captures could not be removed. Close apps using them and retry Delete all captures in Settings.");
         }

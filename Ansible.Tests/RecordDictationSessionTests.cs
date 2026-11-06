@@ -39,6 +39,37 @@ public sealed partial class DictationSessionTests
     }
 
     [Fact]
+    public async Task RecordOperationDeadlineStopsMicrophoneAndMediaTogether()
+    {
+        var clock = new ManualTime();
+        var source = new FakeCapture();
+        var media = new RecordTakeSessionTests.TakeFactory();
+        var session = new DictationSession(_ => new FakeEngine(),
+            new FakeCaptureFactory { Starting = _ => Task.FromResult<IAudioCapture>(source) },
+            new FakeInput(), new FakeUsageStore(), "models", new FakeSettingsStore(), clock,
+            TimeSpan.FromMinutes(5), recordTakeFactory: media);
+        var completions = new List<DictationCompletion>();
+        session.DictationCompleted += completions.Add;
+        try
+        {
+            await session.InitializeAsync();
+            var origin = System.Diagnostics.Stopwatch.GetTimestamp() - 20 * System.Diagnostics.Stopwatch.Frequency;
+            var operation = session.StartShortcutDictationAsync(null, recordTakeOptions: new(1, origin, true));
+            await WaitForStateAsync(session, DictationPhase.Recording);
+            await media.Started.Task;
+            clock.Advance(TimeSpan.FromMinutes(4));
+            Assert.False(operation.IsCompleted);
+            clock.Advance(TimeSpan.FromMinutes(1));
+            Assert.Equal(SessionOutcomeKind.TimedOut, (await operation).Kind);
+            Assert.True(source.IsReleased);
+            Assert.True(media.Capture.IsReleased);
+            Assert.True(media.Capture.Discarded);
+            Assert.Empty(completions);
+        }
+        finally { await session.CloseAsync(); }
+    }
+
+    [Fact]
     public async Task RecordMediaFailureStillCompletesAuthoritativeSpeech()
     {
         var media = new RecordTakeSessionTests.TakeFactory { Capture = new() { StopError = new IOException("test encoder failure") } };
@@ -144,9 +175,15 @@ public sealed partial class DictationSessionTests
     public async Task MicrophoneCleanupFailureRetractsPreparedMedia()
     {
         var source = new FakeCapture { FailDisposal = true };
-        var media = new RecordTakeSessionTests.TakeFactory();
+        var media = new RecordTakeSessionTests.TakeFactory
+        {
+            Capture = new() { Media = new([new(Path.Combine(Path.GetTempPath(), "summary.png"), null, TimeSpan.Zero)],
+                Path.Combine(Path.GetTempPath(), "take.mp4"), []) }
+        };
         var session = Create(new FakeEngine(),
             new FakeCaptureFactory { Starting = _ => Task.FromResult<IAudioCapture>(source) }, recordTakeFactory: media);
+        string? prepared = null;
+        session.StateChanged += state => { if (state.Payload is not null) prepared = state.Transcript; };
         try
         {
             await session.InitializeAsync();
@@ -155,7 +192,11 @@ public sealed partial class DictationSessionTests
             await session.FinishAsync();
             var outcome = await operation;
             Assert.Equal(SessionOutcomeKind.Failed, outcome.Kind);
-            Assert.NotNull(outcome.Result!.Payload);
+            Assert.Contains("Frames in order:", prepared);
+            Assert.Contains("Video: file:", prepared);
+            Assert.Null(outcome.Result!.Payload);
+            Assert.Null(session.State.Payload);
+            Assert.Equal("hello world", session.State.Transcript);
             Assert.True(media.Capture.Discarded);
         }
         finally { source.FailDisposal = false; await session.CloseAsync(); }

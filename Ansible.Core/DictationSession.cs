@@ -519,6 +519,8 @@ public sealed class DictationSession
             state = SetState(_state with
             {
                 BenchmarkingBackend = null,
+                Result = recognition?.Result ?? _state.Result,
+                Transcript = recognition?.Result is { } finalResult ? finalResult.Payload?.Text ?? finalResult.DisplayText : _state.Transcript,
                 Phase = _closing ? DictationPhase.Closing : _recovery is not null ? DictationPhase.RecoveryRequired :
                     _engine is null ? DictationPhase.Disconnected : DictationPhase.Ready,
                 Notice = _recovery is not null ? new(NoticeKind.Error, "Cleanup requires recovery",
@@ -1532,7 +1534,11 @@ public sealed class DictationSession
                 catch (Exception error) { AddError(errors, error); }
             }
             await JoinStreamAsync(errors);
-            if (Take is not null) await Take.StopAsync(discard || errors.Count > 0 || CommandError is not null || Capture?.IsReleased == false);
+            if (Take is not null)
+            {
+                var media = await Take.StopAsync(discard || errors.Count > 0 || CommandError is not null || Capture?.IsReleased == false);
+                if (media.Discarded && Result is { Payload: not null }) Result = Result with { Payload = null };
+            }
         }
         public override async Task ReleaseRetainedAsync(DictationSession session)
         {

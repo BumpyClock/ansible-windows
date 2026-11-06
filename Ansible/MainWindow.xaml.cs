@@ -895,7 +895,7 @@ public sealed partial class MainWindow : Window
             var joined = Task.WhenAll(new[]
             {
                 _startupTask, _meetingRecoveryTask, _permissionRetryTask, _microphoneSettingsTask,
-                _suggestions.JoinAsync(), _shortcut.JoinAsync()
+                _suggestions.JoinAsync(), _shortcut.JoinAsync(), _dictation.FinishBackgroundWorkAsync()
             }.OfType<Task>());
             try { await joined; }
             catch (Exception)

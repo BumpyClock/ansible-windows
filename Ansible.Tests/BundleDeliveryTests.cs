@@ -31,6 +31,46 @@ public sealed class BundleDeliveryTests
         Assert.Equal(PictureDeliveryStatus.ManualRequired, result.Pictures);
     }
 
+    [Theory]
+    [InlineData(1, 0)]
+    [InlineData(2, 1)]
+    [InlineData(3, 1)]
+    public void HeldActivationPrimaryBlocksPicturesWithoutRetryingVerifiedText(int blockedGate, int publications)
+    {
+        var gate = 0;
+        var published = 0;
+        var sent = 0;
+        TextDeliveryOutcome? Recheck() => WindowsTextTarget.RecheckInsertionKeys(
+            TextInsertionMethod.Paste, true, true, 0x57,
+            _ => ++gate >= blockedGate ? short.MinValue : (short)0);
+
+        var result = WindowsTextTarget.DeliverBundlePictures(TextDeliveryOutcome.Verified("text"), true,
+            () => WindowsTextTarget.PasteWithClipboard(
+                () => { published++; return null; }, Recheck, () =>
+                {
+                    if (Recheck() is { } veto) return veto;
+                    sent++;
+                    return null;
+                }) ?? TextDeliveryOutcome.Sent("pictures"));
+
+        Assert.Equal(TextDeliveryStatus.Verified, result.Status);
+        Assert.Equal(PictureDeliveryStatus.ManualRequired, result.Pictures);
+        Assert.Equal(publications, published);
+        Assert.Equal(0, sent);
+    }
+
+    [Fact]
+    public void HeldActivationBeforeTextKeepsBundleRetryableWithoutStartingPictures()
+    {
+        var text = WindowsTextTarget.RecheckInsertionKeys(TextInsertionMethod.Paste, true, true, 0x57,
+            _ => short.MinValue)!.Value;
+        var result = WindowsTextTarget.DeliverBundlePictures(text, true,
+            () => throw new InvalidOperationException("Pictures must wait for text."));
+        Assert.Equal(text, result);
+        Assert.Equal(TextDeliveryStatus.Deferred, result.Status);
+        Assert.NotEqual(PictureDeliveryStatus.ManualRequired, result.Pictures);
+    }
+
     [Fact]
     public void CancelledPictureStageKeepsTextEvidence()
     {

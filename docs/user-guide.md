@@ -263,9 +263,12 @@ result. Press **Alt + Shift + W** and release to paste the latest capture's text
 ink markers, pictures, and optional video link. Change **Settings > Record chord >
 Paste capture shortcut** to another chord, such as **Ctrl + Shift + V**. This is
 separate from both the record shortcut and voice dictation's paste-key preference.
-Plain **Ctrl + V** cannot activate Paste capture because it delivers the bundle.
-**Ctrl + Shift + V** is available only when voice dictation is not also configured
-to send that paste key.
+Activation shortcuts cannot use a paste chord that Ansible sends for delivery.
+With Record chord enabled, **Ctrl + V** is unavailable for voice, record, and
+Paste capture activation because it delivers the bundle. **Ctrl + Shift + V**
+is unavailable for active shortcuts when voice dictation sends that paste key.
+Previously accepted voice or record shortcuts that would intercept delivery
+reset to defaults on load; other saved preferences are kept.
 
 Paste is unavailable during recording or another delivery. Ordinary voice
 dictation still inserts automatically. The latest take remains pasteable after
@@ -747,7 +750,10 @@ the screen contents of one monitor. Automatic cleanup runs at launch and after
 each take, removing captures older than seven days, then oldest first above
 2 GiB. Active writers, the current media result, and files still referenced by
 the app's current clipboard publication are protected. Settings shows total
-size and **Delete all captures**. In-use takes are retained with a warning.
+size and **Delete all captures**. Native clipboard picture-file references are
+protected after restarting Ansible too. If the clipboard is busy or changes
+during inspection, cleanup waits for a later attempt instead of risking those
+files. In-use takes are retained with a warning.
 A locked or inaccessible take does not prevent cleanup of other eligible takes.
 Close apps using those files, then retry **Delete all captures**.
 Failed recognition, failed microphone cleanup, and takes without authoritative

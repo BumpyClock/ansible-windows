@@ -63,6 +63,11 @@ origin supplied by managed code. `run` runs on a managed-owned worker. Its input
 message pump starts and joins a separate capture/encode worker. `stop` latches
 even before `run` enters. `get_status` and `get_burst` read bounded snapshots.
 `destroy` refuses an executing handle. A second executing native take is rejected.
+The managed operation's five-minute timeout cancels speech and media together.
+The standalone native safety timeout starts when `run` enters, not at the earlier
+accepted-chord origin. Delayed admission therefore cannot make that fallback
+stop screen capture before the managed operation deadline. Media timestamps
+still use the original accepted-chord clock.
 
 Mouse hooks apply only while the take is active. Left input supplies geometry;
 all mouse buttons and the wheel are swallowed on every monitor. Movement is
