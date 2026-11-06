@@ -87,6 +87,70 @@ public sealed class AppSettingsStoreTests : IDisposable
         Assert.Equal(saved, store.Load());
     }
 
+    [Theory]
+    [InlineData(10, 0x20)]
+    [InlineData(9, 0x52)]
+    public void PreviouslyValidReservedDictationChordsLoadWithDefaultAndKeepPreferencesSaveable(uint modifiers, uint key)
+    {
+        var store = CreateStore();
+        var saved = new AppSettings
+        {
+            ModelId = "vibevoice-asr-streaming",
+            Language = "en",
+            Backend = NativeBackend.Cpu,
+            ModelsDirectory = Path.Combine(_directory, "models"),
+            PushToTalk = false,
+            WelcomeCompleted = true,
+            CollectUsage = false,
+            LocalDiagnostics = true,
+            CustomDictionary = "NativeAOT\nWinUI",
+            InsertionMethod = TextInsertionMethod.Type,
+            PasteShortcut = PasteShortcut.ShiftInsert,
+            TypingGapMilliseconds = 35,
+            MicrophoneBoostDecibels = 20,
+            HideFromCapture = true,
+            AutoDetectMeetings = false,
+            OverlayFollowsCaret = false,
+            MeetingCleanup = new() { Automatic = true },
+            RecordChordEnabled = true,
+            RecordToggleMode = true,
+            RecordShortcut = new(2, 0x52),
+            RecordPasteShortcut = new(6, 0x56),
+            IncludeVideoLink = false
+        };
+        store.Save(saved);
+        var document = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(store.Path))!.AsObject();
+        document["Shortcut"]!["Modifiers"] = modifiers;
+        document["Shortcut"]!["Key"] = key;
+        File.WriteAllText(store.Path, document.ToJsonString());
+        var previousDocument = File.ReadAllBytes(store.Path);
+
+        var loaded = CreateStore().Load();
+
+        Assert.Equal(DictationShortcut.Default, loaded.Shortcut);
+        Assert.Equal(saved, loaded);
+        Assert.Equal(previousDocument, File.ReadAllBytes(store.Path));
+        var updated = loaded with { Language = "fr" };
+        store.Save(updated);
+        Assert.Equal(updated, CreateStore().Load());
+    }
+
+    [Theory]
+    [InlineData(10, 0x20)]
+    [InlineData(9, 0x52)]
+    public void ReservedDictationChordsAreStillRejectedOnSave(uint modifiers, uint key)
+    {
+        var store = CreateStore();
+        var saved = new AppSettings { Language = "en" };
+        store.Save(saved);
+        var previousDocument = File.ReadAllBytes(store.Path);
+
+        Assert.Throws<InvalidDataException>(() => store.Save(saved with { Shortcut = new(modifiers, key) }));
+
+        Assert.Equal(previousDocument, File.ReadAllBytes(store.Path));
+        Assert.Equal(saved, store.Load());
+    }
+
     [Fact]
     public void FreshInstallShowsWelcomeAndCompletionSurvivesRestart()
     {
@@ -358,6 +422,13 @@ public sealed class AppSettingsStoreTests : IDisposable
     [InlineData("{\"TypingGapMilliseconds\":201}", typeof(InvalidDataException))]
     [InlineData("{\"MicrophoneBoostDecibels\":-1}", typeof(InvalidDataException))]
     [InlineData("{\"MicrophoneBoostDecibels\":25}", typeof(InvalidDataException))]
+    [InlineData("{\"Shortcut\":{\"Modifiers\":0,\"Key\":65}}", typeof(InvalidDataException))]
+    [InlineData("{\"Shortcut\":{\"Modifiers\":26,\"Key\":32}}", typeof(InvalidDataException))]
+    [InlineData("{\"Shortcut\":{\"Modifiers\":9,\"Key\":123}}", typeof(InvalidDataException))]
+    [InlineData("{\"Shortcut\":{\"Modifiers\":10,\"Key\":32},\"Language\":null}", typeof(InvalidDataException))]
+    [InlineData("{\"Shortcut\":{\"Modifiers\":9,\"Key\":82},\"Language\":null}", typeof(InvalidDataException))]
+    [InlineData("{\"RecordShortcut\":{\"Modifiers\":10,\"Key\":32}}", typeof(InvalidDataException))]
+    [InlineData("{\"RecordPasteShortcut\":{\"Modifiers\":9,\"Key\":82}}", typeof(InvalidDataException))]
     public void CorruptSettingsAreReportedWithoutReplacingTheFile(string content, Type errorType)
     {
         var store = CreateStore();

@@ -158,9 +158,10 @@ public sealed class RecordTakeSession
 
     public async Task<BundlePayload> PrepareAsync(RecognitionResult result)
     {
+        var speech = result.SpeechText ?? throw new InvalidOperationException("Authoritative speech is unavailable.");
+        if (string.IsNullOrWhiteSpace(speech)) throw new InvalidOperationException("No speech was recognized.");
         var media = await StopAsync(false).ConfigureAwait(false);
         if (media.Discarded) throw new OperationCanceledException("The record take was discarded.");
-        var speech = result.SpeechText ?? throw new InvalidOperationException("Authoritative speech is unavailable.");
         (RecordInkBurst Burst, int? PreviewLength)[] bursts;
         long? audioOrigin;
         lock (_gate) { bursts = _bursts.OrderBy(item => item.Burst.Timestamp).ToArray(); audioOrigin = _audioOrigin; }

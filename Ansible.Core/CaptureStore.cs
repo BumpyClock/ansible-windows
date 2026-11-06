@@ -1,6 +1,6 @@
 namespace Ansible.Core;
 
-public sealed record CaptureCleanupResult(long BytesRetained, int DeletedTakes, int ProtectedTakes);
+public sealed record CaptureCleanupResult(long BytesRetained, int DeletedTakes, int ProtectedTakes, int FailedTakes);
 
 /// <summary>Serializes private capture storage. Leases protect active writers, visible results and delayed clipboard readers.</summary>
 public sealed class CaptureStore(string root, TimeProvider? time = null)
@@ -83,17 +83,23 @@ public sealed class CaptureStore(string root, TimeProvider? time = null)
                 var bytes = takes.Sum(take => take.Bytes);
                 var deleted = 0;
                 var protectedCount = 0;
+                var failed = 0;
                 var cutoff = _time.GetUtcNow() - MaximumAge;
                 foreach (var take in takes)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     if (_leases.ContainsKey(take.Path)) { protectedCount++; continue; }
                     if (!all && take.CreatedAt > cutoff && bytes <= MaximumBytes) continue;
-                    Directory.Delete(take.Path, recursive: true);
+                    try { Directory.Delete(take.Path, recursive: true); }
+                    catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+                    {
+                        failed++;
+                        continue;
+                    }
                     bytes -= take.Bytes;
                     deleted++;
                 }
-                return new CaptureCleanupResult(bytes, deleted, protectedCount);
+                return new CaptureCleanupResult(bytes, deleted, protectedCount, failed);
             }, cancellationToken).ConfigureAwait(false);
         }
         finally { _gate.Release(); }

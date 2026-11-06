@@ -737,6 +737,10 @@ each take, removing captures older than seven days, then oldest first above
 2 GiB. Active writers, the current media result, and files still referenced by
 the app's current clipboard publication are protected. Settings shows total
 size and **Delete all captures**. In-use takes are retained with a warning.
+A locked or inaccessible take does not prevent cleanup of other eligible takes.
+Close apps using those files, then retry **Delete all captures**.
+Failed recognition, failed microphone cleanup, and takes without authoritative
+speech discard their captured media.
 Deleting captures does not remove transcript history.
 Successful dictation transcripts persist as text and metadata in
 `dictation-history.json`. Meeting transcripts, titles, and speaker names save

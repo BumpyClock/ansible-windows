@@ -29,6 +29,9 @@ public sealed class AppSettingsStore(string path) : IAppSettingsStore
             settings = settings with { RecordPasteShortcut = DictationShortcut.RecordPasteDefault };
         if (!document.RootElement.TryGetProperty(nameof(AppSettings.IncludeVideoLink), out _))
             settings = settings with { IncludeVideoLink = true };
+        // These Windows-reserved dictation chords were accepted by earlier versions.
+        if (settings.Shortcut is { Modifiers: 10, Key: 0x20 } or { Modifiers: 9, Key: 0x52 })
+            settings = settings with { Shortcut = DictationShortcut.Default };
         settings.Validate();
         return settings;
     }

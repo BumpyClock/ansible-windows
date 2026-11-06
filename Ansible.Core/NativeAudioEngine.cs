@@ -356,7 +356,7 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
     {
         if (speech is null || family is not ("nemotron_asr" or "kroko_asr")) return null;
         var count = NativeAudioApi.WordCount(result);
-        if (count > 8192) throw new InvalidDataException("Dictation returned too many timestamp anchors.");
+        if (count > 8192) return null;
         var tokens = new MeetingTimedToken[(int)count];
         var remaining = 65536;
         for (nuint index = 0; index < count; index++)
@@ -364,16 +364,16 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
             token.ThrowIfCancellationRequested();
             NativeAudioApi.Check(NativeAudioApi.Word(result, index, out var text, out var start, out var end, 0),
                 "read dictation timestamp anchors");
-            if (text == 0) throw new InvalidDataException("A dictation timestamp anchor has no text.");
+            if (text == 0) return null;
             var bytes = (byte*)text;
             var length = 0;
             var maximumBytes = checked(remaining * 4);
             while (length <= maximumBytes && bytes[length] != 0) length++;
-            if (length > maximumBytes) throw new InvalidDataException("Dictation timestamps exceed the text limit.");
+            if (length > maximumBytes) return null;
             var piece = Encoding.UTF8.GetString(new ReadOnlySpan<byte>(bytes, length));
             if (family == "kroko_asr" && index > 0) piece = " " + piece;
             remaining -= piece.Length;
-            if (remaining < 0) throw new InvalidDataException("Dictation timestamps exceed the text limit.");
+            if (remaining < 0) return null;
             tokens[(int)index] = new(piece, start, end);
         }
         return MeetingWordAlignment.MapSpeechWords(speech, tokens, processedSamples,

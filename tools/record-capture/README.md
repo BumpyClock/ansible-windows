@@ -129,11 +129,13 @@ does not qualify physical hook delivery or recognition-load performance. See
 
 ## Recorded validation
 
-On 2026-11-04, Windows 11 build 26300, the native self-check passed with an
-80-byte status and 24-byte burst layout. A four-second real-desktop run passed
-with one readable 1920 by 1200 final PNG and a silent H.264 MP4 independently
-decoded to 98 frames and 3.2666 seconds. Its first real image arrived 748.7 ms
-after the host's origin. That gap explains the shorter MP4 and remains explicit.
+On 2026-11-04, Windows 11 build 26300, the original native self-check passed
+against the earlier 80-byte status ABI and 24-byte burst layout. This historical
+run predates the current 112-byte status ABI and does not validate that layout.
+A four-second real-desktop run passed with one readable 1920 by 1200 final PNG
+and a silent H.264 MP4 independently decoded to 98 frames and 3.2666 seconds.
+Its first real image arrived 748.7 ms after the host's origin. That gap explains
+the shorter MP4 and remains explicit.
 
 The synthetic geometry fixture passed with two bursts and three saved pictures.
 Pixel checks observed left/right geometry as `(true,false)` in picture 1,

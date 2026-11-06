@@ -38,18 +38,21 @@ function Build-VerifiedPackage {
     $platform = if ($Architecture -eq "arm64") { "ARM64" } else { "x64" }
     $machine = if ($Architecture -eq "arm64") { [Reflection.PortableExecutable.Machine]::Arm64 } else { [Reflection.PortableExecutable.Machine]::Amd64 }
 
-    & (Join-Path $PSScriptRoot "Build-AudioNative.ps1") -StageRuntimeOnly -Backend $Backend -Architecture $Architecture
-    if ($LASTEXITCODE -ne 0) { throw "Native runtime staging failed." }
     $vsInstaller = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer"
     $vswhere = Join-Path $vsInstaller "vswhere.exe"
+    [string[]]$vcComponents = @("Microsoft.VisualStudio.Component.VC.Tools.x86.x64")
+    if ($Architecture -eq "arm64") { $vcComponents += "Microsoft.VisualStudio.Component.VC.Tools.ARM64" }
     if (-not (Test-Path -LiteralPath $vswhere)) {
-        throw "Visual Studio with the Desktop development with C++ workload is required for NativeAOT packaging."
+        throw "Visual Studio Installer vswhere.exe is missing. Required for $Architecture native builds and packaging with MSVC components: $($vcComponents -join ', ')."
     }
-    $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-    if (-not $vs) { throw "The MSVC x64 compiler workload is missing." }
+    $vs = & $vswhere -latest -products * -requires $vcComponents -property installationPath
+    if (-not $vs) { throw "Visual Studio with MSVC components '$($vcComponents -join "', '")' is required for $Architecture native builds and packaging." }
     $vcvars = Join-Path $vs "VC\Auxiliary\Build\vcvarsall.bat"
     $vcTarget = if ($Architecture -eq "arm64") { "x64_arm64" } else { "x64" }
     $msbuild = Join-Path $vs "MSBuild\Current\Bin\amd64\MSBuild.exe"
+
+    & (Join-Path $PSScriptRoot "Build-AudioNative.ps1") -StageRuntimeOnly -Backend $Backend -Architecture $Architecture
+    if ($LASTEXITCODE -ne 0) { throw "Native runtime staging failed." }
     $env:PATH = "$vsInstaller;" + ($env:PATH -replace '"', '')
 
     & $env:ComSpec /d /s /c "call `"$vcvars`" $vcTarget >nul && `"$msbuild`" `"$project`" -restore -t:Build -p:Configuration=Release -p:Platform=$platform -p:RuntimeIdentifier=win-$Architecture -p:PublishProfile=win-$Architecture -p:AppxBundle=Never -p:GenerateAppxPackageOnBuild=true -p:AppxPackageDir=`"$directory\\`" -nodeReuse:false -nologo -verbosity:minimal"

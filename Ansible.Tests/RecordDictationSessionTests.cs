@@ -85,6 +85,82 @@ public sealed partial class DictationSessionTests
         finally { media.Capture.FailRelease = false; await session.CloseAsync(); }
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData(" \t\n")]
+    public async Task RecordWithoutAuthoritativeSpeechDiscardsFinishedMedia(string? speech)
+    {
+        var media = new RecordTakeSessionTests.TakeFactory();
+        var session = Create(new FakeEngine { Result = new("display only", speech) }, recordTakeFactory: media);
+        var completions = new List<DictationCompletion>();
+        session.DictationCompleted += completions.Add;
+        try
+        {
+            await session.InitializeAsync();
+            var operation = session.StartShortcutDictationAsync(null, recordTakeOptions: session.SnapshotRecordTake());
+            await WaitForStateAsync(session, DictationPhase.Recording);
+            await session.FinishAsync();
+            Assert.Equal(SessionOutcomeKind.Failed, (await operation).Kind);
+            Assert.True(media.Capture.Discarded);
+            Assert.True(media.Capture.IsReleased);
+            Assert.Empty(completions);
+        }
+        finally { await session.CloseAsync(); }
+    }
+
+    [Fact]
+    public async Task ProducerFailureAfterFinalRecognitionDiscardsFinishedMedia()
+    {
+        var final = new TaskCompletionSource<RecognitionResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var source = new FakeCapture();
+        var media = new RecordTakeSessionTests.TakeFactory();
+        var session = Create(new FakeEngine
+        {
+            Streaming = async (_, _, _, ready) => { ready?.Invoke(); return await final.Task; }
+        }, new FakeCaptureFactory { Starting = _ => Task.FromResult<IAudioCapture>(source) }, recordTakeFactory: media);
+        var completions = new List<DictationCompletion>();
+        session.DictationCompleted += completions.Add;
+        try
+        {
+            await session.InitializeAsync();
+            var operation = session.StartShortcutDictationAsync(null, recordTakeOptions: session.SnapshotRecordTake());
+            await WaitForStateAsync(session, DictationPhase.Recording);
+            source.Packets.Writer.TryComplete(new IOException("microphone delivery failed"));
+            await session.FinishAsync();
+            final.SetResult(new("hello world", "hello world"));
+            var outcome = await operation;
+            Assert.Equal(SessionOutcomeKind.Failed, outcome.Kind);
+            Assert.Equal("hello world", outcome.Result!.SpeechText);
+            Assert.Contains("microphone delivery failed", outcome.Error!.ToString());
+            Assert.True(media.Capture.Discarded);
+            Assert.True(media.Capture.IsReleased);
+            Assert.Empty(completions);
+        }
+        finally { final.TrySetResult(new("", "")); await session.CloseAsync(); }
+    }
+
+    [Fact]
+    public async Task MicrophoneCleanupFailureRetractsPreparedMedia()
+    {
+        var source = new FakeCapture { FailDisposal = true };
+        var media = new RecordTakeSessionTests.TakeFactory();
+        var session = Create(new FakeEngine(),
+            new FakeCaptureFactory { Starting = _ => Task.FromResult<IAudioCapture>(source) }, recordTakeFactory: media);
+        try
+        {
+            await session.InitializeAsync();
+            var operation = session.StartShortcutDictationAsync(null, recordTakeOptions: session.SnapshotRecordTake());
+            await WaitForStateAsync(session, DictationPhase.Recording);
+            await session.FinishAsync();
+            var outcome = await operation;
+            Assert.Equal(SessionOutcomeKind.Failed, outcome.Kind);
+            Assert.NotNull(outcome.Result!.Payload);
+            Assert.True(media.Capture.Discarded);
+        }
+        finally { source.FailDisposal = false; await session.CloseAsync(); }
+    }
+
     [Fact]
     public async Task EscDuringCaptureStartupSuppressesCompletionAndJoinsThatStartup()
     {
@@ -131,6 +207,7 @@ public sealed partial class DictationSessionTests
             await operation;
             Assert.Equal(DictationPhase.RecoveryRequired, session.State.Phase);
             Assert.Empty(completions);
+            if (record) Assert.True(media.Capture.Discarded);
         }
         finally { source.KeepOwnershipOnDispose = false; await session.CloseAsync(); }
     }

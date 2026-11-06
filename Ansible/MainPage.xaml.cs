@@ -497,9 +497,11 @@ public sealed partial class MainPage : Page
             await WindowsRecordTakeFactory.RefreshClipboardProtectionAsync();
             var result = await _captures.DeleteAllAsync();
             await RefreshCaptureSizeAsync();
-            _notices.Set("capture-delete", result.ProtectedTakes > 0
-                ? new NoticeContent(NoticeSeverity.Warning, "Some captures are in use", "The current bundle and clipboard pictures were kept. Other saved captures were deleted.")
-                : null, NoticeArea.Settings);
+            _notices.Set("capture-delete", result.FailedTakes > 0
+                ? new NoticeContent(NoticeSeverity.Warning, "Some captures could not be deleted", "Close apps using saved captures and try again. In-use captures were kept; other eligible captures were deleted.")
+                : result.ProtectedTakes > 0
+                    ? new NoticeContent(NoticeSeverity.Warning, "Some captures are in use", "The current bundle and clipboard pictures were kept. Other saved captures were deleted.")
+                    : null, NoticeArea.Settings);
         }
         catch (Exception error) { ReportError(error, "Captures could not be deleted"); }
         finally { DeleteCapturesButton.IsEnabled = !_joining && _state.IsIdle; }

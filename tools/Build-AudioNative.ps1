@@ -114,9 +114,13 @@ if (-not [Environment]::Is64BitProcess -or
 
 $installer = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer"
 $vswhere = Join-Path $installer "vswhere.exe"
-if (-not (Test-Path -LiteralPath $vswhere)) { throw "Visual Studio Installer vswhere.exe is missing: $vswhere" }
-$vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-if (-not $vs) { throw "The Visual Studio MSVC x64 workload is required." }
+[string[]]$vcComponents = @("Microsoft.VisualStudio.Component.VC.Tools.x86.x64")
+if ($Architecture -eq "arm64") { $vcComponents += "Microsoft.VisualStudio.Component.VC.Tools.ARM64" }
+if (-not (Test-Path -LiteralPath $vswhere)) {
+    throw "Visual Studio Installer vswhere.exe is missing. Required for $Architecture native builds and packaging with MSVC components: $($vcComponents -join ', ')."
+}
+$vs = & $vswhere -latest -products * -requires $vcComponents -property installationPath
+if (-not $vs) { throw "Visual Studio with MSVC components '$($vcComponents -join "', '")' is required for $Architecture native builds and packaging." }
 $toolset = Get-ChildItem -LiteralPath (Join-Path $vs "VC\Tools\MSVC") -Directory |
     Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
 $dumpbin = Join-Path $toolset.FullName "bin\Hostx64\x64\dumpbin.exe"

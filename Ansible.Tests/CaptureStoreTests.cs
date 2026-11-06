@@ -49,6 +49,39 @@ public sealed class CaptureStoreTests : IDisposable
         Assert.Equal(1, (await store.DeleteAllAsync()).DeletedTakes);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LockedTakeDoesNotPreventDeletingLaterTakes(bool deleteAll)
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var store = new CaptureStore(_root);
+        var locked = await store.CreateTakeAsync();
+        var lockedFile = Path.Combine(locked.Directory, "take.mp4");
+        await File.WriteAllTextAsync(lockedFile, "1234");
+        Directory.SetCreationTimeUtc(locked.Directory, DateTime.UtcNow.AddDays(-9));
+        await locked.DisposeAsync();
+        var later = await store.CreateTakeAsync();
+        await File.WriteAllTextAsync(Path.Combine(later.Directory, "take.mp4"), "56789");
+        Directory.SetCreationTimeUtc(later.Directory, DateTime.UtcNow.AddDays(-8));
+        await later.DisposeAsync();
+
+        using (var reader = new FileStream(lockedFile, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            var result = deleteAll ? await store.DeleteAllAsync() : await store.CleanupAsync();
+            Assert.Equal(1, result.FailedTakes);
+            Assert.Equal(1, result.DeletedTakes);
+            Assert.Equal(0, result.ProtectedTakes);
+            Assert.Equal(4, result.BytesRetained);
+            Assert.True(File.Exists(lockedFile));
+            Assert.False(Directory.Exists(later.Directory));
+        }
+        var retried = deleteAll ? await store.DeleteAllAsync() : await store.CleanupAsync();
+        Assert.Equal(0, retried.FailedTakes);
+        Assert.Equal(1, retried.DeletedTakes);
+        Assert.Equal(0, retried.BytesRetained);
+    }
+
     [Fact]
     public async Task DiscardDeletesOnlyAnUnleasedDirectTake()
     {

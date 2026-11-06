@@ -236,7 +236,12 @@ internal sealed class WindowsRecordTake : IRecordTakeCapture
             _leaseTransferred = true;
         }
         else await _lease.DisposeAsync().ConfigureAwait(false);
-        try { await WindowsRecordTakeFactory.RefreshClipboardProtectionAsync().ConfigureAwait(false); await _owner.CleanupAsync().ConfigureAwait(false); }
+        try
+        {
+            await WindowsRecordTakeFactory.RefreshClipboardProtectionAsync().ConfigureAwait(false);
+            var cleanup = await _owner.CleanupAsync().ConfigureAwait(false);
+            if (cleanup.FailedTakes > 0) warnings.Add("Some saved captures could not be removed. Close apps using them and retry Delete all captures in Settings.");
+        }
         catch (Exception error) { warnings.Add($"Capture cleanup failed. {error.Message}"); }
         return new(frames, videoPath, warnings, discarded,
             status.FirstVideoQpc > 0 ? Stopwatch.GetElapsedTime(_options.OriginTimestamp, status.FirstVideoQpc) : null);

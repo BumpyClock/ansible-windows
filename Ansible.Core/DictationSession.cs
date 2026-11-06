@@ -1467,7 +1467,7 @@ public sealed class DictationSession
                 ControlsSealed = true;
                 stop = StopWork;
             }
-            var media = Take?.StopAsync(Result is null || Token.IsCancellationRequested);
+            var discard = Token.IsCancellationRequested || string.IsNullOrWhiteSpace(Result?.SpeechText);
             Cancellation.Cancel();
             Pipe.Writer.TryComplete();
             await ObserveAsync(stop, Token, errors);
@@ -1478,7 +1478,7 @@ public sealed class DictationSession
                 catch (Exception error) { AddError(errors, error); }
             }
             await JoinStreamAsync(errors);
-            if (media is not null) await media;
+            if (Take is not null) await Take.StopAsync(discard || errors.Count > 0 || CommandError is not null || Capture?.IsReleased == false);
         }
         public override async Task ReleaseRetainedAsync(DictationSession session)
         {
