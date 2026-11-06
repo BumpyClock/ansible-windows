@@ -123,6 +123,9 @@ public sealed class DictationSession
         RecordTakeOptions? recordTakeOptions = null) =>
         Admit(() => new DictationOperation(RecognitionInputs(requiresMicrophone: true),
             _state.Settings.MicrophoneBoostDecibels, _timeout, _time, shortcutTimestamp, targetValidation, recordTakeOptions));
+    /// <summary>Measures CPU and Vulkan again for the selected dictation model and replaces the cached Auto choice.</summary>
+    public Task<SessionOutcome> BenchmarkDevicesAsync() =>
+        Admit(() => new DeviceBenchmarkOperation(RecognitionInputs(requiresMicrophone: true), _timeout, _time));
     public Task<SessionOutcome> ReplayAsync(string path) =>
         Admit(() => new ReplayOperation(RecognitionInputs(requiresMicrophone: true), path, _timeout, _time));
     public Task<SessionOutcome> TranscribeFileAsync(string path) =>
@@ -499,11 +502,23 @@ public sealed class DictationSession
                 notice = new(NoticeKind.Warning, "Record take warning", string.Join("\n", warnings));
             if (connection is not null && !ReferenceEquals(notice, connection.SettingsWarning))
                 notice = notice with { Area = NoticeArea.Models | NoticeArea.Dictation };
+            if (operation is DeviceBenchmarkOperation)
+                notice = kind switch
+                {
+                    SessionOutcomeKind.Failed => notice with { Title = "Device benchmark failed", Area = NoticeArea.Settings },
+                    SessionOutcomeKind.TimedOut => new(NoticeKind.Warning, "Device benchmark timed out",
+                        "The benchmark exceeded its deadline. The previous device choice is unchanged.", NoticeArea.Settings),
+                    SessionOutcomeKind.Cancelled => new(NoticeKind.Information, "Benchmark cancelled",
+                        "The previous device choice is unchanged.", NoticeArea.Settings),
+                    _ => new(NoticeKind.Success, "Benchmark complete",
+                        "Auto uses the new measurement for this model.", NoticeArea.Settings)
+                };
             var usageWarning = kind == SessionOutcomeKind.Completed && recognition?.Result is not null
                 ? QueueUsage(recognition, elapsed) : null;
             var completedAt = _time.GetUtcNow();
             state = SetState(_state with
             {
+                BenchmarkingBackend = null,
                 Phase = _closing ? DictationPhase.Closing : _recovery is not null ? DictationPhase.RecoveryRequired :
                     _engine is null ? DictationPhase.Disconnected : DictationPhase.Ready,
                 Notice = _recovery is not null ? new(NoticeKind.Error, "Cleanup requires recovery",
@@ -663,6 +678,28 @@ public sealed class DictationSession
         await ConnectCoreAsync(operation);
     }
 
+    private async Task BenchmarkDevicesCoreAsync(DeviceBenchmarkOperation operation)
+    {
+        // A background preload may be running its own qualification; the requested measurement replaces it.
+        await StopEngineWorkAsync();
+        operation.Token.ThrowIfCancellationRequested();
+        var input = operation.Input;
+        await input.Engine.BenchmarkDevicesAsync(input.Model, input.Options with { Backend = NativeBackend.Auto },
+            new InlineProgress<NativeBackend>(backend => ReportBenchmarkDevice(operation, backend)), operation.Token);
+    }
+
+    // Runs on the engine's probe thread, so it never throws into the measurement.
+    private void ReportBenchmarkDevice(DeviceBenchmarkOperation operation, NativeBackend backend)
+    {
+        SessionSnapshot state;
+        lock (_gate)
+        {
+            if (_closing || !ReferenceEquals(_operation, operation)) { return; }
+            state = SetState(_state with { BenchmarkingBackend = backend });
+        }
+        Publish(state);
+    }
+
     private async Task RecognizeFileAsync(FileOperation operation)
     {
         operation.DiagnosticStage = OperationDiagnosticStage.ReadInput;
@@ -820,7 +857,10 @@ public sealed class DictationSession
         if (_closing || _state.MeetingActive || _engine is null || _operation is not null || _recovery is not null) { return; }
         if (_state.SelectedModel is { SupportsMicrophone: true } model)
         {
-            var options = new RecognitionOptions(_state.Language, "", _state.Settings.Backend);
+            // Kroko hotwords change the decoder and its qualification key, so preload with dictation's vocabulary.
+            var dictionary = CustomVocabulary.ModelCompatibilityError(model, _state.Settings.CustomDictionary) is null
+                ? ModelSelectionPolicy.EffectiveDictionary(model, _state.Settings.CustomDictionary) : "";
+            var options = new RecognitionOptions(_state.Language, dictionary, _state.Settings.Backend);
             if (_diagnostics?.CurrentGeneration is { } generation)
                 options = options with { Diagnostics = new(_diagnostics, generation, Guid.NewGuid(), options.Backend,
                     backgroundPreload: true) };
@@ -1024,7 +1064,8 @@ public sealed class DictationSession
                 state = SetState(_state with
                 {
                     Phase = DictationPhase.Cancelling,
-                    Notice = new(NoticeKind.Information, "Cancelling", "Stopping dictation.")
+                    Notice = new(NoticeKind.Information, "Cancelling",
+                        operation is DeviceBenchmarkOperation ? "Stopping the device benchmark." : "Stopping dictation.")
                 });
             }
         }
@@ -1381,6 +1422,19 @@ public sealed class DictationSession
         public override SessionActivity Activity => SessionActivity.ModelMaintenance;
         public override DictationPhase InitialPhase => DictationPhase.MaintainingModels;
         public override Task ExecuteAsync(DictationSession session) => session.MaintainModelsCoreAsync(this);
+    }
+
+    // Holds the engine gate for both isolated probes; admission keeps dictation from silently waiting behind it.
+    private sealed class DeviceBenchmarkOperation(RecognitionInput input, TimeSpan timeout, TimeProvider time)
+        : SessionOperation(timeout, time)
+    {
+        public RecognitionInput Input { get; } = input;
+        public override SessionActivity Activity => SessionActivity.DeviceBenchmark;
+        public override DictationPhase InitialPhase => DictationPhase.Benchmarking;
+        public override bool HasRetainedResources => false;
+        public override Task ExecuteAsync(DictationSession session) => session.BenchmarkDevicesCoreAsync(this);
+        public override Task ReleaseAsync(DictationSession session, List<Exception> errors) => Task.CompletedTask;
+        public override Task ReleaseRetainedAsync(DictationSession session) => Task.CompletedTask;
     }
 
     private sealed record RecognitionInput(IRecognitionEngine Engine, AudioModel Model, RecognitionOptions Options);

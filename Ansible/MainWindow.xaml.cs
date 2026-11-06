@@ -194,7 +194,14 @@ public sealed partial class MainWindow : Window
             token.ThrowIfCancellationRequested();
             _permissionCheckComplete = true;
             RenderMicrophonePermission();
-            try { await WindowsRecordTakeFactory.RefreshClipboardProtectionAsync(); await _captures.CleanupAsync(token); }
+            try
+            {
+                await WindowsRecordTakeFactory.RefreshClipboardProtectionAsync();
+                var cleanup = await _captures.CleanupAsync(token);
+                if (cleanup.FailedTakes > 0)
+                    _notices.Set(CaptureStorageNoticeKey, new NoticeContent(NoticeSeverity.Warning,
+                        "Some captures could not be deleted", "Close apps using saved captures and retry Delete all captures in Settings."), NoticeArea.Settings);
+            }
             catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
             catch (Exception error) { _notices.SetError(CaptureStorageNoticeKey, error, NoticeArea.Settings); }
             await _history.InitializeAsync();

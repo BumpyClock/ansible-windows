@@ -43,6 +43,59 @@ public sealed class AutoDeviceQualifierTests
         Assert.Equal(NativeDiagnosticSource.DiskCache, fresh.Current.Source);
     }
 
+    [Fact]
+    public void RefreshBypassesBothCacheTiersAndReplacesTheCachedSelection()
+    {
+        using var fixture = new Fixture();
+        var qualifier = fixture.Create();
+        var first = fixture.Qualify(qualifier);
+        fixture.Result = backend => new(backend, backend == NativeBackend.Cpu ? 50 : 90, null);
+        fixture.Events.Clear();
+
+        var fresh = qualifier.Qualify(fixture.Input, fixture.Prepare, CancellationToken.None, refresh: true);
+
+        Assert.Equal(["identity", "prepare", "Cpu", "Vulkan"], fixture.Events);
+        Assert.Equal(first.Selection.Key, fresh.Selection.Key);
+        Assert.Equal(NativeBackend.Cpu, fresh.Backend);
+        Assert.Equal(50, qualifier.Current.Comparison!.CpuMilliseconds);
+        Assert.Equal(NativeDiagnosticSource.Qualification, qualifier.Current.Source);
+        Assert.Equal(fresh.Selection, Assert.Single(DeviceBenchmark.ReadCache(fixture.Cache)));
+
+        fixture.Events.Clear();
+        Assert.Same(fresh, fixture.Qualify(qualifier));
+        Assert.Equal(["identity"], fixture.Events);
+        Assert.Equal(NativeDiagnosticSource.MemoryCache, qualifier.Current.Source);
+        fixture.Events.Clear();
+        Assert.Equal(fresh, fixture.Qualify(fixture.Create()));
+        Assert.Equal(["identity"], fixture.Events);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void FailedOrCancelledRefreshKeepsBothCacheTiers(bool cancel)
+    {
+        using var fixture = new Fixture();
+        using var cancellation = new CancellationTokenSource();
+        var qualifier = fixture.Create();
+        var first = fixture.Qualify(qualifier);
+        fixture.Result = backend =>
+        {
+            if (cancel) cancellation.Cancel();
+            return new(backend, null, "probe crashed");
+        };
+
+        Assert.ThrowsAny<Exception>(() =>
+            qualifier.Qualify(fixture.Input, fixture.Prepare, cancellation.Token, refresh: true));
+
+        Assert.Null(qualifier.Current.Comparison);
+        Assert.Equal(first.Selection, Assert.Single(DeviceBenchmark.ReadCache(fixture.Cache)));
+        fixture.Result = backend => throw new InvalidOperationException("cache must answer");
+        fixture.Events.Clear();
+        Assert.Same(first, fixture.Qualify(qualifier));
+        Assert.Equal(["identity"], fixture.Events);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

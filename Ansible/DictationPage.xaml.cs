@@ -361,6 +361,7 @@ public sealed partial class DictationPage : Page
             DictationPhase.Transcribing => ("Transcribing file", _state.Notice.Message),
             DictationPhase.Cancelling => ("Cancelling", "Releasing the microphone and model."),
             DictationPhase.MaintainingModels => ("Updating models", _state.Notice.Message),
+            DictationPhase.Benchmarking => ("Measuring devices", "A device benchmark is running in Settings. Dictation starts when it finishes or is cancelled."),
             DictationPhase.RecoveryRequired => ("Recovery required", _state.Notice.Message),
             _ => ("Closing", "Releasing native resources.")
         };

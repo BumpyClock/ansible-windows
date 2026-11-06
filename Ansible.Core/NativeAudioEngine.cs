@@ -43,7 +43,11 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
         _benchmarkSamplePath = benchmarkSamplePath is null ? null : Path.GetFullPath(benchmarkSamplePath);
         _deviceQualifier = new AutoDeviceQualifier(
             benchmarkCachePath is null ? null : Path.GetFullPath(benchmarkCachePath),
-            (request, token) => DeviceBenchmark.RunAsync(_deviceProbePath!, request, token));
+            (request, token) =>
+            {
+                _benchmarkProgress?.Report(request.Backend);
+                return DeviceBenchmark.RunAsync(_deviceProbePath!, request, token);
+            });
     }
 
     public string ModelsDirectory { get; }

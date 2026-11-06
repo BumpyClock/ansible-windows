@@ -36,6 +36,7 @@ public sealed partial class MainPage : Page
     private MeetingCleanupSettings? _renderedCleanupSettings;
 
     private const string ErrorNoticeKey = "settings-error";
+    private const string BenchmarkNoticeKey = "device-benchmark";
     private readonly AppNotices _notices;
 
     internal event Action? ShortcutLessonRequested;
@@ -123,6 +124,7 @@ public sealed partial class MainPage : Page
             // The result describes the last model load and changes only when recognition prepares again.
             DeviceComparison.Comparison = _state.DeviceComparison;
             DeviceComparison.Summary = _state.DeviceSelectionSummary;
+            RenderBenchmark();
             if (LanguageBox.FocusState == FocusState.Unfocused) { LanguageBox.Text = _state.Language; }
             UsageToggle.IsOn = _state.Settings.CollectUsage;
             DiagnosticsToggle.IsOn = _state.Settings.LocalDiagnostics;
@@ -171,6 +173,47 @@ public sealed partial class MainPage : Page
             RenderCleanupSettings();
         }
         finally { _rendering = false; }
+    }
+
+    private void RenderBenchmark()
+    {
+        // Activity stays set after the terminal snapshot; only these phases mean the benchmark still owns the session.
+        var running = _state.Activity == SessionActivity.DeviceBenchmark &&
+            _state.Phase is DictationPhase.Benchmarking or DictationPhase.Cancelling;
+        var model = _state.SelectedModel;
+        var status = running
+            ? _state.Phase == DictationPhase.Cancelling ? "Cancelling the benchmark."
+                : _state.BenchmarkingBackend switch
+                {
+                    NativeBackend.Cpu => "Measuring CPU with the bundled public sample.",
+                    NativeBackend.Vulkan => "Measuring Vulkan with the bundled public sample.",
+                    _ => "Preparing the benchmark."
+                }
+            : model is null ? "Install a dictation model to benchmark CPU and Vulkan."
+            : _state.CanStart ? $"Measure CPU and Vulkan again for {model.DisplayName ?? model.Id}."
+            : "Benchmarking is available when no other work is running.";
+        BenchmarkStatusText.Text = status;
+        ToolTipService.SetToolTip(BenchmarkStatusText, status);
+        BenchmarkProgress.IsActive = running;
+        BenchmarkButton.Content = running ? "Cancel" : "Run benchmark";
+        BenchmarkButton.IsEnabled = running ? _state.IsBenchmarking : _state.CanStart;
+        AutomationProperties.SetName(BenchmarkButton, running ? "Cancel device benchmark" : "Run device benchmark");
+    }
+
+    private async void BenchmarkClicked(object sender, RoutedEventArgs args)
+    {
+        try
+        {
+            if (_state.IsBenchmarking) { await _session.CancelAsync(); return; }
+            _notices.Set(BenchmarkNoticeKey, null);
+            // Failures and timeouts arrive as a Settings notice from the terminal snapshot.
+            await _session.BenchmarkDevicesAsync();
+        }
+        catch (Exception error)
+        {
+            _notices.Set(BenchmarkNoticeKey, new NoticeContent(NoticeSeverity.Error, "Device benchmark failed", error.Message),
+                NoticeArea.Settings);
+        }
     }
 
     private void RenderInsertion(bool idle)

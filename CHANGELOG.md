@@ -26,6 +26,13 @@
 - Show history insertion status as a quiet icon and word instead of a pill. Rows
   no longer flash white when the pointer moves between them.
 - Check every app XAML file for its compiled resource in the published package.
+- Add **Run benchmark** to Settings > Processor. It measures CPU and Vulkan again
+  for the selected dictation model, bypasses cached results, and replaces the
+  result Auto uses. It shows which device is being measured, supports Cancel, and
+  blocks other recognition while it runs. A manual processor choice or a
+  cancelled Auto preparation no longer hides the last comparison. Kroko preload
+  now qualifies with the dictation vocabulary, so it reuses the dictation result
+  instead of running a second comparison.
 
 - Report failed injected-key release as unverified insertion, including when Windows
   queued only a modifier. Keep the warning and never replay uncertain input.
