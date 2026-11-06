@@ -355,7 +355,8 @@ public sealed partial class DictationSessionTests
         private readonly SemaphoreSlim _completed = new(0);
         private bool _closed;
 
-        public ShortcutHarness(AppSettings settings, FakeEngine? engine = null, bool diagnostics = false)
+        public ShortcutHarness(AppSettings settings, FakeEngine? engine = null, bool diagnostics = false,
+            IRecordTakeFactory? recordTakeFactory = null)
         {
             Engine = engine ?? new FakeEngine
             {
@@ -368,7 +369,7 @@ public sealed partial class DictationSessionTests
                 settings = settings with { LocalDiagnostics = true };
             }
             Session = new DictationSession(_ => Engine, Capture, new FakeInput(), new FakeUsageStore(), "models",
-                new FakeSettingsStore { Settings = settings }, diagnostics: _log);
+                new FakeSettingsStore { Settings = settings }, diagnostics: _log, recordTakeFactory: recordTakeFactory);
             Session.StateChanged += state => Notices.Enqueue(state.Notice);
             Session.DictationCompleted += completion =>
             {
@@ -483,15 +484,21 @@ public sealed partial class DictationSessionTests
     {
         public CaretBounds? Caret => caret;
         public ConcurrentQueue<string> Inserts { get; } = new();
+        public ConcurrentQueue<BundlePayload> Payloads { get; } = new();
+        public ConcurrentQueue<CancellationToken> InsertionTokens { get; } = new();
+        public ConcurrentQueue<Func<bool>> CurrencyChecks { get; } = new();
         public ConcurrentQueue<bool> CurrentAtInsert { get; } = new();
         public TaskCompletionSource InsertEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public Func<int, TextDeliveryOutcome>? Inserting { get; set; }
         public Func<int, Task<TextDeliveryOutcome>>? InsertingAsync { get; set; }
 
-        public Task<TextDeliveryOutcome> InsertAsync(string text, Func<bool> isCurrent, CancellationToken cancellationToken)
+        public Task<TextDeliveryOutcome> InsertAsync(BundlePayload payload, Func<bool> isCurrent, CancellationToken cancellationToken)
         {
             CurrentAtInsert.Enqueue(isCurrent());
-            Inserts.Enqueue(text);
+            Payloads.Enqueue(payload);
+            InsertionTokens.Enqueue(cancellationToken);
+            CurrencyChecks.Enqueue(isCurrent);
+            Inserts.Enqueue(payload.Text);
             InsertEntered.TrySetResult();
             var attempt = Inserts.Count;
             if (InsertingAsync is not null) return InsertingAsync(attempt);

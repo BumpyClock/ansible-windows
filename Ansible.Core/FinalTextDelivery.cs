@@ -14,6 +14,8 @@ public enum TextDeliveryStatus
     CleanupFailed
 }
 
+public enum PictureDeliveryStatus { None, ManualRequired, Queued, Failed }
+
 public enum TextDeliveryReason
 {
     NoSpeech, Superseded, ModifiersHeld, TargetInvalid, ClipboardChanged, ClipboardBusy,
@@ -24,6 +26,7 @@ public enum TextDeliveryReason
 
 public readonly record struct TextDeliveryOutcome(TextDeliveryStatus Status, string Message)
 {
+    public PictureDeliveryStatus Pictures { get; init; }
     public TextDeliveryReason? Reason { get; init; }
     public double? VerificationMilliseconds { get; init; }
     public static TextDeliveryOutcome Sent(string message, TextDeliveryReason? reason = null) => new(TextDeliveryStatus.Sent, message) { Reason = reason };
@@ -40,7 +43,7 @@ internal readonly record struct DeliveryTrace(DeliveryDiagnosticOutcome Outcome,
 
 /// <summary>Inserts authoritative speech once, only after successful recognition completes.</summary>
 internal sealed class FinalTextDelivery(
-    Func<string, CancellationToken, Task<TextDeliveryOutcome>> insert,
+    Func<BundlePayload, CancellationToken, Task<TextDeliveryOutcome>> insert,
     Func<bool> isCurrent,
     Func<bool> typingDeferred,
     Action<DeliveryTrace>? diagnostic = null)
@@ -48,6 +51,7 @@ internal sealed class FinalTextDelivery(
     public bool Sent { get; private set; }
     public string? Error { get; private set; }
     public TextDeliveryOutcome? Delivery { get; private set; }
+    public bool MayHaveInserted { get; private set; }
 
     public async Task<SessionOutcome> RunAsync(Task<SessionOutcome> operation, CancellationToken cancellationToken)
     {
@@ -76,6 +80,7 @@ internal sealed class FinalTextDelivery(
                 return outcome;
             }
             if (string.IsNullOrWhiteSpace(speech)) { terminal = DeliveryDiagnosticOutcome.EmptySpeech; return outcome; }
+            var payload = outcome.Result!.Payload ?? new BundlePayload(speech, []);
             while (true)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -83,7 +88,14 @@ internal sealed class FinalTextDelivery(
                 if (!typingDeferred())
                 {
                     TextDeliveryOutcome delivery;
-                    try { delivery = await insert(speech, cancellationToken).ConfigureAwait(false); }
+                    try
+                    {
+                        // A throwing adapter cannot establish that Windows queued no input.
+                        MayHaveInserted = true;
+                        delivery = await insert(payload, cancellationToken).ConfigureAwait(false);
+                        MayHaveInserted = delivery.Status is TextDeliveryStatus.Sent or TextDeliveryStatus.Verified or
+                            TextDeliveryStatus.Partial or TextDeliveryStatus.CleanupFailed;
+                    }
                     catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
                     catch (Exception error) { Error = error.Message; errorHResult = error.HResult; return outcome; }
                     if (delivery.Status != TextDeliveryStatus.Deferred)
@@ -92,7 +104,8 @@ internal sealed class FinalTextDelivery(
                         reason = delivery.Reason;
                         verificationMilliseconds = delivery.VerificationMilliseconds;
                         Sent = delivery.Status is TextDeliveryStatus.Sent or TextDeliveryStatus.Verified;
-                        if (delivery.Status is TextDeliveryStatus.Rejected or TextDeliveryStatus.Partial or TextDeliveryStatus.CleanupFailed)
+                        if (delivery.Status is TextDeliveryStatus.Rejected or TextDeliveryStatus.Partial or TextDeliveryStatus.CleanupFailed ||
+                            delivery.Pictures is PictureDeliveryStatus.ManualRequired or PictureDeliveryStatus.Failed)
                             Error = delivery.Message;
                         terminal = delivery.Status switch
                         {

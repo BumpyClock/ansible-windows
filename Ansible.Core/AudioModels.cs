@@ -59,5 +59,14 @@ public static class SpeechContent
 public sealed record TranscriptUpdate(string Text, bool IsFinal, string? SpeechText = null)
 {
     public long? ProcessedSamples { get; init; }
+    /// <summary>A replacement snapshot, including the revisable tail. Sample positions are relative to 16 kHz input audio.</summary>
+    public SpeechWordTimings? WordTimings { get; init; }
     public IReadOnlyList<MeetingTurn>? SpeakerTurns { get; init; }
 }
+
+public enum SpeechWordTimingSource { NativeTokenEmission, NativeWordSpan }
+
+/// <summary>Character offsets refer to the unchanged SpeechText. Native timing is not forced acoustic alignment.</summary>
+public sealed record SpeechWordTiming(int TextStart, int TextLength, long StartSample, long EndSample);
+
+public sealed record SpeechWordTimings(SpeechWordTimingSource Source, IReadOnlyList<SpeechWordTiming> Words);

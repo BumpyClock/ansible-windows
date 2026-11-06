@@ -7,7 +7,11 @@ param(
     [int]$Jobs = 2,
     [switch]$StageRuntimeOnly,
     [switch]$VerifyRuntimeOnly,
-    [string]$NativeDirectory = ""
+    [string]$NativeDirectory = "",
+    [ValidateSet("x64", "arm64")]
+    [string]$Architecture = "x64",
+    # Pinned GGML requires Clang for ARM. Use an x64-hosted clang-cl with the VS ARM64 SDK/libraries.
+    [string]$ClangCompiler = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -17,11 +21,21 @@ $tools = Join-Path $runtime "native-tools"
 $source = Join-Path $runtime "audio-native-src"
 $build = Join-Path $runtime "audio-native-build-$Backend"
 $output = Join-Path $runtime "native"
+if ($Architecture -eq "arm64") {
+    $build = Join-Path $runtime "audio-native-build-arm64-$Backend"
+    $output = Join-Path $runtime "native-arm64"
+}
 if ($NativeDirectory) { $output = [IO.Path]::GetFullPath($NativeDirectory) }
 [string[]]$runtimeBackends = @("cpu")
 if ($Backend -eq "vulkan") { $runtimeBackends += "vulkan" }
 $sdkVersion = $null
 [object[]]$sourcePatches = @()
+$expectedCommit = "795c45fbde0a7d29c93b22199728ff5caaec02e5"
+$expectedMachine = if ($Architecture -eq "arm64") { "AA64" } else { "8664" }
+[string[]]$cpuRequirements = if ($Architecture -eq "arm64") { @("ARMv8-A", "NEON") } else {
+    @("AVX2", "FMA", "F16C", "BMI1", "BMI2", "OS-enabled AVX state")
+}
+$record = $null
 
 # Single source of truth for the native build recipe. Both the real build path and the
 # stage/verify path must derive from these, so a stale record can never be trusted blindly.
@@ -39,6 +53,15 @@ function Get-ExpectedSourcePatches {
 
 function Assert-RecipeMatchesCurrentExpectations {
     param($Record)
+    if ($Record.architecture -ne "windows-$Architecture") {
+        throw "The native runtime architecture '$($Record.architecture)' does not match requested windows-$Architecture."
+    }
+    if ($Record.source_commit -ne $expectedCommit) {
+        throw "The native runtime source commit does not match pinned audio.cpp v0.9.0 ($expectedCommit)."
+    }
+    if (@(Compare-Object @($cpuRequirements | Sort-Object) @($Record.cpu_requirements | Sort-Object)).Count -ne 0) {
+        throw "The native runtime CPU requirements do not match the $Architecture build recipe."
+    }
     $expectedPatches = Get-ExpectedSourcePatches
     $recordPatches = @($Record.source_patches)
     $recordPatchKeys = @($recordPatches | ForEach-Object { "$($_.file)=$($_.sha256)".ToLowerInvariant() } | Sort-Object)
@@ -64,6 +87,9 @@ if ($StageRuntimeOnly -or $VerifyRuntimeOnly) {
         @($runtimeBackends | Where-Object { $_ -notin @("cpu", "vulkan") }).Count -ne 0) {
         throw "The native runtime has an invalid backend record. Rebuild it with .\tools\Build-AudioNative.ps1."
     }
+    if ("vulkan" -in $runtimeBackends -and [string]::IsNullOrWhiteSpace($record.vulkan_sdk)) {
+        throw "The Vulkan runtime record is missing its Vulkan SDK version. Rebuild the requested runtime."
+    }
     if ($PSBoundParameters.ContainsKey("Backend") -and $Backend -notin $runtimeBackends) {
         throw "The native runtime does not include '$Backend'. Rebuild with .\tools\Build-AudioNative.ps1 -Backend $Backend. To package an intentional CPU-only build, pass -Backend cpu to .\tools\Publish-Ansible.ps1."
     }
@@ -83,26 +109,33 @@ if ($StageRuntimeOnly -or $VerifyRuntimeOnly) {
 }
 if (-not [Environment]::Is64BitProcess -or
     [Runtime.InteropServices.RuntimeInformation]::OSArchitecture -ne [Runtime.InteropServices.Architecture]::X64) {
-    throw "The qualified native build and deployment path requires Windows x64."
+    throw "Native builds and PE verification require a Windows x64 host, including ARM64 cross-compilation."
 }
 
 $installer = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer"
 $vswhere = Join-Path $installer "vswhere.exe"
-$vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-if (-not $vs) { throw "The Visual Studio MSVC x64 workload is required." }
+[string[]]$vcComponents = @("Microsoft.VisualStudio.Component.VC.Tools.x86.x64")
+if ($Architecture -eq "arm64") { $vcComponents += "Microsoft.VisualStudio.Component.VC.Tools.ARM64" }
+if (-not (Test-Path -LiteralPath $vswhere)) {
+    throw "Visual Studio Installer vswhere.exe is missing. Required for $Architecture native builds and packaging with MSVC components: $($vcComponents -join ', ')."
+}
+$vs = & $vswhere -latest -products * -requires $vcComponents -property installationPath
+if (-not $vs) { throw "Visual Studio with MSVC components '$($vcComponents -join "', '")' is required for $Architecture native builds and packaging." }
 $toolset = Get-ChildItem -LiteralPath (Join-Path $vs "VC\Tools\MSVC") -Directory |
     Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
 $dumpbin = Join-Path $toolset.FullName "bin\Hostx64\x64\dumpbin.exe"
+if (-not (Test-Path -LiteralPath $dumpbin)) { throw "The installed Visual Studio x64-hosted dumpbin.exe is missing: $dumpbin" }
 $redistRoot = Get-ChildItem -LiteralPath (Join-Path $vs "VC\Redist\MSVC") -Directory |
     Where-Object Name -Match '^\d+\.\d+\.\d+$' |
     Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
-if (-not $redistRoot) { throw "The installed Visual Studio x64 redistributables are missing." }
+if (-not $redistRoot) { throw "The installed Visual Studio $Architecture redistributables are missing." }
 $redistDirectories = @(
-    (Join-Path $redistRoot.FullName "x64\Microsoft.VC145.CRT"),
-    (Join-Path $redistRoot.FullName "x64\Microsoft.VC145.OpenMP"),
-    (Join-Path $redistRoot.FullName "x64\Microsoft.VC143.CRT"),
-    (Join-Path $redistRoot.FullName "x64\Microsoft.VC143.OpenMP")
+    (Join-Path $redistRoot.FullName "$Architecture\Microsoft.VC145.CRT"),
+    (Join-Path $redistRoot.FullName "$Architecture\Microsoft.VC145.OpenMP"),
+    (Join-Path $redistRoot.FullName "$Architecture\Microsoft.VC143.CRT"),
+    (Join-Path $redistRoot.FullName "$Architecture\Microsoft.VC143.OpenMP")
 ) | Where-Object { Test-Path -LiteralPath $_ }
+if (-not $redistDirectories) { throw "The installed Visual Studio $Architecture redistributable directories are missing under $($redistRoot.FullName)." }
 $systemImports = @(
     "kernel32.dll", "advapi32.dll", "ntdll.dll", "user32.dll", "gdi32.dll",
     "ole32.dll", "oleaut32.dll", "combase.dll", "rpcrt4.dll", "shell32.dll",
@@ -114,7 +147,7 @@ function Get-PeImports {
     param([string]$Path)
     $details = & $dumpbin /nologo /headers /imports $Path
     if ($LASTEXITCODE -ne 0) { throw "Cannot inspect PE imports for $Path." }
-    if (-not ($details -match '8664 machine')) { throw "Native deployment contains a non-x64 PE file: $Path." }
+    if (-not ($details -match "^\s+$expectedMachine machine \(")) { throw "Native deployment contains a non-$Architecture PE file: $Path." }
     return @($details | ForEach-Object {
         if ($_ -match '^\s+([a-zA-Z0-9_.-]+\.dll)\s*$') { $Matches[1].ToLowerInvariant() }
     } | Sort-Object -Unique)
@@ -154,9 +187,17 @@ function Test-NativeClosure {
             $queue.Enqueue($local)
         }
     }
-    foreach ($required in @("msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll", "vcomp140.dll")) {
-        if (-not (Test-Path -LiteralPath (Join-Path $output $required))) {
-            throw "The app-local runtime is incomplete: $required is missing."
+    if (-not $Stage -and $null -ne $record) {
+        # Verify every reachable dependency, not just audiocpp.dll. Re-staging must not bless
+        # tampered dependencies or discard recorded files/imports that disagree with the PE walk.
+        $actualKeys = @($closure | ForEach-Object {
+            "$($_.file)|$($_.sha256)|$(@($_.imports | Sort-Object) -join ',')".ToLowerInvariant()
+        } | Sort-Object)
+        $recordKeys = @($record.closure | ForEach-Object {
+            "$($_.file)|$($_.sha256)|$(@($_.imports | Sort-Object) -join ',')".ToLowerInvariant()
+        } | Sort-Object)
+        if (@(Compare-Object $actualKeys $recordKeys).Count -ne 0) {
+            throw "The native dependency closure does not match its runtime record. Rebuild the $Architecture runtime."
         }
     }
     $notices = Join-Path $output "native-notices"
@@ -183,13 +224,13 @@ function Test-NativeClosure {
         New-Item -ItemType Directory -Force -Path $validation | Out-Null
         Copy-Item -LiteralPath $sample -Destination (Join-Path $validation "sample_16k.wav") -Force
         [ordered]@{
-            source_commit = "795c45fbde0a7d29c93b22199728ff5caaec02e5"
-            architecture = "windows-x64"
+            source_commit = $expectedCommit
+            architecture = "windows-$Architecture"
             backends = $runtimeBackends
             vulkan_sdk = $sdkVersion
             source_patches = $sourcePatches
             model_families = $expectedModelFamilies
-            cpu_requirements = @("AVX2", "FMA", "F16C", "BMI1", "BMI2", "OS-enabled AVX state")
+            cpu_requirements = $cpuRequirements
             windows_prerequisite = "Windows 10 or newer supplies UCRT and Windows API-set imports."
             redist_version = $redistRoot.Name
             clean_machine_qualified = $false
@@ -200,17 +241,21 @@ function Test-NativeClosure {
         if (-not (Test-Path -LiteralPath (Join-Path $notices $notice))) { throw "Native deployment notice '$notice' is missing." }
     }
     if (-not (Test-Path -LiteralPath (Join-Path $output "native-runtime.json"))) { throw "The native deployment record is missing." }
-    Write-Host "Verified x64 native PE import closure ($($visited.Count) app-local files). Windows 10+ system imports remain prerequisites."
-    Write-Host "CPU requires AVX2/FMA/F16C/BMI1/BMI2. Clean-machine qualification has not been performed."
-    Write-Host "Compiled backends: $($runtimeBackends -join ', '). Vulkan recognition requires a compatible GPU driver; CPU remains available without it."
+    Write-Host "Verified $Architecture native PE import closure ($($visited.Count) app-local files). Windows 10+ system imports remain prerequisites."
+    Write-Host "CPU requires $($cpuRequirements -join ', '). Clean-machine qualification has not been performed."
+    Write-Host "Compiled backends: $($runtimeBackends -join ', ')."
+    if ("vulkan" -in $runtimeBackends) {
+        Write-Host "Vulkan recognition requires a compatible GPU driver; CPU remains available without it."
+    }
 }
 
 if ($VerifyRuntimeOnly) { Test-NativeClosure $false; return }
 if ($StageRuntimeOnly) {
     $commit = & git -C $source rev-parse HEAD
-    if ($LASTEXITCODE -ne 0 -or $commit -ne "795c45fbde0a7d29c93b22199728ff5caaec02e5") {
+    if ($LASTEXITCODE -ne 0 -or $commit -ne $expectedCommit) {
         throw "The native source is not the expected audio.cpp v0.9.0 commit."
     }
+    Test-NativeClosure $false
     Test-NativeClosure $true
     return
 }
@@ -249,7 +294,7 @@ if (-not (Test-Path -LiteralPath $source)) {
     if ($LASTEXITCODE -ne 0) { throw "Cannot clone the pinned audio.cpp source." }
 }
 $commit = & git -C $source rev-parse HEAD
-if ($LASTEXITCODE -ne 0 -or $commit -ne "795c45fbde0a7d29c93b22199728ff5caaec02e5") {
+if ($LASTEXITCODE -ne 0 -or $commit -ne $expectedCommit) {
     throw "The native source is not the expected audio.cpp v0.9.0 commit."
 }
 
@@ -278,9 +323,76 @@ if ($Backend -eq "vulkan") {
     $env:VULKAN_SDK = $VulkanSdk
     $sdkVersion = Split-Path $VulkanSdk -Leaf
     $vulkanFlags = "-DENGINE_ENABLE_VULKAN=ON"
+    if ($Architecture -eq "arm64") {
+        $glslc = (Join-Path $VulkanSdk "Bin\glslc.exe").Replace('\', '/')
+        $shaderCompilerHeaders = & $dumpbin /nologo /headers $glslc
+        if ($LASTEXITCODE -ne 0 -or -not ($shaderCompilerHeaders -match '^\s+8664 machine \(')) {
+            throw "ARM64 cross-compilation requires an x64-hosted Vulkan SDK shader compiler. The executable was not run: $glslc."
+        }
+        # GGML's shader generator runs during the build. The outer vcvars environment targets
+        # ARM64, so its host sub-build needs explicit x64 compilers AND x64 library search paths.
+        $hostCompiler = (Join-Path $toolset.FullName "bin\Hostx64\x64\cl.exe").Replace('\', '/')
+        $hostLinker = (Join-Path $toolset.FullName "bin\Hostx64\x64\link.exe").Replace('\', '/')
+        $hostArchiver = (Join-Path $toolset.FullName "bin\Hostx64\x64\lib.exe").Replace('\', '/')
+        $hostVcvars = Join-Path $vs "VC\Auxiliary\Build\vcvars64.bat"
+        $hostEnvironment = & $env:ComSpec /d /s /c "call `"$hostVcvars`" >nul && set LIB"
+        $hostLibraries = @($hostEnvironment | Where-Object { $_ -match '^LIB=' })
+        if ($LASTEXITCODE -ne 0 -or $hostLibraries.Count -ne 1) {
+            throw "Cannot obtain Visual Studio x64 libraries for the Vulkan shader generator."
+        }
+        $hostLinkFlags = ($hostLibraries[0].Substring(4) -split ';' | Where-Object { $_ } | ForEach-Object {
+            '/LIBPATH:\"' + $_.Replace('\', '/') + '\"'
+        }) -join ' '
+        New-Item -ItemType Directory -Force -Path $build | Out-Null
+        $hostToolchain = (Join-Path $build "vulkan-host-x64.cmake").Replace('\', '/')
+        @(
+            "set(CMAKE_C_COMPILER `"$hostCompiler`")",
+            "set(CMAKE_CXX_COMPILER `"$hostCompiler`")",
+            "set(CMAKE_LINKER `"$hostLinker`")",
+            "set(CMAKE_AR `"$hostArchiver`")",
+            'set(CMAKE_MSVC_RUNTIME_LIBRARY MultiThreaded)',
+            "set(CMAKE_EXE_LINKER_FLAGS_INIT `"$hostLinkFlags`")"
+        ) | Set-Content -LiteralPath $hostToolchain -Encoding utf8
+        # The tracked optional-loader patch uses SDK headers, not Vulkan::Vulkan, on Windows.
+        # No target import library or SDK loader DLL is linked or shipped.
+        $vulkanFlags += " -DGGML_VULKAN_SHADERS_GEN_TOOLCHAIN:FILEPATH=`"$hostToolchain`" " +
+            "-DVulkan_GLSLC_EXECUTABLE:FILEPATH=`"$glslc`""
+    }
 }
 
 $vcvars = Join-Path $vs "VC\Auxiliary\Build\vcvars64.bat"
+$architectureFlags = "-DGGML_AVX=ON -DGGML_AVX2=ON -DGGML_BMI2=ON -DGGML_AVX512=OFF"
+if ($Architecture -eq "arm64") {
+    $vcvars = Join-Path $vs "VC\Auxiliary\Build\vcvarsamd64_arm64.bat"
+    $armCompiler = Join-Path $toolset.FullName "bin\Hostx64\arm64\cl.exe"
+    if (-not (Test-Path -LiteralPath $vcvars) -or -not (Test-Path -LiteralPath $armCompiler)) {
+        throw "Visual Studio C++ ARM64 build tools are missing. Required: $vcvars and $armCompiler. No workloads were installed."
+    }
+    if (-not $ClangCompiler) {
+        $vsClang = Join-Path $vs "VC\Tools\Llvm\x64\bin\clang-cl.exe"
+        $pathClang = Get-Command clang-cl.exe -ErrorAction SilentlyContinue
+        if (Test-Path -LiteralPath $vsClang) { $ClangCompiler = $vsClang }
+        elseif ($pathClang) { $ClangCompiler = $pathClang.Source }
+    }
+    if (-not $ClangCompiler -or -not (Test-Path -LiteralPath $ClangCompiler -PathType Leaf)) {
+        throw "ARM64 audio.cpp requires x64-hosted clang-cl.exe; pinned GGML rejects MSVC for ARM. Visual Studio C++ Clang tools are missing ($vs\VC\Tools\Llvm\x64\bin\clang-cl.exe). Pass -ClangCompiler <clang-cl.exe> for an existing compiler. No workloads were installed."
+    }
+    # Match CMake's cached path spelling so a repeated configure keeps the same compiler identity.
+    $ClangCompiler = [IO.Path]::GetFullPath($ClangCompiler).Replace('\', '/')
+    $compilerHeaders = & $dumpbin /nologo /headers $ClangCompiler
+    if ($LASTEXITCODE -ne 0 -or -not ($compilerHeaders -match '^\s+8664 machine \(')) {
+        throw "ARM64 cross-compilation requires an x64-hosted clang-cl.exe. The compiler was not executed: $ClangCompiler."
+    }
+    # Set the target system so CMake never tries to execute an ARM64 feature probe on this x64 host.
+    # Baseline ARMv8-A includes NEON. No dot-product, FP16 arithmetic, i8mm, SVE or host ISA tuning.
+    # Disable OpenMP explicitly rather than depend on an unqualified ARM64 libomp distribution.
+    $architectureFlags = "-DCMAKE_SYSTEM_NAME=Windows -DCMAKE_SYSTEM_PROCESSOR=ARM64 " +
+        "-DCMAKE_C_COMPILER:FILEPATH=`"$ClangCompiler`" -DCMAKE_CXX_COMPILER:FILEPATH=`"$ClangCompiler`" " +
+        "-DCMAKE_C_COMPILER_TARGET=aarch64-pc-windows-msvc -DCMAKE_CXX_COMPILER_TARGET=aarch64-pc-windows-msvc " +
+        "-DCMAKE_C_FLAGS_INIT=/clang:-march=armv8-a -DCMAKE_CXX_FLAGS_INIT=/clang:-march=armv8-a " +
+        "-DGGML_CPU_ARM_ARCH=armv8-a -DENGINE_ENABLE_OPENMP=OFF -DGGML_OPENMP=OFF " +
+        "-DGGML_AVX=OFF -DGGML_AVX2=OFF -DGGML_BMI2=OFF -DGGML_AVX512=OFF -DGGML_FMA=OFF -DGGML_F16C=OFF"
+}
 $env:PATH = "$installer;$ninjaRoot;" + ($env:PATH -replace '"', '')
 $configure = "`"$cmake`" -S `"$source`" -B `"$build`" -G Ninja " +
     "-DCMAKE_MAKE_PROGRAM=`"$ninja`" -DCMAKE_BUILD_TYPE=Release " +
@@ -288,15 +400,31 @@ $configure = "`"$cmake`" -S `"$source`" -B `"$build`" -G Ninja " +
     "-DAUDIOCPP_MODEL_SET=custom -DAUDIOCPP_MODELS=$($expectedModelFamilies -join ',') " +
     "-DENGINE_ENABLE_CUDA=OFF -DENGINE_ENABLE_HIP=OFF $vulkanFlags " +
     "-DENGINE_ENABLE_METAL=OFF -DENGINE_ENABLE_NATIVE_CPU=OFF -DENGINE_ENABLE_LLAMAFILE=OFF " +
-    "-DGGML_AVX=ON -DGGML_AVX2=ON -DGGML_BMI2=ON -DGGML_AVX512=OFF -DENGINE_BUILD_TESTS=OFF"
+    "$architectureFlags -DENGINE_BUILD_TESTS=OFF"
 $compile = "`"$cmake`" --build `"$build`" --target audiocpp --parallel $Jobs"
-& $env:ComSpec /d /s /c "call `"$vcvars`" >nul && $configure && $compile"
-if ($LASTEXITCODE -ne 0) { throw "The audio.cpp C ABI build failed." }
+$logDirectory = Join-Path $runtime "build-logs"
+New-Item -ItemType Directory -Force -Path $logDirectory | Out-Null
+$log = Join-Path $logDirectory "audio-native-$Architecture-$Backend-$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
+& $env:ComSpec /d /s /c "call `"$vcvars`" && $configure && $compile" 2>&1 | Tee-Object -FilePath $log
+if ($LASTEXITCODE -ne 0) { throw "The audio.cpp $Architecture C ABI build failed. See $log." }
 
 $vulkanSetting = @(Select-String -LiteralPath (Join-Path $build "CMakeCache.txt") -Pattern '^GGML_VULKAN:BOOL=(ON|OFF)$')
 if ($vulkanSetting.Count -ne 1 -or
     ($vulkanSetting[0].Matches[0].Groups[1].Value -eq "ON") -ne ($Backend -eq "vulkan")) {
     throw "The compiled GGML Vulkan setting does not match the requested backend '$Backend'. The runtime was not staged."
+}
+if ($Architecture -eq "arm64") {
+    $cache = Get-Content -LiteralPath (Join-Path $build "CMakeCache.txt")
+    foreach ($setting in @(
+        '^CMAKE_C_COMPILER_TARGET:.*=aarch64-pc-windows-msvc$',
+        '^CMAKE_CXX_COMPILER_TARGET:.*=aarch64-pc-windows-msvc$',
+        '^GGML_CPU_ARM_ARCH:.*=armv8-a$', '^GGML_NATIVE:BOOL=OFF$',
+        '^ENGINE_ENABLE_OPENMP:BOOL=OFF$', '^GGML_OPENMP:BOOL=OFF$'
+    )) {
+        if (-not ($cache -match $setting)) {
+            throw "The ARM64 build cache does not match the baseline CPU recipe ($setting). The runtime was not staged."
+        }
+    }
 }
 
 Copy-Item -LiteralPath (Join-Path $build "bin\audiocpp.dll") -Destination $output -Force

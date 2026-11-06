@@ -7,16 +7,16 @@ and known backend failures.
 
 ## Requirements
 
-- Windows x64 and the .NET 10 SDK.
+- Windows x64, the .NET 10 SDK, and PowerShell 7 for native build and publish scripts.
 - Visual Studio with Desktop development with C++ and single-project MSIX tooling.
 - Git and `curl.exe` for source and model downloads.
 - For the default Vulkan build: a Vulkan SDK with `Bin\glslc.exe`. The build
   reads `VULKAN_SDK`; pass `-VulkanSdk <SDK directory>` to select it explicitly.
 
-The native runtime requires AVX2, FMA, F16C, BMI1/BMI2, and OS-enabled AVX state,
-including when GPU inference is selected. ARM64 and x86 are not supported by
-the current deployment path. A compatible Vulkan driver is required for GPU
-recognition; a CPU-only build does not need the Vulkan SDK.
+The x64 native runtime requires AVX2, FMA, F16C, BMI1/BMI2, and OS-enabled AVX
+state, including when GPU inference is selected. A compatible Vulkan driver is
+required for GPU recognition; a CPU-only build does not need the Vulkan SDK.
+ARM64 cross-builds require additional tools listed below. x86 is unsupported.
 
 ## Prepare the runtime
 
@@ -63,6 +63,69 @@ folder. The app package includes the runtime and public sample; it excludes
 model weights. Select `.runtime\models` through **Speech models > Model folder >
 Choose folder** to use setup's weights in the packaged app.
 
+## ARM64 cross-build
+
+Build on Windows x64 with the Visual Studio C++ ARM64 build tools and an
+x64-hosted `clang-cl.exe`. Pinned GGML rejects MSVC's ARM compiler. The native
+script finds Visual Studio's x64 Clang tools or `clang-cl.exe` on PATH.
+Use `-ClangCompiler <path>` to select an existing portable compiler.
+The cross-build was checked with LLVM 21.1.8 and MSVC libraries 14.51.36231.
+
+```powershell
+.\tools\Build-AudioNative.ps1 -Architecture arm64 -Backend cpu
+.\tools\Publish-Ansible.ps1 -Architecture arm64 -Backend cpu -Bundle
+```
+
+For the portable compiler used in the initial cross-build, the native command is:
+
+```powershell
+.\tools\Build-AudioNative.ps1 -Architecture arm64 -Backend cpu `
+  -ClangCompiler '.\.runtime\native-tools\clang+llvm-21.1.8-x86_64-pc-windows-msvc\bin\clang-cl.exe'
+```
+
+ARM64 uses baseline ARMv8-A/NEON, with OpenMP disabled. It does not use x64 AVX
+flags, ARM dot-product instructions, FP16 arithmetic, or host CPU tuning.
+All six configured model families remain compiled.
+
+For CPU plus Vulkan, use `-Backend vulkan` instead. The build uses the x64
+Vulkan SDK shader compiler and builds GGML's shader generator with a separate
+x64 toolchain. The tracked optional-loader patch needs SDK headers rather than
+an ARM64 Vulkan import library. The target device supplies the Vulkan loader and
+compatible GPU driver. No SDK installation is needed on that device to run the app.
+
+The runtime lives in `.runtime\native-arm64`; x64 stays in `.runtime\native`.
+The app selects matching native content and publishes a matching DeviceProbe.
+Capture builds automatically into `.runtime\record-capture-arm64`.
+DeviceProbe output is `.runtime\device-probe\<architecture>\<configuration>`.
+Its nested build intermediates live under that directory's `build` folder,
+separate from app and test intermediates to avoid shared core assembly locks.
+The optional encoder validation helper can be cross-built separately with
+`tools\record-spikes\encoder\Build-EncoderSpike.ps1 -Architecture arm64`.
+It stays in `.runtime\record-spikes\encoder-arm64`, separate from x64.
+
+These commands verify compilation, native PE architecture, dependencies, and
+package resources. They do not prove recognition or capture on ARM64 hardware.
+Before shipping ARM64, run the public WAV and streaming probes, microphone and
+loopback capture, shortcut insertion, record chord, and clean-machine installation
+on an ARM64 Windows device. Measure each model's latency and memory there.
+Keep `clean_machine_qualified` false until that qualification is performed.
+Do not treat an x64 Windows or Linux test run as ARM64 execution evidence.
+
+### Precompiled runtime storage
+
+Keep generated binaries and models out of Git. For team reuse, distribute native
+runtimes as versioned release assets or a native NuGet package, with pinned
+SHA-256 hashes in source control. No remote artifact publishing or automatic
+artifact download is configured by these changes.
+
+A reusable runtime includes its matching DLL dependency closure, notices,
+`audio.cpp-LICENSE`, `native-runtime.json`, and the public validation sample.
+Keep x64 and ARM64 artifacts separate. Preserve the source commit, patch hashes,
+model families, CPU requirements, and backend record. App publishing still needs
+the Windows SDK/MSVC toolchain; runtime staging also uses the pinned audio.cpp
+source for notices and the public sample. Precompiled audio does not remove those
+requirements or the capture helper build.
+
 ## Run in Visual Studio
 
 Open `Ansible.slnx`, set `Ansible` as the startup project, select Debug/x64, and use
@@ -77,8 +140,9 @@ Debug AOT can deadlock inside WinUI reference tracking during garbage collection
 The build rejects that configuration; use the Release package workflow for AOT.
 
 The solution's Any CPU platform maps the WinUI app to x64 because the app has
-no Any CPU project configuration. ARM64 and x86 map to their named project
-configurations, but the deployment checks reject them until separately qualified.
+no Any CPU project configuration. Select ARM64 to cross-build the ARM64 package;
+it cannot run on the x64 build host. x86 remains rejected. Visual Studio bundle
+creation defaults to the selected platform, not every solution platform.
 
 ## Build and verify a package
 
@@ -97,10 +161,9 @@ To publish an intentional CPU-only build, use:
 ```
 
 The native build checks the compiled `GGML_VULKAN` setting before staging.
-`native-runtime.json` records patch names and SHA-256 hashes plus compiled
-model families. Staging and package verification reject a DLL whose hash
-differs from that record, and reject a record whose patches or families do
-not match the current recipe. Rebuild with `.\tools\Build-AudioNative.ps1`
+`native-runtime.json` records architecture, source commit, CPU requirements,
+patch hashes, model families, and dependency hashes/imports. Staging and package
+verification reject mismatched recipes, PE architectures, and dependency closures. Rebuild with `.\tools\Build-AudioNative.ps1`
 after changing patches or compiled families; a matching DLL hash is not
 enough. `.\tools\Test-NativeBuildRecipe.ps1` checks that stale and tampered
 records are rejected. It does not compile the native runtime.
@@ -111,7 +174,29 @@ verified path under `Ansible\bin\AppPackages`. Change the output directory with:
 .\tools\Publish-Ansible.ps1 -OutputDirectory .\.runtime\packages
 ```
 
-Verification inspects the actual package for a native x64 executable, required
+To also create an x64-only bundle from the verified package:
+
+```powershell
+.\tools\Publish-Ansible.ps1 -Bundle
+```
+
+The bundle is `Ansible_<version>_x64.msixbundle` directly under the output directory.
+ARM64 uses the same naming with `arm64`. To include both architectures, prepare
+both native runtimes and run:
+
+```powershell
+.\tools\Publish-Ansible.ps1 -Architecture x64,arm64 -Bundle
+```
+
+This produces `Ansible_<version>_x64_arm64.msixbundle`. The script builds and
+verifies each MSIX sequentially, then verifies both bundle entries against those
+packages by SHA-256. Its explicit package builds ignore Visual Studio's bundle
+setting. A single architecture still produces a single-architecture bundle.
+
+`tools\Test-PackagingConfiguration.ps1` checks evaluated Debug/Release paths and
+bundle settings for both architectures, plus rejection of x86 and mixed targets.
+
+Verification inspects the actual package for a matching native executable, required
 WinUI XAML embedded in `resources.pri`, resources, native dependencies, notices,
 and `DeviceProbe\Ansible.DeviceProbe.exe`. Building the WinUI app publishes that
 worker automatically (NativeAOT in Release). A managed build alone does not
@@ -290,6 +375,24 @@ Vulkan or another model. For WinUI, interop, or deployment changes, also run
 `Publish-Ansible.ps1`. Documentation-only edits do not require downloads or
 a native rebuild.
 
+### Record chord and capture validation
+
+The opt-in record chord owns a native capture worker through `RecordTakeSession`.
+The native helper builds from `tools/record-capture` during app builds and ships
+beside `audiocpp.dll`. The [phase 0 report](record-chord-spikes.md) links the screen
+encoder experiment, native dictation word timing checks, and manual clipboard
+acceptance harness. The harness uses synthetic images. The
+[observed target results](record-chord-clipboard-results.md) distinguish measured
+counts from user-reported web checks. The provisional image cap is eight.
+Do not treat a clipboard readback or successful package build as target acceptance.
+
+After publishing, `Invoke-PackagedEncoderSpike.ps1 -Msix <package> -Take`
+registers a separate developer identity and runs the actual managed capture
+adapter for four seconds. It blocks mouse input during that interval and writes
+local PNG/MP4 evidence. It opens no microphone and sends no destination input.
+Use a fresh `-RunId` for each invocation. See
+[record chord validation](record-chord-validation.md) for evidence and hand checks.
+
 ## Source and ownership
 
 `DictationSession` has one admission and shutdown owner. Model replacement owns
@@ -303,13 +406,14 @@ destination. Final speech is sent at most once, only a deferred attempt
 retries, and shutdown joins inspection, press, delivery and release-tail work.
 Shortcut admission opens bounded in-memory microphone capture before Windows
 target inspection finishes. Packets stay off the recognizer until inspection
-succeeds. Rejected or failed inspection cancels or fails the operation and
+succeeds. For voice-only dictation, rejected or failed inspection cancels or fails the operation and
 discards that buffer, with no transcript, history row, or insertion. Hold-to-talk
 release still uses the 500 ms tail and may Finish while inspection is pending.
 Native model-load buffering is unchanged. The overlay waveform is shown after
 capture opens. Accessible startup status is Starting microphone. Removing the
 inspection wait does not prove a missing first word is gone, and it cannot
-remove hardware microphone startup delay or speech before the shortcut.
+remove hardware microphone startup delay or speech before the shortcut. Record
+takes permit a missing destination and keep successful bundles for manual Copy.
 
 `MeetingStore.ListAsync` returns summaries rather than transcript documents.
 The in-memory cache validates file identity on each listing and reads changed

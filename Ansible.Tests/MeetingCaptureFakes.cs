@@ -39,6 +39,7 @@ internal sealed class FakeMeetingCapture(Channel<byte[]> audio) : IMeetingCaptur
     public FakeMeetingCapture() : this(Channel.CreateUnbounded<byte[]>()) { }
 
     public ChannelReader<byte[]> Audio => audio.Reader;
+    public long? SampleZeroTimestamp => null;
     public double CapturedSeconds => Interlocked.Read(ref _emittedSamples) / 16000.0;
     public long ClockSamplePosition
     {

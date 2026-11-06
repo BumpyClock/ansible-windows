@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
@@ -6,10 +6,17 @@
     <RootNamespace>Ansible</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon Condition="Exists('Assets\AppIcon.ico')">Assets\AppIcon.ico</ApplicationIcon>
-    <Platforms>x64;ARM64;x86</Platforms>
+    <Platforms>x64;ARM64</Platforms>
     <Platform Condition="'$(Platform)' == '' or '$(Platform)' == 'AnyCPU'">x64</Platform>
-    <PlatformTarget>x64</PlatformTarget>
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <NativeArchitecture>$(Platform.ToLowerInvariant())</NativeArchitecture>
+    <PlatformTarget>$(Platform)</PlatformTarget>
+    <RuntimeIdentifier>win-$(NativeArchitecture)</RuntimeIdentifier>
+    <NativeRuntimeDirectory>..\.runtime\native</NativeRuntimeDirectory>
+    <NativeRuntimeDirectory Condition="'$(Platform)' == 'ARM64'">..\.runtime\native-arm64</NativeRuntimeDirectory>
+    <RecordCaptureDirectory>..\.runtime\record-capture</RecordCaptureDirectory>
+    <RecordCaptureDirectory Condition="'$(Platform)' == 'ARM64'">..\.runtime\record-capture-arm64</RecordCaptureDirectory>
+    <EncoderSpikeDirectory>..\.runtime\record-spikes\encoder</EncoderSpikeDirectory>
+    <EncoderSpikeDirectory Condition="'$(Platform)' == 'ARM64'">..\.runtime\record-spikes\encoder-arm64</EncoderSpikeDirectory>
     <UseWinUI>true</UseWinUI>
     <WinUISDKReferences>false</WinUISDKReferences>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -19,8 +26,8 @@
     <EnableMsixTooling>true</EnableMsixTooling>
     <AppxPackageSigningEnabled>false</AppxPackageSigningEnabled>
     <AppxAutoIncrementPackageRevision>false</AppxAutoIncrementPackageRevision>
-    <AppxBundle>Never</AppxBundle>
-    <PublishProfile>win-x64</PublishProfile>
+    <AppxBundle>Always</AppxBundle>
+    <PublishProfile>win-$(NativeArchitecture)</PublishProfile>
     <EnableWinAppRunSupport>false</EnableWinAppRunSupport>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <PublishAot>true</PublishAot>
@@ -32,10 +39,12 @@
     <Content Include="Assets\**\*" />
     <Content Update="Assets\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\tools\audio-models.json" Link="audio-models.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="..\.runtime\native\*.dll" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="..\.runtime\native\audio.cpp-LICENSE" Link="audio.cpp-LICENSE" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="..\.runtime\native\native-runtime.json" Link="native-runtime.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="..\.runtime\native\native-notices\**\*" Link="native-notices\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="$(NativeRuntimeDirectory)\*.dll" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="$(EncoderSpikeDirectory)\record_encoder_spike.dll" Condition="Exists('$(EncoderSpikeDirectory)\record_encoder_spike.dll')" Link="record_encoder_spike.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="$(RecordCaptureDirectory)\record_capture.dll" Link="record_capture.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="$(NativeRuntimeDirectory)\audio.cpp-LICENSE" Link="audio.cpp-LICENSE" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="$(NativeRuntimeDirectory)\native-runtime.json" Link="native-runtime.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="$(NativeRuntimeDirectory)\native-notices\**\*" Link="native-notices\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\.runtime\validation\sample_16k.wav" Link="validation-sample.wav" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
@@ -55,12 +64,22 @@
     <PublishReadyToRun>False</PublishReadyToRun>
     <PublishTrimmed Condition="'$(Configuration)' == 'Debug'">False</PublishTrimmed>
     <PublishTrimmed Condition="'$(Configuration)' != 'Debug'">True</PublishTrimmed>
+    <GenerateAppInstallerFile>False</GenerateAppInstallerFile>
+    <AppxPackageSigningTimestampDigestAlgorithm>SHA256</AppxPackageSigningTimestampDigestAlgorithm>
+    <AppxSymbolPackageEnabled>False</AppxSymbolPackageEnabled>
+    <GenerateTestArtifacts>False</GenerateTestArtifacts>
+    <AppxBundlePlatforms>$(Platform)</AppxBundlePlatforms>
+    <HoursBetweenUpdateChecks>0</HoursBetweenUpdateChecks>
   </PropertyGroup>
 
+  <Target Name="BuildRecordCapture" BeforeTargets="PrepareForBuild" Inputs="..\tools\record-capture\record_capture.cpp;..\tools\record-capture\record_capture.h;..\tools\record-capture\video_encoder.h;..\tools\record-spikes\encoder\record_encoder.h;..\tools\record-capture\Build-RecordCapture.ps1" Outputs="$(RecordCaptureDirectory)\record_capture.dll">
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\tools\record-capture\Build-RecordCapture.ps1&quot; -Architecture $(NativeArchitecture)" />
+  </Target>
+
   <Target Name="RequireQualifiedDeployment" BeforeTargets="PrepareForBuild">
-    <Error Condition="'$(RuntimeIdentifier)' != 'win-x64' or '$(Platform)' != 'x64' or '$(PlatformTarget)' != 'x64'" Text="Only the Windows x64 deployment is supported. x86 and ARM64 require separate native builds and qualification." />
+    <Error Condition="('$(Platform)' != 'x64' and '$(Platform)' != 'ARM64') or '$(RuntimeIdentifier)' != 'win-$(NativeArchitecture)' or '$(PlatformTarget)' != '$(Platform)'" Text="Use matching x64/win-x64 or ARM64/win-arm64 app and native builds. x86 is not supported." />
     <Error Condition="'$(WindowsPackageType)' != 'MSIX' or '$(EnableMsixTooling)' != 'true' or '$(WindowsAppSDKSelfContained)' != 'true' or '$(SelfContained)' != 'true' or '$(PublishAot)' != 'true'" Text="Use the packaged, self-contained NativeAOT deployment path." />
-    <Error Condition="!Exists('..\.runtime\native\audiocpp.dll') or !Exists('..\.runtime\native\audio.cpp-LICENSE') or !Exists('..\.runtime\native\native-runtime.json') or !Exists('..\.runtime\validation\sample_16k.wav')" Text="Native runtime files or the public validation sample are missing. Run .\tools\Build-AudioNative.ps1 from the repository root before building Ansible." />
+    <Error Condition="!Exists('$(NativeRuntimeDirectory)\audiocpp.dll') or !Exists('$(NativeRuntimeDirectory)\audio.cpp-LICENSE') or !Exists('$(NativeRuntimeDirectory)\native-runtime.json') or !Exists('..\.runtime\validation\sample_16k.wav')" Text="Native runtime files or the public validation sample are missing. Run tools\Build-AudioNative.ps1 -Architecture $(NativeArchitecture), or add -Backend cpu for an intentional CPU-only runtime." />
   </Target>
 
   <Target Name="RequireOptimizedNativeAot" BeforeTargets="IlcCompile">
@@ -69,16 +88,15 @@
 
   <Target Name="PublishDeviceProbe" BeforeTargets="PrepareForBuild">
     <PropertyGroup>
-      <DeviceProbeOutput>$(MSBuildProjectDirectory)\..\.runtime\device-probe\$(Configuration)</DeviceProbeOutput>
+      <DeviceProbeOutput>$(MSBuildProjectDirectory)\..\.runtime\device-probe\$(NativeArchitecture)\$(Configuration)</DeviceProbeOutput>
       <DeviceProbeAot Condition="'$(Configuration)' == 'Release'">true</DeviceProbeAot>
       <DeviceProbeAot Condition="'$(Configuration)' != 'Release'">false</DeviceProbeAot>
     </PropertyGroup>
-    <Exec Command="dotnet publish &quot;$(MSBuildProjectDirectory)\..\Ansible.DeviceProbe\Ansible.DeviceProbe.csproj&quot; -c $(Configuration) -r win-x64 --self-contained true -p:PublishAot=$(DeviceProbeAot) -p:Platform=AnyCPU -o &quot;$(DeviceProbeOutput)&quot; --verbosity quiet" />
+    <!-- Keep the nested publish's core intermediates separate from app and test builds. -->
+    <Exec Command="dotnet publish &quot;$(MSBuildProjectDirectory)\..\Ansible.DeviceProbe\Ansible.DeviceProbe.csproj&quot; -c $(Configuration) -r $(RuntimeIdentifier) --self-contained true -p:PublishAot=$(DeviceProbeAot) -p:Platform=AnyCPU --artifacts-path &quot;$(DeviceProbeOutput)\build&quot; -o &quot;$(DeviceProbeOutput)&quot; --verbosity quiet" />
     <ItemGroup>
       <_DeviceProbeFile Include="$(DeviceProbeOutput)\*" Exclude="$(DeviceProbeOutput)\*.pdb" />
-      <Content Include="@(_DeviceProbeFile)"
-               Link="DeviceProbe\%(_DeviceProbeFile.Filename)%(_DeviceProbeFile.Extension)"
-               CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+      <Content Include="@(_DeviceProbeFile)" Link="DeviceProbe\%(_DeviceProbeFile.Filename)%(_DeviceProbeFile.Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     </ItemGroup>
   </Target>
 </Project>

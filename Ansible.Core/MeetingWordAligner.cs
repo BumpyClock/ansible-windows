@@ -73,6 +73,33 @@ public static class MeetingWordAlignment
     private const int MaximumTokens = 8192;
     private const int MaximumTextCharacters = 65536;
 
+    /// <summary>
+    /// Maps a cumulative native timestamp snapshot onto the exact speech text. Every lexical word must
+    /// agree in order; unmatched text receives no timings. Repeated words remain positional.
+    /// </summary>
+    public static SpeechWordTimings? MapSpeechWords(string speech, IReadOnlyList<MeetingTimedToken> tokens,
+        long processedSamples, SpeechWordTimingSource source, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(speech);
+        ArgumentNullException.ThrowIfNull(tokens);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (processedSamples is <= 0 or > 16000 * 5 * 60 || speech.Length > MaximumTextCharacters ||
+            tokens.Count is 0 or > MaximumTokens) return null;
+        var words = ReadWords(tokens, processedSamples / (double)SampleRate);
+        if (words is null || words.Count == 0) return null;
+        var expected = LexicalWords(speech);
+        if (expected.Count != words.Count) return null;
+        var mapped = new SpeechWordTiming[words.Count];
+        for (var index = 0; index < words.Count; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (expected[index].Text != words[index].Text) return null;
+            mapped[index] = new(expected[index].Start, expected[index].End - expected[index].Start,
+                words[index].StartSample, words[index].EndSample);
+        }
+        return new(source, mapped);
+    }
+
     public static IReadOnlyList<MeetingTurn> Align(IReadOnlyList<MeetingTurn> turns,
         IReadOnlyList<MeetingTimedToken> tokens, double clipDurationSeconds, CancellationToken cancellationToken = default)
     {

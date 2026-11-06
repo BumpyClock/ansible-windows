@@ -293,13 +293,13 @@ public sealed partial class WelcomeDialog : ContentDialog
     {
         public CaretBounds? Caret => null;
 
-        public Task<TextDeliveryOutcome> InsertAsync(string text, Func<bool> isCurrent, CancellationToken cancellationToken) =>
+        public Task<TextDeliveryOutcome> InsertAsync(BundlePayload payload, Func<bool> isCurrent, CancellationToken cancellationToken) =>
             OnDispatcherAsync(lesson.DispatcherQueue, () =>
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 if (!isCurrent() || !lesson._open || lesson._step != PracticeStep)
                     return new TextDeliveryOutcome(TextDeliveryStatus.Rejected, "The practice field is no longer open.");
-                lesson.PracticeBox.Text = text;
+                lesson.PracticeBox.Text = payload.Text;
                 lesson._practiced = true;
                 lesson.Render();
                 lesson.Celebrate();

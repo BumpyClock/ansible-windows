@@ -2,8 +2,44 @@ using Ansible.Core;
 
 namespace Ansible.Tests;
 
-public sealed class CtrlWinShortcutStateTests
+public sealed class ModifierShortcutStateTests
 {
+    [Theory]
+    [InlineData(0xA4u, 0x5Bu)]
+    [InlineData(0xA4u, 0x5Cu)]
+    [InlineData(0xA5u, 0x5Bu)]
+    [InlineData(0xA5u, 0x5Cu)]
+    [InlineData(0x5Bu, 0xA5u)]
+    [InlineData(0x5Cu, 0xA4u)]
+    public void RecordChordQualifiesEitherSideAndOrderWithoutSwallowingAltRelease(uint first, uint second)
+    {
+        foreach (var release in new[] { first, second })
+        {
+            var state = new ModifierShortcutState(9);
+            Assert.False(state.Process(first, true, false, 0));
+            Assert.False(state.Process(second, true, false, 10));
+            Assert.False(state.Advance(209));
+            Assert.True(state.Advance(210));
+            Assert.False(state.Process(0xE8, true, true, 211));
+            Assert.False(state.Process(0xE8, false, true, 212));
+            Assert.True(state.IsPressed);
+            Assert.False(state.Process(release, false, false, 220));
+            Assert.False(state.IsPressed);
+        }
+    }
+
+    [Theory]
+    [InlineData(0xA2u)]
+    [InlineData(0x41u)]
+    public void RecordChordDoesNotCaptureThreeKeyShortcuts(uint extra)
+    {
+        var state = new ModifierShortcutState(9);
+        state.Process(0xA4, true, false, 0);
+        state.Process(0x5B, true, false, 10);
+        state.Process(extra, true, false, 20);
+        Assert.False(state.Advance(500));
+    }
+
     [Theory]
     [InlineData(0xA2u, 0x5Bu)]
     [InlineData(0xA2u, 0x5Cu)]
@@ -15,7 +51,7 @@ public sealed class CtrlWinShortcutStateTests
     {
         foreach (var release in new[] { first, second })
         {
-            var state = new CtrlWinShortcutState();
+            var state = new ModifierShortcutState(10);
             Assert.False(state.Process(first, true, false, 0));
             Assert.False(state.Process(second, true, false, 10));
             Assert.False(state.Advance(209));
@@ -39,7 +75,7 @@ public sealed class CtrlWinShortcutStateTests
     [InlineData(0xA4u)]
     public void OrdinaryChordsNeverQualifyAndAreNotSwallowed(uint other)
     {
-        var state = new CtrlWinShortcutState();
+        var state = new ModifierShortcutState(10);
         state.Process(0xA2, true, false, 0);
         state.Process(0x5B, true, false, 10);
         Assert.False(state.Process(other, true, false, 20));
@@ -58,7 +94,7 @@ public sealed class CtrlWinShortcutStateTests
     [Fact]
     public void ExistingPrimaryKeyBlocksTheChord()
     {
-        var state = new CtrlWinShortcutState();
+        var state = new ModifierShortcutState(10);
         state.Process(0x44, true, false, 0);
         state.Process(0xA2, true, false, 10);
         state.Process(0x5B, true, false, 20);
@@ -68,7 +104,7 @@ public sealed class CtrlWinShortcutStateTests
     [Fact]
     public void InjectedKeysNeitherStartNorReleaseTheHold()
     {
-        var state = new CtrlWinShortcutState();
+        var state = new ModifierShortcutState(10);
         state.Process(0xA2, true, true, 0);
         state.Process(0x5B, true, true, 10);
         Assert.False(state.Advance(500));
@@ -83,7 +119,7 @@ public sealed class CtrlWinShortcutStateTests
     [Fact]
     public void QuickReleaseDoesNotStartAndBareWindowsStillOpensStart()
     {
-        var state = new CtrlWinShortcutState();
+        var state = new ModifierShortcutState(10);
         state.Process(0x5B, true, false, 0);
         Assert.False(state.Process(0x5B, false, false, 10));
         state.Process(0xA2, true, false, 20);
@@ -203,7 +239,7 @@ public sealed class CtrlWinShortcutStateTests
     [Fact]
     public void ReconcileClearsStaleLockKeyBeforeTheNextChord()
     {
-        var state = new CtrlWinShortcutState();
+        var state = new ModifierShortcutState(10);
         state.Process(0x5B, true, false, 0);
         state.Process(0x4C, true, false, 10);
         Assert.False(state.Advance(500));
@@ -219,7 +255,7 @@ public sealed class CtrlWinShortcutStateTests
     [Fact]
     public void ReconcilePreservesMatchingCandidateAndHoldUntilPhysicalRelease()
     {
-        var state = new CtrlWinShortcutState();
+        var state = new ModifierShortcutState(10);
         state.Process(0xA2, true, false, 0);
         state.Process(0x5B, true, false, 10);
 
@@ -284,7 +320,7 @@ public sealed class CtrlWinShortcutStateTests
     [Fact]
     public void ReconcileCancelsPendingCandidateWhenPhysicalKeysAreGone()
     {
-        var state = new CtrlWinShortcutState();
+        var state = new ModifierShortcutState(10);
         state.Process(0xA2, true, false, 0);
         state.Process(0x5B, true, false, 10);
         Assert.True(state.IsPending);
@@ -304,7 +340,7 @@ public sealed class CtrlWinShortcutStateTests
     [Fact]
     public void ReconcileKeepsThirdKeyBlockingUntilEveryTrackedKeyIsUp()
     {
-        var state = new CtrlWinShortcutState();
+        var state = new ModifierShortcutState(10);
         state.Process(0xA2, true, false, 0);
         state.Process(0x5B, true, false, 10);
         state.Process(0x4C, true, false, 20);
@@ -323,9 +359,9 @@ public sealed class CtrlWinShortcutStateTests
         Assert.True(state.Advance(940));
     }
 
-    private static CtrlWinShortcutState Active()
+    private static ModifierShortcutState Active()
     {
-        var state = new CtrlWinShortcutState();
+        var state = new ModifierShortcutState(10);
         state.Process(0xA2, true, false, 0);
         state.Process(0x5B, true, false, 10);
         Assert.True(state.Advance(210));
@@ -334,7 +370,7 @@ public sealed class CtrlWinShortcutStateTests
 
     private sealed class ForwardedKeyboard
     {
-        public CtrlWinShortcutState State { get; } = new();
+        public ModifierShortcutState State { get; } = new(10);
         public HashSet<uint> WindowsVisibleDown { get; } = [];
 
         public void Input(uint key, bool down, bool injected, long milliseconds)

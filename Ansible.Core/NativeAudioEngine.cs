@@ -128,7 +128,8 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
             return RunWithDevice(model, "offline", 0, bytes, options, cancellationToken,
                 backend => RunOffline(model, audio, backend, cancellationToken));
         }, cancellationToken);
-        progress?.Report(new TranscriptUpdate(result.DisplayText, true, result.SpeechText));
+        progress?.Report(new TranscriptUpdate(result.DisplayText, true, result.SpeechText)
+            { ProcessedSamples = result.ProcessedSamples, WordTimings = result.WordTimings });
         return result;
     }
 
@@ -165,7 +166,8 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
             return await TranscribeAsync(model, recording, options, progress, cancellationToken);
         }
         var result = (await RunExclusiveAsync(() => RunAutoStream(model, audio, options, progress, cancellationToken, onReady), cancellationToken)).Result;
-        progress?.Report(new TranscriptUpdate(result.DisplayText, true, result.SpeechText));
+        progress?.Report(new TranscriptUpdate(result.DisplayText, true, result.SpeechText)
+            { ProcessedSamples = result.ProcessedSamples, WordTimings = result.WordTimings });
         return result;
     }
 
@@ -277,7 +279,9 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
         NativeAudioApi.Check(NativeAudioApi.StreamFinish(session, out var result), "finish native dictation");
         using var owned = new NativeAudioHandle(result, NativeHandleKind.Result);
         token.ThrowIfCancellationRequested();
-        var recognized = ReadResult(result, model.Family!, token);
+        var recognized = ReadResult(result, model.Family!, token) with { ProcessedSamples = receivedFrames };
+        if (historySteps == 0)
+            recognized = recognized with { WordTimings = ReadSpeechWordTimings(result, model.Family!, recognized.SpeechText, receivedFrames, token) };
         var meetingFinal = diarization?.CreateFinal(result, recognized.SpeechText
             ?? throw new InvalidDataException("The ASR model returned no authoritative meeting speech."), receivedFrames, token);
         return new(recognized, meetingFinal);
@@ -337,12 +341,47 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
             return;
         }
         var result = ReadResult(resultPointer, family, token, optionalText: true);
-        if (!string.IsNullOrEmpty(result.DisplayText) || !string.IsNullOrEmpty(result.SpeechText))
+        if (!string.IsNullOrEmpty(result.DisplayText) || !string.IsNullOrEmpty(result.SpeechText) ||
+            family is "nemotron_asr" or "kroko_asr" && NativeAudioApi.WordCount(resultPointer) > 0)
         {
             var speechMetadata = NativeAudioApi.SegmentCount(resultPointer) > 0 ||
                 NativeAudioApi.SpeakerTurnCount(resultPointer) > 0;
-            progress?.Report(transcript.Append(result, speechMetadata) with { ProcessedSamples = processedSamples });
+            var update = transcript.Append(result, speechMetadata);
+            progress?.Report(update with
+            {
+                ProcessedSamples = processedSamples,
+                WordTimings = ReadSpeechWordTimings(resultPointer, family, update.SpeechText, processedSamples, token)
+            });
         }
+    }
+
+    private static unsafe SpeechWordTimings? ReadSpeechWordTimings(nint result, string family, string? speech,
+        long processedSamples, CancellationToken token)
+    {
+        if (speech is null || family is not ("nemotron_asr" or "kroko_asr")) return null;
+        var count = NativeAudioApi.WordCount(result);
+        if (count > 8192) return null;
+        var tokens = new MeetingTimedToken[(int)count];
+        var remaining = 65536;
+        for (nuint index = 0; index < count; index++)
+        {
+            token.ThrowIfCancellationRequested();
+            NativeAudioApi.Check(NativeAudioApi.Word(result, index, out var text, out var start, out var end, 0),
+                "read dictation timestamp anchors");
+            if (text == 0) return null;
+            var bytes = (byte*)text;
+            var length = 0;
+            var maximumBytes = checked(remaining * 4);
+            while (length <= maximumBytes && bytes[length] != 0) length++;
+            if (length > maximumBytes) return null;
+            var piece = Encoding.UTF8.GetString(new ReadOnlySpan<byte>(bytes, length));
+            if (family == "kroko_asr" && index > 0) piece = " " + piece;
+            remaining -= piece.Length;
+            if (remaining < 0) return null;
+            tokens[(int)index] = new(piece, start, end);
+        }
+        return MeetingWordAlignment.MapSpeechWords(speech, tokens, processedSamples,
+            family == "nemotron_asr" ? SpeechWordTimingSource.NativeTokenEmission : SpeechWordTimingSource.NativeWordSpan, token);
     }
 
     private static string? ReadText(nint result, bool optional)

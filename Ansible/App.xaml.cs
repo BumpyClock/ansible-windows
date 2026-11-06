@@ -16,25 +16,39 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        if (Environment.GetCommandLineArgs().Contains("--record-take-spike"))
+        {
+            RecordTakeValidation.Run(this, LocalDataDirectory);
+            return;
+        }
+        if (Environment.GetCommandLineArgs().Contains("--record-encoder-spike"))
+        {
+            RecordEncoderSpike.Run(this, LocalDataDirectory,
+                Environment.GetCommandLineArgs().Contains("--borderless"));
+            return;
+        }
         LocalDiagnosticLog? diagnostics = null;
         long? launchGeneration = null;
         long? launchStarted = null;
         try
         {
             var paths = AppPaths.Create(AppContext.BaseDirectory, LocalDataDirectory);
+            var captures = new CaptureStore(paths.Captures);
             var microphonePermission = new MicrophonePermissionPreflight(new WindowsMicrophonePermission());
             var packageVersion = Windows.ApplicationModel.Package.Current.Id.Version;
             diagnostics = new LocalDiagnosticLog(Path.Combine(Path.GetDirectoryName(paths.Settings)!, "diagnostics"),
                 new Version(packageVersion.Major, packageVersion.Minor, packageVersion.Build, packageVersion.Revision));
+            var recordFactory = new WindowsRecordTakeFactory(captures, diagnostics);
             var session = new DictationSession(
                 directory => new NativeAudioEngine(paths.NativeLibrary, paths.ModelCatalog, directory,
                     deviceProbePath: paths.DeviceProbe, benchmarkSamplePath: paths.PublicSample,
                     benchmarkCachePath: paths.DeviceBenchmarks),
                 new PermissionCheckedAudioCaptureFactory(new WaveInCaptureFactory(diagnostics), microphonePermission), new AudioInputReader(), new UsageStore(paths.Usage), paths.ModelsDirectory,
-                settingsStore: new AppSettingsStore(paths.Settings), diagnostics: diagnostics);
+                settingsStore: new AppSettingsStore(paths.Settings), diagnostics: diagnostics,
+                recordTakeFactory: recordFactory);
             launchGeneration = diagnostics.CurrentGeneration;
             if (launchGeneration is not null) launchStarted = Stopwatch.GetTimestamp();
-            Window = new MainWindow(session, paths, ModelDownloadManager.CreateHttpClient(), microphonePermission, diagnostics);
+            Window = new MainWindow(session, paths, ModelDownloadManager.CreateHttpClient(), microphonePermission, diagnostics, captures, recordFactory);
 #if DEBUG
             // Scope screenshot qualification to this window without changing Windows appearance.
             if (Window.Content is FrameworkElement previewRoot)

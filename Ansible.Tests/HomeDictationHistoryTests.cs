@@ -9,6 +9,41 @@ public sealed class HomeDictationHistoryTests : IDisposable
     public void Dispose() => _history.Dispose();
 
     [Fact]
+    public async Task PreparedBundleTextIncludingSelectedVideoLinkPersistsWithoutMediaObjects()
+    {
+        var path = TemporaryPath();
+        var video = Path.Combine(Path.GetDirectoryName(path)!, "captures", "take.mp4");
+        var frame = Path.Combine(Path.GetDirectoryName(path)!, "captures", "1.png");
+        var text = "two [ink 1 at 0:07] words\nVideo: " + new Uri(video).AbsoluteUri;
+        var completion = Completion(1, "two words");
+        var prepared = completion with
+        {
+            Result = completion.Result with
+            {
+                Payload = new(text, [new(frame, 1, TimeSpan.FromSeconds(7))], video) { IsRecordTake = true }
+            }
+        };
+        try
+        {
+            await using (var history = new HomeDictationHistory(path))
+            {
+                await history.InitializeAsync();
+                Assert.True(history.Add(prepared));
+            }
+            await using var reloaded = new HomeDictationHistory(path);
+            await reloaded.InitializeAsync();
+            var row = Assert.Single(reloaded.Snapshot());
+            Assert.Equal(text, row.Text);
+            Assert.Equal(2, row.Words);
+            var saved = await File.ReadAllTextAsync(path);
+            Assert.DoesNotContain("1.png", saved);
+            Assert.DoesNotContain("VideoPath", saved);
+            Assert.DoesNotContain("Frames", saved);
+        }
+        finally { DeleteTemporary(path); }
+    }
+
+    [Fact]
     public async Task HistoryDiagnosticsNeverContainTranscriptOrPath()
     {
         var path = TemporaryPath();

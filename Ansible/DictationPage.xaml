@@ -59,8 +59,22 @@
         </local:PageCanvas.HeaderActions>
         <!-- Content height follows history; the PageCanvas scroller is the only vertical scroller. -->
         <Grid VerticalAlignment="Top">
-            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-            <Grid x:Name="HomeColumns" Grid.Row="1" ColumnSpacing="{StaticResource HomeGridGap}" RowSpacing="{StaticResource HomeGridGap}" SizeChanged="HomeColumnsSizeChanged">
+            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+            <Border x:Name="RetainedCaptureCard" Margin="{StaticResource PageSectionBottomMargin}" Style="{StaticResource CardStyle}" Visibility="Collapsed">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Latest screen and ink capture" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                    <TextBlock x:Name="RetainedCaptureHint" Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap" />
+                    <StackPanel x:Name="RetainedCaptureActions" Orientation="Horizontal" Spacing="8">
+                        <Button x:Name="CopyRetainedTextButton" Content="Copy text" Click="CopyClicked" MinHeight="32"
+                                AutomationProperties.Name="Copy latest capture text" />
+                        <Button x:Name="CopyRetainedPicturesButton" Content="Copy pictures" Click="CopyPicturesClicked" MinHeight="32"
+                                AutomationProperties.Name="Copy latest capture pictures" />
+                        <Button x:Name="CopyRetainedVideoButton" Content="Copy video link" Click="CopyVideoClicked" MinHeight="32"
+                                AutomationProperties.Name="Copy latest capture video link" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+            <Grid x:Name="HomeColumns" Grid.Row="2" ColumnSpacing="{StaticResource HomeGridGap}" RowSpacing="{StaticResource HomeGridGap}" SizeChanged="HomeColumnsSizeChanged">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="{StaticResource HomeRailColumnWidth}" />
@@ -71,25 +85,30 @@
                 <local:HomeInsightsView x:Name="HomeInsightsColumn" Grid.Column="1" VerticalAlignment="Top" Canvas.ZIndex="1" />
             </Grid>
             <!-- A result that is not in saved history (WAV, oversized) sits above history so a long list cannot bury it. -->
-            <Border x:Name="TranscriptCard" Margin="{StaticResource PageSectionBottomMargin}" Style="{StaticResource CardStyle}" MinHeight="160" Visibility="Collapsed">
+            <Border x:Name="TranscriptCard" Grid.Row="1" Margin="{StaticResource PageSectionBottomMargin}" Style="{StaticResource CardStyle}" MinHeight="160" Visibility="Collapsed">
                 <Grid RowSpacing="8">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
                     <Grid x:Name="TranscriptHeader" ColumnSpacing="12" MinHeight="32" Visibility="Collapsed">
+                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="Transcript" Style="{StaticResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" />
-                        <Button x:Name="CopyButton" Grid.Column="1" Click="CopyClicked" MinHeight="32"
+                        <TextBlock x:Name="TranscriptTitle" Text="Transcript" Style="{StaticResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" />
+                        <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
+                        <Button x:Name="CopyPicturesButton" Content="Copy pictures" Click="CopyPicturesClicked" MinHeight="32" Visibility="Collapsed" />
+                        <Button x:Name="CopyVideoButton" Content="Copy video link" Click="CopyVideoClicked" MinHeight="32" Visibility="Collapsed" />
+                        <Button x:Name="CopyButton" Click="CopyClicked" MinHeight="32"
                                 AutomationProperties.Name="Copy transcript">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <FontIcon Glyph="&#xE8C8;" FontSize="14" />
                                 <TextBlock x:Name="CopyLabel" Text="Copy" />
                             </StackPanel>
                         </Button>
+                        </StackPanel>
                     </Grid>
                     <Grid Grid.Row="1" MinHeight="96">
                         <TextBox x:Name="TranscriptBox" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True"

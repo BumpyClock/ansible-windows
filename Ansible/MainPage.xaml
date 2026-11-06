@@ -149,6 +149,56 @@
             </StackPanel>
 
             <StackPanel Spacing="{StaticResource SectionHeaderGap}">
+                <TextBlock Text="Record chord" Style="{StaticResource SettingsSectionTitleStyle}" />
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <StackPanel>
+                        <local:SettingsRow Title="Dictate with screen and ink" ShowDivider="False" CompactAlignment="Left"
+                                           Description="Records the monitor under the pointer with silent video. Drag to draw. Clicks and scrolling are blocked on all monitors. Esc discards the take. Nothing is pasted until you use Paste capture. Recordings stay on this device for up to seven days or 2 GB.">
+                            <ToggleSwitch x:Name="RecordChordToggle" AutomationProperties.Name="Enable record chord"
+                                          Toggled="RecordChordToggled" />
+                        </local:SettingsRow>
+                        <local:SettingsRow Title="Record shortcut" Description="Captures dictation, screen, and ink together.">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBox x:Name="RecordHotkeyCaptureBox" IsReadOnly="True" MinWidth="150"
+                                         AutomationProperties.Name="Record shortcut" TextAlignment="Center"
+                                         GotFocus="ShortcutGotFocus" KeyDown="ShortcutKeyDown" KeyUp="ShortcutKeyUp"
+                                         LostFocus="ShortcutLostFocus" />
+                                <Button x:Name="ChangeRecordShortcutButton" Content="Change" Click="ChangeRecordShortcutClicked" />
+                                <HyperlinkButton x:Name="ResetRecordShortcutButton" Content="Reset" Click="ResetRecordShortcutClicked"
+                                                 AutomationProperties.Name="Reset record shortcut" />
+                            </StackPanel>
+                        </local:SettingsRow>
+                        <local:SettingsRow Title="Paste capture shortcut" Description="After recording finishes, focus a chat or text field and press this shortcut to paste the latest take's text, ink markers, pictures, and optional video link.">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBox x:Name="RecordPasteHotkeyCaptureBox" IsReadOnly="True" MinWidth="150"
+                                         AutomationProperties.Name="Paste capture shortcut" TextAlignment="Center"
+                                         GotFocus="ShortcutGotFocus" KeyDown="ShortcutKeyDown" KeyUp="ShortcutKeyUp"
+                                         LostFocus="ShortcutLostFocus" />
+                                <Button x:Name="ChangeRecordPasteShortcutButton" Content="Change" Click="ChangeRecordPasteShortcutClicked" />
+                                <HyperlinkButton x:Name="ResetRecordPasteShortcutButton" Content="Reset" Click="ResetRecordPasteShortcutClicked"
+                                                 AutomationProperties.Name="Reset paste capture shortcut" />
+                            </StackPanel>
+                        </local:SettingsRow>
+                        <local:SettingsRow Title="Press once to start and stop" CompactAlignment="Left"
+                                           Description="Release the keys to draw with your touchpad. Press the record shortcut again to finish. Independent of voice dictation's activation mode.">
+                            <ToggleSwitch x:Name="RecordToggleModeToggle"
+                                          AutomationProperties.AutomationId="RecordToggleModeToggle"
+                                          AutomationProperties.Name="Press record shortcut once to start and stop"
+                                          Toggled="RecordToggleModeToggled" />
+                        </local:SettingsRow>
+                        <local:SettingsRow Title="Include video link in pasted text" CompactAlignment="Left"
+                                           Description="Adds a local file URL. Web and cloud agents cannot open it. The URL reveals this device's local path.">
+                            <ToggleSwitch x:Name="IncludeVideoLinkToggle" AutomationProperties.Name="Include video link in pasted text"
+                                          Toggled="IncludeVideoLinkToggled" />
+                        </local:SettingsRow>
+                        <local:SettingsRow x:Name="CaptureStorageRow" Title="Saved captures" Description="Checking size…">
+                            <Button x:Name="DeleteCapturesButton" Content="Delete all captures" Click="DeleteCapturesClicked" />
+                        </local:SettingsRow>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <StackPanel Spacing="{StaticResource SectionHeaderGap}">
                 <TextBlock Text="Recognition" Style="{StaticResource SettingsSectionTitleStyle}" />
                 <TextBlock Text="Applies to the next dictation." Style="{StaticResource SettingsLedeStyle}" />
                 <Border Style="{StaticResource SettingsCardStyle}">

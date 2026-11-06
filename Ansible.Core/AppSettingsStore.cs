@@ -23,6 +23,27 @@ public sealed class AppSettingsStore(string path) : IAppSettingsStore
             settings = settings with { OverlayFollowsCaret = true };
         if (!document.RootElement.TryGetProperty(nameof(AppSettings.MeetingCleanup), out _))
             settings = settings with { MeetingCleanup = new() };
+        if (!document.RootElement.TryGetProperty(nameof(AppSettings.RecordShortcut), out _))
+            settings = settings with { RecordShortcut = DictationShortcut.RecordDefault };
+        if (!document.RootElement.TryGetProperty(nameof(AppSettings.RecordPasteShortcut), out _))
+            settings = settings with { RecordPasteShortcut = DictationShortcut.RecordPasteDefault };
+        if (!document.RootElement.TryGetProperty(nameof(AppSettings.IncludeVideoLink), out _))
+            settings = settings with { IncludeVideoLink = true };
+        // These Windows-reserved dictation chords were accepted by earlier versions.
+        if (settings.Shortcut is { Modifiers: 10, Key: 0x20 } or { Modifiers: 9, Key: 0x52 })
+            settings = settings with { Shortcut = DictationShortcut.Default };
+        var previous = settings;
+        if (settings.Shortcut.IsValid && settings.IsDeliveryShortcut(settings.Shortcut))
+            settings = settings with { Shortcut = DictationShortcut.Default };
+        if (settings.RecordChordEnabled && settings.RecordShortcut.IsValid && settings.IsDeliveryShortcut(settings.RecordShortcut))
+            settings = settings with { RecordShortcut = DictationShortcut.RecordDefault };
+        // A replacement default can overlap another saved activation. Reset that layout, not unrelated preferences.
+        if (settings != previous && settings.RecordChordEnabled && settings.ActivationShortcutsOverlap &&
+            !previous.ActivationShortcutsOverlap && previous.Shortcut.IsValid && previous.RecordShortcut.IsValid &&
+            previous.RecordPasteShortcut.IsValid && previous.RecordPasteShortcut != new DictationShortcut(2, 0x56) &&
+            !previous.IsDeliveryShortcut(previous.RecordPasteShortcut))
+            settings = settings with { Shortcut = DictationShortcut.Default, RecordShortcut = DictationShortcut.RecordDefault,
+                RecordPasteShortcut = DictationShortcut.RecordPasteDefault };
         settings.Validate();
         return settings;
     }

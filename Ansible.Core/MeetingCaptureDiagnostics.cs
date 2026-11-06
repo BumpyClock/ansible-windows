@@ -193,8 +193,11 @@ public sealed record OperationDiagnostic(
     public string? AppBuild { get; init; }
 }
 
-public enum ApplicationDiagnosticStage { Launch, Startup, MicrophonePermission, Hotkey, Shutdown, Recovery, CleanupCopilot, CleanupOpenAI }
+public enum ApplicationDiagnosticStage { Launch, Startup, MicrophonePermission, Hotkey, Shutdown, Recovery, CleanupCopilot, CleanupOpenAI, RecordCapture }
 public enum DiagnosticOutcome { Completed, Failed, Cancelled }
+
+public sealed record RecordCaptureDiagnostic(uint MouseEvents, uint MouseMoves, uint MaxHookDelayMs,
+    uint HookDelaysOver100Ms, uint MaxPresentUs, uint MaxLoopUs, uint MaxFenceWaitMs, bool HooksReleasedBeforeJoin);
 
 public sealed record ApplicationDiagnostic(
     DateTimeOffset TimestampUtc, ApplicationDiagnosticStage Stage, DiagnosticOutcome Outcome,
@@ -206,6 +209,7 @@ public sealed record ApplicationDiagnostic(
     public Guid RunId { get; init; }
     public long DroppedEvents { get; init; }
     public string? AppBuild { get; init; }
+    public RecordCaptureDiagnostic? RecordCapture { get; init; }
 }
 
 public enum DeliveryDiagnosticOutcome

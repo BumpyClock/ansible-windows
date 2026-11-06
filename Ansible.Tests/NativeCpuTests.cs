@@ -1,4 +1,5 @@
 using Ansible.Core;
+using System.Runtime.InteropServices;
 
 namespace Ansible.Tests;
 
@@ -63,16 +64,32 @@ public sealed class NativeCpuTests
     }
 
     [Theory]
-    [InlineData(false, true)]
-    [InlineData(true, false)]
-    [InlineData(false, false)]
-    public void NonWindowsOrNonX64ProcessesRemainUnsupported(bool windows, bool x64) =>
-        Assert.Throws<PlatformNotSupportedException>(() => NativeCpu.ValidatePlatform(windows, x64));
+    [InlineData(false, Architecture.X64)]
+    [InlineData(false, Architecture.Arm64)]
+    [InlineData(true, Architecture.X86)]
+    [InlineData(true, Architecture.Arm)]
+    [InlineData(true, Architecture.Wasm)]
+    public void NonWindowsOrUnsupportedProcessesRemainUnsupported(bool windows, Architecture architecture) =>
+        Assert.Throws<PlatformNotSupportedException>(() => NativeCpu.ValidatePlatform(windows, architecture));
+
+    [Theory]
+    [InlineData(Architecture.X64)]
+    [InlineData(Architecture.Arm64)]
+    public void WindowsSupportedArchitecturesAreAccepted(Architecture architecture) =>
+        NativeCpu.ValidatePlatform(windows: true, architecture);
+
+    [Fact]
+    public void WindowsArm64WithNeonIsEligible() => NativeCpu.ValidateArm64(neonAvailable: true);
+
+    [Fact]
+    public void WindowsArm64WithoutNeonIsRejected() =>
+        Assert.Throws<PlatformNotSupportedException>(() => NativeCpu.ValidateArm64(neonAvailable: false));
 
     [Fact]
     public void WindowsFeatureNumbersMatchTheSdk()
     {
         Assert.Equal(39u, NativeCpu.ProcessorFeatureAvx);
         Assert.Equal(40u, NativeCpu.ProcessorFeatureAvx2);
+        Assert.Equal(19u, NativeCpu.ProcessorFeatureArmNeon);
     }
 }

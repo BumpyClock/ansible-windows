@@ -75,6 +75,7 @@ internal sealed class MeetingCapture : IMeetingCapture
     private long _outputsLost;
     private bool _enumerationFailed;
     public ChannelReader<byte[]> Audio => _audio.Reader;
+    public long? SampleZeroTimestamp => null;
     public double CapturedSeconds => Interlocked.Read(ref _samples) / 16000.0;
     public long ClockSamplePosition
     {

@@ -16,7 +16,8 @@ internal static unsafe partial class WindowsTextTarget
 
     private static TextDeliveryOutcome? Paste(string text, PasteShortcut shortcut,
         CancellationToken cancellationToken, Func<bool> stillCurrent,
-        Func<TextDeliveryOutcome?> recheck, Func<TextDeliveryOutcome?> prepareSend)
+        Func<TextDeliveryOutcome?> recheck, Func<TextDeliveryOutcome?> prepareSend,
+        Action<uint>? clipboardPublished = null)
     {
         var window = CreatePasteWindow();
         uint sequence = 0;
@@ -27,6 +28,7 @@ internal static unsafe partial class WindowsTextTarget
                 {
                     var failure = PublishClipboardText(window, text);
                     sequence = GetClipboardSequenceNumber();
+                    if (failure is null) clipboardPublished?.Invoke(sequence);
                     return failure;
                 },
                 recheck,

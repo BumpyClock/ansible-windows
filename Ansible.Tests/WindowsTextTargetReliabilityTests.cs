@@ -19,7 +19,69 @@ public sealed class WindowsTextTargetReliabilityTests
     public void FinalKeyGuardDoesNotTakeOwnershipOfPhysicallyHeldPasteKeys(
         TextInsertionMethod method, bool modifiersReleased, bool triggerReleased, bool expected)
     {
-        Assert.Equal(expected, InsertionKeysReleased(method, modifiersReleased, triggerReleased));
+        var result = RecheckInsertionKeys(method, modifiersReleased, triggerReleased, 0,
+            _ => throw new InvalidOperationException("Modifier-only activation has no primary key."));
+        Assert.Equal(expected, result is null);
+        if (!expected) Assert.Equal(TextDeliveryStatus.Deferred, result!.Value.Status);
+    }
+
+    [Theory]
+    [InlineData(TextInsertionMethod.Paste, 0x57u, true)]
+    [InlineData(TextInsertionMethod.Paste, 0x57u, false)]
+    [InlineData(TextInsertionMethod.Type, 0x57u, true)]
+    [InlineData(TextInsertionMethod.Type, 0x57u, false)]
+    [InlineData(TextInsertionMethod.Paste, 0x78u, true)]
+    [InlineData(TextInsertionMethod.Type, 0x78u, true)]
+    [InlineData(TextInsertionMethod.Paste, 0u, true)]
+    [InlineData(TextInsertionMethod.Type, 0u, true)]
+    public void ActivationPrimaryMustBeReleasedEvenAfterAllModifiersAreUp(
+        TextInsertionMethod method, uint primaryKey, bool primaryHeld)
+    {
+        var reads = 0;
+        var result = RecheckInsertionKeys(method, true, true, primaryKey, key =>
+        {
+            reads++;
+            Assert.Equal((int)primaryKey, key);
+            return primaryHeld ? short.MinValue : (short)1; // The low transition bit is not a held key.
+        });
+        Assert.Equal(primaryKey == 0 ? 0 : 1, reads);
+        if (primaryKey != 0 && primaryHeld)
+        {
+            Assert.Equal(TextDeliveryStatus.Deferred, result!.Value.Status);
+            Assert.Equal(TextDeliveryReason.ModifiersHeld, result.Value.Reason);
+        }
+        else Assert.Null(result);
+    }
+
+    [Theory]
+    [InlineData(1, 0)]
+    [InlineData(2, 1)]
+    [InlineData(3, 1)]
+    public void HeldActivationPrimaryVetoesEachPasteGateAndRetryWaitsForRelease(int blockedGate, int publications)
+    {
+        var gate = 0;
+        var published = 0;
+        var sent = 0;
+        var released = false;
+        TextDeliveryOutcome? Recheck() => RecheckInsertionKeys(TextInsertionMethod.Paste, true, true, 0x57,
+            _ => !released && ++gate >= blockedGate ? short.MinValue : (short)0);
+        TextDeliveryOutcome? Attempt() => PasteWithClipboard(
+            () => { published++; return null; }, Recheck, () =>
+            {
+                if (Recheck() is { } veto) return veto;
+                sent++;
+                return null;
+            });
+
+        Assert.Equal(TextDeliveryStatus.Deferred, Attempt()!.Value.Status);
+        Assert.Equal(publications, published);
+        Assert.Equal(0, sent);
+        Assert.Equal(TextDeliveryStatus.Deferred, Attempt()!.Value.Status);
+        Assert.Equal(publications, published);
+        Assert.Equal(0, sent);
+        released = true;
+        Assert.Null(Attempt());
+        Assert.Equal(1, sent);
     }
 
     [Fact]
@@ -92,6 +154,30 @@ public sealed class WindowsTextTargetReliabilityTests
         Assert.False(ExactInsertion(new("speech", 6, 6), new("speech", 6, 6), "speech"));
         Assert.False(ExactInsertion(new("speech", 0, 6), new("speech", 6, 6), "speech"));
         Assert.False(ExactInsertion(new("ab", 0, 0), new("axb", 2, 2), "x"));
+    }
+
+    [Fact]
+    public void ChromiumEmptyParagraphAndTerminalCaretPreserveExactVerification()
+    {
+        var before = SnapshotFromTextRanges("\n", "", "", false, true);
+        const string text = "speech [ink 1 at 0:03]\nFrames in order: 1, summary.\nVideo: file:///C:/take.mp4";
+        var after = SnapshotFromTextRanges(text, text, text, true, false);
+        Assert.NotNull(before);
+        Assert.NotNull(after);
+        Assert.True(ExactInsertion(before, after, text));
+        Assert.False(ExactInsertion(before, after, text + "!"));
+        Assert.Null(SnapshotFromTextRanges(text, "speech", "speech", true, false));
+        Assert.Null(SnapshotFromTextRanges(text, text, text + "extra", true, false));
+        Assert.Equal("\n\n", SnapshotFromTextRanges("\n\n", "", "", false, true)!.Document);
+    }
+
+    [Fact]
+    public void RealOrUnprovenNewlineIsPreserved()
+    {
+        var before = SnapshotFromTextRanges("\n", "", "", false, false);
+        Assert.Equal("\n", before!.Document);
+        Assert.False(ExactInsertion(before, new("speech", 6, 6), "speech"));
+        Assert.True(ExactInsertion(before, new("speech\n", 6, 6), "speech"));
     }
 
     [Theory]

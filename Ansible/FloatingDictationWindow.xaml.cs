@@ -40,6 +40,8 @@ public sealed partial class FloatingDictationWindow : Window
     private bool _reducedMotion;
     private bool _replay;
     private bool? _capturePrivacy;
+    private bool _forceRecordPrivacy;
+    private bool _recordPrivacyFailed;
     private (int Left, int Top, int Width, int Height) _windowShape;
 
     internal FloatingDictationWindow(DictationSession session, MainWindow owner, AppNotices notices)
@@ -147,7 +149,7 @@ public sealed partial class FloatingDictationWindow : Window
         SizeToContent();
         AppWindow.Show(false);
         _visible = true;
-        _pill?.Show();
+        if (!_recordPrivacyFailed) _pill?.Show();
         QueueLayout();
     }
 
@@ -183,16 +185,31 @@ public sealed partial class FloatingDictationWindow : Window
     internal void ApplyCapturePrivacy(bool enabled)
     {
         if (_closed) return;
+        enabled |= _state.IsRecordTake || _forceRecordPrivacy;
         var failures = new List<Exception>();
         if (_capturePrivacy != enabled)
         {
-            _capturePrivacy = enabled;
-            try { Ansible.Core.Windows.WindowCapturePrivacy.Apply(WinRT.Interop.WindowNative.GetWindowHandle(this), enabled); }
+            try
+            {
+                Ansible.Core.Windows.WindowCapturePrivacy.Apply(WinRT.Interop.WindowNative.GetWindowHandle(this), enabled);
+                _capturePrivacy = enabled;
+            }
             catch (Exception error) { failures.Add(error); }
         }
         try { _pill?.ApplyCapturePrivacy(enabled); }
         catch (Exception error) { failures.Add(error); }
-        if (failures.Count > 0) throw new AggregateException("Windows could not update capture privacy for the dictation overlay.", failures);
+        if (failures.Count > 0)
+        {
+            if (_state.IsRecordTake || _forceRecordPrivacy) { _recordPrivacyFailed = true; _pill?.Hide(); }
+            throw new AggregateException("Windows could not update capture privacy for the dictation overlay.", failures);
+        }
+        _recordPrivacyFailed = false;
+    }
+
+    internal void ForceRecordPrivacy(bool enabled)
+    {
+        _forceRecordPrivacy = enabled;
+        ApplyCapturePrivacy(_state.Settings.HideFromCapture);
     }
 
     private void PreviewLoaded(object sender, RoutedEventArgs args)
@@ -283,8 +300,21 @@ public sealed partial class FloatingDictationWindow : Window
             }
             _pill ??= new NativeCompositionPill(WinRT.Interop.WindowNative.GetWindowHandle(_owner),
                 QueueTerminalDismiss, _cleanupTasks.Add);
-            try { _pill.ApplyCapturePrivacy(_state.Settings.HideFromCapture); }
-            catch (Exception error) { ShowCapturePrivacyFailure(error); }
+            try
+            {
+                _pill.ApplyCapturePrivacy(_state.Settings.HideFromCapture || _state.IsRecordTake || _forceRecordPrivacy);
+                _recordPrivacyFailed = false;
+            }
+            catch (Exception error)
+            {
+                ShowCapturePrivacyFailure(error);
+                if (_state.IsRecordTake || _forceRecordPrivacy)
+                {
+                    _recordPrivacyFailed = true;
+                    _pill.Hide();
+                    return;
+                }
+            }
             var foreground = ((SolidColorBrush)PreviewRoot.BorderBrush).Color;
             _pill.Configure(bounds.X + shape.Item1, bounds.Y + shape.Item2, pillWidth, pillHeight,
                 scale, foreground, ((SolidColorBrush)PreviewRoot.Background).Color,
@@ -448,8 +478,8 @@ public sealed partial class FloatingDictationWindow : Window
         public void ApplyCapturePrivacy(bool enabled)
         {
             if (_disposed || _capturePrivacy == enabled) return;
-            _capturePrivacy = enabled;
             Ansible.Core.Windows.WindowCapturePrivacy.Apply(_handle, enabled);
+            _capturePrivacy = enabled;
         }
 
         public void Configure(int x, int y, int width, int height, double scale,

@@ -18,8 +18,11 @@ public sealed partial class DictationPage : Page
     private readonly DictationSession _session;
     private readonly AppPaths _paths;
     private readonly HomeDictationHistory _history;
+    private readonly ShortcutDictation _shortcut;
     private readonly Func<nint> _windowHandle;
     private readonly Task _catalogNamesTask;
+    private Task _copyPicturesTask = Task.CompletedTask;
+    private bool _copyingPictures;
     private readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromMilliseconds(250) };
     private readonly DispatcherTimer _copiedTimer = new() { Interval = CopiedDuration };
     private SessionSnapshot _state;
@@ -41,11 +44,14 @@ public sealed partial class DictationPage : Page
 
     private readonly AppNotices _notices;
 
-    internal DictationPage(DictationSession session, AppPaths paths, Func<nint> windowHandle, HomeDictationHistory history, AppNotices notices)
+    internal DictationPage(DictationSession session, AppPaths paths, Func<nint> windowHandle, HomeDictationHistory history,
+        AppNotices notices, ShortcutDictation shortcut)
     {
         InitializeComponent();
         HomeViewport.PrimaryAction = new PageAction(CompactDictateButton, RecordClicked, CompactDictateLabel);
         _session = session;
+        _shortcut = shortcut;
+        _shortcut.RecordResultChanged += RecordResultChanged;
         _notices = notices;
         _paths = paths;
         _windowHandle = windowHandle;
@@ -85,11 +91,12 @@ public sealed partial class DictationPage : Page
         };
     }
 
-    internal Task FinishBackgroundWorkAsync() => _catalogNamesTask;
+    internal Task FinishBackgroundWorkAsync() => Task.WhenAll(_catalogNamesTask, _copyPicturesTask);
 
     internal void Dispose()
     {
         _disposed = true;
+        _shortcut.RecordResultChanged -= RecordResultChanged;
         _history.Changed -= HistoryChanged;
         HistoryView.QueryChanged -= HistoryQueryChanged;
         HistoryView.CopyRequested -= CopyHistoryItem;
@@ -106,20 +113,41 @@ public sealed partial class DictationPage : Page
         _notices.Set(ErrorNoticeKey, null);
     }
 
+    private void RecordResultChanged()
+    {
+        if (!_disposed && IsLoaded) Render();
+    }
+
     private void Render()
     {
         RenderRecordControl();
         RenderStatus();
         RenderClock();
         RenderHomeData();
-        if (TranscriptBox.Text != _state.Transcript) { TranscriptBox.Text = _state.Transcript; }
-        var empty = string.IsNullOrWhiteSpace(_state.Transcript);
+        var payload = _state.Payload;
+        var text = payload?.Text ?? _state.Transcript;
+        if (TranscriptBox.Text != text) { TranscriptBox.Text = text; }
+        var empty = string.IsNullOrWhiteSpace(text);
         var retainedInHistory = _state.TranscriptOperationId is { } operationId &&
             (_history.Contains(operationId) || operationId == _removedTranscriptOperationId);
-        var showTranscript = !empty && !retainedInHistory;
+        var hasMedia = payload is { Frames.Count: > 0 } || payload?.VideoPath is not null;
+        var showTranscript = !empty && (!retainedInHistory || hasMedia);
         TranscriptCard.Visibility = showTranscript ? Visibility.Visible : Visibility.Collapsed;
         TranscriptHeader.Visibility = showTranscript ? Visibility.Visible : Visibility.Collapsed;
         CopyButton.IsEnabled = _state.IsIdle || _state.Phase == DictationPhase.RecoveryRequired;
+        TranscriptTitle.Text = payload is null ? "Transcript" : "Dictation bundle";
+        CopyPicturesButton.Visibility = payload is { Frames.Count: > 0 } ? Visibility.Visible : Visibility.Collapsed;
+        CopyVideoButton.Visibility = payload?.VideoPath is not null ? Visibility.Visible : Visibility.Collapsed;
+        CopyPicturesButton.IsEnabled = CopyButton.IsEnabled && !_copyingPictures;
+        CopyVideoButton.IsEnabled = CopyButton.IsEnabled;
+        var retained = _shortcut.RecordPayload;
+        RetainedCaptureCard.Visibility = retained is not null && payload?.IsRecordTake != true ? Visibility.Visible : Visibility.Collapsed;
+        RetainedCaptureHint.Text = $"Paste with {_state.Settings.RecordPasteShortcut.DisplayText}, or copy individual parts.";
+        CopyRetainedTextButton.IsEnabled = CopyButton.IsEnabled;
+        CopyRetainedPicturesButton.IsEnabled = CopyButton.IsEnabled && !_copyingPictures;
+        CopyRetainedVideoButton.IsEnabled = CopyButton.IsEnabled;
+        CopyRetainedPicturesButton.Visibility = retained is { Frames.Count: > 0 } ? Visibility.Visible : Visibility.Collapsed;
+        CopyRetainedVideoButton.Visibility = retained?.VideoPath is not null ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private async Task LoadHomeCatalogNamesAsync()
@@ -406,12 +434,58 @@ public sealed partial class DictationPage : Page
     {
         try
         {
+            var retainedCopy = ReferenceEquals(sender, CopyRetainedTextButton);
+            var text = retainedCopy ? _shortcut.RecordPayload?.Text : _state.Payload?.Text ?? _state.Transcript;
+            if (text is null) return;
             var package = new DataPackage();
-            package.SetText(_state.Transcript);
+            package.SetText(text);
             Clipboard.SetContent(package);
-            CopyLabel.Text = "Copied";
-            _copiedTimer.Stop();
-            _copiedTimer.Start();
+            if (retainedCopy) _notices.Confirm("Capture text copied.");
+            else
+            {
+                CopyLabel.Text = "Copied";
+                _copiedTimer.Stop();
+                _copiedTimer.Start();
+            }
+            _notices.Set(ErrorNoticeKey, null);
+        }
+        catch (Exception error) { ShowError(error); }
+    }
+
+    private void CopyPicturesClicked(object sender, RoutedEventArgs args)
+    {
+        if (_disposed || !IsEnabled || !_copyPicturesTask.IsCompleted) return;
+        var payload = ReferenceEquals(sender, CopyRetainedPicturesButton) ? _shortcut.RecordPayload : _state.Payload;
+        if (payload is not { Frames.Count: > 0 }) return;
+        _copyingPictures = true;
+        _copyPicturesTask = CopyPicturesAsync(payload.Frames);
+    }
+
+    private async Task CopyPicturesAsync(IReadOnlyList<RecordFrame> frames)
+    {
+        Render();
+        try
+        {
+            await WindowsRecordTakeFactory.CopyPicturesAsync(frames);
+            if (!_disposed) _notices.Set(ErrorNoticeKey, null);
+        }
+        catch (Exception error) { if (!_disposed) ShowError(error); }
+        finally
+        {
+            _copyingPictures = false;
+            if (!_disposed) Render();
+        }
+    }
+
+    private void CopyVideoClicked(object sender, RoutedEventArgs args)
+    {
+        try
+        {
+            var payload = ReferenceEquals(sender, CopyRetainedVideoButton) ? _shortcut.RecordPayload : _state.Payload;
+            if (payload?.VideoPath is not { } path) return;
+            var package = new DataPackage();
+            package.SetText(new Uri(path).AbsoluteUri);
+            Clipboard.SetContent(package);
             _notices.Set(ErrorNoticeKey, null);
         }
         catch (Exception error) { ShowError(error); }

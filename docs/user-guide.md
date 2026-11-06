@@ -107,8 +107,8 @@ administrator. File transcription and model management remain available.
 This check does not open a microphone or capture audio. Recording checks access
 again to catch permission changes, without opening another consent prompt.
 Older Windows versions without the capability-request API show Settings guidance
-when access cannot be confirmed. Camera, screen-recording, and calendar access
-are not requested because these features do not use them.
+when access cannot be confirmed. The opt-in record chord uses Windows screen
+capture. Camera and calendar access are not requested.
 
 ## Choose a model
 
@@ -197,8 +197,8 @@ The default activation mode is **Hold to talk**. In **Settings > Activation mode
 choose **Press to start and stop** to finish with a second shortcut press instead.
 Click the shortcut field to record a different key or key combination; Esc
 cancels the change. **Reset** restores Ctrl + Win. Saved F9 and other custom
-shortcuts stay until you change or reset them. The only modifier-only chord is
-Ctrl + Win. Other shortcuts still need a primary key, including F9. A short
+shortcuts stay until you change or reset them. Modifier-only chords support
+Ctrl + Win and Alt + Win. Other shortcuts still need a primary key, including F9. A short
 Ctrl + Win tap does not start dictation. A quick third key still goes to
 Windows and does not activate Ansible. **Press to start and stop** uses that
 same brief hold to start, then a second press to finish. It does not require
@@ -244,6 +244,87 @@ the pill would leave the work area it moves above the cursor line. When Windows
 cannot report a cursor position, for dictation started from the app window, or
 when the option is off, the pill stays at the bottom centre. The option applies
 to the next dictation and persists across restarts.
+
+### Record chord
+
+Enable **Record chord** in Settings. Its default is **Alt + Win**. It starts
+dictation, a silent screen recording, and an ink overlay together. The pointer's
+monitor at activation stays fixed for the take. The ordinary dictation shortcut
+stays voice-only. Enable **Settings > Record chord > Press once to start and stop**
+to start with one press, release the keys while dictating and drawing, then press
+again to finish. This keeps held keys from disabling a laptop touchpad. The
+setting is independent of voice dictation's **Activation mode** and persists
+across restarts. With it off, hold the record shortcut; release uses the 500 ms
+tail. Only the chord that started the take can stop it.
+
+Recording never pastes automatically and needs no editable field. Finish the
+take, wait for recognition, then focus the chat or text field where you want the
+result. Press **Alt + Shift + W** and release to paste the latest capture's text,
+ink markers, pictures, and optional video link. Change **Settings > Record chord >
+Paste capture shortcut** to another chord, such as **Ctrl + Shift + V**. This is
+separate from both the record shortcut and voice dictation's paste-key preference.
+Activation shortcuts cannot use a paste chord that Ansible sends for delivery.
+With Record chord enabled, **Ctrl + V** is unavailable for voice, record, and
+Paste capture activation because it delivers the bundle. **Ctrl + Shift + V**
+is unavailable for active shortcuts when voice dictation sends that paste key.
+Previously accepted voice or record shortcuts that would intercept delivery
+reset to defaults on load; other saved preferences are kept.
+
+Paste is unavailable during recording or another delivery. Ordinary voice
+dictation still inserts automatically. The latest take remains pasteable after
+voice dictation, until a new record take starts or Ansible exits. Each new paste
+press intentionally pastes that take again. Captured media is not reloaded into
+the shortcut after restarting Ansible.
+
+Left-drag draws on the recorded monitor. A click makes a numbered ping. Pointer
+movement stays available during capture. Mouse buttons and scrolling are blocked
+on all monitors, including right-click, middle button, and the wheel. Escape
+discards a pending take before it becomes available to Paste capture. The limit
+is five minutes. The pill and recording indicator are excluded from capture. Ink stays
+visible in the recording.
+
+An ink burst ends after 1.5 seconds without drawing. Its picture is captured
+before the marks fade over one second. The first seven burst pictures and a
+final summary are retained. The summary shows all numbered marks once over the
+final screen. Later bursts keep their numbers in the text and summary. With no
+ink, the result contains one final screen picture. Pictures have burned-in
+labels and a maximum 1920-pixel long edge. Eight is a provisional cap; it is not
+a measured attachment maximum across every destination.
+
+If ink is unreliable, **Local diagnostics** in Settings can record input-delay,
+drawing, and frame-wait counters for a take. It remains opt-in and records no
+stroke coordinates, pictures, audio, or transcript text in the diagnostic log.
+
+Nemotron uses its native word anchors to place ink markers in the final speech.
+Pasted markers use `[ink 1 at 0:07]`. Frame legends use single line breaks.
+This keeps timestamps as text in chat composers that turn `@0:07` into a file
+mention or collapse empty paragraphs. Picture labels still use `1 @0:07`.
+These anchors are token emission times, not forced acoustic alignment. Kroko
+and VibeVoice streaming use partial-text lengths and label markers approximate.
+Buffered or final-only models use a trailing **Ink timeline** and a warning.
+Unavailable timing stays unavailable. The app never changes models for a take.
+
+Chat inputs tested so far drop text from a combined files/text paste. When you
+use Paste capture, the app inspects the field focused at that press and pastes
+text first. It queues one bulk picture paste only after exact insertion
+is observed in the same field. Attachment insertion cannot be verified through
+accessibility. If text verification is unavailable, its clipboard publication
+stays available and pictures remain in Dictation for **Copy pictures**. No timer
+or clipboard callback counts as proof of insertion. Record bundles use Ctrl+V
+regardless of the voice-only insertion preference.
+
+The Dictation result also offers Copy text, Copy pictures, and Copy video link.
+Use these manual actions when a destination cannot accept the bundle paste.
+After another voice or WAV result, **Latest screen and ink capture** keeps these
+Copy actions available without repeating text that has already been sent.
+Media failures warn and leave authoritative speech available. History stores
+the prepared text with markers and, when enabled, the video URL,
+never the pictures or MP4. Media stays in private package storage.
+
+**Include video link in pasted text** defaults on. The video is never attached
+through the clipboard. Its `file:///` URL reveals a local path. Web and cloud
+agents generally cannot open it. A genuine video startup gap is reported as an
+offset on the shared take clock.
 
 ### Text insertion
 
@@ -664,6 +745,20 @@ camera. The app reports an app-wide warning if Windows cannot apply or verify
 the setting.
 
 Captured audio always stays in memory and is never saved or uploaded.
+The opt-in record chord saves PNGs and silent H.264 video locally. It captures
+the screen contents of one monitor. Automatic cleanup runs at launch and after
+each take, removing captures older than seven days, then oldest first above
+2 GiB. Active writers, the current media result, and files still referenced by
+the app's current clipboard publication are protected. Settings shows total
+size and **Delete all captures**. Native clipboard picture-file references are
+protected after restarting Ansible too. If the clipboard is busy or changes
+during inspection, cleanup waits for a later attempt instead of risking those
+files. In-use takes are retained with a warning.
+A locked or inaccessible take does not prevent cleanup of other eligible takes.
+Close apps using those files, then retry **Delete all captures**.
+Failed recognition, failed microphone cleanup, and takes without authoritative
+speech discard their captured media.
+Deleting captures does not remove transcript history.
 Successful dictation transcripts persist as text and metadata in
 `dictation-history.json`. Meeting transcripts, titles, and speaker names save
 locally. Recognition does
@@ -692,6 +787,7 @@ Per-user files are in Windows package storage, normally
 | `meetings\<id>.json` | Titles, dates, transcript turns, timing quality, manual/automatic names, and original wording after cleanup; no audio |
 | `diagnostics\local-diagnostics.jsonl` | Opt-in operational metadata beside `settings.json`. Rotates to `local-diagnostics.jsonl.previous` at 1 MiB. No audio or transcript text |
 | `models\` | Default location for downloaded model weights |
+| `captures\<take>\` | Record chord PNG pictures and silent MP4; never captured audio |
 
 If `dictation-history.json` is corrupt or unreadable, Ansible leaves the file
 unchanged, shows a warning, and keeps new rows in memory until storage can be
