@@ -315,7 +315,7 @@ Use these manual actions when a destination cannot accept the bundle paste.
 After another voice or WAV result, **Latest screen and ink capture** keeps these
 Copy actions available without repeating text that has already been sent.
 Media failures warn and leave authoritative speech available. History stores
-the prepared text with markers,
+the prepared text with markers and, when enabled, the video URL,
 never the pictures or MP4. Media stays in private package storage.
 
 **Include video link in pasted text** defaults on. The video is never attached
