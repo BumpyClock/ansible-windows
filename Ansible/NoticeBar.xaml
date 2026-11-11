@@ -9,8 +9,8 @@
             Background="{ThemeResource SolidBackgroundFillColorQuarternaryBrush}"
             BorderBrush="{ThemeResource SurfaceStrokeColorFlyoutBrush}"
             BorderThickness="1"
-            CornerRadius="{StaticResource CardCornerRadius}"
-            Padding="16,10,8,10">
+            CornerRadius="{StaticResource OverlayCornerRadius}"
+            Padding="16,8,8,8">
         <Grid ColumnSpacing="12">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
@@ -23,7 +23,7 @@
                 <Ellipse x:Name="InfoDisc" Fill="{ThemeResource AccentTextFillColorPrimaryBrush}" />
                 <Ellipse x:Name="WarningDisc" Fill="{ThemeResource SystemFillColorCautionBrush}" Visibility="Collapsed" />
                 <Ellipse x:Name="ErrorDisc" Fill="{ThemeResource SystemFillColorCriticalBrush}" Visibility="Collapsed" />
-                <FontIcon x:Name="IconGlyph" FontSize="11" Foreground="{ThemeResource AppOnAccentBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                <FontIcon x:Name="IconGlyph" FontSize="12" Foreground="{ThemeResource AppOnAccentBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
             </Grid>
             <TextBlock x:Name="Text" Grid.Column="1" TextWrapping="Wrap" VerticalAlignment="Center"
                        Foreground="{ThemeResource TextFillColorSecondaryBrush}">

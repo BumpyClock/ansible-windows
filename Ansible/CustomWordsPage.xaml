@@ -31,18 +31,18 @@
                     </Grid.ColumnDefinitions>
                     <Grid>
                         <TextBox x:Name="SearchBox" Height="36" VerticalContentAlignment="Center"
-                                 Padding="{StaticResource HistorySearchPadding}" FontSize="{StaticResource HistorySearchFontSize}"
+                                 Padding="{StaticResource HistorySearchPadding}" FontSize="{StaticResource BodyFontSize}"
                                  UseSystemFocusVisuals="True"
                                  AutomationProperties.AutomationId="SearchCustomWordsBox"
                                  AutomationProperties.Name="Find or add a word" PlaceholderText="Find or add a word"
                                  TextChanged="SearchChanged" KeyDown="SearchKeyDown" />
-                        <FontIcon Glyph="&#xE721;" FontSize="14" HorizontalAlignment="Left" VerticalAlignment="Center"
+                        <FontIcon Glyph="&#xE721;" FontSize="16" HorizontalAlignment="Left" VerticalAlignment="Center"
                                   Margin="12,0,0,0" IsHitTestVisible="False" />
                     </Grid>
                     <Button x:Name="AddWordButton" Grid.Column="1" Height="36" MaxWidth="260"
                             Style="{StaticResource AppPrimaryButtonStyle}" Click="AddWordClicked"
                             AutomationProperties.AutomationId="AddCustomWordsButton" AutomationProperties.Name="Add word">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
                             <FontIcon Glyph="&#xE710;" FontSize="12" VerticalAlignment="Center" />
                             <TextBlock x:Name="AddWordLabel" Text="Add" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
@@ -69,7 +69,7 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
             <StackPanel x:Name="EmptyState" HorizontalAlignment="Center" Padding="24,32" Spacing="4" Visibility="Collapsed">
-                <TextBlock x:Name="EmptyTitle" Text="No words yet" Style="{StaticResource SubtitleTextBlockStyle}"
+                <TextBlock x:Name="EmptyTitle" Text="No words yet" Style="{StaticResource BodyStrongTextBlockStyle}"
                            TextWrapping="Wrap" TextAlignment="Center" />
                 <TextBlock x:Name="EmptyHelp" Style="{StaticResource CaptionSecondaryStyle}"
                            TextAlignment="Center" TextWrapping="Wrap" MaxWidth="360" />

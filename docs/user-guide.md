@@ -80,17 +80,15 @@ total and pace. There is no time-saved figure. Activity is a dotted 24-hour
 clock of completed dictations by local completion hour over the last 7 or 30
 calendar days, including today. Week and Month stay. The center is the period
 total. Marks are 00, 06, 12, and 18. Accent dots scale to the busiest hour.
-Hover an hour for its actual count. Files are not included. **Most-used models** counts dictation and WAV sessions
-together, all time. A failed or overflowed background usage write appears
+Hover an hour for its actual count. Files are not included. **Most-used models** sits in the same card as the
+all-time word total and counts dictation and WAV sessions together, all time. A failed or overflowed background usage write appears
 there as a warning; it does not delay transcript insertion. History and local
 usage counts are separate. Turning off usage statistics does not change saved
 dictation history.
 
-Ansible uses a Mica window base and follows Windows light, dark, and High Contrast appearance. Pages sit
-directly on that base; each section is a title above one borderless tonal card, and High Contrast adds
-outlines. The default
-Ink / Citron identity matches the Pencil design. Additional color schemes are
-prepared through shared brand tokens; a scheme picker is not yet available.
+Ansible follows Windows light, dark, and High Contrast appearance and uses Windows materials and neutral
+colours. The title bar and sidebar sit on the Mica window base. Each page sits on one content layer, and
+cards group related content on it. The citron accent is the only brand colour.
 Compact windows use an icon sidebar, smaller page padding, and stacked controls.
 
 ## Microphone access

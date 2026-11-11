@@ -77,7 +77,12 @@ function Get-PageScroller {
     $root = [System.Windows.Automation.AutomationElement]::FromHandle($Handle)
     $condition = [System.Windows.Automation.PropertyCondition]::new(
         [System.Windows.Automation.AutomationElement]::AutomationIdProperty, 'PageViewport')
-    $viewport = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condition)
+    # The automation tree is briefly empty while a page reflows after a resize or navigation.
+    $deadline = (Get-Date).AddSeconds(8)
+    do {
+        $viewport = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condition)
+        if (-not $viewport) { Start-Sleep -Milliseconds 400 }
+    } until ($viewport -or (Get-Date) -gt $deadline)
     if (-not $viewport) { throw 'PageViewport was not found. The page did not load.' }
     $pattern = $null
     if ($viewport.TryGetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern, [ref]$pattern)) { $pattern }

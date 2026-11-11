@@ -17,14 +17,14 @@
             <Setter Property="Foreground" Value="{ThemeResource ControlStrongFillColorDisabledBrush}" />
         </Style>
         <Style x:Key="BenchmarkDeviceStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
-            <Setter Property="FontSize" Value="{StaticResource BenchmarkLabelFontSize}" />
+            <Setter Property="FontSize" Value="{StaticResource CaptionFontSize}" />
             <Setter Property="FontWeight" Value="Medium" />
             <Setter Property="Width" Value="{StaticResource BenchmarkLabelWidth}" />
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
         </Style>
         <Style x:Key="BenchmarkValueStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
-            <Setter Property="FontSize" Value="{StaticResource BenchmarkLabelFontSize}" />
+            <Setter Property="FontSize" Value="{StaticResource CaptionFontSize}" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="MinWidth" Value="{StaticResource BenchmarkValueMinWidth}" />
             <Setter Property="MaxWidth" Value="{StaticResource BenchmarkValueMaxWidth}" />
@@ -33,14 +33,14 @@
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
         </Style>
-        <Style x:Key="BenchmarkFootnoteStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
-            <Setter Property="FontSize" Value="{StaticResource BenchmarkFootnoteFontSize}" />
-            <Setter Property="LineHeight" Value="{StaticResource BenchmarkFootnoteLineHeight}" />
+        <Style x:Key="BenchmarkFootnoteStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionSecondaryStyle}">
+            <Setter Property="FontSize" Value="{StaticResource CaptionFontSize}" />
+            <Setter Property="LineHeight" Value="{StaticResource CaptionLineHeight}" />
             <Setter Property="TextWrapping" Value="Wrap" />
         </Style>
     </UserControl.Resources>
     <Border Background="{ThemeResource ControlAltFillColorSecondaryBrush}"
-            CornerRadius="{StaticResource BenchmarkPanelCornerRadius}"
+            CornerRadius="{StaticResource OverlayCornerRadius}"
             Padding="{StaticResource BenchmarkPanelPadding}">
         <!-- The faster measured device gets the accent bar and primary text; the other stays on the neutral track. -->
         <VisualStateManager.VisualStateGroups>

@@ -5,7 +5,7 @@
              xmlns:local="using:Ansible"
              HorizontalAlignment="Stretch">
     <UserControl.Resources>
-        <Style x:Key="DetailLabelStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
+        <Style x:Key="DetailLabelStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionSecondaryStyle}">
             <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
         </Style>
         <Style x:Key="DetailValueStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionSecondaryStyle}">
@@ -15,7 +15,7 @@
     <!-- One full-width row per model. The page's group heading carries the install state; the row carries
          facts, actions, and details that expand in place. -->
     <Border x:Name="CardBorder" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-            BorderThickness="1" CornerRadius="{StaticResource CardCornerRadius}" Padding="16">
+            BorderThickness="1" CornerRadius="{StaticResource OverlayCornerRadius}" Padding="16">
         <!-- The in-use outline is a visual state with a ThemeResource setter, so it follows theme and High Contrast. -->
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup x:Name="OutlineStates">
@@ -40,12 +40,12 @@
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <Border Width="40" Height="40" CornerRadius="10" Background="{ThemeResource ControlFillColorDefaultBrush}"
+            <Border Width="40" Height="40" CornerRadius="{StaticResource OverlayCornerRadius}" Background="{ThemeResource ControlFillColorDefaultBrush}"
                     VerticalAlignment="Center" AutomationProperties.AccessibilityView="Raw">
                 <Grid>
                     <Image x:Name="IconImage" Width="28" Height="28" Stretch="Uniform"
                            Visibility="Collapsed" ImageOpened="IconOpened" ImageFailed="IconFailed" />
-                    <TextBlock x:Name="Monogram" FontSize="16" FontWeight="Bold"
+                    <TextBlock x:Name="Monogram" FontSize="{StaticResource BodyFontSize}" FontWeight="Bold"
                                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                HorizontalAlignment="Center" VerticalAlignment="Center" />
                 </Grid>
@@ -83,11 +83,11 @@
                     <Button.Resources>
                         <SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="Transparent" />
                     </Button.Resources>
-                    <FontIcon Glyph="&#xE74D;" FontSize="14" />
+                    <FontIcon Glyph="&#xE74D;" FontSize="16" />
                 </Button>
                 <Button x:Name="DetailsButton" Style="{StaticResource IconButtonStyle}" Click="DetailsClicked"
                         ToolTipService.ToolTip="Details">
-                    <FontIcon Glyph="&#xE946;" FontSize="14" />
+                    <FontIcon Glyph="&#xE946;" FontSize="16" />
                 </Button>
             </StackPanel>
 
@@ -130,7 +130,7 @@
                         <StackPanel Grid.Column="1" Spacing="2">
                             <TextBlock x:Name="PrecisionText" Style="{StaticResource DetailValueStyle}" />
                             <TextBlock x:Name="ByteCountText" Style="{StaticResource DetailValueStyle}" />
-                            <TextBlock x:Name="HashText" Style="{StaticResource DetailValueStyle}" FontFamily="Consolas" />
+                            <TextBlock x:Name="HashText" Style="{StaticResource DetailValueStyle}" />
                         </StackPanel>
                     </Grid>
                     <Grid ColumnSpacing="16">

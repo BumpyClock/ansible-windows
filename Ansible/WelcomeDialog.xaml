@@ -17,7 +17,7 @@
         <Style x:Key="LessonIconStyle" TargetType="Border">
             <Setter Property="Width" Value="32" />
             <Setter Property="Height" Value="32" />
-            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="CornerRadius" Value="{StaticResource OverlayCornerRadius}" />
             <Setter Property="VerticalAlignment" Value="Top" />
             <Setter Property="Background" Value="{ThemeResource AccentSoftBrush}" />
         </Style>
@@ -26,7 +26,7 @@
             <Setter Property="Foreground" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
         </Style>
         <Style x:Key="StepDotStyle" TargetType="Border">
-            <Setter Property="CornerRadius" Value="3" />
+            <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
             <Setter Property="Background" Value="{ThemeResource ControlStrongFillColorDisabledBrush}" />
         </Style>
         <Style x:Key="CurrentStepDotStyle" TargetType="Border" BasedOn="{StaticResource StepDotStyle}">
@@ -43,21 +43,21 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
-        <Grid Margin="0,-6,-8,-6">
+        <Grid Margin="0,-8,-8,-8">
             <TextBlock Text="WELCOME TO ANSIBLE" CharacterSpacing="140" VerticalAlignment="Center" Style="{StaticResource CaptionSecondaryStyle}" />
             <Button x:Name="SkipButton" Content="Skip for now" HorizontalAlignment="Right" Click="SkipClicked"
                     Style="{StaticResource LessonSubtleButtonStyle}" />
         </Grid>
         <local:WelcomeScene x:Name="Scene" Grid.Row="1" />
-        <StackPanel x:Name="StepBody" Grid.Row="2" Spacing="18" MinHeight="324">
+        <StackPanel x:Name="StepBody" Grid.Row="2" Spacing="16" MinHeight="324">
             <StackPanel.RenderTransform><TranslateTransform x:Name="StepShift" /></StackPanel.RenderTransform>
-            <StackPanel Spacing="6">
+            <StackPanel Spacing="8">
                 <TextBlock x:Name="Heading" Style="{StaticResource TitleTextBlockStyle}" TextWrapping="Wrap"
                            AutomationProperties.HeadingLevel="Level1" />
-                <TextBlock x:Name="Description" FontSize="16" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                <TextBlock x:Name="Description" FontSize="{StaticResource BodyFontSize}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
             </StackPanel>
             <StackPanel x:Name="IntroPanel" Spacing="16">
-                <Grid ColumnSpacing="14">
+                <Grid ColumnSpacing="16">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                     <Border Style="{StaticResource LessonIconStyle}"><FontIcon Glyph="&#xE720;" Style="{StaticResource LessonGlyphStyle}" /></Border>
                     <StackPanel Grid.Column="1" Spacing="4">
@@ -66,7 +66,7 @@
                                    Style="{StaticResource BodyTextBlockStyle}" TextWrapping="Wrap" />
                     </StackPanel>
                 </Grid>
-                <Grid ColumnSpacing="14">
+                <Grid ColumnSpacing="16">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                     <Border Style="{StaticResource LessonIconStyle}"><FontIcon Glyph="&#xE72E;" Style="{StaticResource LessonGlyphStyle}" /></Border>
                     <TextBlock Grid.Column="1" VerticalAlignment="Center" Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap"
@@ -74,7 +74,7 @@
                 </Grid>
             </StackPanel>
             <StackPanel x:Name="ShortcutPanel" Spacing="16" Visibility="Collapsed">
-                <Grid ColumnSpacing="14">
+                <Grid ColumnSpacing="16">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                     <Border Style="{StaticResource LessonIconStyle}"><FontIcon Glyph="&#xE765;" Style="{StaticResource LessonGlyphStyle}" /></Border>
                     <StackPanel Grid.Column="1" Spacing="4">
@@ -82,13 +82,13 @@
                         <TextBlock x:Name="ShortcutDetail" Style="{StaticResource BodyTextBlockStyle}" TextWrapping="Wrap" />
                     </StackPanel>
                 </Grid>
-                <Grid ColumnSpacing="14">
+                <Grid ColumnSpacing="16">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                     <Border Style="{StaticResource LessonIconStyle}"><FontIcon Glyph="&#xE720;" Style="{StaticResource LessonGlyphStyle}" /></Border>
                     <TextBlock Grid.Column="1" VerticalAlignment="Center" Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap"
                                Text="The keys above follow your keyboard. Your microphone is off until you start a dictation." />
                 </Grid>
-                <Grid ColumnSpacing="14">
+                <Grid ColumnSpacing="16">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                     <Border Style="{StaticResource LessonIconStyle}"><FontIcon Glyph="&#xE713;" Style="{StaticResource LessonGlyphStyle}" /></Border>
                     <TextBlock Grid.Column="1" VerticalAlignment="Center" Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap"
@@ -98,7 +98,7 @@
             <StackPanel x:Name="PracticePanel" Spacing="12" Visibility="Collapsed">
                 <Grid>
                     <TextBox x:Name="PracticeBox" Header="Practice field" AcceptsReturn="True" TextWrapping="Wrap"
-                             Height="112" PlaceholderText="Click here, then use your shortcut." Padding="10,6,48,6"
+                             Height="112" PlaceholderText="Click here, then use your shortcut." Padding="8,8,48,8"
                              AutomationProperties.AutomationId="WelcomePracticeField" />
                     <!-- Pops in only when a real practice dictation lands in the field. -->
                     <Grid x:Name="Celebration" Width="28" Height="28" Margin="0,0,12,12" HorizontalAlignment="Right" VerticalAlignment="Bottom"
@@ -106,9 +106,9 @@
                         <Ellipse x:Name="Burst" Stroke="{ThemeResource AccentTextFillColorPrimaryBrush}" StrokeThickness="2" Opacity="0" RenderTransformOrigin="0.5,0.5">
                             <Ellipse.RenderTransform><ScaleTransform x:Name="BurstScale" /></Ellipse.RenderTransform>
                         </Ellipse>
-                        <Border CornerRadius="14" Background="{ThemeResource AccentTextFillColorPrimaryBrush}" RenderTransformOrigin="0.5,0.5">
+                        <Border CornerRadius="{StaticResource PillCornerRadius}" Background="{ThemeResource AccentTextFillColorPrimaryBrush}" RenderTransformOrigin="0.5,0.5">
                             <Border.RenderTransform><ScaleTransform x:Name="CheckScale" /></Border.RenderTransform>
-                            <FontIcon Glyph="&#xE73E;" FontSize="14" Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                            <FontIcon Glyph="&#xE73E;" FontSize="16" Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
                         </Border>
                     </Grid>
                 </Grid>
@@ -127,7 +127,7 @@
         <Grid Grid.Row="3">
             <Button x:Name="BackButton" Content="Back" HorizontalAlignment="Left" Click="BackClicked" Visibility="Collapsed"
                     Style="{StaticResource LessonSubtleButtonStyle}" />
-            <StackPanel x:Name="StepDots" Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <StackPanel x:Name="StepDots" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" VerticalAlignment="Center">
                 <Grid Width="6" Height="6"><Border Style="{StaticResource StepDotStyle}" /><Border Style="{StaticResource CurrentStepDotStyle}" /></Grid>
                 <Grid Width="6" Height="6"><Border Style="{StaticResource StepDotStyle}" /><Border Style="{StaticResource CurrentStepDotStyle}" /></Grid>
                 <Grid Width="6" Height="6"><Border Style="{StaticResource StepDotStyle}" /><Border Style="{StaticResource CurrentStepDotStyle}" /></Grid>

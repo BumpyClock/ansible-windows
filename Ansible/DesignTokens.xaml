@@ -29,10 +29,7 @@
             <SolidColorBrush x:Key="AppAccentBrush" Color="{StaticResource BrandAccentColor}" />
             <SolidColorBrush x:Key="AppOnAccentBrush" Color="{StaticResource BrandOnAccentColor}" />
             <SolidColorBrush x:Key="AccentSoftBrush" Color="{StaticResource BrandAccentGraphicColor}" Opacity="0.12" />
-            <SolidColorBrush x:Key="ActivityLowBrush" Color="{StaticResource BrandAccentGraphicColor}" Opacity="0.3" />
             <SolidColorBrush x:Key="ActivityMediumBrush" Color="{StaticResource BrandAccentGraphicColor}" Opacity="0.55" />
-            <SolidColorBrush x:Key="ActivityHighBrush" Color="{StaticResource BrandAccentGraphicColor}" Opacity="0.8" />
-            <x:Double x:Key="FutureActivityOpacity">0.35</x:Double>
 
             <!-- The primary button is citron with ink text in both themes. -->
             <SolidColorBrush x:Key="AccentButtonBackground" Color="{StaticResource BrandAccentColor}" />
@@ -80,10 +77,7 @@
             <SolidColorBrush x:Key="AppAccentBrush" Color="{StaticResource BrandAccentColor}" />
             <SolidColorBrush x:Key="AppOnAccentBrush" Color="{StaticResource BrandOnAccentColor}" />
             <SolidColorBrush x:Key="AccentSoftBrush" Color="{StaticResource BrandAccentGraphicColor}" Opacity="0.12" />
-            <SolidColorBrush x:Key="ActivityLowBrush" Color="{StaticResource BrandAccentGraphicColor}" Opacity="0.3" />
             <SolidColorBrush x:Key="ActivityMediumBrush" Color="{StaticResource BrandAccentGraphicColor}" Opacity="0.55" />
-            <SolidColorBrush x:Key="ActivityHighBrush" Color="{StaticResource BrandAccentGraphicColor}" Opacity="0.8" />
-            <x:Double x:Key="FutureActivityOpacity">0.35</x:Double>
 
             <!-- The primary button is citron with ink text in both themes. -->
             <SolidColorBrush x:Key="AccentButtonBackground" Color="{StaticResource BrandAccentColor}" />
@@ -116,10 +110,7 @@
             <SolidColorBrush x:Key="AppAccentBrush" Color="{ThemeResource SystemColorHighlightColor}" />
             <SolidColorBrush x:Key="AppOnAccentBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
             <SolidColorBrush x:Key="AccentSoftBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
-            <SolidColorBrush x:Key="ActivityLowBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="ActivityMediumBrush" Color="{ThemeResource SystemColorHotlightColor}" />
-            <SolidColorBrush x:Key="ActivityHighBrush" Color="{ThemeResource SystemColorHighlightColor}" />
-            <x:Double x:Key="FutureActivityOpacity">1</x:Double>
             <SolidColorBrush x:Key="AppBrandVoiceBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="AppBrandReplyBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="AppBrandVoiceDetailBrush" Color="{ThemeResource SystemColorWindowColor}" />
@@ -130,7 +121,7 @@
     <!-- Dimensions, type, motion, and shared styles. -->
     <x:Double x:Key="PageContentMaxWidth">1440</x:Double>
     <Thickness x:Key="PagePadding">36,24,40,40</Thickness>
-    <Thickness x:Key="CompactPagePadding">18</Thickness>
+    <Thickness x:Key="CompactPagePadding">16</Thickness>
     <x:Double x:Key="CompactPageThreshold">800</x:Double>
     <x:Double x:Key="NarrowActionsThreshold">400</x:Double>
     <x:Double x:Key="ShortcutStackThreshold">440</x:Double>
@@ -144,8 +135,7 @@
     <x:Double x:Key="NoticeHostMaxWidth">680</x:Double>
     <x:Double x:Key="NoticeHostSpacing">8</x:Double>
     <x:Double x:Key="CardGap">20</x:Double>
-    <x:Double x:Key="SectionHeaderGap">10</x:Double>
-    <x:Double x:Key="HomeSectionTitleFontSize">28</x:Double>
+    <x:Double x:Key="SectionHeaderGap">8</x:Double>
     <!-- Home grid: a 320 DIP insights rail beside history, 32 DIP apart. Below 1040 DIP of page content the rail
          would squeeze history, so the cards move above it as a strip. -->
     <GridLength x:Key="HomeRailColumnWidth">320</GridLength>
@@ -153,22 +143,16 @@
     <x:Double x:Key="HomeGridGap">32</x:Double>
     <x:Double x:Key="NavSelectionBarWidth">3</x:Double>
     <Thickness x:Key="NavSelectionBarMargin">0,12</Thickness>
-    <FontFamily x:Key="InsightNumeralFontFamily">Consolas</FontFamily>
-    <x:Double x:Key="InsightNumeralFontSize">22</x:Double>
-    <x:Double x:Key="InsightTotalNumeralFontSize">32</x:Double>
     <x:Double x:Key="HomeSectionHeaderMinHeight">36</x:Double>
     <x:Double x:Key="NavLabelGap">12</x:Double>
+    <!-- Radii are WinUI's: ControlCornerRadius (4) for controls, rows, chips, and bars; OverlayCornerRadius (8) for
+         cards, the content layer, and panels. PillCornerRadius rounds a shape fully. -->
+    <CornerRadius x:Key="PillCornerRadius">999</CornerRadius>
     <Thickness x:Key="CardBorderThickness">1</Thickness>
     <Thickness x:Key="CardPadding">20</Thickness>
-    <Thickness x:Key="HomeMetricCardPadding">20</Thickness>
     <Thickness x:Key="SettingsCardPadding">24,4,24,4</Thickness>
-    <CornerRadius x:Key="CardCornerRadius">12</CornerRadius>
-    <CornerRadius x:Key="ControlCornerRadius">8</CornerRadius>
     <x:Double x:Key="IconSize">18</x:Double>
-    <x:Double x:Key="RadioButtonsColumnSpacing">2</x:Double>
-    <x:Double x:Key="RadioButtonsRowSpacing">2</x:Double>
     <x:Double x:Key="NavHeight">40</x:Double>
-    <x:Double x:Key="SidebarWidth">248</x:Double>
     <GridLength x:Key="SidebarColumnWidth">248</GridLength>
     <GridLength x:Key="CompactSidebarColumnWidth">72</GridLength>
     <x:Double x:Key="CompactNavigationThreshold">1000</x:Double>
@@ -178,95 +162,47 @@
     <Thickness x:Key="SidebarBrandMargin">24,0,12,0</Thickness>
     <!-- The page area is an inset content layer under the title bar, beside the sidebar. -->
     <Thickness x:Key="ContentLayerMargin">0,4,4,4</Thickness>
-    <CornerRadius x:Key="ContentLayerCornerRadius">8</CornerRadius>
     <Thickness x:Key="TitleBarPageTitleMargin">40,0,12,0</Thickness>
     <Thickness x:Key="CompactTitleBarPageTitleMargin">20,0,12,0</Thickness>
     <x:Double x:Key="BenchmarkBarHeight">8</x:Double>
     <x:Double x:Key="BenchmarkValueMaxWidth">160</x:Double>
-    <CornerRadius x:Key="BenchmarkBarCornerRadius">4</CornerRadius>
     <x:Double x:Key="SettingsRowRowSpacing">12</x:Double>
-    <x:Double x:Key="SettingsRowDescriptionSpacing">5</x:Double>
+    <x:Double x:Key="SettingsRowDescriptionSpacing">4</x:Double>
     <x:Double x:Key="SettingsRowDescriptionMaxWidth">620</x:Double>
-    <x:Double x:Key="SettingsSelectWidth">320</x:Double>
     <x:Double x:Key="SettingsNumberWidth">132</x:Double>
-    <x:Double x:Key="SettingsLanguageWidth">180</x:Double>
     <x:Double x:Key="SettingsWideMinWidth">700</x:Double>
     <Thickness x:Key="SettingsRowPadding">0,20</Thickness>
     <Thickness x:Key="SettingsBenchmarkMargin">0,0,0,20</Thickness>
     <x:Double x:Key="SettingsRowColumnGap">32</x:Double>
-    <x:Double x:Key="SettingsLabelFontSize">14.5</x:Double>
-    <x:Double x:Key="SettingsLabelLineHeight">20</x:Double>
-    <x:Double x:Key="SettingsDescriptionFontSize">13</x:Double>
-    <x:Double x:Key="SettingsDescriptionLineHeight">19.5</x:Double>
-    <x:Double x:Key="SettingsLinkFontSize">13.5</x:Double>
-    <x:Double x:Key="SettingsOptionFontSize">14</x:Double>
     <Thickness x:Key="BenchmarkPanelPadding">24,20</Thickness>
-    <CornerRadius x:Key="BenchmarkPanelCornerRadius">12</CornerRadius>
     <x:Double x:Key="BenchmarkColumnGap">32</x:Double>
-    <x:Double x:Key="BenchmarkRowGap">18</x:Double>
+    <x:Double x:Key="BenchmarkRowGap">16</x:Double>
     <x:Double x:Key="BenchmarkBarGap">12</x:Double>
     <x:Double x:Key="BenchmarkLabelWidth">52</x:Double>
     <x:Double x:Key="BenchmarkValueMinWidth">84</x:Double>
     <x:Double x:Key="BenchmarkResultWidth">340</x:Double>
-    <x:Double x:Key="BenchmarkLabelFontSize">13</x:Double>
-    <x:Double x:Key="BenchmarkFootnoteFontSize">12</x:Double>
-    <x:Double x:Key="BenchmarkFootnoteLineHeight">18</x:Double>
     <x:Double x:Key="NavItemGap">4</x:Double>
     <x:Double x:Key="BrandSize">32</x:Double>
     <x:Double x:Key="TitleBarHeight">48</x:Double>
-    <x:Double x:Key="PageTitleFontSize">28</x:Double>
-    <x:Double x:Key="MetricValueFontSize">30</x:Double>
-    <x:Double x:Key="PageTitleLineHeight">34</x:Double>
-    <x:Double x:Key="StatValueLineHeight">36</x:Double>
-    <x:Double x:Key="BodyFontSize">14</x:Double>
-    <x:Double x:Key="BodyLineHeight">18</x:Double>
-    <x:Double x:Key="BodyStrongFontSize">14</x:Double>
-    <x:Double x:Key="CaptionFontSize">12.5</x:Double>
-    <x:Double x:Key="CaptionLineHeight">16</x:Double>
-    <x:Double x:Key="SubtitleFontSize">14.5</x:Double>
-    <x:Double x:Key="KeycapFontSize">12.5</x:Double>
-    <x:Double x:Key="KeycapLineHeight">16</x:Double>
     <x:Double x:Key="KeycapMinHeight">24</x:Double>
-    <x:Double x:Key="SearchKeycapFontSize">11.5</x:Double>
-    <x:Double x:Key="SearchKeycapLineHeight">14</x:Double>
     <x:Double x:Key="SearchKeycapMinHeight">22</x:Double>
-    <Thickness x:Key="KeycapPadding">8,3</Thickness>
+    <Thickness x:Key="KeycapPadding">8,2</Thickness>
     <Thickness x:Key="SearchKeycapPadding">8,2</Thickness>
     <Thickness x:Key="SearchKeycapMargin">0,0,8,0</Thickness>
     <Thickness x:Key="KeycapBorderThickness">0,0,0,2</Thickness>
-    <CornerRadius x:Key="KeycapCornerRadius">6</CornerRadius>
-    <x:Double x:Key="HomeStatsGap">16</x:Double>
-    <x:Double x:Key="HomeMetricColumnGap">12</x:Double>
     <x:Double x:Key="HomeModelRowsGap">8</x:Double>
     <x:Double x:Key="HomeModelTrackHeight">6</x:Double>
-    <CornerRadius x:Key="HomeModelTrackCornerRadius">3</CornerRadius>
-    <x:Double x:Key="HomeModelsCardGap">14</x:Double>
-    <x:Double x:Key="HomeCardTitleFontSize">15</x:Double>
-    <x:Double x:Key="HomeCardMetaFontSize">12.5</x:Double>
-    <x:Double x:Key="HomeCardFootnoteFontSize">12</x:Double>
-    <x:Double x:Key="HistoryEmptyTitleFontSize">14</x:Double>
-    <x:Double x:Key="HistoryEmptyDetailFontSize">12.5</x:Double>
+    <x:Double x:Key="HomeModelsCardGap">12</x:Double>
     <x:Double x:Key="HistoryEmptyGap">4</x:Double>
-    <x:Double x:Key="HomeActivityHeatmapGap">4</x:Double>
-    <Thickness x:Key="SectionBadgePadding">10,4</Thickness>
-    <CornerRadius x:Key="SectionBadgeCornerRadius">6</CornerRadius>
+    <Thickness x:Key="SectionBadgePadding">8,4</Thickness>
     <x:Double x:Key="SectionBadgeMinHeight">28</x:Double>
     <x:Double x:Key="SectionBadgeMaxWidth">240</x:Double>
-    <Thickness x:Key="HistorySearchPadding">36,7,68,7</Thickness>
-    <x:Double x:Key="HistorySearchFontSize">13.5</x:Double>
-    <x:Double x:Key="HomeLegendChipSize">11</x:Double>
-    <CornerRadius x:Key="HomeLegendChipCornerRadius">3</CornerRadius>
+    <Thickness x:Key="HistorySearchPadding">36,8,68,8</Thickness>
     <!-- History timeline rows (Pencil P4f14c rows xwIiZ..tSBom). -->
-    <Thickness x:Key="HistoryRowPadding">20,14,12,14</Thickness>
-    <CornerRadius x:Key="HistoryRowCornerRadius">10</CornerRadius>
+    <Thickness x:Key="HistoryRowPadding">20,12,12,12</Thickness>
     <GridLength x:Key="HistoryTimeColumnWidth">64</GridLength>
     <x:Double x:Key="HistoryRowColumnGap">20</x:Double>
-    <x:Double x:Key="HistoryTranscriptFontSize">15.5</x:Double>
-    <x:Double x:Key="HistoryTranscriptLineHeight">24</x:Double>
-    <x:Double x:Key="HistoryTimeFontSize">13</x:Double>
-    <x:Double x:Key="HistoryMetaFontSize">12</x:Double>
     <x:Double x:Key="HistoryMetaGap">8</x:Double>
-    <x:Double x:Key="HistoryGroupLabelFontSize">11.5</x:Double>
     <x:Double x:Key="IconButtonSize">32</x:Double>
     <x:Double x:Key="IconButtonGlyphSize">16</x:Double>
     <x:Double x:Key="HistoryActionGap">2</x:Double>
@@ -274,106 +210,48 @@
     <!-- Motion. Theme transitions follow the Windows animation setting on their own. -->
     <x:Double x:Key="MotionFastMilliseconds">120</x:Double>
     <x:Double x:Key="MotionNormalMilliseconds">200</x:Double>
-    <x:Double x:Key="MotionEntranceOffset">12</x:Double>
 
 
 
-    <Style x:Key="BodyTextBlockStyle" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="{StaticResource BodyFontSize}" />
-        <Setter Property="LineHeight" Value="{StaticResource BodyLineHeight}" />
-        <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
-        <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
-    </Style>
-    <Style x:Key="BodyStrongTextBlockStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
-        <Setter Property="FontWeight" Value="SemiBold" />
-    </Style>
-    <Style x:Key="CaptionTextBlockStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
-        <Setter Property="FontSize" Value="{StaticResource CaptionFontSize}" />
-        <Setter Property="LineHeight" Value="{StaticResource CaptionLineHeight}" />
-        <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
-    </Style>
-    <Style x:Key="SubtitleTextBlockStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
-        <Setter Property="FontSize" Value="{StaticResource SubtitleFontSize}" />
-        <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
-    </Style>
-    <!-- A heading for a group of rows within a page section, such as Speech models groups. -->
-    <Style x:Key="GroupHeadingTextBlockStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
-        <Setter Property="FontFamily" Value="Segoe UI Variable Display" />
-        <Setter Property="FontSize" Value="20" />
-        <Setter Property="LineHeight" Value="28" />
-    </Style>
-    <Style x:Key="TitleTextBlockStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
-        <Setter Property="FontSize" Value="{StaticResource PageTitleFontSize}" />
-        <Setter Property="FontWeight" Value="SemiBold" />
-    </Style>
-    <Style x:Key="MetricValueTextBlockStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
-        <Setter Property="FontSize" Value="{StaticResource MetricValueFontSize}" />
-        <Setter Property="LineHeight" Value="{StaticResource StatValueLineHeight}" />
-        <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
-        <Setter Property="FontWeight" Value="SemiBold" />
-    </Style>
-    <Style x:Key="AppWordmarkStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
-        <Setter Property="FontSize" Value="18" />
-        <Setter Property="FontWeight" Value="SemiBold" />
-    </Style>
+    <!-- Type. The ramp is WinUI's own, used by name and never redefined: CaptionTextBlockStyle 12/16,
+         BodyTextBlockStyle 14/20, BodyStrongTextBlockStyle, SubtitleTextBlockStyle 20/28, TitleTextBlockStyle 28/36,
+         TitleLargeTextBlockStyle 40/52. The sizes below repeat that ramp for controls that take a FontSize. A style
+         in this file adds a role (colour, wrapping) to a ramp step; none introduces a size. -->
+    <x:Double x:Key="CaptionFontSize">12</x:Double>
+    <x:Double x:Key="CaptionLineHeight">16</x:Double>
+    <x:Double x:Key="BodyFontSize">14</x:Double>
+    <x:Double x:Key="BodyLineHeight">20</x:Double>
+    <x:Double x:Key="SubtitleFontSize">20</x:Double>
+    <x:Double x:Key="TitleFontSize">28</x:Double>
+    <x:Double x:Key="TitleLargeFontSize">40</x:Double>
     <Style x:Key="PageTitleStyle" TargetType="TextBlock" BasedOn="{StaticResource TitleTextBlockStyle}">
-        <Setter Property="TextWrapping" Value="Wrap" />
         <Setter Property="Margin" Value="0,0,0,8" />
-        <Setter Property="LineHeight" Value="{StaticResource PageTitleLineHeight}" />
-        <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
-    </Style>
-    <Style x:Key="PageSubtitleStyle" TargetType="TextBlock" BasedOn="{StaticResource SubtitleTextBlockStyle}">
-        <Setter Property="TextWrapping" Value="Wrap" />
-        <Setter Property="LineHeight" Value="{StaticResource BodyLineHeight}" />
-        <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
-    </Style>
-    <Style x:Key="StatValueTextStyle" TargetType="TextBlock" BasedOn="{StaticResource TitleTextBlockStyle}">
-        <Setter Property="FontSize" Value="{StaticResource MetricValueFontSize}" />
-        <Setter Property="LineHeight" Value="{StaticResource StatValueLineHeight}" />
-        <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
-    </Style>
-    <!-- Shared input surfaces keep native WinUI templates and interaction states. -->
-    <Style TargetType="ComboBox">
-        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
-    </Style>
-    <Style TargetType="TextBox">
-        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
-    </Style>
-    <Style TargetType="controls:NumberBox">
-        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
     </Style>
     <Style x:Key="SecondaryTextStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
         <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
     </Style>
-    <Style x:Key="SectionHeaderStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
-        <Setter Property="Margin" Value="0,8,0,0" />
-    </Style>
+    <Style x:Key="PageSubtitleStyle" TargetType="TextBlock" BasedOn="{StaticResource SecondaryTextStyle}" />
+    <Style x:Key="AppWordmarkStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}" />
     <Style x:Key="CaptionSecondaryStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
         <Setter Property="TextWrapping" Value="Wrap" />
         <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
     </Style>
     <Style x:Key="HomeCardTitleStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
-        <Setter Property="FontSize" Value="{StaticResource HomeCardTitleFontSize}" />
         <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
     </Style>
     <Style x:Key="HomeCardMetaStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionSecondaryStyle}">
-        <Setter Property="FontSize" Value="{StaticResource HomeCardMetaFontSize}" />
         <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
     </Style>
     <Style x:Key="HomeCardFootnoteStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionSecondaryStyle}">
-        <Setter Property="FontSize" Value="{StaticResource HomeCardFootnoteFontSize}" />
         <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
     </Style>
     <Style x:Key="HomeMetricLabelStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionSecondaryStyle}">
-        <Setter Property="FontSize" Value="{StaticResource CaptionFontSize}" />
     </Style>
     <Style x:Key="HistoryEmptyTitleStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
-        <Setter Property="FontSize" Value="{StaticResource HistoryEmptyTitleFontSize}" />
         <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
         <Setter Property="TextAlignment" Value="Center" />
     </Style>
     <Style x:Key="HistoryEmptyDetailStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionSecondaryStyle}">
-        <Setter Property="FontSize" Value="{StaticResource HistoryEmptyDetailFontSize}" />
         <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
         <Setter Property="TextAlignment" Value="Center" />
     </Style>
@@ -381,14 +259,12 @@
         <Setter Property="Background" Value="{ThemeResource ControlFillColorDefaultBrush}" />
         <Setter Property="BorderBrush" Value="{ThemeResource ControlStrokeColorSecondaryBrush}" />
         <Setter Property="BorderThickness" Value="{StaticResource KeycapBorderThickness}" />
-        <Setter Property="CornerRadius" Value="{StaticResource KeycapCornerRadius}" />
+        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
         <Setter Property="Padding" Value="{StaticResource KeycapPadding}" />
         <Setter Property="MinHeight" Value="{StaticResource KeycapMinHeight}" />
     </Style>
     <Style x:Key="KeycapTextStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
-        <Setter Property="FontSize" Value="{StaticResource KeycapFontSize}" />
         <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="LineHeight" Value="{StaticResource KeycapLineHeight}" />
         <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
     </Style>
     <Style x:Key="SearchKeycapStyle" TargetType="Border" BasedOn="{StaticResource KeycapStyle}">
@@ -397,17 +273,15 @@
         <Setter Property="MinHeight" Value="{StaticResource SearchKeycapMinHeight}" />
     </Style>
     <Style x:Key="SectionBadgeStyle" TargetType="Border">
-        <Setter Property="CornerRadius" Value="{StaticResource SectionBadgeCornerRadius}" />
+        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
         <Setter Property="Padding" Value="{StaticResource SectionBadgePadding}" />
         <Setter Property="MinHeight" Value="{StaticResource SectionBadgeMinHeight}" />
         <Setter Property="HorizontalAlignment" Value="Left" />
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
     <Style x:Key="SearchKeycapTextStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
-        <Setter Property="FontSize" Value="{StaticResource SearchKeycapFontSize}" />
         <Setter Property="FontWeight" Value="Normal" />
         <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
-        <Setter Property="LineHeight" Value="{StaticResource SearchKeycapLineHeight}" />
         <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
     </Style>
     <!-- Layering (learn.microsoft.com/windows/apps/design/signature-experiences/layering). Mica is the base layer:
@@ -418,75 +292,28 @@
         <Setter Property="Background" Value="{ThemeResource LayerFillColorDefaultBrush}" />
         <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
         <Setter Property="BorderThickness" Value="{StaticResource CardBorderThickness}" />
-        <Setter Property="CornerRadius" Value="{StaticResource ContentLayerCornerRadius}" />
+        <Setter Property="CornerRadius" Value="{StaticResource OverlayCornerRadius}" />
     </Style>
     <Style x:Key="CardStyle" TargetType="Border">
         <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
         <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
         <Setter Property="BorderThickness" Value="{StaticResource CardBorderThickness}" />
-        <Setter Property="CornerRadius" Value="{StaticResource CardCornerRadius}" />
+        <Setter Property="CornerRadius" Value="{StaticResource OverlayCornerRadius}" />
         <Setter Property="Padding" Value="{StaticResource CardPadding}" />
     </Style>
     <Style x:Key="SettingsCardStyle" TargetType="Border" BasedOn="{StaticResource CardStyle}">
         <Setter Property="Padding" Value="{StaticResource SettingsCardPadding}" />
     </Style>
-    <Style x:Key="MetricCardStyle" TargetType="Border" BasedOn="{StaticResource CardStyle}">
-        <Setter Property="Padding" Value="{StaticResource HomeMetricCardPadding}" />
-    </Style>
     <Style x:Key="AppPrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}" />
-    <Style x:Key="RecordButtonStyle" TargetType="Button" BasedOn="{StaticResource AppPrimaryButtonStyle}">
-        <Setter Property="Width" Value="72" />
-        <Setter Property="Height" Value="72" />
-        <Setter Property="CornerRadius" Value="36" />
-        <Setter Property="Padding" Value="0" />
-        <Setter Property="FontSize" Value="26" />
-    </Style>
     <Style x:Key="TranscriptTextBoxStyle" TargetType="TextBox">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Padding" Value="0" />
-        <Setter Property="FontSize" Value="17" />
+        <Setter Property="FontSize" Value="{StaticResource BodyFontSize}" />
         <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
     </Style>
-    <Style x:Key="NavIconStyle" TargetType="controls:PathIcon">
-        <Setter Property="Width" Value="{StaticResource IconSize}" />
-        <Setter Property="Height" Value="{StaticResource IconSize}" />
-        <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
-    </Style>
 
 
-    <Style x:Key="ActivityEmptyCellStyle" TargetType="Border">
-        <Setter Property="Background" Value="{ThemeResource ControlAltFillColorQuarternaryBrush}" />
-    </Style>
-    <Style x:Key="ActivityLowCellStyle" TargetType="Border">
-        <Setter Property="Background" Value="{ThemeResource ActivityLowBrush}" />
-    </Style>
-    <Style x:Key="ActivityMediumCellStyle" TargetType="Border">
-        <Setter Property="Background" Value="{ThemeResource ActivityMediumBrush}" />
-    </Style>
-    <Style x:Key="ActivityHighCellStyle" TargetType="Border">
-        <Setter Property="Background" Value="{ThemeResource ActivityHighBrush}" />
-    </Style>
-    <Style x:Key="ActivityFutureCellStyle" TargetType="Border" BasedOn="{StaticResource ActivityEmptyCellStyle}">
-        <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
-        <Setter Property="BorderBrush" Value="{ThemeResource DividerStrokeColorDefaultBrush}" />
-        <Setter Property="BorderThickness" Value="{StaticResource CardBorderThickness}" />
-    </Style>
-    <Style x:Key="HomeLegendChipStyle" TargetType="Border">
-        <Setter Property="Width" Value="{StaticResource HomeLegendChipSize}" />
-        <Setter Property="Height" Value="{StaticResource HomeLegendChipSize}" />
-        <Setter Property="CornerRadius" Value="{StaticResource HomeLegendChipCornerRadius}" />
-        <Setter Property="Background" Value="{ThemeResource ControlAltFillColorQuarternaryBrush}" />
-    </Style>
-    <Style x:Key="HomeLegendLowChipStyle" TargetType="Border" BasedOn="{StaticResource HomeLegendChipStyle}">
-        <Setter Property="Background" Value="{ThemeResource ActivityLowBrush}" />
-    </Style>
-    <Style x:Key="HomeLegendMediumChipStyle" TargetType="Border" BasedOn="{StaticResource HomeLegendChipStyle}">
-        <Setter Property="Background" Value="{ThemeResource ActivityMediumBrush}" />
-    </Style>
-    <Style x:Key="HomeLegendHighChipStyle" TargetType="Border" BasedOn="{StaticResource HomeLegendChipStyle}">
-        <Setter Property="Background" Value="{ThemeResource ActivityHighBrush}" />
-    </Style>
         <Style x:Key="HistoryDividerStyle" TargetType="Border">
             <Setter Property="Height" Value="1" />
             <Setter Property="Background" Value="{ThemeResource DividerStrokeColorDefaultBrush}" />
@@ -494,25 +321,20 @@
         </Style>
 
     <Style x:Key="HistoryTranscriptTextStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
-        <Setter Property="FontSize" Value="{StaticResource HistoryTranscriptFontSize}" />
-        <Setter Property="LineHeight" Value="{StaticResource HistoryTranscriptLineHeight}" />
         <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
         <Setter Property="TextWrapping" Value="Wrap" />
         <Setter Property="IsTextSelectionEnabled" Value="True" />
     </Style>
     <Style x:Key="HistoryTimeTextStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
-        <Setter Property="FontSize" Value="{StaticResource HistoryTimeFontSize}" />
         <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
         <Setter Property="TextWrapping" Value="NoWrap" />
     </Style>
     <Style x:Key="HistoryMetaTextStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
-        <Setter Property="FontSize" Value="{StaticResource HistoryMetaFontSize}" />
         <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
         <Setter Property="TextWrapping" Value="NoWrap" />
         <Setter Property="TextTrimming" Value="CharacterEllipsis" />
     </Style>
     <Style x:Key="HistoryGroupLabelStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
-        <Setter Property="FontSize" Value="{StaticResource HistoryGroupLabelFontSize}" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
     </Style>
@@ -528,14 +350,8 @@
         <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
         <Setter Property="UseSystemFocusVisuals" Value="True" />
     </Style>
-    <Style x:Key="ActivityPeakCellStyle" TargetType="Border">
-        <Setter Property="Background" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-    </Style>
-    <Style x:Key="HomeLegendPeakChipStyle" TargetType="Border" BasedOn="{StaticResource HomeLegendChipStyle}">
-        <Setter Property="Background" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-    </Style>
         <Style x:Key="HistoryRowStyle" TargetType="Border">
-        <Setter Property="CornerRadius" Value="{StaticResource HistoryRowCornerRadius}" />
+        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
         <Setter Property="Padding" Value="{StaticResource HistoryRowPadding}" />
             <Setter Property="Background" Value="Transparent" />
         </Style>

@@ -4,7 +4,7 @@
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:local="using:Ansible">
     <Page.Resources>
-        <Style x:Key="ModelGroupHeadingStyle" TargetType="TextBlock" BasedOn="{StaticResource GroupHeadingTextBlockStyle}">
+        <Style x:Key="ModelGroupHeadingStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
         <Style x:Key="ModelGroupNoteStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
@@ -19,7 +19,7 @@
                         AutomationProperties.AutomationId="TranscribeModelWavButton"
                         AutomationProperties.Name="Transcribe a WAV file">
                 <StackPanel Orientation="Horizontal" Spacing="8">
-                    <FontIcon Glyph="&#xE8E5;" FontSize="14" />
+                    <FontIcon Glyph="&#xE8E5;" FontSize="16" />
                     <TextBlock Text="Transcribe WAV file…" />
                 </StackPanel>
             </Button>

@@ -54,8 +54,8 @@
              it. Its fill repeats the window's two layers, Mica under the content layer fill, so it hides those rows
              without a visible band. The fill reaches past the row hover fill on both sides and adds breathing room above and below
              while stuck; matching negative margins keep the layout where it was. -->
-        <Grid x:Name="HistoryHeaderGrid" Style="{StaticResource HomeSectionHeaderStyle}" Margin="-12,-12,-12,-10"
-              Padding="12,12,12,10" Background="Transparent" Canvas.ZIndex="1"
+        <Grid x:Name="HistoryHeaderGrid" Style="{StaticResource HomeSectionHeaderStyle}" Margin="-12,-12,-12,-8"
+              Padding="12,12,12,8" Background="Transparent" Canvas.ZIndex="1"
               SizeChanged="HistoryHeaderSizeChanged">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
@@ -63,12 +63,12 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="{StaticResource HistorySearchColumnWidth}" />
             </Grid.ColumnDefinitions>
-            <SystemBackdropElement Grid.ColumnSpan="4" Grid.RowSpan="2" Margin="-12,-12,-12,-10" IsHitTestVisible="False">
+            <SystemBackdropElement Grid.ColumnSpan="4" Grid.RowSpan="2" Margin="-12,-12,-12,-8" IsHitTestVisible="False">
                 <SystemBackdropElement.SystemBackdrop>
                     <MicaBackdrop />
                 </SystemBackdropElement.SystemBackdrop>
             </SystemBackdropElement>
-            <Border Grid.ColumnSpan="4" Grid.RowSpan="2" Margin="-12,-12,-12,-10" IsHitTestVisible="False"
+            <Border Grid.ColumnSpan="4" Grid.RowSpan="2" Margin="-12,-12,-12,-8" IsHitTestVisible="False"
                     Background="{ThemeResource LayerFillColorDefaultBrush}" />
             <TextBlock x:Name="HistoryTitle" Text="History" Style="{StaticResource HomeSectionTitleStyle}"
                        AutomationProperties.HeadingLevel="Level2" />
@@ -76,21 +76,21 @@
                          ToolTipService.ToolTip="Your latest transcriptions saved on this device, up to 100." />
             <TextBox x:Name="HistorySearchBox" Grid.Column="3" Height="36" PlaceholderText="Search transcripts"
                      TextChanged="HistorySearchChanged" Padding="{StaticResource HistorySearchPadding}"
-                     FontSize="{StaticResource HistorySearchFontSize}" VerticalContentAlignment="Center"
+                     FontSize="{StaticResource BodyFontSize}" VerticalContentAlignment="Center"
                      AutomationProperties.Name="Search transcripts">
                 <TextBox.KeyboardAccelerators>
                     <KeyboardAccelerator Key="K" Modifiers="Control" Invoked="FocusHistorySearchInvoked" />
                 </TextBox.KeyboardAccelerators>
             </TextBox>
             <FontIcon x:Name="HistorySearchIcon" Grid.Column="3" Glyph="&#xE721;"
-                      FontSize="14" HorizontalAlignment="Left" VerticalAlignment="Center"
+                      FontSize="16" HorizontalAlignment="Left" VerticalAlignment="Center"
                       Margin="12,0,0,0" IsHitTestVisible="False" />
             <Border x:Name="HistorySearchShortcut" Grid.Column="3" Style="{StaticResource SearchKeycapStyle}"
                     HorizontalAlignment="Right" VerticalAlignment="Center" IsHitTestVisible="False">
                 <TextBlock Text="Ctrl K" Style="{StaticResource SearchKeycapTextStyle}" />
             </Border>
             <!-- A hairline under the stuck header. The pin fades it in only while rows pass underneath. -->
-            <Border x:Name="HistoryHeaderDivider" Grid.ColumnSpan="4" Grid.RowSpan="2" Margin="-12,0,-12,-10"
+            <Border x:Name="HistoryHeaderDivider" Grid.ColumnSpan="4" Grid.RowSpan="2" Margin="-12,0,-12,-8"
                     Style="{StaticResource HistoryDividerStyle}" VerticalAlignment="Bottom" IsHitTestVisible="False" />
         </Grid>
         <!-- History flows in the page scroller. No card, no fixed height, no nested scroller. -->

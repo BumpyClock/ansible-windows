@@ -4,12 +4,12 @@
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:local="using:Ansible">
     <Page.Resources>
-        <Style x:Key="SettingsSectionTitleStyle" TargetType="TextBlock" BasedOn="{StaticResource SubtitleTextBlockStyle}">
+        <Style x:Key="SettingsSectionTitleStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
             <Setter Property="AutomationProperties.HeadingLevel" Value="Level2" />
         </Style>
         <Style x:Key="SettingsLedeStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionSecondaryStyle}">
-            <Setter Property="FontSize" Value="{StaticResource SettingsDescriptionFontSize}" />
-            <Setter Property="LineHeight" Value="{StaticResource SettingsDescriptionLineHeight}" />
+            <Setter Property="FontSize" Value="{StaticResource CaptionFontSize}" />
+            <Setter Property="LineHeight" Value="{StaticResource CaptionLineHeight}" />
             <Setter Property="TextWrapping" Value="Wrap" />
             <Setter Property="MaxWidth" Value="{StaticResource SettingsRowDescriptionMaxWidth}" />
             <Setter Property="HorizontalAlignment" Value="Left" />
@@ -55,7 +55,7 @@
                                 <!-- Read-only keycap. Focus or click records a new shortcut; Esc cancels. -->
                                 <Grid MinWidth="140" MaxWidth="280" MinHeight="32">
                                     <StackPanel x:Name="HotkeyKeycaps" Orientation="Horizontal"
-                                                HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6">
+                                                HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
                                         <Border x:Name="HotkeyModifierKeycap" Style="{StaticResource KeycapStyle}">
                                             <TextBlock x:Name="HotkeyModifierText" Style="{StaticResource KeycapTextStyle}" />
                                         </Border>
@@ -85,13 +85,13 @@
                                 <!-- Shown only when the shortcut differs from the default. -->
                                 <HyperlinkButton x:Name="ResetShortcutButton" Content="Reset" VerticalAlignment="Center"
                                                  Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
-                                                 FontSize="{StaticResource SettingsLinkFontSize}" FontWeight="Medium"
+                                                 FontSize="{StaticResource BodyFontSize}" FontWeight="Medium"
                                                  AutomationProperties.AutomationId="ResetShortcutButton"
                                                  AutomationProperties.Name="Reset shortcut"
                                                  Visibility="Collapsed" Click="ResetShortcutClicked" />
                                 <HyperlinkButton x:Name="PracticeShortcutButton" Content="Practice" VerticalAlignment="Center"
                                                  Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
-                                                 FontSize="{StaticResource SettingsLinkFontSize}" FontWeight="Medium"
+                                                 FontSize="{StaticResource BodyFontSize}" FontWeight="Medium"
                                                  AutomationProperties.AutomationId="ShortcutLessonButton"
                                                  AutomationProperties.Name="Practice the shortcut"
                                                  Click="PracticeShortcutClicked" />

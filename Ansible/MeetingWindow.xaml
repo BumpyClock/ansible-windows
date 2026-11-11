@@ -8,7 +8,7 @@
         <Border Grid.Row="1" Grid.RowSpan="4" Margin="8,0,8,8" Style="{StaticResource ContentLayerStyle}" />
         <Grid x:Name="TitleBar" Margin="24,0,140,0"><TextBlock x:Name="TitleBarCaption" Text="Meeting transcript" VerticalAlignment="Center" Style="{StaticResource CaptionSecondaryStyle}"/></Grid>
         <StackPanel Grid.Row="1" Margin="32,20,32,20" Spacing="12">
-            <TextBox x:Name="MeetingTitle" Text="New meeting" FontSize="{StaticResource PageTitleFontSize}" FontWeight="SemiBold" Background="Transparent" BorderThickness="0" Padding="0" MaxLength="200" LostFocus="TitleLostFocus" AutomationProperties.Name="Meeting title"/>
+            <TextBox x:Name="MeetingTitle" Text="New meeting" FontSize="{StaticResource TitleFontSize}" FontWeight="SemiBold" Background="Transparent" BorderThickness="0" Padding="0" MaxLength="200" LostFocus="TitleLostFocus" AutomationProperties.Name="Meeting title"/>
             <TextBlock x:Name="MeetingDate" Style="{StaticResource CaptionSecondaryStyle}"/>
             <Grid ColumnSpacing="12">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
@@ -25,16 +25,16 @@
             </Grid>
         </StackPanel>
         <StackPanel Grid.Row="2" Margin="32,0,32,16" Spacing="12">
-            <Border Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}" CornerRadius="8" Padding="14,12">
+            <Border Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}" CornerRadius="{StaticResource OverlayCornerRadius}" Padding="16,12">
                 <Grid ColumnSpacing="12">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                    <FontIcon Glyph="&#xE916;" FontSize="14"/>
+                    <FontIcon Glyph="&#xE916;" FontSize="16"/>
                     <TextBlock x:Name="ElapsedText" Grid.Column="1" Text="0:00" Style="{StaticResource BodyTextBlockStyle}"/>
                     <TextBlock x:Name="StateText" Grid.Column="2" Text="Ready" Style="{StaticResource CaptionSecondaryStyle}" VerticalAlignment="Center"/>
                 </Grid>
             </Border>
             <TextBlock x:Name="DelayText" Visibility="Collapsed" Style="{StaticResource CaptionSecondaryStyle}"/>
-            <StackPanel x:Name="AudioHealthPanel" Visibility="Collapsed" Spacing="6">
+            <StackPanel x:Name="AudioHealthPanel" Visibility="Collapsed" Spacing="8">
                 <Grid ColumnSpacing="16">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                     <TextBlock x:Name="MicrophoneHealthText" Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap"/>
@@ -62,13 +62,13 @@
                 </ListView.ItemContainerStyle>
                 <ListView.ItemTemplate>
                     <DataTemplate x:DataType="local:MeetingTranscriptRow">
-                        <StackPanel Spacing="6">
+                        <StackPanel Spacing="8">
                             <Button Content="{x:Bind SpeakerName, Mode=OneWay}" Tag="{x:Bind SpeakerId, Mode=OneWay}"
                                     AutomationProperties.Name="{x:Bind RenameSpeakerName, Mode=OneWay}" Click="SpeakerClicked"
                                     Background="{x:Null}" BorderThickness="0" Padding="0,4,0,4" HorizontalAlignment="Left"/>
                             <TextBlock Text="{x:Bind TimingText, Mode=OneWay}" Style="{StaticResource CaptionSecondaryStyle}"/>
-                            <Border CornerRadius="8" Padding="12,10" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
-                                <TextBlock Text="{x:Bind Text, Mode=OneWay}" TextWrapping="Wrap" IsTextSelectionEnabled="True" FontSize="16"/>
+                            <Border CornerRadius="{StaticResource OverlayCornerRadius}" Padding="12,8" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
+                                <TextBlock Text="{x:Bind Text, Mode=OneWay}" TextWrapping="Wrap" IsTextSelectionEnabled="True" FontSize="{StaticResource BodyFontSize}"/>
                             </Border>
                             <Expander Header="Original wording" IsExpanded="{x:Bind IsOriginalExpanded, Mode=TwoWay}"
                                       Visibility="{x:Bind local:MeetingWindow.ToVisibility(HasCleanup), Mode=OneWay}"
@@ -79,8 +79,8 @@
                     </DataTemplate>
                 </ListView.ItemTemplate>
             </ListView>
-            <StackPanel x:Name="EmptyState" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="10" MaxWidth="400">
-                <TextBlock x:Name="EmptyTitle" Text="Ready when you are" Style="{StaticResource SubtitleTextBlockStyle}" TextAlignment="Center"/>
+            <StackPanel x:Name="EmptyState" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8" MaxWidth="400">
+                <TextBlock x:Name="EmptyTitle" Text="Ready when you are" Style="{StaticResource BodyStrongTextBlockStyle}" TextAlignment="Center"/>
                 <TextBlock x:Name="EmptyDescription" Text="Start the meeting to see speaker-labelled text here." Style="{StaticResource PageSubtitleStyle}" TextAlignment="Center"/>
             </StackPanel>
         </Grid>

@@ -72,15 +72,12 @@ foreach ($key in $lightDarkInvariantColors) {
 }
 
 $typedDimensions = @{
-    'CardCornerRadius' = 'CornerRadius'
-    'ControlCornerRadius' = 'CornerRadius'
     'CardBorderThickness' = 'Thickness'
     'SettingsCardPadding' = 'Thickness'
     'SettingsRowRowSpacing' = 'Double'
     'SettingsRowDescriptionSpacing' = 'Double'
     'SettingsRowDescriptionMaxWidth' = 'Double'
     'SectionBadgePadding' = 'Thickness'
-    'SectionBadgeCornerRadius' = 'CornerRadius'
     'SectionBadgeMinHeight' = 'Double'
     'SectionBadgeMaxWidth' = 'Double'
 }
@@ -90,10 +87,7 @@ foreach ($entry in $typedDimensions.GetEnumerator()) {
 }
 
 $badgeHeight = $tokenDocument.SelectSingleNode("//*[@x:Key='SectionBadgeMinHeight']", $namespaceManager)
-$badgeRadius = $tokenDocument.SelectSingleNode("//*[@x:Key='SectionBadgeCornerRadius']", $namespaceManager)
-Assert-Condition ([double]$badgeHeight.InnerText -ge 28) 'Section badges need at least 28 effective pixels of height for caption padding.'
-Assert-Condition ([double]$badgeRadius.InnerText -le [double]$badgeHeight.InnerText / 2) `
-    'Section badge corner radii must fit their height without flattening the rounded ends.'
+Assert-Condition ([double]$badgeHeight.InnerText -ge 24) 'Section badges need at least 24 effective pixels of height for caption padding.'
 foreach ($view in @('HomeHistoryView.xaml', 'HomeInsightsView.xaml')) {
     [xml]$viewDocument = Get-Content -LiteralPath (Join-Path $RepoRoot "Ansible\$view") -Raw
     $badge = $viewDocument.SelectSingleNode("//*[local-name()='Badge' and (@x:Name='HistoryCountPill' or @x:Name='HomeStreakPill')]", $namespaceManager)
@@ -121,7 +115,9 @@ foreach ($file in $xamlFiles) {
     }
 }
 $platformStyleKeys = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-foreach ($key in @('AccentButtonStyle', 'SubtleButtonStyle', 'DefaultButtonStyle', 'DefaultContentDialogStyle')) { [void]$platformStyleKeys.Add($key) }
+foreach ($key in @('AccentButtonStyle', 'SubtleButtonStyle', 'DefaultButtonStyle', 'DefaultContentDialogStyle',
+    'CaptionTextBlockStyle', 'BodyTextBlockStyle', 'BodyStrongTextBlockStyle', 'SubtitleTextBlockStyle',
+    'TitleTextBlockStyle', 'TitleLargeTextBlockStyle')) { [void]$platformStyleKeys.Add($key) }
 $styleReferencePattern = '(?:Style|BasedOn)\s*=\s*"\{StaticResource\s+([A-Za-z_][A-Za-z0-9_]*)\}"'
 $semanticReferences = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
 foreach ($file in $xamlFiles) {
@@ -219,7 +215,8 @@ foreach ($file in @((Get-Item -LiteralPath $tokenPath)) + $xamlFiles) {
     foreach ($reference in [regex]::Matches($content, '\{StaticResource\s+([A-Za-z_][A-Za-z0-9_]*)\}')) {
         $key = $reference.Groups[1].Value
         if ($key -match '(CornerRadius|Padding|Margin|Spacing|Threshold|Width|Height|Gap|Size|Thickness|FontSize|LineHeight)$') {
-            Assert-Condition ($tokenKeySet.Contains($key)) "$($file.FullName): layout token '$key' is missing from DesignTokens.xaml."
+            Assert-Condition ($tokenKeySet.Contains($key) -or $key -in @('ControlCornerRadius', 'OverlayCornerRadius')) `
+                "$($file.FullName): layout token '$key' is missing from DesignTokens.xaml."
         }
     }
 }
@@ -264,6 +261,67 @@ foreach ($file in $csharpFiles) {
             [void]$failures.Add("$($file.FullName): Color.FromArgb palette constant '$($match.Value)' is outside DesignTokens.xaml.")
         }
     }
+}
+
+# One scale. Text sizes come from WinUI's type ramp (its TextBlock styles, or the ramp tokens for controls that take
+# a FontSize). Radii are WinUI's ControlCornerRadius and OverlayCornerRadius, or PillCornerRadius for a fully round
+# shape. Spacing sits on the 4 DIP grid; 1 and 2 are allowed for hairlines and optical nudges. AppMark.xaml is
+# exact brand geometry and is exempt.
+$iconSizes = @('12', '16', '20', '24', '32', '48')
+$spacingProperties = @('Margin', 'Padding', 'Spacing', 'RowSpacing', 'ColumnSpacing')
+function Test-OnGrid {
+    param([string]$Value)
+    foreach ($part in $Value.Split(',')) {
+        $number = 0.0
+        if (-not [double]::TryParse($part.Trim(), [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$number)) { return $true }
+        $size = [Math]::Abs($number)
+        if ($size -notin @(0, 1, 2) -and ($size % 4) -ne 0) { return $false }
+    }
+    $true
+}
+function Test-ScaleValue {
+    param([string]$File, [string]$Element, [string]$Property, [string]$Value)
+    if ($Value -notmatch '^-?[0-9][0-9.,\s-]*$') { return }
+    if ($Property -eq 'FontSize') {
+        Assert-Condition ($Element -eq 'FontIcon' -and $Value -in $iconSizes) `
+            "${File}: <$Element> FontSize='$Value' is off the scale. Use a WinUI TextBlock style or a ramp token; icons use 12, 16, 20, 24, 32, or 48."
+    } elseif ($Property -eq 'CornerRadius') {
+        Assert-Condition $false "${File}: <$Element> CornerRadius='$Value' is a literal. Use ControlCornerRadius, OverlayCornerRadius, or PillCornerRadius."
+    } elseif ($Property -in $spacingProperties) {
+        Assert-Condition (Test-OnGrid $Value) "${File}: <$Element> $Property='$Value' is off the 4 DIP grid."
+    }
+}
+foreach ($file in @((Get-Item -LiteralPath $tokenPath)) + $xamlFiles) {
+    if ($file.Name -eq 'AppMark.xaml') { continue }
+    [xml]$scaleDocument = Get-Content -LiteralPath $file.FullName -Raw
+    foreach ($node in $scaleDocument.SelectNodes('//*')) {
+        if ($node.LocalName -eq 'Setter') {
+            Test-ScaleValue $file.Name $node.ParentNode.GetAttribute('TargetType') $node.GetAttribute('Property') $node.GetAttribute('Value')
+            continue
+        }
+        foreach ($attribute in $node.Attributes) {
+            Test-ScaleValue $file.Name $node.LocalName $attribute.LocalName $attribute.Value
+        }
+        $resourceKey = $node.GetAttribute('Key', $namespaceManager.LookupNamespace('x'))
+        if ($node.LocalName -eq 'Thickness' -and $resourceKey -notmatch 'BorderThickness$|DividerThickness$') {
+            Assert-Condition (Test-OnGrid $node.InnerText) "$($file.Name): Thickness token '$resourceKey' ($($node.InnerText)) is off the 4 DIP grid."
+        } elseif ($node.LocalName -eq 'Double' -and $resourceKey -match '(Gap|Spacing|Inset)$') {
+            Assert-Condition (Test-OnGrid $node.InnerText) "$($file.Name): spacing token '$resourceKey' ($($node.InnerText)) is off the 4 DIP grid."
+        } elseif ($node.LocalName -eq 'CornerRadius' -and $resourceKey) {
+            Assert-Condition ($resourceKey -eq 'PillCornerRadius') "$($file.Name): radius token '$resourceKey' duplicates the WinUI radii."
+        } elseif ($node.LocalName -eq 'Double' -and $resourceKey -match 'FontSize$') {
+            Assert-Condition ($node.InnerText -in @('12', '14', '20', '28', '40')) "$($file.Name): '$resourceKey' ($($node.InnerText)) is not a WinUI ramp size."
+        }
+    }
+}
+
+# A token nothing references is dead. Remove it instead of keeping it for later.
+$referenceText = (@($xamlFiles) + @(Get-Item -LiteralPath $tokenPath) + @(Get-ChildItem -LiteralPath (Join-Path $RepoRoot 'Ansible') -Filter '*.cs' -File) |
+    ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw }) -join "`n"
+foreach ($key in $tokenKeys | Sort-Object -Unique) {
+    if ($key -in @('Light', 'Dark', 'HighContrast') -or $key -match $allowedPlatformOverride) { continue }
+    $escaped = [regex]::Escape($key)
+    Assert-Condition ($referenceText -match "(?:Resource |ResourceKey=`")$escaped\b|`"$escaped`"") "Token '$key' is not referenced anywhere. Remove it."
 }
 
 $interAssets = @(Get-ChildItem -LiteralPath (Join-Path $RepoRoot 'Ansible') -Recurse -File |

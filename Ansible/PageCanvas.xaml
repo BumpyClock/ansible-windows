@@ -16,7 +16,7 @@
                       SizeChanged="HeaderSizeChanged">
                     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="0" /></Grid.RowDefinitions>
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                    <StackPanel x:Name="HeadingPanel" Spacing="6" VerticalAlignment="Center">
+                    <StackPanel x:Name="HeadingPanel" Spacing="8" VerticalAlignment="Center">
                         <TextBlock x:Name="TitleText" Text="{x:Bind Title, Mode=OneWay}" Margin="0"
                                    Style="{StaticResource PageTitleStyle}" AutomationProperties.HeadingLevel="Level1" />
                         <TextBlock x:Name="SubtitleText" Text="{x:Bind Subtitle, Mode=OneWay}"
