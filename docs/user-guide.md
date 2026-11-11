@@ -7,10 +7,11 @@ See the [README](../README.md#build-and-run) to build and launch the app.
 A new install opens a three-step welcome lesson in a dialog over Home. An
 existing `settings.json` that has no welcome flag is treated as already
 complete, so current installs are not forced through it. **Next** moves through
-the steps, and **Back** returns. **Skip for now** (bottom left, or Escape) and
-**Done** both save completion in settings. **Done** replaces **Next** on the
-last step, and **Skip for now** is hidden there. The dialog follows the
-window's light or dark theme.
+the steps, and **Back** returns. **Back** is hidden on the first step. **Skip
+for now** (or Escape) and **Done** both save completion in settings. **Done**
+replaces **Next** on the last step, and **Skip for now** is hidden there. **Next**
+and **Done** are the dialog's default button, so Enter activates them. The dialog
+follows the window's light or dark theme.
 
 1. Intro. Speak into a focused field. Recognition stays on this device.
 2. Shortcut. Keycaps for your chord press down while you hold those keys and
@@ -51,7 +52,8 @@ Every page scrolls as one document inside the content layer; lists and cards do
 not scroll on their own.
 
 **Home** shows the latest successful dictations, newest first, grouped as Today,
-Yesterday, and older dates. Each row shows the time, transcript, **Copy
+Yesterday, and older dates. A day heading reads weekday, day, and abbreviated
+month, such as **Thu 29 Oct**, with the year only outside the current year. Each row shows the time, transcript, **Copy
 transcript**, and a **More** menu with **Remove from history**. Remove deletes
 that entry from saved history. Removing the current dictation's row also hides
 its transcript card. Shortcut dictations keep an insertion tag across restarts:
@@ -72,14 +74,16 @@ never saved. Prior session-only transcripts from earlier app versions cannot be
 recovered.
 
 Use **Dictate** or your configured shortcut to record. Choose the active model
-and use **Transcribe WAV file** on **Speech models**.
+and use **Transcribe WAV file…** from the **More options** menu on **Speech models**.
 With no saved rows, History shows an empty state under its header instead of a list, and
 the count badge beside the History title is hidden. It says **No dictations
 yet** only when usage shows no dictations. When usage counts dictations that
-History does not hold, it says **No saved transcripts** and that they were
-removed or not saved. When History storage has a problem, it says that saved
-transcripts may be missing. When usage is unavailable, it says **New
-dictations appear here.** The search box and its Ctrl K hint are hidden while
+History does not hold, it says **No saved transcripts**. The detail starts with
+**New dictations appear here.** and adds that the earlier dictations are no
+longer saved, for example **12 earlier dictations are no longer saved.** or
+**Your earlier dictation is no longer saved.** When History storage has a
+problem, it says that saved transcripts may be missing. When usage is
+unavailable, it says **New dictations appear here.** The search box and its Ctrl K hint are hidden while
 History holds no entries. A search with no hits shows **No matches** and the
 search text, and keeps the search box.
 
@@ -116,20 +120,22 @@ cards group related content on it. The citron accent is the only brand colour.
 Compact windows use a 48 DIP icon sidebar, smaller page padding, and stacked
 controls. In the compact layout the title bar keeps the app icon and name. Pages
 are at most 1000 DIP wide, so a page of one column of rows reads in a narrow
-measure. Home, with history beside its insights, may use up to 1440 DIP. Page
-content starts at the left page padding.
+measure. Home uses up to 1440 DIP once History holds a saved dictation, with
+history beside its insights. With no saved dictations Home keeps the 1000 DIP
+width and stacks at every width. Page content starts at the left page padding.
 
-When the page title has scrolled out of view, the title bar shows the page name.
+When less than a third of the page title's height is left in view, the title bar shows the page name.
 On Home and Meetings, once the header actions have scrolled out too, the title
 bar also shows a copy of the page's main action, the dictation button or
 **Start meeting**, right after the page name. The copy has the same label, state, and icon as
-the original. On a narrow Home, History comes before the insight cards.
+the original, and it is a standard button, not an accent button. When Home is
+stacked, History comes before the insight cards, and the two cards sit side by
+side and end on one line.
 
-Settings has five sections, chosen from a bar under the heading. They are
-**Dictation**, **Screen and ink**, **Recognition**, **Meetings**, and **Privacy
-and data**. One section shows at a time, and the bar stays at the top of the page
-while a section scrolls. This guide names a setting as **Settings > Section >
-Row**.
+Settings is one scrolling page. Its sections, in order, are **Dictation**,
+**Screen and ink**, **Recognition**, **Meetings**, **Transcript cleanup**, and
+**Privacy and data**. Each is a heading over one card of rows. This guide names a
+setting as **Settings > Section > Row**.
 
 ## Microphone access
 
@@ -160,8 +166,9 @@ details**, which expands exact technical details in place. They include the
 languages, license, catalog name, source, precision, byte count, hash, and
 location.
 
-Select **Download** on a row, or open **Model folder** and use **Choose folder** to
-select a folder containing catalog weights. Download progress shows in the row.
+Select **Download** on a row, or open **More options > Model folder…** in the
+page header and use **Choose folder** to select a folder containing catalog
+weights. Download progress shows in the row.
 Select **Use for dictation** on an installed model to make it active.
 
 Downloads start only when requested. **Pause** keeps partial files for **Resume**.
@@ -169,7 +176,8 @@ The app verifies the length and SHA-256 before installing weights. If recognitio
 is active when verification finishes, select **Install** on the row after it
 ends. You can dictate with an existing model during a download.
 
-**Model folder > Verify installed files** checks the chosen folder without downloading.
+**More options > Model folder… > Verify installed files** checks the chosen folder
+without downloading.
 Use the row's **More options** menu to choose **Remove from this device** for
 installed weights or **Discard partial download** for a partial one; both require
 confirmation. Installation, removal, and folder changes are available
@@ -177,8 +185,8 @@ only while recognition is idle. Removing the last model leaves the app disconnec
 until another model is installed.
 
 If a model installs but its resume data cannot be removed, the card reports
-that cleanup failed. The verified model remains installed. Choose **Model folder >
-Verify installed files** to retry cleanup without downloading or removing the
+that cleanup failed. The verified model remains installed. Choose **More options >
+Model folder… > Verify installed files** to retry cleanup without downloading or removing the
 weights. An interrupted resume-data update never replaces the previous valid
 metadata with a partially written file.
 
@@ -446,7 +454,8 @@ On **Home**, use **Dictate** to start microphone capture, then
 the current native step; partial text can remain visible for copying. A blocking
 native call cannot be forcibly interrupted.
 
-On **Models**, select **Transcribe WAV file** for a recording. **Copy** copies the visible
+On **Models**, open **More options** in the header and select **Transcribe WAV
+file…** for a recording. **Copy** copies the visible
 transcript. These page controls do not automatically insert text into another app.
 
 WAV input is limited to five minutes, 100 MiB on disk, and 64 MiB of decoded float
@@ -485,7 +494,8 @@ app. Unsupported native options produce an error.
 
 Open **Dictionary** in the sidebar. One field finds and adds. Type a name, word,
 or phrase, then select **Add** or press Enter. The list filters as you type.
-**Import...** accepts one entry per line. Each row offers Edit and Remove.
+**Import…** in the header's **More options** menu accepts one entry per line. **Add**
+is the page's only accent button. Each row offers Edit and Remove.
 **Undo** in the confirmation restores the latest removal. Existing saved words
 stay in the list. Changes save immediately. The line under the field shows how
 many words the dictionary holds, for example **12 of 100 words**. A message about
@@ -529,12 +539,14 @@ When both devices work
 and GPU is within five percent of CPU, Auto selects GPU, except that a meeting
 prefers the device that keeps half real time when only one of them does. **Settings >
 Recognition > Compare processors** shows the last
-comparison, including its model and kind (streaming, meeting, or whole recording), the selected processor, and device
-timings, after a qualification runs. Each model and kind keeps its own result, so
+speed test, including its model and kind (recognizing while you speak, meetings, or
+recognizing after you finish), the processor Auto uses, a line that says why, and device
+timings in seconds, such as **0.8 s**, after a qualification runs. The badge reads
+**Auto uses the CPU** or **Auto uses the graphics card**. Each model and kind keeps its own result, so
 one model can use GPU while another uses CPU. The last device result stays in place when you change the
 choice; it updates when recognition next prepares a model.
 
-**Run benchmark** below the processor choice measures CPU and GPU again for the
+**Run speed test** below the processor choice measures CPU and GPU again for the
 selected dictation model, whatever the processor setting is. It ignores cached
 results and uses the dictation mode and, for Kroko, the vocabulary decoder mode.
 Use it after plugging in, updating a graphics driver, or switching models. The
@@ -556,8 +568,8 @@ is reported but does not prevent using the qualified device or a qualified
 fallback in the current session.
 Qualification cannot catch a later in-process native driver crash.
 
-**CPU** and **GPU (Vulkan)** remain available as manual choices. Vulkan uses
-device 0 and needs a Vulkan build, a compatible driver, and supported model
+**CPU** and **Graphics card (GPU)** remain available as manual choices. The
+graphics card uses the Vulkan backend on device 0 and needs a Vulkan build, a compatible driver, and supported model
 operations. Manual GPU failures are shown without an automatic CPU retry.
 
 Auto selects CPU for Nemotron dictation because its GPU streaming path has a
@@ -568,9 +580,11 @@ memory to load and decode. Keep the guard enabled.
 
 ### Transcript cleanup
 
-Open **Settings > Meetings > Transcript cleanup**. Choose **Copilot CLI** or **OpenAI API**.
-Each provider has its own model and reasoning effort. Fields save as you change
-them. Automatic cleanup stays off until you turn on **Clean up automatically**
+Open **Settings > Transcript cleanup**. Choose **GitHub Copilot** or **OpenAI** under
+**Service**. Each service has its own model and thinking effort. For GitHub Copilot,
+the model and thinking effort sit under the **Advanced** row, and for OpenAI only the
+thinking effort does. **Show** opens them and **Hide** closes them. The OpenAI model
+and API key stay visible. Fields save as you change them. Automatic cleanup stays off until you turn on **Clean up automatically**
 and confirm with **Turn on** in the dialog. That confirmation is the opt-in to send meeting
 text to the cloud. Enabling OpenAI automatic cleanup
 requires a saved API key and an OpenAI API model ID. No OpenAI model is guessed.
@@ -583,9 +597,9 @@ The selected provider is used alone. There is no fallback to the other provider
 or another account. Audio is never uploaded. Only finalized local text is sent,
 and only after the original transcript is saved.
 
-**Copilot CLI** uses the installed GitHub Copilot CLI and its signed-in account.
+**GitHub Copilot** uses the installed GitHub Copilot CLI and its signed-in account.
 Run `copilot login` if needed. It does not use an OpenAI API key. The default
-model is `gpt-6-luna` with `high` reasoning. Cleanup starts a subprocess with
+model is `gpt-6-luna` with `high` thinking effort. Cleanup starts a subprocess with
 tools, hooks, memory, and custom instructions disabled. That isolation applies
 only to the subprocess. It does not change your global Copilot CLI config.
 Obsolete `--no-remote` is not passed. `--no-remote-export` is replaced by
@@ -593,12 +607,12 @@ Obsolete `--no-remote` is not passed. `--no-remote-export` is replaced by
 the CLI is incompatible and keeps the original transcript. CLI errors are
 classified. Raw stderr is not shown.
 
-**OpenAI API** posts transcript text to the OpenAI Responses API with `store`
+**OpenAI** posts transcript text to the OpenAI Responses API with `store`
 false. Enter a valid OpenAI API model ID from your OpenAI account. Copilot
-aliases are not mapped. Save the key with **Save API key**. The key is stored
+aliases are not mapped. Save the key with **Save key**. The key is stored
 in Windows Credential Locker. It is not written to `settings.json` or logs.
 OpenAI API billing is separate from Copilot. Remove the saved key with
-**Remove saved key**.
+**Remove key**.
 
 The meeting snapshots the cleanup provider at Start. Automatic cleanup runs
 only after a successful **End meeting** when that snapshot has automatic cleanup
@@ -736,7 +750,8 @@ the same speaker into one text block. The transcript is a single scrolling list
 of these blocks. Each block has the speaker heading with a pencil rename control,
 the text, and a start time beside the heading. The start time reads like `2:05`
 when every joined chunk has an aligned time. It reads like `About 2:05` when any
-chunk has only an approximate chunk time. It is left out when any joined chunk is
+chunk has only an approximate chunk time, except that a block starting at exactly
+zero reads `0:00`. It is left out when any joined chunk is
 untimed, and **Updating** follows it while the newest words can still change. A speaker change starts a new block. If the same
 speaker returns after someone else, that later speech is a new block. Saved
 meetings keep each original chunk's wording and timing. Cleanup still aligns those
@@ -780,7 +795,9 @@ for the required save to finish. A crash can lose updates still awaiting disk;
 slow storage can delay those actions. Save failures remain visible and closing
 can be retried. Failed wording cleanup keeps the completed original for retry.
 The Meetings list groups saved
-meetings by day, newest first. Each row shows a title and one detail line. The
+meetings by day, newest first. Day headings and the date in the meeting window
+read weekday, day, and abbreviated month, such as **Thu 29 Oct**, with the year
+only outside the current year. Each row shows a title and one detail line. The
 line gives the length and speaker count, then the start time when the title does
 not say it. A finished meeting with no transcribed speech states the outcome once
 in that line, as **Failed before any speech was transcribed**, **Interrupted
@@ -872,9 +889,9 @@ Successful dictation transcripts persist as text and metadata in
 locally. Recognition does
 not upload audio. Auto device qualification uses only the bundled public sample
 in a local process; it does not send or save user audio. Optional transcript
-cleanup sends meeting text only after you enable it in **Settings > Meetings >
-Transcript cleanup** and a completed original is saved locally. Choose Copilot CLI or the
-OpenAI API. There is no provider fallback. Audio is never uploaded. The OpenAI
+cleanup sends meeting text only after you enable it in **Settings >
+Transcript cleanup** and a completed original is saved locally. Choose GitHub Copilot or
+OpenAI. There is no provider fallback. Audio is never uploaded. The OpenAI
 API key is stored in Windows Credential Locker, not in `settings.json` or logs.
 Model downloads also use the network.
 **Copy** uses the ordinary clipboard; Windows clipboard features and destination
@@ -975,5 +992,5 @@ app has no external usage telemetry.
 Changing model folders does not move or delete weights. Package updates preserve
 local data; uninstalling removes package-local data, including models in the
 default folder. Models in a chosen folder outside package storage remain there.
-Use **Speech models > Model folder > Choose folder** to reuse development weights
+Use **Speech models > More options > Model folder… > Choose folder** to reuse development weights
 from `.runtime\models`.

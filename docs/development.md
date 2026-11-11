@@ -60,8 +60,8 @@ To build CPU only:
 Build the native runtime before building or launching the WinUI app.
 Downloaded models and generated native files stay in the ignored `.runtime`
 folder. The app package includes the runtime and public sample; it excludes
-model weights. Select `.runtime\models` through **Speech models > Model folder >
-Choose folder** to use setup's weights in the packaged app.
+model weights. Select `.runtime\models` through **Speech models > More options >
+Model folder… > Choose folder** to use setup's weights in the packaged app.
 
 ## ARM64 cross-build
 
@@ -250,22 +250,33 @@ vertical scroller, and bottom space. Pages supply `Title`, `Subtitle`,
 `HeaderActions`, and body content; they do not implement their own header grids,
 heading breakpoints, or nested scrollers. The header and content share one column
 that starts at the page padding. The column is at most `PageReadingMaxWidth`
-(1000) wide. A page that sets `Wide="True"` gets `PageContentMaxWidth` (1440)
-instead. Only Home sets it, because its history and insights sit side by side.
+(1000) wide. A `Wide` page gets `PageContentMaxWidth` (1440) instead. `Wide` can
+change while the page shows. Only Home sets it, from code, and only once History
+holds a saved dictation, because only then do its history and insights sit side
+by side. With no saved dictations Home keeps the reading width and stacks at
+every width, and its two insights cards fill their row so they end on one line.
 Content that must stay visible while the page scrolls uses `PageCanvas.Pin`.
-Settings pins its `SelectorBar` that way. The bar chooses one of five sections
-(Dictation, Screen and ink, Recognition, Meetings, Privacy and data), and only
-that section is visible. `EmptyState` is the one empty state. It shows a glyph on
+Home pins its History header and, in the wide layout, its insights rail that way.
+Settings is one scrolling page of six sections in this order, each a heading over
+one card of rows: Dictation, Screen and ink, Recognition, Meetings, Transcript
+cleanup, and Privacy and data. It has no tabs and no sub-group headings.
+`EmptyState` is the one empty state. It shows a glyph on
 a 48 DIP round backplate, a Subtitle title, an optional detail line, and an
 optional footer. History, Meetings, Dictionary, the meeting window transcript,
 and the Home daily rhythm card when usage statistics are unavailable use it.
-`NoticeBarPanel` lays out a notice by its content, so the message and the action
-buttons stack when they do not fit on one line. `NoticeHost` reports the height
-of the notice band, and `MainWindow` sets it as the current page's
-`PageCanvas.BottomInset`, which ends the page's scroll viewport above the band.
-`ShellTitleBar` shows the page name once `PageCanvas.IsTitleScrolledOut` is true.
-It adds the copy of the page's `PrimaryAction` directly after the name only once
-`IsActionScrolledOut` is also true. Its brand stays at 16 DIP with the app name in
+`NoticeBar` is a flat docked bar with the card stroke, the control corner radius,
+and no shadow. `NoticeBarPanel` lays out a notice by its content, so the message
+and the action buttons stack when they do not fit on one line. `NoticeHost`
+reports the height of the notice band, and `MainWindow` sets it as the current
+page's `PageCanvas.BottomInset`, which ends the page's scroll viewport above the
+band. `MainWindow` also lines the band up with the current page's column
+(`PageCanvas.Column`, `NoticeHost.AlignWith`), so a notice has the same left and
+right insets and width cap as the page content.
+`ShellTitleBar` shows the page name once `PageCanvas.IsTitleScrolledOut` is true,
+which is when less than a third of the page title's height is left in the
+viewport. It adds the copy of the page's `PrimaryAction` directly after the name
+only once `IsActionScrolledOut` is also true. The copy is a standard button, not
+an accent button. Its brand stays at 16 DIP with the app name in
 Caption type in the 48 DIP compact layout too. The design check rejects page roots that
 bypass the shared canvas. `DeviceComparisonView` renders
 structured benchmark snapshots without parsing presentation text.
@@ -288,12 +299,13 @@ and [system backdrops](https://learn.microsoft.com/windows/apps/develop/ui/syste
 `tools\design\Capture-AppScreens.ps1 -Round <name>` builds the Debug app and
 captures the fixed review matrix into `.runtime\ux\<name>`: five pages in light
 and dark at a wide and a narrow window, one frame per viewport of scroll, plus the
-welcome lesson and a saved meeting window. Settings is captured one section at a
-time, each from top to bottom. The script waits for the session to be ready
-before it captures. It takes each frame with the app window in the foreground.
-When the window is not, it clicks once on the empty title bar, checks the
-foreground again after the screenshot, and retries up to four times. It warns if
-a frame was still captured with the window inactive. It waits up to 10 seconds
+welcome lesson and a saved meeting window. Settings is one page and is captured
+like any other. The script waits for the session to be ready before it captures.
+It takes each frame with the app window in the foreground and the title bar drawn
+active. After each screenshot it checks the foreground window and reads the saved
+frame to see whether the title bar was drawn active. When either check fails, it
+clicks once on the empty title bar and retries up to four times. It warns if a
+frame was still captured with the window inactive. It waits up to 10 seconds
 for the meeting transcript window to open. `-Only` limits the run to the named pages or to `extras` (the
 welcome lesson and the meeting window) for a quick local probe. Review rounds use
 the full matrix. It needs the `winapp` CLI and replaces the running development
