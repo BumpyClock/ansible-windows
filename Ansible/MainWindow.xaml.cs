@@ -44,6 +44,7 @@ public sealed partial class MainWindow : Window
     private readonly ModelNames _modelNames = new();
     private readonly Task _modelNamesTask;
     private readonly List<(MeetingSession session, MeetingWindow window, Guid? savedId)> _meetingWindows = [];
+    private readonly HashSet<Task> _meetingCloseTasks = [];
     private readonly UiSessionObserver _observer;
     private readonly AppNotices _notices = new();
     private GlobalDictationHotkey? _hotkey;
@@ -517,23 +518,25 @@ public sealed partial class MainWindow : Window
         });
         window.Closed += async (_, _) =>
         {
-            try
-            {
-                await meeting.DisposeAsync();
-                try
-                {
-                    if (window.DeleteOnClose && (document?.Id ?? meeting.Document?.Id) is { } id)
-                        await _meetingStore.DeleteAsync(id);
-                }
-                finally
-                {
-                    _meetingWindows.RemoveAll(item => ReferenceEquals(item.window, window));
-                    if (ReferenceEquals(MainContent.Content, _meetings)) await _meetings.RefreshAsync();
-                }
-            }
-            catch (Exception error) { _notices.SetError(MeetingWindowNoticeKey, error, NoticeArea.Meetings); }
+            // Every close path disposes the session before allowing Window.Close.
+            _meetingWindows.RemoveAll(item => ReferenceEquals(item.window, window));
+            var work = FinishClosedMeetingAsync();
+            _meetingCloseTasks.Add(work);
+            try { await work; }
+            finally { _meetingCloseTasks.Remove(work); }
         };
         return window;
+
+        async Task FinishClosedMeetingAsync()
+        {
+            try
+            {
+                if (window.DeleteOnClose && (document?.Id ?? meeting.Document?.Id) is { } id)
+                    await _meetingStore.DeleteAsync(id);
+                if (ReferenceEquals(MainContent.Content, _meetings)) await _meetings.RefreshAsync();
+            }
+            catch (Exception error) { _notices.SetError(MeetingWindowNoticeKey, error, NoticeArea.Meetings); }
+        }
     }
 
     private bool MeetingSuggestionsBlocked => !_launchReady || !_meetingRecoveryComplete || !_session.State.IsIdle ||
@@ -887,10 +890,12 @@ public sealed partial class MainWindow : Window
             if (_microphoneSettingsTask is not null) await _microphoneSettingsTask;
             await _meetings.BeginShutdownAsync();
             await _suggestions.JoinAsync();
+            await Task.WhenAll(_meetingCloseTasks.ToArray());
             var meetings = _meetingWindows.ToArray();
             await Task.WhenAll(meetings.Select(meeting => meeting.window.BeginShutdownAsync()));
             foreach (var meeting in meetings) await meeting.session.DisposeAsync();
             foreach (var meeting in _meetingWindows.ToArray()) meeting.window.Close();
+            await Task.WhenAll(_meetingCloseTasks.ToArray());
             await Task.WhenAll(_session.CloseAsync(), _models.DisposeAsync().AsTask(), _dictation.FinishBackgroundWorkAsync(),
                 _settings.JoinAsync(), _modelNamesTask);
             await _shortcut.JoinAsync();
