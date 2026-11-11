@@ -50,6 +50,20 @@ public sealed class DictationWordTimingsTests
     }
 
     [Fact]
+    public void MeetingMappingKeepsMoreThanFiveMinutesAnd8192NativeWords()
+    {
+        var tokens = Enumerable.Range(0, 8193).Select(index => new MeetingTimedToken(index == 0 ? "word" : " word",
+            index * 100, index * 100 + 50)).ToArray();
+        var speech = string.Join(" ", Enumerable.Repeat("word", tokens.Length));
+        var processed = 16000L * 5 * 60 + 1;
+
+        Assert.Null(MeetingWordAlignment.MapSpeechWords(speech, tokens, processed, SpeechWordTimingSource.NativeWordSpan));
+        var mapped = MeetingWordAlignment.MapMeetingSpeechWords(speech, tokens, processed, SpeechWordTimingSource.NativeWordSpan);
+        Assert.Equal(tokens.Length, mapped!.Words.Count);
+        Assert.Equal(tokens[^1].EndSample, mapped.Words[^1].EndSample);
+    }
+
+    [Fact]
     public void ReorderedAndUnmatchedWordsReceiveNoTimes()
     {
         Assert.Null(MeetingWordAlignment.MapSpeechWords("second first", [new("first", 0, 1280), new(" second", 1280, 2560)],

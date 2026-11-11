@@ -19,48 +19,20 @@ internal static class NativeTranscript
     private static string? ReadSpeakerAttributedSpeech(string text)
     {
         text = text.Trim();
-        if (!TryReadSpeakerLabel(text, 0, out var speechStart))
+        var labels = MeetingSpeakerLabels.Find(text);
+        if (labels.Count == 0 || labels[0].Index != 0)
             return null;
         List<string> pieces = [];
-        while (true)
+        for (var index = 0; index < labels.Count; index++)
         {
-            var next = speechStart;
-            var nextSpeechStart = 0;
-            while ((next = text.IndexOf("Speaker", next, StringComparison.Ordinal)) >= 0)
-            {
-                if (TryReadSpeakerLabel(text, next, out nextSpeechStart))
-                    break;
-                next += "Speaker".Length;
-            }
-            var piece = text[speechStart..(next < 0 ? text.Length : next)].Trim();
+            var start = labels[index].Index + labels[index].Length;
+            var end = index + 1 < labels.Count ? labels[index + 1].Index : text.Length;
+            var piece = text[start..end].Trim();
             if (piece.Length == 0)
                 return null;
             pieces.Add(piece);
-            if (next < 0)
-                return string.Join(" ", pieces);
-            speechStart = nextSpeechStart;
         }
-    }
-
-    private static bool TryReadSpeakerLabel(string text, int start, out int end)
-    {
-        end = start;
-        if (!text.AsSpan(start).StartsWith("Speaker", StringComparison.Ordinal))
-            return false;
-        var index = start + "Speaker".Length;
-        while (index < text.Length && char.IsWhiteSpace(text[index]))
-            index++;
-        var digitsStart = index;
-        while (index < text.Length && text[index] is >= '0' and <= '9')
-            index++;
-        if (index == digitsStart)
-            return false;
-        while (index < text.Length && char.IsWhiteSpace(text[index]))
-            index++;
-        if (index >= text.Length || text[index] != ':')
-            return false;
-        end = index + 1;
-        return true;
+        return string.Join(" ", pieces);
     }
 
     private static string? Join(IReadOnlyList<string> pieces)

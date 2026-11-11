@@ -634,11 +634,16 @@ Meetings window shows a **Speaker model changed** notice naming the skipped
 model, its measured pace, and the model in use. A manual processor choice
 skips that check. The caption shows the measured pace of the chosen model.
 
-Text appears throughout the meeting as native chunks finish. Paired Nemotron or
-Kroko meetings publish cumulative timed anonymous speaker turns (`Speaker 0`
-through `Speaker 7`). The diarizer works in four-second chunks, so the newest
-words can show **Unknown speaker** for up to about five seconds before their
-label arrives. Overlapping speech and words with no speaker activity near them
+Text appears throughout the meeting as native chunks finish. The default
+microphone and system playback are recognized separately on the same meeting
+clock. Microphone speech is labeled **You**. Listening through headphones does
+not change which microphone Windows supplies. Muting Teams does not mute
+Ansible's separate microphone capture.
+Paired Nemotron or Kroko playback publishes cumulative timed anonymous speaker turns (`Speaker 0`
+through `Speaker 7`). The diarizer works in four-second chunks and publishes
+closed speech intervals. The newest words can show **Unknown speaker** until
+their interval closes; a long continuous turn can take longer than five seconds.
+Overlapping speech and words with no speaker activity near them
 stay **Unknown speaker**. Kroko words that run through a pause are judged by
 the speech where they begin, so the last word before a pause stays with its
 speaker when someone else speaks next.
@@ -649,8 +654,9 @@ markers on named tiles or their visible descendants. Current Teams labels such
 as **video is on**, **video is off**, **Myself video**, mute state, and
 **Has control of production tools** are tile descriptions, not names. Names that
 contain commas stay intact. Unmuted, video on, and roster presence do not prove
-speaking. Mapping still requires two consistent, nonoverlapping final turns with
-an exclusive microphone/playback source and full observation coverage.
+speaking. Mapping remote names still requires two consistent, nonoverlapping
+final playback turns and full observation coverage. Background microphone
+activity does not change a playback turn's source or block its name matching.
 Ambiguous evidence retains model labels. Manual names take precedence. Other
 meeting apps retain editable model labels. Names are not inferred from
 transcript text. Popups, minimized or hidden tiles, unsupported layouts, and
@@ -680,7 +686,9 @@ memory, or other optional naming and refinement failures leave editable speaker
 labels in place and write a trace warning; they do not add diagnostic status
 cards. Chunk timestamps use native input sample positions; audio during pauses
 is excluded. Update latency and long-session speaker continuity remain
-unqualified.
+unqualified. Separate microphone and playback recognition uses additional
+model memory and inference work. The device's paired-model qualification does
+not establish combined two-stream live performance.
 
 **Pause** stops capture and transcript updates. **Resume** continues the same
 meeting and processes retained pending speech. Speech during the pause is not

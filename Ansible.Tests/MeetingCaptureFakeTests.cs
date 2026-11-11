@@ -12,7 +12,7 @@ public sealed class MeetingCaptureFakeTests
     [InlineData(true)]
     public Task ReleaseIsVisibleBeforeSynchronousAudioCompletion(bool dispose) => Task.Run(async () =>
     {
-        var channel = Channel.CreateUnbounded<byte[]>(new() { AllowSynchronousContinuations = true });
+        var channel = Channel.CreateUnbounded<MeetingAudioPacket>(new() { AllowSynchronousContinuations = true });
         IMeetingCapture capture = new FakeMeetingCapture(channel);
         var observed = new TaskCompletionSource<(bool HasAudio, bool Released, int Thread)>(
             TaskCreationOptions.RunContinuationsAsynchronously);
@@ -139,7 +139,7 @@ public sealed class MeetingCaptureFakeTests
 
         Assert.True(capture.IsReleased);
         Assert.False(capture.Audio.Completion.IsCompleted);
-        Assert.Equal(pcm, await capture.Audio.ReadAsync());
+        Assert.Equal(pcm, (await capture.Audio.ReadAsync()).Playback);
         await capture.Audio.Completion.WaitAsync(Timeout);
     }
 
@@ -149,7 +149,7 @@ public sealed class MeetingCaptureFakeTests
         await using var capture = new FakeMeetingCapture();
         Assert.Equal(0, capture.ClockSamplePosition);
         await Task.Run(() => capture.Send(320));
-        Assert.Equal(320, (await capture.Audio.ReadAsync()).Length);
+        Assert.Equal(320, (await capture.Audio.ReadAsync()).Playback.Length);
         Assert.Equal(160, capture.ClockSamplePosition);
         Assert.Equal(0.01, capture.CapturedSeconds);
 
@@ -160,7 +160,7 @@ public sealed class MeetingCaptureFakeTests
             capture.Send(640);
         });
 
-        Assert.Equal(640, (await capture.Audio.ReadAsync()).Length);
+        Assert.Equal(640, (await capture.Audio.ReadAsync()).Playback.Length);
         Assert.Equal(position, capture.ClockSamplePosition);
         Assert.Equal(0.03, capture.CapturedSeconds);
         await capture.StopAsync();

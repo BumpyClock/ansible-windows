@@ -1,4 +1,5 @@
 using Ansible.Core;
+using System.Threading.Channels;
 
 namespace Ansible.Tests;
 
@@ -137,7 +138,7 @@ public sealed class MicrophonePermissionPreflightTests
         Assert.Equal(0, inner.Starts);
         permission.Current = MicrophonePermissionStatus.Allowed;
         await preflight.InitializeAsync();
-        Assert.Same(inner.Capture, await audio.StartAsync(default, 6));
+        Assert.Same(inner.AudioCapture, await audio.StartAsync(default, 6));
         Assert.Equal(6, inner.Boost);
         Assert.Same(inner.Capture, await meeting.StartAsync(request, default));
         Assert.Same(request, inner.Request);
@@ -186,12 +187,25 @@ public sealed class MicrophonePermissionPreflightTests
     private sealed class FakeCaptureFactory : IAudioCaptureFactory, IMeetingCaptureFactory
     {
         public FakeMeetingCapture Capture { get; } = new();
+        public IAudioCapture AudioCapture { get; } = new FakeAudioCapture();
         public int Starts { get; private set; }
         public int Boost { get; private set; }
         public MeetingCaptureRequest? Request { get; private set; }
         public Task<IAudioCapture> StartAsync(CancellationToken cancellationToken, int microphoneBoostDecibels = 0)
-        { Starts++; Boost = microphoneBoostDecibels; return Task.FromResult<IAudioCapture>(Capture); }
+        { Starts++; Boost = microphoneBoostDecibels; return Task.FromResult(AudioCapture); }
         public Task<IMeetingCapture> StartAsync(MeetingCaptureRequest request, CancellationToken cancellationToken)
         { Starts++; Request = request; return Task.FromResult<IMeetingCapture>(Capture); }
+    }
+
+    private sealed class FakeAudioCapture : IAudioCapture
+    {
+        private readonly Channel<byte[]> _audio = Channel.CreateUnbounded<byte[]>();
+        public ChannelReader<byte[]> Audio => _audio.Reader;
+        public double CapturedSeconds => 0;
+        public bool IsReleased => true;
+        public long? SampleZeroTimestamp => null;
+        public event Action<double>? LevelChanged { add { } remove { } }
+        public Task StopAsync() => Task.CompletedTask;
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 }

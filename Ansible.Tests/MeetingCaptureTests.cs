@@ -61,13 +61,14 @@ public sealed class MeetingCaptureTests
         var maximumToneAmplitude = 0.0;
         for (var index = 0; index < 50; index++)
         {
-            byte[] bytes;
-            try { bytes = await capture.Audio.ReadAsync(timeout.Token); }
+            MeetingAudioPacket packet;
+            try { packet = await capture.Audio.ReadAsync(timeout.Token); }
             catch (System.Threading.Channels.ChannelClosedException error)
             {
                 throw new Xunit.Sdk.XunitException($"{error.InnerException?.Message}\n" +
                     System.Text.Json.JsonSerializer.Serialize(capture.Health, LocalDiagnosticJson.Default.MeetingCaptureHealth));
             }
+            var bytes = packet.Playback;
             Assert.Equal(1280, bytes.Length);
             double sine = 0, cosine = 0;
             for (var sampleIndex = 0; sampleIndex < bytes.Length / 2; sampleIndex++)
@@ -85,7 +86,7 @@ public sealed class MeetingCaptureTests
         await capture.StopAsync();
         var stoppedPosition = capture.ClockSamplePosition;
         long flushedSamples = 0;
-        await foreach (var packet in capture.Audio.ReadAllAsync(timeout.Token)) flushedSamples += packet.Length / 2;
+        await foreach (var packet in capture.Audio.ReadAllAsync(timeout.Token)) flushedSamples += packet.Samples;
         Assert.True(flushedSamples > 0, "Stop must emit pending holdback audio.");
         Assert.Equal(stoppedPosition, (long)Math.Round(capture.CapturedSeconds * 16000));
         await Task.Delay(20, timeout.Token);

@@ -187,12 +187,10 @@ public sealed class MeetingSpeakerEvidenceTests
             Turn(4, 5) with { Source = MeetingAudioSource.Playback }
         ];
         MeetingTurn[] turns = [
-            Turn(0, 1, MeetingTimingQuality.Aligned) with { Text = "Revised" },
-            Turn(2, 4, MeetingTimingQuality.Aligned),
+            Turn(0, 1, MeetingTimingQuality.Aligned) with { Text = "Revised", Source = MeetingAudioSource.Playback },
+            Turn(2, 4, MeetingTimingQuality.Aligned) with { Source = MeetingAudioSource.Mixed },
             Turn(4, 5)
         ];
-
-        evidence.RefineTimedTurns(turns, previous);
 
         Assert.Equal(MeetingAudioSource.Playback, turns[0].Source);
         Assert.Equal(MeetingAudioSource.Mixed, turns[1].Source);
@@ -237,8 +235,7 @@ public sealed class MeetingSpeakerEvidenceTests
         Assert.Equal(2, observer.Starts);
         Assert.Equal(2, reports.Count(report => report == new EvidenceReport(MeetingDiagnosticKind.NamingAvailability, true)));
         second.Raise(new(0, 16000, 0, 0.2));
-        MeetingTurn[] turns = [Turn(5, 6, MeetingTimingQuality.Aligned)];
-        evidence.RefineTimedTurns(turns, []);
+        MeetingTurn[] turns = [Turn(5, 6, MeetingTimingQuality.Aligned) with { Source = MeetingAudioSource.Playback }];
         Assert.Equal(MeetingAudioSource.Playback, turns[0].Source);
     }
 
@@ -254,11 +251,10 @@ public sealed class MeetingSpeakerEvidenceTests
         observer.Report(8 * 16000, "Blair");
         source.Clock = 9 * 16000;
         MeetingTurn[] turns = [
-            Turn(0, 1, MeetingTimingQuality.Aligned),
-            Turn(2, 3, MeetingTimingQuality.Aligned),
-            Turn(7, 9, MeetingTimingQuality.Aligned)
+            Turn(0, 1, MeetingTimingQuality.Aligned) with { Source = MeetingAudioSource.Playback },
+            Turn(2, 3, MeetingTimingQuality.Aligned) with { Source = MeetingAudioSource.Playback },
+            Turn(7, 9, MeetingTimingQuality.Aligned) with { Source = MeetingAudioSource.Playback }
         ];
-        evidence.RefineTimedTurns(turns, []);
         var document = new MeetingDocument { Turns = turns };
         Assert.Equal("Alex", evidence.NameSpeakers(document).GetSpeakerName("Speaker 0"));
 
@@ -272,8 +268,7 @@ public sealed class MeetingSpeakerEvidenceTests
 
         Assert.Empty(evidence.NameSpeakers(document).AutoSpeakerNames);
         Assert.Equal(0, source.Subscribers);
-        MeetingTurn[] tail = [Turn(9, 10, MeetingTimingQuality.Aligned)];
-        evidence.RefineTimedTurns(tail, []);
+        MeetingTurn[] tail = [Turn(9, 10, MeetingTimingQuality.Aligned) with { Source = MeetingAudioSource.Playback }];
         Assert.Equal(MeetingAudioSource.Playback, tail[0].Source);
     }
 
@@ -461,11 +456,10 @@ public sealed class MeetingSpeakerEvidenceTests
         observer.Report(8 * 16000, "Blair");
         source.Clock = 9 * 16000;
         MeetingTurn[] turns = [
-            Turn(0, 1, MeetingTimingQuality.Aligned),
-            Turn(2, 3, MeetingTimingQuality.Aligned),
-            Turn(7, 9, MeetingTimingQuality.Aligned)
+            Turn(0, 1, MeetingTimingQuality.Aligned) with { Source = MeetingAudioSource.Playback },
+            Turn(2, 3, MeetingTimingQuality.Aligned) with { Source = MeetingAudioSource.Playback },
+            Turn(7, 9, MeetingTimingQuality.Aligned) with { Source = MeetingAudioSource.Playback }
         ];
-        evidence.RefineTimedTurns(turns, []);
         var document = new MeetingDocument { Turns = turns };
         Assert.Equal("Alex", evidence.NameSpeakers(document).GetSpeakerName("Speaker 0"));
         var drained = false;

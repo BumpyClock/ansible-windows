@@ -26,6 +26,22 @@ public interface IMeetingCaptureFactory
 
 public sealed record MeetingAudioActivity(long StartSample, int Samples, double MicrophoneRms, double PlaybackRms);
 
+/// <summary>One time-aligned 16 kHz PCM16 capture frame. Each channel is retained separately so speaker attribution
+/// never has to infer its source from a mixed waveform.</summary>
+public sealed record MeetingAudioPacket(byte[] Microphone, byte[] Playback)
+{
+    public int Samples
+    {
+        get
+        {
+            if (Microphone is null || Playback is null || Microphone.Length != Playback.Length || Microphone.Length == 0 ||
+                Microphone.Length % 2 != 0)
+                throw new InvalidDataException("Meeting audio packets require matching, complete PCM16 channels.");
+            return Microphone.Length / 2;
+        }
+    }
+}
+
 public interface IMeetingAudioSourceMetadata
 {
     long ClockSamplePosition { get; }
@@ -33,10 +49,17 @@ public interface IMeetingAudioSourceMetadata
 }
 
 /// <summary>
-/// One recording of mixed microphone and output audio. Positions are 16 kHz samples relative to this capture's origin.
+/// One recording with time-aligned microphone and output channels. Positions are 16 kHz samples relative to this capture's origin.
 /// <see cref="IMeetingAudioSourceMetadata.Activity"/> and <see cref="IMeetingCaptureDiagnostics.HealthChanged"/> run on the capture thread.
 /// </summary>
-public interface IMeetingCapture : IAudioCapture, IMeetingAudioSourceMetadata, IMeetingCaptureDiagnostics { }
+public interface IMeetingCapture : IAsyncDisposable, IMeetingAudioSourceMetadata, IMeetingCaptureDiagnostics
+{
+    ChannelReader<MeetingAudioPacket> Audio { get; }
+    double CapturedSeconds { get; }
+    bool IsReleased { get; }
+    event Action<double>? LevelChanged;
+    Task StopAsync();
+}
 
 public sealed class MeetingCaptureOwnershipException(string message, IMeetingCapture capture, Exception cause)
     : Exception(message, cause)

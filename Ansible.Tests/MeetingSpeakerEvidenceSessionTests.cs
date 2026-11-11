@@ -46,6 +46,38 @@ public sealed class MeetingSpeakerEvidenceSessionTests : IDisposable
     }
 
     [Fact]
+    public async Task TimedPlaybackChunksRefineWithoutUsingPlaybackAudioForMicrophoneTurns()
+    {
+        var engine = new Engine();
+        var captures = CreateCaptures();
+        var aligner = new FakeWordAligner
+        {
+            Align = turns => turns.Select(turn => turn with
+            {
+                StartSeconds = 1.25,
+                EndSeconds = 1.75,
+                TimingQuality = MeetingTimingQuality.Aligned
+            }).ToArray()
+        };
+        await using var session = Create(engine, captures, aligner: aligner);
+        await session.StartAsync(new());
+        await SendAsync(captures.Captures[0], engine, 2, 2);
+
+        engine.ReportTimedSources([
+            new("Speaker 1", 0, 2, "Remote speech") { TimingQuality = MeetingTimingQuality.Chunk, Source = MeetingAudioSource.Playback },
+            new("You", 0, 2, "Local speech") { TimingQuality = MeetingTimingQuality.Chunk, Source = MeetingAudioSource.Microphone }
+        ]);
+
+        Assert.Equal(["Remote speech"], Assert.Single(aligner.Inputs).Select(turn => turn.Text));
+        var turns = session.Document!.Turns;
+        Assert.Equal(MeetingTimingQuality.Chunk, turns[0].TimingQuality);
+        Assert.Equal(MeetingAudioSource.Microphone, turns[0].Source);
+        Assert.Equal(MeetingTimingQuality.Aligned, turns[1].TimingQuality);
+        Assert.Equal(MeetingAudioSource.Playback, turns[1].Source);
+        await session.EndAsync();
+    }
+
+    [Fact]
     public async Task PauseResumeJoinsObserverAndRebasesItsClockOnTheNewCapture()
     {
         var engine = new Engine();
@@ -247,16 +279,20 @@ public sealed class MeetingSpeakerEvidenceSessionTests : IDisposable
         public Task<IReadOnlyList<AudioModel>> ConnectAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<AudioModel>>([new() { Id = "vibevoice", Family = "vibevoice_asr_streaming", Mode = "streaming" }]);
         public Task PrepareMeetingAsync(AudioModel model, RecognitionOptions options, CancellationToken token) => Task.CompletedTask;
-        public async Task StreamMeetingAsync(AudioModel model, ChannelReader<byte[]> audio, RecognitionOptions options,
+        public async Task StreamMeetingAsync(AudioModel model, ChannelReader<MeetingAudioPacket> audio, RecognitionOptions options,
             IProgress<TranscriptUpdate> progress, CancellationToken token, Action? onReady = null)
         {
             _progress = progress;
             onReady?.Invoke();
-            await foreach (var packet in audio.ReadAllAsync(token)) Interlocked.Add(ref _samples, packet.Length / 2);
+            await foreach (var packet in audio.ReadAllAsync(token)) Interlocked.Add(ref _samples, packet.Samples);
             progress.Report(_last with { IsFinal = true });
         }
         public void Report(string text) => Publish(new(text, false));
-        public void ReportTimed(IReadOnlyList<MeetingTurn> turns) => Publish(new("", false) { SpeakerTurns = turns });
+        public void ReportTimed(IReadOnlyList<MeetingTurn> turns) => Publish(new("", false)
+        {
+            SpeakerTurns = turns.Select(turn => turn with { Source = MeetingAudioSource.Playback }).ToArray()
+        });
+        public void ReportTimedSources(IReadOnlyList<MeetingTurn> turns) => Publish(new("", false) { SpeakerTurns = turns });
         private void Publish(TranscriptUpdate update) { _last = update; _progress!.Report(update); }
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }

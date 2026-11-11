@@ -56,7 +56,7 @@ public sealed class MeetingSession : IAsyncDisposable
     private IMeetingCapture? _capture;
     private CancellationTokenSource? _cancellation;
     private CancellationTokenSource? _preparation;
-    private Channel<byte[]>? _audio;
+    private Channel<MeetingAudioPacket>? _audio;
     private PausableReader? _reader;
     private MeetingTranscript _transcript = new();
     private TranscriptUpdate? _pendingUpdate;
@@ -167,7 +167,7 @@ public sealed class MeetingSession : IAsyncDisposable
             _cancellation = CancellationTokenSource.CreateLinkedTokenSource(preparation.Token);
             var evidence = _evidence = new MeetingSpeakerEvidence(_observerFactory, _alignerFactory, request.ProcessId,
                 (kind, available, error) => LogMeeting(kind, error: error, available: available), _cancellation.Token);
-            _audio = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(300)
+            _audio = Channel.CreateBounded<MeetingAudioPacket>(new BoundedChannelOptions(300)
             { SingleWriter = true, SingleReader = true, AllowSynchronousContinuations = false });
             _reader = new PausableReader(_audio.Reader, evidence.Append);
             await SaveAsync();
@@ -438,32 +438,33 @@ public sealed class MeetingSession : IAsyncDisposable
         }
     }
 
-    private async Task PumpAsync(IAudioCapture capture, CancellationToken token)
+    private async Task PumpAsync(IMeetingCapture capture, CancellationToken token)
     {
-        var buffer = new byte[PacketBytes];
-        var used = 0;
         try
         {
+            var microphone = new byte[PacketBytes];
+            var playback = new byte[PacketBytes];
+            var used = 0;
             await foreach (var packet in capture.Audio.ReadAllAsync(token))
             {
-                if (packet.Length == 0 || packet.Length % 2 != 0)
-                    throw new InvalidDataException("Meeting capture returned incomplete PCM16 samples.");
-                var index = 0;
-                while (index < packet.Length)
+                var packetBytes = checked(packet.Samples * 2);
+                var offset = 0;
+                while (offset < packetBytes)
                 {
-                    var count = Math.Min(PacketBytes - used, packet.Length - index);
-                    packet.AsSpan(index, count).CopyTo(buffer.AsSpan(used));
+                    var count = Math.Min(PacketBytes - used, packetBytes - offset);
+                    packet.Microphone.AsSpan(offset, count).CopyTo(microphone.AsSpan(used));
+                    packet.Playback.AsSpan(offset, count).CopyTo(playback.AsSpan(used));
                     used += count;
-                    index += count;
-                    if (used == PacketBytes)
-                    {
-                        QueueAudio(buffer);
-                        buffer = new byte[PacketBytes];
-                        used = 0;
-                    }
+                    offset += count;
+                    if (used != PacketBytes) continue;
+                    QueueAudio(new(microphone, playback));
+                    microphone = new byte[PacketBytes];
+                    playback = new byte[PacketBytes];
+                    used = 0;
                 }
             }
-            if (used > 0) QueueAudio(buffer.AsSpan(0, used).ToArray());
+            if (used > 0)
+                QueueAudio(new(microphone.AsSpan(0, used).ToArray(), playback.AsSpan(0, used).ToArray()));
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         catch (Exception error)
@@ -476,9 +477,9 @@ public sealed class MeetingSession : IAsyncDisposable
         }
     }
 
-    private void QueueAudio(byte[] packet)
+    private void QueueAudio(MeetingAudioPacket packet)
     {
-        var captured = Interlocked.Add(ref _capturedSamples, packet.Length / 2);
+        var captured = Interlocked.Add(ref _capturedSamples, packet.Samples);
         if (captured > MaximumSamples) throw new InvalidOperationException("The meeting reached its two-hour capture limit. The existing transcript is preserved.");
         if (!_audio!.Writer.TryWrite(packet))
             throw new InvalidOperationException("Transcription fell more than 30 seconds behind capture. Capture stopped to keep memory bounded; the existing transcript is preserved.");
@@ -517,7 +518,12 @@ public sealed class MeetingSession : IAsyncDisposable
         if (update.SpeakerTurns is { } timed)
         {
             turns = ValidateTimedTurns(timed, processed, update.IsFinal);
-            evidence.RefineTimedTurns(turns, previous);
+            evidence.RefinePlaybackChunkTurns(turns, previous, processed);
+            Array.Sort(turns, static (left, right) =>
+            {
+                var comparison = left.StartSeconds.CompareTo(right.StartSeconds);
+                return comparison != 0 ? comparison : left.Source.CompareTo(right.Source);
+            });
         }
         else
         {
@@ -927,7 +933,7 @@ public sealed class MeetingSession : IAsyncDisposable
         public void Report(TranscriptUpdate value) => report(value);
     }
 
-    private sealed class PausableReader(ChannelReader<byte[]> reader, Action<byte[]> consumed) : ChannelReader<byte[]>
+    private sealed class PausableReader(ChannelReader<MeetingAudioPacket> reader, Action<byte[]> consumed) : ChannelReader<MeetingAudioPacket>
     {
         private readonly object _gate = new();
         private TaskCompletionSource? _resume;
@@ -936,14 +942,14 @@ public sealed class MeetingSession : IAsyncDisposable
         public override Task Completion => reader.Completion;
         public void Pause() { lock (_gate) _resume ??= new(TaskCreationOptions.RunContinuationsAsynchronously); }
         public void Resume() { lock (_gate) { _resume?.TrySetResult(); _resume = null; } }
-        public override bool TryRead(out byte[] item)
+        public override bool TryRead(out MeetingAudioPacket item)
         {
             lock (_gate)
             {
                 if (_resume is null && reader.TryRead(out item!))
                 {
-                    Interlocked.Add(ref _readSamples, item.Length / 2);
-                    consumed(item);
+                    Interlocked.Add(ref _readSamples, item.Samples);
+                    consumed(item.Playback);
                     return true;
                 }
                 item = null!;

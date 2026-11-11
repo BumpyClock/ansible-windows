@@ -38,7 +38,7 @@ public sealed class NativeSpeakerModelTests(ITestOutputHelper output)
         var sample = await new AudioInputReader().ReadReplayAsync(paths.Sample, timeout.Token);
         const int loops = 9;
         const int packetBytes = 2560;
-        var audio = Channel.CreateBounded<byte[]>(300);
+        var audio = Channel.CreateBounded<MeetingAudioPacket>(300);
         var clock = new Stopwatch();
         var updates = new List<(TranscriptUpdate Update, TimeSpan At)>();
         var progress = new InlineProgress(update => { lock (updates) updates.Add((update, clock.Elapsed)); });
@@ -59,7 +59,7 @@ public sealed class NativeSpeakerModelTests(ITestOutputHelper output)
                     var wait = TimeSpan.FromSeconds(written / 32000d) - clock.Elapsed;
                     if (wait > TimeSpan.Zero) await Task.Delay(wait, timeout.Token);
                     var before = clock.Elapsed;
-                    await audio.Writer.WriteAsync(packet, timeout.Token);
+                    await audio.Writer.WriteAsync(new(new byte[packet.Length], packet), timeout.Token);
                     maximumWriteDelay = TimeSpan.FromTicks(Math.Max(maximumWriteDelay.Ticks, (clock.Elapsed - before).Ticks));
                     maximumBacklog = Math.Max(maximumBacklog, audio.Reader.Count);
                     written += packet.Length;
@@ -99,7 +99,7 @@ public sealed class NativeSpeakerModelTests(ITestOutputHelper output)
         var model = Assert.Single(models, candidate => candidate.Id == modelId);
         Assert.Contains(models, candidate => candidate.Id == AudioModelDefaults.DiarizationModelId && candidate.Task == "diar");
         var pcm = await new AudioInputReader().ReadReplayAsync(paths.Sample, timeout.Token);
-        var audio = Channel.CreateBounded<byte[]>(2);
+        var audio = Channel.CreateBounded<MeetingAudioPacket>(2);
         var live = new TaskCompletionSource<TranscriptUpdate>(TaskCreationOptions.RunContinuationsAsynchronously);
         var updates = new List<TranscriptUpdate>();
         var progress = new InlineProgress(update =>
@@ -113,7 +113,7 @@ public sealed class NativeSpeakerModelTests(ITestOutputHelper output)
         var recognition = engine.StreamMeetingAsync(model, audio.Reader, options, progress, timeout.Token);
         try
         {
-            await audio.Writer.WriteAsync(pcm, timeout.Token);
+            await audio.Writer.WriteAsync(new(new byte[pcm.Length], pcm), timeout.Token);
             if (await Task.WhenAny(live.Task, recognition).WaitAsync(timeout.Token) == recognition)
             {
                 await recognition;
@@ -138,6 +138,7 @@ public sealed class NativeSpeakerModelTests(ITestOutputHelper output)
         Assert.NotNull(final.SpeakerTurns);
         Assert.NotEmpty(final.SpeakerTurns);
         Assert.Contains(final.SpeakerTurns, turn => turn.SpeakerId.StartsWith("Speaker ", StringComparison.Ordinal));
+        Assert.All(final.SpeakerTurns, turn => Assert.Equal(MeetingAudioSource.Playback, turn.Source));
         var partials = updates.Where(update => !update.IsFinal && !string.IsNullOrWhiteSpace(update.SpeechText)).ToArray();
         Assert.True(partials.Length >= 2, "Qualification requires multiple cumulative live snapshots.");
         Assert.True(partials[^1].ProcessedSamples > partials[0].ProcessedSamples);
@@ -159,6 +160,7 @@ public sealed class NativeSpeakerModelTests(ITestOutputHelper output)
                 Assert.True(turn.SpeakerId == "Unknown speaker" || turn.SpeakerId is
                     "Speaker 0" or "Speaker 1" or "Speaker 2" or "Speaker 3" or
                     "Speaker 4" or "Speaker 5" or "Speaker 6" or "Speaker 7");
+                Assert.Equal(MeetingAudioSource.Playback, turn.Source);
             }
         }
         // Reusing the paired engine for ordinary PCM streaming must not retain meeting labels.

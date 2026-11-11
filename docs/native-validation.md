@@ -16,7 +16,9 @@ The native build pins audio.cpp v0.9.0, applies tracked patches including
 `tools/patches/audio-nemotron-stream-timestamps.patch`, and supports CPU and
 optional Vulkan. Compiled families include `nemotron_3_diar`. The patch publishes
 cumulative Nemotron token timestamps on stream updates. Paired meetings combine
-those timestamps with the Nemotron 3 diarizer on the same captured stream.
+playback ASR timestamps with the Nemotron 3 diarizer on the same playback stream.
+Microphone ASR runs separately and retains local-source identity. Qualification
+of the playback pair alone does not qualify the combined two-stream workload.
 
 The [catalog](../tools/audio-models.json) pins each model's revision, file length,
 SHA-256, license, task, and capabilities. Use those capabilities rather than assuming

@@ -345,6 +345,17 @@ the same native assets:
 .\tools\Test-SpeakerModels.ps1 -Model both
 ```
 
+Source-isolation checks use Kroko and the public WAV without opening a
+microphone. They verify live microphone text with silent playback and retention
+of both sources when both channels contain speech:
+
+```powershell
+dotnet test .\Ansible.Tests\Ansible.Tests.csproj --filter 'FullyQualifiedName~NativeMeetingSourceTests'
+```
+
+Run this separately from the model probes above. These are functional checks,
+not live performance or Teams participant-name qualification.
+
 Use `--stream-only` to skip WAV transcription, prepare once, then stream.
 Add `--repeat 5` for five sequential paced streams on that session. The
 selected ASR weights must be installed. Missing previews stay missing:
@@ -599,8 +610,11 @@ Transient scanner catalog or apartment acquisition failures retry at the scan
 interval on the scanner's own MTA thread. Fatal scanner failures surface instead
 of silently leaving permanent microphone-only capture.
 
-Paired Nemotron or Kroko meetings load the Nemotron 3 diarizer beside the ASR.
-Both consume the same captured PCM, share memory admission, and reset or
+Meeting capture emits matching microphone and playback PCM16 buffers in each
+`MeetingAudioPacket`. Recognition preserves their shared sample clock and
+source provenance. Microphone ASR supplies local `You` turns independently of
+playback ASR. Paired Nemotron or Kroko playback loads the Nemotron 3 diarizer
+beside the ASR. Both consume the same playback PCM, share memory admission, and reset or
 dispose together. Native paired output is cumulative timed anonymous speaker
 turns; unknown or overlapping speech stays unlabeled. The VibeVoice streaming
 path remains when no paired Nemotron or Kroko ASR is available. That path still bounds native
@@ -687,7 +701,10 @@ admission bounded.
 Meeting naming uses the selected Teams process on a dedicated worker. A
 provider-side FindAllBuildCache query, scoped to each selected Teams window's
 descendants, finds candidate MenuItems or nodes with known participant/video
-automation IDs. Bounded raw traversal then runs only inside validated tiles.
+automation IDs. Each validated tile is fetched with a raw-view subtree cache.
+Traversal reads cached children locally instead of making a provider call for
+every child and sibling. The raw-view filter is necessary because a default
+control-view cache omits Teams' non-control speaking descendants.
 Node, depth, and time budgets remain 256
 nodes, depth 32, and 750 ms. Classification recognizes current Teams labels
 such as `, video is on/off`, `Myself video, <name>, ...`, mute state, and
@@ -697,8 +714,13 @@ speaking markers in named tiles or their descendants remain necessary.
 Mapping still requires aligned source-exclusive turns and independent
 consistent evidence. Names are not inferred from transcript text. Popups,
 minimized or hidden tiles, or Teams not exposing speaking metadata can prevent
-naming. A baseline live read of 256 raw UIA nodes across Teams windows
-returned Unavailable. Live success on a real call is not yet established. Optional
+naming. A live call check on 2026-11-10 reached two named tiles and their
+descendants but found no explicit speaking markers. A visible speaking border
+alone is not evidence available to this accessibility reader. The read-only
+`ExistingTeamsWindowCanBeReadWithoutInteraction` test prints redacted node
+shapes to distinguish traversal failure from missing markers. Passing that
+test does not prove participant names were obtained. Live success on a real
+call is not yet established. Optional
 Nemotron timing runs on CPU through the existing C ABI; deterministic alignment
 tests do not prove live ASR accuracy. Keep its 30-second audio ring in memory.
 Meeting wording cleanup is `IMeetingTextCleanup`. Core snapshots the cleanup

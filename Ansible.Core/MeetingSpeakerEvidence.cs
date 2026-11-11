@@ -117,18 +117,29 @@ internal sealed class MeetingSpeakerEvidence : IAsyncDisposable
         TagSources(turns, previous);
     }
 
-    /// <summary>Tags audio sources without changing recognizer-provided timing.</summary>
-    public void RefineTimedTurns(MeetingTurn[] turns, IReadOnlyList<MeetingTurn> previous) => TagSources(turns, previous);
+    /// <summary>Refines only remote playback chunks. Microphone timing never consumes the playback audio ring.</summary>
+    public void RefinePlaybackChunkTurns(MeetingTurn[] turns, IReadOnlyList<MeetingTurn> previous, long processedSamples)
+    {
+        for (var index = 0; index < turns.Length; index++)
+        {
+            if (turns[index].Source != MeetingAudioSource.Playback || turns[index].TimingQuality != MeetingTimingQuality.Chunk) continue;
+            var old = index < previous.Count ? previous[index] : null;
+            if (old?.Source == MeetingAudioSource.Playback && old.SpeakerId == turns[index].SpeakerId && old.Text == turns[index].Text)
+                turns[index] = old with { IsProvisional = turns[index].IsProvisional };
+        }
+        AlignTiming(turns, processedSamples, MeetingAudioSource.Playback, chunksOnly: true);
+    }
 
     public MeetingDocument NameSpeakers(MeetingDocument document) => _matcher.Refine(document);
 
-    private void AlignTiming(MeetingTurn[] turns, long processedSamples)
+    private void AlignTiming(MeetingTurn[] turns, long processedSamples, MeetingAudioSource? source = null, bool chunksOnly = false)
     {
         if (_disposed || _alignerFactory is null || _alignmentUnavailable) return;
         var clip = _timeline.Clip(processedSamples);
         if (clip is null) return;
         var origin = clip.Value.StartSample / 16000.0;
         var indices = Enumerable.Range(0, turns.Length).Where(index =>
+            (source is null || turns[index].Source == source) && (!chunksOnly || turns[index].TimingQuality == MeetingTimingQuality.Chunk) &&
             !turns[index].IsProvisional && (turns[index].TimingQuality == MeetingTimingQuality.Aligned
                 ? turns[index].EndSeconds > origin : turns[index].StartSeconds >= origin)).ToArray();
         if (!indices.Any(index => turns[index].TimingQuality != MeetingTimingQuality.Aligned)) return;
@@ -184,7 +195,7 @@ internal sealed class MeetingSpeakerEvidence : IAsyncDisposable
         for (var index = 0; index < turns.Length; index++)
         {
             var turn = turns[index];
-            if (turn.TimingQuality != MeetingTimingQuality.Aligned) continue;
+            if (turn.TimingQuality != MeetingTimingQuality.Aligned || turn.Source != MeetingAudioSource.Mixed) continue;
             var old = index < previous.Count ? previous[index] : null;
             var unchangedBounds = old?.TimingQuality == MeetingTimingQuality.Aligned &&
                 old.StartSeconds == turn.StartSeconds && old.EndSeconds == turn.EndSeconds;

@@ -803,6 +803,23 @@ public sealed class MeetingSessionTests : IDisposable
     }
 
     [Fact]
+    public async Task FortyMillisecondCaptureFramesCoalesceBeforeTheThirtySecondBacklogLimit()
+    {
+        var engine = new Engine { BlockReads = true };
+        var captures = new CaptureFactory();
+        await using var session = Create(engine, captures);
+        await session.StartAsync(Request);
+
+        for (var index = 0; index < 300; index++) captures.Captures[0].Send(1280);
+        await Task.Delay(100);
+
+        Assert.Equal(MeetingSessionPhase.Recording, session.State.Phase);
+        engine.AllowReads.TrySetResult();
+        await session.EndAsync();
+        Assert.Equal(300 * 1280, engine.ReadBytes);
+    }
+
+    [Fact]
     public async Task TranscriptUpdatesDoNotOverwriteTitleOrSpeakerEdits()
     {
         var engine = new Engine();
@@ -1321,7 +1338,7 @@ public sealed class MeetingSessionTests : IDisposable
             ? Task.FromException<IReadOnlyList<AudioModel>>(error)
             : Task.FromResult<IReadOnlyList<AudioModel>>(Models ?? [new() { Id = "vibevoice", Family = "vibevoice_asr_streaming",
                 Mode = "streaming", SupportsCustomDictionary = SupportsDictionary }]);
-        public async Task StreamMeetingAsync(AudioModel model, ChannelReader<byte[]> audio, RecognitionOptions options,
+        public async Task StreamMeetingAsync(AudioModel model, ChannelReader<MeetingAudioPacket> audio, RecognitionOptions options,
             IProgress<TranscriptUpdate> progress, CancellationToken cancellationToken, Action? onReady = null)
         {
             StreamCalls++;
@@ -1332,7 +1349,7 @@ public sealed class MeetingSessionTests : IDisposable
             {
                 if (StreamingWork is { } work) { await work(cancellationToken); return; }
                 if (BlockReads) await AllowReads.Task.WaitAsync(cancellationToken);
-                await foreach (var packet in audio.ReadAllAsync(cancellationToken)) Interlocked.Add(ref _readBytes, packet.Length);
+                await foreach (var packet in audio.ReadAllAsync(cancellationToken)) Interlocked.Add(ref _readBytes, packet.Playback.Length);
                 // Fail before invoking a blocking callback so the regression cannot deadlock the test runner.
                 if (RequireBackgroundFinalization && SynchronizationContext.Current is not null)
                     throw new InvalidOperationException("Final recognition callback ran on the UI context.");
