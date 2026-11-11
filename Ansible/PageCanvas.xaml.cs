@@ -126,12 +126,6 @@ public sealed partial class PageCanvas : UserControl
     /// </summary>
     public PageAction? PrimaryAction { get; set; }
 
-    /// <summary>
-    /// The icon of <see cref="PrimaryAction"/>, for the title bar's copy. A page whose primary button shows an icon
-    /// declares the same icon here; a text-only action leaves it unset.
-    /// </summary>
-    public IconSource? PrimaryActionIcon { get; set; }
-
     private void ViewportSizeChanged(object sender, SizeChangedEventArgs args)
     {
         UpdateLayoutBounds();

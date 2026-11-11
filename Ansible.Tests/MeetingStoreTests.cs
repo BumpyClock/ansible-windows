@@ -103,6 +103,24 @@ public sealed class MeetingStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task UntitledMeetingsSaveTheDefaultTitleAndNoDerivedFields()
+    {
+        var store = new MeetingStore(_directory);
+        var meeting = new MeetingDocument { Turns = [new(MeetingTurn.UnattributedSpeakerId, 0, 2, "Unattributed")] };
+        await store.SaveAsync(meeting);
+
+        using var json = System.Text.Json.JsonDocument.Parse(await File.ReadAllTextAsync(Directory.GetFiles(_directory).Single()));
+        Assert.Equal("New meeting", json.RootElement.GetProperty("Title").GetString());
+        Assert.Equal("Unknown speaker", json.RootElement.GetProperty("Turns")[0].GetProperty("SpeakerId").GetString());
+        string[] saved = ["AutoSpeakerNames", "CreatedAt", "Id", "SchemaVersion", "SpeakerNames", "Status", "Title", "Turns", "UpdatedAt"];
+        Assert.Equal(saved, json.RootElement.EnumerateObject().Select(property => property.Name).Order(StringComparer.Ordinal));
+        var loaded = await store.LoadAsync(meeting.Id);
+        Assert.True(loaded.IsUntitled);
+        Assert.Equal(0, loaded.SpeakerCount);
+        Assert.Equal(TimeSpan.FromSeconds(2), loaded.SpeechDuration);
+    }
+
+    [Fact]
     public async Task CanceledSaveDoesNotReplaceTranscript()
     {
         var store = new MeetingStore(_directory);

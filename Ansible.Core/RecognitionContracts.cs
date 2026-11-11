@@ -23,13 +23,25 @@ public enum NativeBackend
 /// </summary>
 public enum DeviceComparisonKind { Streaming, Meeting, WholeRecording }
 
-// Each model and kind qualifies separately; ModelName and Kind say which comparison this is.
+/// <summary>Why Auto recommended a device after measuring both.</summary>
+public enum DeviceChoiceReason
+{
+    CpuUnavailable,
+    GpuUnavailable,
+    Faster,
+    SameTime,
+    GpuPreferredWhenClose,
+    KeepsMeetingPace
+}
+
 public sealed record DeviceComparisonSnapshot(
+    string ModelId,
     string ModelName,
     DeviceComparisonKind Kind,
     double? CpuMilliseconds,
     double? GpuMilliseconds,
     NativeBackend RecommendedBackend,
+    DeviceChoiceReason Reason,
     DateTimeOffset MeasuredAt,
     string? CpuError = null,
     string? GpuError = null);

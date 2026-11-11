@@ -67,7 +67,7 @@ public sealed class MeetingSpeakerMatcher
         for (var index = 0; index < sortedTurns.Length; index++)
         {
             var turn = sortedTurns[index];
-            if (overlapping[index] || turn.IsProvisional || turn.SpeakerId == "Unknown speaker" ||
+            if (overlapping[index] || turn.IsProvisional || turn.SpeakerId == MeetingTurn.UnattributedSpeakerId ||
                 turn.TimingQuality != MeetingTimingQuality.Aligned ||
                 turn.Source == MeetingAudioSource.Mixed || turn.EndSeconds - turn.StartSeconds < 1)
                 continue;

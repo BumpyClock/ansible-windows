@@ -601,7 +601,7 @@ public sealed class MeetingSession : IAsyncDisposable
         {
             lock (_gate)
             {
-                if (!_reserved || _state.Document is not { Title: "New meeting" } document) return;
+                if (!_reserved || _state.Document is not { IsUntitled: true } document) return;
                 _state = _state with { Version = _state.Version + 1,
                     Document = document with { Title = title.Trim(), UpdatedAt = DateTimeOffset.UtcNow } };
             }

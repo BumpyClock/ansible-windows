@@ -13,6 +13,10 @@ public sealed partial class MeetingsPage : Page
     private const string ErrorNoticeKey = "meetings-error";
     private const string DeleteNoticeKey = "meetings-delete";
 
+    // x:Bind functions in a DataTemplate must be static, so they read the page's styles from these fields.
+    private static Style s_emptyRowTitleStyle = null!;
+    private static Style s_criticalStatusIconStyle = null!;
+
     private readonly AppNotices _notices;
     private readonly MeetingStore _store;
     private readonly LocalDiagnosticLog _diagnostics;
@@ -34,9 +38,10 @@ public sealed partial class MeetingsPage : Page
         Func<nint> windowHandle, LocalDiagnosticLog diagnostics, AppNotices notices)
     {
         InitializeComponent();
+        s_emptyRowTitleStyle = (Style)Resources["EmptyRowTitleStyle"];
+        s_criticalStatusIconStyle = (Style)Resources["CriticalStatusIconStyle"];
         var canvas = (PageCanvas)Content;
-        canvas.PrimaryAction = new PageAction(NewMeetingButton, NewMeetingClicked, NewMeetingLabel);
-        canvas.PrimaryActionIcon = new FontIconSource { Glyph = "", FontSize = 16 };
+        canvas.PrimaryAction = new PageAction(NewMeetingButton, NewMeetingClicked, NewMeetingLabel, new FontIconSource { Glyph = "", FontSize = 16 });
         _notices = notices;
         _store = store;
         _diagnostics = diagnostics;
@@ -173,7 +178,7 @@ public sealed partial class MeetingsPage : Page
         open.Click += (_, _) => Open(id);
         var delete = new MenuFlyoutItem
         {
-            Text = "Delete…", Icon = new FontIcon { Glyph = "" }, IsEnabled = new MeetingHistoryRow(summary).CanDelete
+            Text = "Delete…", Icon = new FontIcon { Glyph = "" }, IsEnabled = MeetingList.IsFinished(summary.Status)
         };
         delete.Click += (_, _) => Delete([id]);
         var menu = new MenuFlyout { Placement = FlyoutPlacementMode.BottomEdgeAlignedRight };
@@ -251,7 +256,12 @@ public sealed partial class MeetingsPage : Page
     private void ShowError(Exception error) => _notices.Set(ErrorNoticeKey,
         new NoticeContent(NoticeSeverity.Error, "Meeting unavailable", error.Message), NoticeArea.Meetings);
 
-    public static Visibility VisibleIf(bool visible) => visible ? Visibility.Visible : Visibility.Collapsed;
+    public static Style TitleStyle(bool isEmpty) =>
+        isEmpty ? s_emptyRowTitleStyle : (Style)Application.Current.Resources["RowTitleStyle"];
+
+    public static UIElement? StatusIcon(bool isCriticalFailure) =>
+        isCriticalFailure ? new FontIcon { Style = s_criticalStatusIconStyle } : null;
+
 }
 
 internal sealed partial class MeetingListTemplateSelector : DataTemplateSelector

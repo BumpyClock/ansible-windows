@@ -72,16 +72,13 @@ function Build-VerifiedPackage {
     $inspection = Join-Path $root ".runtime\package-validation\$([Guid]::NewGuid().ToString('N'))"
     try {
         [IO.Compression.ZipFile]::ExtractToDirectory($packagePath, $inspection)
+        $modelIcons = Get-ChildItem -LiteralPath (Join-Path $root "Ansible\Assets\ModelIcons") -File |
+            ForEach-Object { "Assets\ModelIcons\$($_.Name)" }
         foreach ($resource in @(
             "AppxManifest.xml", "resources.pri", "Ansible.exe", "DeviceProbe\Ansible.DeviceProbe.exe",
             "audiocpp.dll", "record_capture.dll", "audio-models.json", "validation-sample.wav", "audio.cpp-LICENSE",
-            "Assets\AppIcon.ico", "Assets\StoreLogo.png",
-            "Assets\ModelIcons\moonshine.png",
-            "Assets\ModelIcons\qwen.png",
-            "Assets\ModelIcons\vibevoice.png", "Assets\ModelIcons\vibevoice-dark.png",
-            "Assets\ModelIcons\NOTICE.txt", "Assets\ModelIcons\moonshine-LICENSE.txt",
-            "Assets\ModelIcons\qwen-LICENSE.txt", "Assets\ModelIcons\vibevoice-LICENSE.txt"
-        )) {
+            "Assets\AppIcon.ico", "Assets\StoreLogo.png"
+        ) + $modelIcons) {
             if (-not (Test-Path -LiteralPath (Join-Path $inspection $resource) -PathType Leaf)) {
                 throw "The NativeAOT MSIX is missing '$resource'."
             }

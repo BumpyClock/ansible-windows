@@ -3,6 +3,14 @@
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:local="using:Ansible">
     <Page.Resources>
+        <Style x:Key="EmptyRowTitleStyle" TargetType="TextBlock" BasedOn="{StaticResource RowTitleStyle}">
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}"/>
+        </Style>
+        <Style x:Key="CriticalStatusIconStyle" TargetType="FontIcon">
+            <Setter Property="Glyph" Value="&#xE783;"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}"/>
+        </Style>
         <DataTemplate x:Key="MeetingDayTemplate" x:DataType="local:MeetingDayHeader">
             <Grid Margin="0,12,0,4" ColumnSpacing="8">
                 <Grid.ColumnDefinitions>
@@ -25,24 +33,14 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <StackPanel Spacing="2">
-                            <TextBlock Text="{x:Bind Title}" Style="{StaticResource RowTitleStyle}"
-                                       TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
-                                       Visibility="{x:Bind local:MeetingsPage.VisibleIf(HasReadableTitle)}"/>
-                            <TextBlock Text="{x:Bind Title}" Style="{StaticResource RowTitleStyle}"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                       TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
-                                       Visibility="{x:Bind local:MeetingsPage.VisibleIf(IsEmpty)}"/>
+                            <TextBlock Text="{x:Bind Title}" Style="{x:Bind local:MeetingsPage.TitleStyle(IsEmpty)}"
+                                       TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
                             <TextBlock Text="{x:Bind Details}" Style="{StaticResource CaptionSecondaryStyle}"
                                        TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
                         </StackPanel>
                         <local:Badge Grid.Column="1" Text="{x:Bind Status}" VerticalAlignment="Center"
-                                     Visibility="{x:Bind local:MeetingsPage.VisibleIf(IsCriticalFailure)}">
-                            <local:Badge.Icon>
-                                <FontIcon Glyph="&#xE783;" FontSize="12" Foreground="{ThemeResource SystemFillColorCriticalBrush}"/>
-                            </local:Badge.Icon>
-                        </local:Badge>
-                        <local:Badge Grid.Column="1" Text="{x:Bind Status}" VerticalAlignment="Center"
-                                     Visibility="{x:Bind local:MeetingsPage.VisibleIf(HasNeutralStatus)}"/>
+                                     Icon="{x:Bind local:MeetingsPage.StatusIcon(IsCriticalFailure)}"
+                                     Visibility="{x:Bind local:Visible.IfText(Status)}"/>
                     </Grid>
                 </Button>
                 <Button Tag="{x:Bind Summary.Id}" Click="MeetingOptionsClicked" Style="{StaticResource IconButtonStyle}"

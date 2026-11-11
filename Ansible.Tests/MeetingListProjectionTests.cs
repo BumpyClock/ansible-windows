@@ -69,19 +69,19 @@ public sealed class MeetingListProjectionTests
 
         Assert.Equal(critical, row.IsCriticalFailure);
         Assert.Equal(empty, row.IsEmpty);
-        Assert.Equal(!empty, row.HasReadableTitle);
         Assert.Equal(empty, MeetingList.Empty([row.Summary]).Count == 1);
         Assert.Equal(badge, row.Status);
     }
 
     [Fact]
-    public void EachRowShowsAtMostOneStatusBadge()
+    public void TheCriticalIconOnlyAppearsOnAShownBadge()
     {
         foreach (var status in Enum.GetValues<MeetingStatus>())
         foreach (var duration in new TimeSpan?[] { null, TimeSpan.FromMinutes(3) })
         {
-            var row = new MeetingHistoryRow(Meeting(new DateTime(2026, 10, 20, 8, 0, 0), status: status, duration: duration));
-            Assert.True(new[] { row.IsCriticalFailure, row.HasNeutralStatus }.Count(shown => shown) <= 1);
+            var row = new MeetingHistoryRow(Meeting(new DateTime(2026, 10, 20, 8, 0, 0), status: status, duration: duration,
+                speakers: duration is null ? 0 : 1));
+            Assert.True(!row.IsCriticalFailure || row.Status.Length != 0);
         }
     }
 
@@ -133,7 +133,6 @@ public sealed class MeetingListProjectionTests
         Assert.Equal("Failed before any speech was transcribed", failed.Details);
         Assert.Equal("", failed.Status);
         Assert.True(failed.IsFailed);
-        Assert.False(failed.HasNeutralStatus);
         Assert.Equal("Interrupted before any speech was transcribed",
             new MeetingHistoryRow(Meeting(start, "New meeting", MeetingStatus.Interrupted)).Details);
         Assert.Equal("No speech transcribed", new MeetingHistoryRow(Meeting(start, "New meeting")).Details);
@@ -171,8 +170,8 @@ public sealed class MeetingListProjectionTests
         ];
 
         Assert.Equal(summaries.Take(3).Select(summary => summary.Id), MeetingList.Empty(summaries));
-        Assert.All(summaries.Take(5), summary => Assert.True(new MeetingHistoryRow(summary).CanDelete));
-        Assert.All(summaries.Skip(5), summary => Assert.False(new MeetingHistoryRow(summary).CanDelete));
+        Assert.All(summaries.Take(5), summary => Assert.True(MeetingList.IsFinished(summary.Status)));
+        Assert.All(summaries.Skip(5), summary => Assert.False(MeetingList.IsFinished(summary.Status)));
         Assert.Equal("Delete this meeting?", MeetingText.DeleteConfirmation(1).Title);
         Assert.Equal("Delete 3 empty meetings?", MeetingText.DeleteConfirmation(3).Title);
     }
@@ -185,9 +184,8 @@ public sealed class MeetingListProjectionTests
             duration: TimeSpan.FromMinutes(3), speakers: 2));
 
         Assert.Equal("", completed.Status);
-        Assert.False(completed.HasNeutralStatus);
         Assert.Equal("Interrupted", interrupted.Status);
-        Assert.True(interrupted.HasNeutralStatus);
+        Assert.False(interrupted.IsCriticalFailure);
         foreach (var status in Enum.GetValues<MeetingStatus>()) MeetingText.Status(status);
     }
 
@@ -197,14 +195,18 @@ public sealed class MeetingListProjectionTests
         var local = new DateTime(2026, 10, 19, 22, 9, 0);
         var created = new DateTimeOffset(local, TimeZoneInfo.Local.GetUtcOffset(local));
         var untitled = new MeetingDocument { CreatedAt = created, UpdatedAt = created, Status = MeetingStatus.Completed };
+        var planning = untitled with { Title = "Planning", Status = MeetingStatus.Failed };
 
-        Assert.Equal(new MeetingHistoryRow(MeetingSummary.From(untitled)).Title, MeetingText.Title(untitled.Title, created));
-        Assert.Equal($"Meeting at {Time(local)}", MeetingText.Title("New meeting", created));
-        Assert.Equal("Planning", MeetingText.Title("Planning", created));
-        Assert.Equal(MeetingText.Date(local, Today), MeetingText.SavedDetails(untitled, Today));
+        Assert.Equal("New meeting", untitled.Title);
+        Assert.True(untitled.IsUntitled);
+        Assert.False(planning.IsUntitled);
+        Assert.Equal($"Meeting at {Time(local)}", MeetingText.Title(MeetingSummary.From(untitled)));
+        Assert.Equal("Planning", MeetingText.Title(MeetingSummary.From(planning)));
+        Assert.Equal(MeetingText.Date(local, Today), MeetingText.SavedDetails(MeetingSummary.From(untitled), Today));
         Assert.Equal($"{MeetingText.Date(local, Today)}, {Time(local)} · Failed",
-            MeetingText.SavedDetails(untitled with { Title = "Planning", Status = MeetingStatus.Failed }, Today));
-        Assert.Contains(local.ToString("ddd d MMM yyyy", CultureInfo.CurrentCulture), MeetingText.SavedDetails(untitled, new DateOnly(2027, 1, 2)));
+            MeetingText.SavedDetails(MeetingSummary.From(planning), Today));
+        Assert.Contains(local.ToString("ddd d MMM yyyy", CultureInfo.CurrentCulture),
+            MeetingText.SavedDetails(MeetingSummary.From(untitled), new DateOnly(2027, 1, 2)));
     }
 
     [Theory]
@@ -240,6 +242,6 @@ public sealed class MeetingListProjectionTests
         Assert.Equal(TimeSpan.FromSeconds(474), summary.Duration);
         Assert.Null(MeetingSummary.From(new MeetingDocument()).Duration);
         Assert.Equal($"{MeetingText.Date(local, Today)} · 8 min · 2 speakers",
-            MeetingText.SavedDetails(document with { Status = MeetingStatus.Completed }, Today));
+            MeetingText.SavedDetails(MeetingSummary.From(document with { Status = MeetingStatus.Completed }), Today));
     }
 }

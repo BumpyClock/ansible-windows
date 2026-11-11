@@ -6,7 +6,7 @@ namespace Ansible;
 internal sealed record HomeModelName(string Name, string FullName)
 {
     internal static HomeModelName From(NativeModelEntry entry) =>
-        new(ModelCardText.PlainName(entry), entry.DisplayName ?? entry.Id);
+        new(ModelNames.Plain(entry), entry.DisplayName ?? entry.Id);
 }
 
 internal sealed record HomeModelViewModel(string DisplayName, string FullName, int Sessions, int MaximumSessions, bool IsPrimary);
@@ -28,24 +28,35 @@ internal sealed record HomeActivityViewModel(
     bool IsEmpty,
     IReadOnlyList<HomeClockHour> Hours);
 
-internal sealed record HomeInsightsViewModel(
+internal abstract record HomeUsage;
+
+internal sealed record HomeUsageStats(
     string PaceText,
     string SessionsText,
     string WordsText,
     string MicrophoneMinutesText,
     string Footnote,
-    string? AvailabilityMessage,
     IReadOnlyList<HomeModelViewModel> Models,
-    IReadOnlyDictionary<DateOnly, int>? Activity,
-    IReadOnlyList<HomeActivityHour>? HourlyActivity,
-    DateOnly Today,
-    string? UsageWarning,
+    IReadOnlyDictionary<DateOnly, int> Activity,
+    IReadOnlyList<HomeActivityHour> HourlyActivity,
     string? StreakText,
-    int? Dictations,
-    string? LastDictationText);
+    int Dictations,
+    string? LastDictationText,
+    string? Warning) : HomeUsage;
+
+internal sealed record HomeUsageUnavailable(string Message) : HomeUsage;
+
+internal sealed record HomeInsightsViewModel(DateOnly Today, HomeUsage Usage)
+{
+    public string? UsageWarning => (Usage as HomeUsageStats)?.Warning;
+
+    public int? Dictations => (Usage as HomeUsageStats)?.Dictations;
+}
 
 internal static class HomeInsightsProjection
 {
+    internal const string UnknownNumber = "--";
+
     internal static HomeInsightsViewModel Create(
         UsageDocument? usage,
         string? usageError,
@@ -55,9 +66,8 @@ internal static class HomeInsightsProjection
     {
         if (usage is null)
         {
-            return new HomeInsightsViewModel(
-                "--", "--", "--", "--", usageError ?? "Usage statistics are not available yet.",
-                usageError ?? "Usage statistics are not available yet.", new List<HomeModelViewModel>(), null, null, today, null, null, null, null);
+            return new HomeInsightsViewModel(today,
+                new HomeUsageUnavailable(usageError ?? "Usage statistics are not available yet."));
         }
 
         var summary = UsageSummary.Create(usage.Entries, today, timeZone);
@@ -90,16 +100,23 @@ internal static class HomeInsightsProjection
         var footnote = unknownWords > 0
             ? $"Word count and pace unavailable. {unknownWords:N0} {(unknownWords == 1 ? "dictation has" : "dictations have")} no word count. Microphone time includes pauses."
             : dictations.Length == 0 ? "No completed dictations yet." : "Pace uses microphone time, including pauses.";
-        return new HomeInsightsViewModel(
-            unknownWords == 0 ? summary.WordsPerMinute?.ToString("N0", CultureInfo.CurrentCulture) ?? "--" : "--",
-            summary.DictationSessions.ToString("N0", CultureInfo.CurrentCulture),
-            unknownWords == 0 ? summary.DictatedWords.ToString("N0", CultureInfo.CurrentCulture) : "--",
-            (microphoneSeconds / 60).ToString("N1", CultureInfo.CurrentCulture),
-            footnote, null, models, activity, hourlyActivity, today, usageError,
-            streak == 0 ? null : $"{streak:N0} {(streak == 1 ? "day" : "days")} streak", summary.DictationSessions,
-            lastDictation is { } day
+        return new HomeInsightsViewModel(today, new HomeUsageStats(
+            PaceText: unknownWords == 0
+                ? summary.WordsPerMinute?.ToString("N0", CultureInfo.CurrentCulture) ?? UnknownNumber
+                : UnknownNumber,
+            SessionsText: summary.DictationSessions.ToString("N0", CultureInfo.CurrentCulture),
+            WordsText: unknownWords == 0 ? summary.DictatedWords.ToString("N0", CultureInfo.CurrentCulture) : UnknownNumber,
+            MicrophoneMinutesText: (microphoneSeconds / 60).ToString("N1", CultureInfo.CurrentCulture),
+            Footnote: footnote,
+            Models: models,
+            Activity: activity,
+            HourlyActivity: hourlyActivity,
+            StreakText: streak == 0 ? null : $"{streak:N0} {(streak == 1 ? "day" : "days")} streak",
+            Dictations: summary.DictationSessions,
+            LastDictationText: lastDictation is { } day
                 ? $"Last dictation {day.ToString(day.Year == today.Year ? "d MMM" : "d MMM yyyy", CultureInfo.CurrentCulture)}"
-                : null);
+                : null,
+            Warning: usageError));
     }
 
     internal static HomeActivityViewModel CreateActivity(

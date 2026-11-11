@@ -318,19 +318,6 @@ public sealed partial class WelcomeDialog : ContentDialog
     }
 }
 
-/// <summary>
-/// A ContentDialog opens in the popup layer, which follows the application theme and ignores a theme requested on
-/// the window's content root.
-/// </summary>
-internal static class DialogTheme
-{
-    public static void FollowWindowTheme(this ContentDialog dialog, XamlRoot root)
-    {
-        dialog.XamlRoot = root;
-        dialog.RequestedTheme = root.Content is FrameworkElement content ? content.RequestedTheme : ElementTheme.Default;
-    }
-}
-
 internal sealed class WelcomeShortcutTargetInspector(
     DispatcherQueue dispatcher, Func<WelcomeDialog?> currentWelcome, IShortcutTargetInspector desktop) : IShortcutTargetInspector
 {

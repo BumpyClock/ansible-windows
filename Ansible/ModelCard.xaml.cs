@@ -10,7 +10,7 @@ namespace Ansible;
 public sealed partial class ModelCard : UserControl
 {
     private ThemeSettings? _themeSettings;
-    private string? _assetName;
+    private MakerMark? _mark;
     private string _name = "";
     private Uri? _iconUri;
     private bool _iconFailureLogged;
@@ -45,7 +45,7 @@ public sealed partial class ModelCard : UserControl
         themeSettings.Changed += OnThemeSettingsChanged;
         ModelId = entry.Id;
         var catalogName = entry.DisplayName ?? entry.Id;
-        _name = ModelCardText.PlainName(entry);
+        _name = ModelNames.Plain(entry);
         _companion = ModelSelectionPolicy.IsDiarizationTask(entry.Task);
         NameText.Text = _name;
         AutomationProperties.SetName(NameText, _name);
@@ -75,11 +75,11 @@ public sealed partial class ModelCard : UserControl
         AutomationProperties.SetName(MoreButton, $"More options for {_name}");
         ApplyDetailsState();
 
-        _assetName = entry.Family switch
+        _mark = entry.Family switch
         {
-            "moonshine_asr" => "moonshine",
-            "qwen3_asr" => "qwen",
-            "vibevoice_asr" or "vibevoice_asr_streaming" => "vibevoice",
+            "moonshine_asr" => new("moonshine", HasDarkVariant: false),
+            "qwen3_asr" => new("qwen", HasDarkVariant: false),
+            "vibevoice_asr" or "vibevoice_asr_streaming" => new("vibevoice", HasDarkVariant: true),
             _ => null
         };
         ApplyIcon();
@@ -194,19 +194,19 @@ public sealed partial class ModelCard : UserControl
             System.Diagnostics.Debug.WriteLine($"Ansible: high-contrast icon update for '{ModelId}' could not be dispatched.");
     }
 
-    private static bool HasDarkVariant(string assetName) => assetName == "vibevoice";
+    private sealed record MakerMark(string Asset, bool HasDarkVariant);
 
     private void ApplyIcon()
     {
         TileGlyph.Visibility = Visibility.Visible;
-        if (_assetName is null || IsHighContrast())
+        if (_mark is null || IsHighContrast())
         {
             _iconUri = null;
             IconImage.Source = null;
             IconImage.Visibility = Visibility.Collapsed;
             return;
         }
-        var file = HasDarkVariant(_assetName) && ActualTheme == ElementTheme.Dark ? $"{_assetName}-dark.png" : $"{_assetName}.png";
+        var file = _mark.HasDarkVariant && ActualTheme == ElementTheme.Dark ? $"{_mark.Asset}-dark.png" : $"{_mark.Asset}.png";
         _iconUri = new Uri($"ms-appx:///Assets/ModelIcons/{file}");
         _iconFailureLogged = false;
         IconImage.Visibility = Visibility.Visible;

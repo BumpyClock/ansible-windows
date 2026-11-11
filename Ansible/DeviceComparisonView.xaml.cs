@@ -80,7 +80,7 @@ public sealed partial class DeviceComparisonView : UserControl
         ComparisonTitleText.Text = $"Last speed test: {name}, {kind}";
         ToolTipService.SetToolTip(ComparisonTitleText, name == comparison.ModelName ? null : comparison.ModelName);
         RecommendationBadge.Text = $"Auto uses the {DeviceName(recommended)}";
-        ComparisonDetailsText.Text = $"{Reason(recommended, cpuValid ? cpu : null, gpuValid ? gpu : null)} " +
+        ComparisonDetailsText.Text = $"{Reason(comparison.Reason)} " +
             $"Tested {FormatLocalTime(comparison.MeasuredAt)} with the sample recording included with Ansible, " +
             "not counting the time to load and warm up the model. Each model and use is tested separately.";
     }
@@ -88,15 +88,15 @@ public sealed partial class DeviceComparisonView : UserControl
     private static string DeviceName(NativeBackend backend) =>
         backend == NativeBackend.Cpu ? "CPU" : "graphics card";
 
-    private static string Reason(NativeBackend recommended, double? cpu, double? gpu)
+    private static string Reason(DeviceChoiceReason reason) => reason switch
     {
-        if (cpu is null) return "The CPU could not be used.";
-        if (gpu is null) return "The graphics card could not be used.";
-        if (recommended == NativeBackend.Cpu || gpu < cpu) return "It was faster for this model.";
-        return gpu == cpu
-            ? "Both took the same time, and Auto prefers the graphics card."
-            : "The CPU was only slightly faster, and Auto prefers the graphics card when they are this close.";
-    }
+        DeviceChoiceReason.CpuUnavailable => "The CPU could not be used.",
+        DeviceChoiceReason.GpuUnavailable => "The graphics card could not be used.",
+        DeviceChoiceReason.SameTime => "Both took the same time, and Auto prefers the graphics card.",
+        DeviceChoiceReason.GpuPreferredWhenClose =>
+            "The CPU was only slightly faster, and Auto prefers the graphics card when they are this close.",
+        _ => "It was faster for this model."
+    };
 
     private static void ShowValue(TextBlock value, double? milliseconds, string? error)
     {

@@ -23,7 +23,7 @@
                     Click="RenameTitleClicked" ToolTipService.ToolTip="Rename meeting">
                 <Grid ColumnSpacing="8">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                    <TextBlock x:Name="MeetingTitle" Text="New meeting" Style="{StaticResource SubtitleTextBlockStyle}"
+                    <TextBlock x:Name="MeetingTitle" Style="{StaticResource SubtitleTextBlockStyle}"
                                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
                                IsTextTrimmedChanged="MeetingTitleTrimmedChanged"
@@ -109,14 +109,14 @@
                                 </Button>
                                 <TextBlock Text="{x:Bind TimingText, Mode=OneWay}" Style="{StaticResource CaptionSecondaryStyle}"
                                            VerticalAlignment="Center"
-                                           Visibility="{x:Bind local:MeetingWindow.VisibleIfText(TimingText), Mode=OneWay}"/>
+                                           Visibility="{x:Bind local:Visible.IfText(TimingText), Mode=OneWay}"/>
                             </StackPanel>
                             <TextBlock Text="{x:Bind Text, Mode=OneWay}" Style="{StaticResource HistoryTranscriptTextStyle}"
                                        Margin="8,0"/>
                             <HyperlinkButton Content="{x:Bind OriginalToggleText, Mode=OneWay}" Click="OriginalToggleClicked"
-                                             Padding="0,4" Margin="8,0" Visibility="{x:Bind local:MeetingWindow.ToVisibility(HasCleanup), Mode=OneWay}"/>
+                                             Padding="0,4" Margin="8,0" Visibility="{x:Bind local:Visible.If(HasCleanup), Mode=OneWay}"/>
                             <Border Margin="8,0" Padding="12,0,0,0" BorderThickness="2,0,0,0" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                                    Visibility="{x:Bind local:MeetingWindow.ToVisibility(IsOriginalExpanded), Mode=OneWay}">
+                                    Visibility="{x:Bind local:Visible.If(IsOriginalExpanded), Mode=OneWay}">
                                 <TextBlock Text="{x:Bind OriginalText, Mode=OneWay}" Style="{StaticResource SecondaryTextStyle}"
                                            TextWrapping="Wrap" IsTextSelectionEnabled="True"/>
                             </Border>

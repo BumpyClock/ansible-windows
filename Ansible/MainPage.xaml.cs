@@ -1,11 +1,10 @@
+using System.ComponentModel;
 using Ansible.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Input;
 using Windows.System;
-using Windows.UI.Core;
 
 namespace Ansible;
 
@@ -22,15 +21,12 @@ public sealed partial class MainPage : Page
     private readonly Action<bool> _captureShortcut;
     private readonly LocalDiagnosticLog _diagnostics;
     private readonly DispatcherTimer _diagnosticStatusTimer = new() { Interval = TimeSpan.FromSeconds(1) };
-    private bool _recordingShortcut;
-    private ShortcutField? _captureField;
+    private readonly ModelNames _modelNames;
     private Task? _captureSizeTask;
     private bool _capturesSaved;
     private Task? _captureDeleteTask;
     private bool _wasRecordTake;
     private bool _joining;
-    private DictationShortcut? _pendingShortcut;
-    private bool _shortcutPrimarySeen;
     private UiSessionObserver? _observer;
     private SessionSnapshot _state;
     private bool _rendering;
@@ -46,11 +42,9 @@ public sealed partial class MainPage : Page
         ("high", "High"), ("xhigh", "Extra high"), ("max", "Maximum")
     ];
 
-    private readonly Dictionary<string, NativeModelEntry> _catalogEntries = new(StringComparer.Ordinal);
-
     internal event Action? ShortcutLessonRequested;
 
-    internal MainPage(DictationSession session, AppPaths paths, Func<nint> windowHandle,
+    internal MainPage(DictationSession session, ModelNames modelNames, Func<nint> windowHandle,
         Action<DictationShortcut> changeHotkey, Action<bool> changeMode, Action<bool> captureShortcut,
         LocalDiagnosticLog diagnostics, AppNotices notices, Action<DictationShortcut> changeRecordHotkey,
         Action<bool> enableRecordChord, CaptureStore captures, Action<DictationShortcut> changeRecordPasteHotkey)
@@ -67,6 +61,7 @@ public sealed partial class MainPage : Page
         _changeMode = changeMode;
         _captureShortcut = captureShortcut;
         _diagnostics = diagnostics;
+        _modelNames = modelNames;
         _state = session.State;
         foreach (var effort in ReasoningEfforts)
         {
@@ -76,17 +71,19 @@ public sealed partial class MainPage : Page
         var copilotDefault = new MeetingCleanupSettings().CopilotModel;
         CopilotCleanupModelBox.PlaceholderText = copilotDefault;
         CopilotModelRow.Description = $"The GitHub Copilot model to use. The default is {copilotDefault}.";
-        _ = LoadCatalogNamesAsync(paths.ModelCatalog);
+        _modelNames.Ready += RenderBenchmark;
         const string typingHelp = "Click to record a new shortcut. Esc cancels. The completed transcript is inserted once after recognition succeeds. Held Ctrl, Alt, Shift or Win keys delay insertion until released. Some editors cannot distinguish fields within the same window. Hold to talk finishes when you release the shortcut; otherwise press it again to finish. Cancelling recognition inserts no text. Check the destination before dictating.";
-        ToolTipService.SetToolTip(HotkeyField.CaptureBox, typingHelp);
-        AutomationProperties.SetHelpText(HotkeyField.CaptureBox, typingHelp);
-        AutomationProperties.SetAutomationId(HotkeyField.CaptureBox, "HotkeyCaptureBox");
-        AutomationProperties.SetName(HotkeyField.CaptureBox, "Shortcut");
-        AutomationProperties.SetName(RecordHotkeyField.CaptureBox, "Record shortcut");
-        AutomationProperties.SetName(RecordPasteHotkeyField.CaptureBox, "Paste capture shortcut");
-        WireShortcutField(HotkeyField);
-        WireShortcutField(RecordHotkeyField);
-        WireShortcutField(RecordPasteHotkeyField);
+        HotkeyField.Describe("Shortcut", "HotkeyCaptureBox", typingHelp);
+        RecordHotkeyField.Describe("Record shortcut");
+        RecordPasteHotkeyField.Describe("Paste capture shortcut");
+        foreach (var field in new[] { HotkeyField, RecordHotkeyField, RecordPasteHotkeyField })
+        {
+            field.CaptureStarted += ShortcutCaptureStarted;
+            field.CaptureEnded += ShortcutCaptureEnded;
+        }
+        HotkeyField.ShortcutCaptured += HotkeyCaptured;
+        RecordHotkeyField.ShortcutCaptured += RecordHotkeyCaptured;
+        RecordPasteHotkeyField.ShortcutCaptured += RecordPasteHotkeyCaptured;
         _rendering = true;
         ShowShortcuts();
         PushToTalkChoice.SelectedIndex = _state.Settings.PushToTalk ? 0 : 1;
@@ -101,7 +98,6 @@ public sealed partial class MainPage : Page
         Unloaded += (_, _) =>
         {
             _diagnosticStatusTimer.Stop();
-            EndShortcutCapture();
             _observer?.Dispose(); _observer = null;
         };
         _diagnosticStatusTimer.Tick += (_, _) => RenderDiagnosticStatus();
@@ -148,7 +144,7 @@ public sealed partial class MainPage : Page
             UsageToggle.IsEnabled = idle;
             ToolTipService.SetToolTip(UsageToggle,$"Stored on this device. Never audio or text. Session dates, model, word counts, and timing. File: {_session.UsagePath}");
             AutomationProperties.SetHelpText(UsageToggle, _session.UsagePath);
-            if (!_recordingShortcut) { ShowShortcuts(); }
+            ShowShortcuts();
             HotkeyField.IsEnabled = idle;
             ResetShortcutButton.Visibility = _state.Settings.Shortcut != DictationShortcut.Default ? Visibility.Visible : Visibility.Collapsed;
             ResetShortcutButton.IsEnabled = idle;
@@ -190,7 +186,7 @@ public sealed partial class MainPage : Page
             _state.Phase is DictationPhase.Benchmarking or DictationPhase.Cancelling;
         var model = _state.SelectedModel;
         var fullName = model is null ? null : model.DisplayName ?? model.Id;
-        var plainName = fullName is null ? null : PlainModelName(fullName);
+        var plainName = model is null ? null : _modelNames.Find(model.Id, _state.Models)?.Name ?? fullName;
         var status = running
             ? _state.Phase == DictationPhase.Cancelling ? "Stopping the speed test."
                 : _state.BenchmarkingBackend switch
@@ -211,23 +207,8 @@ public sealed partial class MainPage : Page
         ToolTipService.SetToolTip(BenchmarkButton, plainName == fullName ? null : fullName);
         var comparison = _state.DeviceComparison;
         DeviceComparison.Show(comparison, _state.DeviceSelectionSummary,
-            comparison is null ? "" : PlainModelName(comparison.ModelName), _state.Settings.Backend);
-    }
-
-    private string PlainModelName(string nameOrId) =>
-        _catalogEntries.TryGetValue(nameOrId, out var entry) ? ModelCardText.PlainName(entry) : nameOrId;
-
-    private async Task LoadCatalogNamesAsync(string catalogPath)
-    {
-        IReadOnlyList<NativeModelEntry> entries;
-        try { entries = await NativeModelCatalog.LoadAsync(catalogPath); }
-        catch (Exception) { return; }
-        foreach (var entry in entries)
-        {
-            _catalogEntries.TryAdd(entry.Id, entry);
-            if (!string.IsNullOrWhiteSpace(entry.DisplayName)) _catalogEntries.TryAdd(entry.DisplayName, entry);
-        }
-        RenderBenchmark();
+            comparison is null ? "" : _modelNames.Find(comparison.ModelId, _state.Models)?.Name ?? comparison.ModelName,
+            _state.Settings.Backend);
     }
 
     private async void BenchmarkClicked(object sender, RoutedEventArgs args)
@@ -519,17 +500,14 @@ public sealed partial class MainPage : Page
         if (!Try(() => _session.SetMicrophoneBoost(boost))) Render();
     }
 
-    private void ChangeShortcutClicked(object sender, RoutedEventArgs args) =>
-        HotkeyField.CaptureBox.Focus(FocusState.Programmatic);
+    private void ChangeShortcutClicked(object sender, RoutedEventArgs args) => HotkeyField.BeginCapture();
 
-    private void ChangeRecordShortcutClicked(object sender, RoutedEventArgs args) =>
-        RecordHotkeyField.CaptureBox.Focus(FocusState.Programmatic);
+    private void ChangeRecordShortcutClicked(object sender, RoutedEventArgs args) => RecordHotkeyField.BeginCapture();
 
     private void ResetRecordShortcutClicked(object sender, RoutedEventArgs args) =>
         Try(() => _changeRecordHotkey(DictationShortcut.RecordDefault), "Record shortcut unavailable");
 
-    private void ChangeRecordPasteShortcutClicked(object sender, RoutedEventArgs args) =>
-        RecordPasteHotkeyField.CaptureBox.Focus(FocusState.Programmatic);
+    private void ChangeRecordPasteShortcutClicked(object sender, RoutedEventArgs args) => RecordPasteHotkeyField.BeginCapture();
 
     private void ResetRecordPasteShortcutClicked(object sender, RoutedEventArgs args) =>
         Try(() => _changeRecordPasteHotkey(DictationShortcut.RecordPasteDefault), "Paste capture shortcut unavailable");
@@ -614,119 +592,42 @@ public sealed partial class MainPage : Page
     private void ResetShortcutClicked(object sender, RoutedEventArgs args) =>
         Try(() => _changeHotkey(DictationShortcut.Default), "Shortcut unavailable");
 
-    private void WireShortcutField(ShortcutField field)
+    private void ShortcutCaptureStarted(object? sender, CancelEventArgs args)
     {
-        var box = field.CaptureBox;
-        box.GotFocus += (_, _) => StartShortcutCapture(field);
-        box.KeyDown += (_, args) => ShortcutKeyDown(field, args);
-        box.KeyUp += (_, args) => ShortcutKeyUp(args);
-        box.LostFocus += (_, _) => EndShortcutCapture();
-        // TextBox handles pointer presses itself, so listen for handled presses to restart capture on click.
-        box.AddHandler(PointerPressedEvent, new PointerEventHandler((_, _) => StartShortcutCapture(field)), true);
-    }
-
-    private void StartShortcutCapture(ShortcutField field)
-    {
-        if (_recordingShortcut || !field.IsEnabled) { return; }
-        try
+        if (HotkeyField.IsCapturing || RecordHotkeyField.IsCapturing || RecordPasteHotkeyField.IsCapturing)
         {
-            _captureShortcut(true);
-            _captureField = field;
-            _recordingShortcut = true;
-            _pendingShortcut = null;
-            _shortcutPrimarySeen = false;
-            field.ShowStatus("Press a shortcut; Esc cancels");
-        }
-        catch (Exception error) { ReportError(error); }
-    }
-
-    private void ShortcutKeyDown(ShortcutField field, KeyRoutedEventArgs args)
-    {
-        if (_captureField is not { } capturing)
-        {
-            if (args.Key == VirtualKey.Enter) { args.Handled = true; StartShortcutCapture(field); }
+            args.Cancel = true;
             return;
         }
-        if (args.Key == VirtualKey.Tab) { return; }
-        args.Handled = true;
-        if (args.Key == VirtualKey.Escape) { EndShortcutCapture(); return; }
-        uint modifiers = 0;
-        if (Down(VirtualKey.Menu)) { modifiers |= 1; }
-        if (Down(VirtualKey.Control)) { modifiers |= 2; }
-        if (Down(VirtualKey.Shift)) { modifiers |= 4; }
-        if (Down(VirtualKey.LeftWindows) || Down(VirtualKey.RightWindows)) { modifiers |= 8; }
-        if (IsModifierKey(args.Key))
+        try { _captureShortcut(true); }
+        catch (Exception error)
         {
-            if (!_shortcutPrimarySeen)
-            {
-                var candidate = new DictationShortcut(modifiers, 0);
-                _pendingShortcut = candidate.IsModifierOnly ? candidate : null;
-                if (_pendingShortcut is { } modifierOnly)
-                    capturing.ShowStatus($"{modifierOnly.DisplayText} (release to apply)");
-            }
-            return;
+            ReportError(error);
+            args.Cancel = true;
         }
-        _shortcutPrimarySeen = true;
-        _pendingShortcut = null;
-        var shortcut = new DictationShortcut(modifiers, (uint)args.Key);
-        if (!shortcut.IsValid)
-        {
-            capturing.ShowStatus("Use Ctrl + Win, Alt + Win, F1-F11, or a modified letter or digit");
-            return;
-        }
-        _pendingShortcut = shortcut;
-        capturing.ShowStatus($"{shortcut.DisplayText} (release to apply)");
     }
 
-    private void ShortcutKeyUp(KeyRoutedEventArgs args)
+    private void ShortcutCaptureEnded(object? sender, EventArgs args)
     {
-        if (_captureField is not { } capturing) { return; }
-        if (_pendingShortcut is not { } shortcut)
-        {
-            if (!IsModifierKey(args.Key)) { _shortcutPrimarySeen = false; }
-            return;
-        }
-        if (shortcut.IsModifierOnly)
-        {
-            if (!new ModifierShortcutState(shortcut.Modifiers).IsChordKey((uint)args.Key)) return;
-        }
-        else if ((uint)args.Key != shortcut.Key) { return; }
-        args.Handled = true;
-        Try(() =>
-        {
-            if (capturing == RecordPasteHotkeyField) _changeRecordPasteHotkey(shortcut);
-            else if (capturing == RecordHotkeyField) _changeRecordHotkey(shortcut);
-            else _changeHotkey(shortcut);
-        }, "Shortcut unavailable");
-        EndShortcutCapture();
-    }
-
-    private static bool Down(VirtualKey key) =>
-        (InputKeyboardSource.GetKeyStateForCurrentThread(key) & CoreVirtualKeyStates.Down) != 0;
-
-    private static bool IsModifierKey(VirtualKey key) =>
-        key is VirtualKey.Control or VirtualKey.LeftControl or VirtualKey.RightControl
-            or VirtualKey.Shift or VirtualKey.LeftShift or VirtualKey.RightShift
-            or VirtualKey.Menu or VirtualKey.LeftMenu or VirtualKey.RightMenu
-            or VirtualKey.LeftWindows or VirtualKey.RightWindows;
-
-    private void EndShortcutCapture()
-    {
-        if (!_recordingShortcut) { return; }
-        _recordingShortcut = false;
-        _pendingShortcut = null;
-        _shortcutPrimarySeen = false;
         try { _captureShortcut(false); }
         catch (Exception error) { ReportError(error, "Shortcut unavailable"); }
-        _captureField = null;
         ShowShortcuts();
     }
+
+    private void HotkeyCaptured(DictationShortcut shortcut) =>
+        Try(() => _changeHotkey(shortcut), "Shortcut unavailable");
+
+    private void RecordHotkeyCaptured(DictationShortcut shortcut) =>
+        Try(() => _changeRecordHotkey(shortcut), "Shortcut unavailable");
+
+    private void RecordPasteHotkeyCaptured(DictationShortcut shortcut) =>
+        Try(() => _changeRecordPasteHotkey(shortcut), "Shortcut unavailable");
 
     private void ShowShortcuts()
     {
         var settings = _session.State.Settings;
-        if (_captureField != HotkeyField) HotkeyField.ShowShortcut(settings.Shortcut.DisplayText);
-        if (_captureField != RecordHotkeyField) RecordHotkeyField.ShowShortcut(settings.RecordShortcut.DisplayText);
-        if (_captureField != RecordPasteHotkeyField) RecordPasteHotkeyField.ShowShortcut(settings.RecordPasteShortcut.DisplayText);
+        HotkeyField.ShowShortcut(settings.Shortcut.DisplayText);
+        RecordHotkeyField.ShowShortcut(settings.RecordShortcut.DisplayText);
+        RecordPasteHotkeyField.ShowShortcut(settings.RecordPasteShortcut.DisplayText);
     }
 }

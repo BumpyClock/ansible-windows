@@ -16,11 +16,10 @@ public sealed partial class DictationPage : Page
     private static readonly TimeSpan CopiedDuration = TimeSpan.FromSeconds(2);
 
     private readonly DictationSession _session;
-    private readonly AppPaths _paths;
+    private readonly ModelNames _modelNames;
     private readonly HomeDictationHistory _history;
     private readonly ShortcutDictation _shortcut;
     private readonly Func<nint> _windowHandle;
-    private readonly Task _catalogNamesTask;
     private Task _copyPicturesTask = Task.CompletedTask;
     private bool _copyingPictures;
     private readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromMilliseconds(250) };
@@ -28,7 +27,6 @@ public sealed partial class DictationPage : Page
     private SessionSnapshot _state;
     private UiSessionObserver? _observer;
     private bool _picking;
-    private readonly Dictionary<string, HomeModelName> _homeCatalogNames = new(StringComparer.OrdinalIgnoreCase);
     private UsageDocument? _homeUsage;
     private string? _homeUsageError;
     private int? _homeDictations;
@@ -39,25 +37,23 @@ public sealed partial class DictationPage : Page
     private bool _disposed;
     private Guid? _removedTranscriptOperationId;
     private StickyPin? _railPin;
-    private bool _homeHasHistory;
 
     private readonly AppNotices _notices;
 
-    internal DictationPage(DictationSession session, AppPaths paths, Func<nint> windowHandle, HomeDictationHistory history,
+    internal DictationPage(DictationSession session, ModelNames modelNames, Func<nint> windowHandle, HomeDictationHistory history,
         AppNotices notices, ShortcutDictation shortcut)
     {
         InitializeComponent();
-        HomeViewport.PrimaryAction = new PageAction(CompactDictateButton, RecordClicked, CompactDictateLabel);
-        HomeViewport.PrimaryActionIcon = new FontIconSource { Glyph = "", FontSize = 16 };
+        HomeViewport.PrimaryAction = new PageAction(CompactDictateButton, RecordClicked, CompactDictateLabel, new FontIconSource { Glyph = "", FontSize = 16 });
         _session = session;
         _shortcut = shortcut;
         _shortcut.RecordResultChanged += RecordResultChanged;
         _notices = notices;
-        _paths = paths;
+        _modelNames = modelNames;
+        _modelNames.Ready += ModelNamesReady;
         _windowHandle = windowHandle;
         _history = history ?? throw new ArgumentNullException(nameof(history));
         _state = session.State;
-        _catalogNamesTask = LoadHomeCatalogNamesAsync();
         _clock.Tick += (_, _) =>
         {
             RenderClock();
@@ -92,11 +88,12 @@ public sealed partial class DictationPage : Page
         };
     }
 
-    internal Task FinishBackgroundWorkAsync() => Task.WhenAll(_catalogNamesTask, _copyPicturesTask);
+    internal Task FinishBackgroundWorkAsync() => _copyPicturesTask;
 
     internal void Dispose()
     {
         _disposed = true;
+        _modelNames.Ready -= ModelNamesReady;
         _shortcut.RecordResultChanged -= RecordResultChanged;
         _history.Changed -= HistoryChanged;
         HistoryView.QueryChanged -= HistoryQueryChanged;
@@ -151,35 +148,15 @@ public sealed partial class DictationPage : Page
         CopyRetainedVideoButton.Visibility = retained?.VideoPath is not null ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    private async Task LoadHomeCatalogNamesAsync()
+    private void ModelNamesReady()
     {
-        var dispatcher = DispatcherQueue;
-        try
-        {
-            var entries = await NativeModelCatalog.LoadAsync(_paths.ModelCatalog).ConfigureAwait(false);
-            var names = entries
-                .Where(entry => !string.IsNullOrWhiteSpace(entry.DisplayName))
-                .ToDictionary(entry => entry.Id, HomeModelName.From, StringComparer.OrdinalIgnoreCase);
-            dispatcher.TryEnqueue(() =>
-            {
-                if (_disposed) { return; }
-                _homeCatalogNames.Clear();
-                foreach (var pair in names) { _homeCatalogNames[pair.Key] = pair.Value; }
-                _homeDataInitialized = false;
-                RenderHomeData();
-                RenderHomeHistory(animate: false);
-            });
-        }
-        catch
-        {
-        }
+        if (_disposed) { return; }
+        _homeDataInitialized = false;
+        RenderHomeData();
+        RenderHomeHistory(animate: false);
     }
 
-    private HomeModelName? HomeModelNameFor(string modelId)
-    {
-        if (_homeCatalogNames.TryGetValue(modelId, out var catalogName)) { return catalogName; }
-        return _state.Models.FirstOrDefault(model => model.Id == modelId)?.DisplayName is { } name ? new HomeModelName(name, name) : null;
-    }
+    private HomeModelName? HomeModelNameFor(string modelId) => _modelNames.Find(modelId, _state.Models);
 
     private void RenderHomeData()
     {
@@ -282,8 +259,7 @@ public sealed partial class DictationPage : Page
 
     private void UpdateHomeWidth(bool hasHistory)
     {
-        if (_homeHasHistory == hasHistory && HomeViewport.Wide == hasHistory) return;
-        _homeHasHistory = hasHistory;
+        if (HomeViewport.Wide == hasHistory) return;
         HomeViewport.Wide = hasHistory;
         UpdateHomeColumns(HomeColumns.ActualWidth);
     }
@@ -292,7 +268,7 @@ public sealed partial class DictationPage : Page
 
     private void UpdateHomeColumns(double width)
     {
-        var stacked = !_homeHasHistory || width < (double)Application.Current.Resources["HomeRailStackThreshold"];
+        var stacked = !HomeViewport.Wide || width < (double)Application.Current.Resources["HomeRailStackThreshold"];
         if (stacked) { _railPin?.Dispose(); _railPin = null; }
         else if (!_disposed)
         {

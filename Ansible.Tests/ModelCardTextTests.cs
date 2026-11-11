@@ -40,7 +40,7 @@ public sealed class ModelCardTextTests : IDisposable
     [InlineData("Q8", "Q8_0", "Q8")]
     [InlineData(null, "Q8_0", "model-id")]
     public void PlainNameDropsOnlyTheEntrysOwnPrecisionToken(string? name, string? precision, string expected) =>
-        Assert.Equal(expected, ModelCardText.PlainName(Entry(name, precision)));
+        Assert.Equal(expected, ModelNames.Plain(Entry(name, precision)));
 
     [Theory]
     [InlineData("nemotron_3_diar", "diar", "streaming", "final-only", "Tells speakers apart in meetings")]

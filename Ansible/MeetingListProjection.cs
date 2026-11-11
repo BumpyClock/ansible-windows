@@ -7,27 +7,12 @@ public sealed record MeetingDayHeader(string Label);
 
 public sealed record MeetingHistoryRow(MeetingSummary Summary)
 {
-    private DateTime Local => Summary.CreatedAt.LocalDateTime;
-    private bool Untitled => MeetingText.IsUntitled(Summary.Title);
-    private bool HasSpeech => Summary.Duration is not null;
-
-    public string Title => MeetingText.Title(Summary.Title, Summary.CreatedAt);
-
-    public string Details => string.Join(" · ", new[]
-    {
-        HasSpeech ? MeetingText.Duration(Summary.Duration!.Value) : null,
-        HasSpeech ? MeetingText.Speakers(Summary.SpeakerCount) : null,
-        MeetingText.Outcome(Summary.Status, HasSpeech),
-        Untitled ? null : MeetingText.Time(Local)
-    }.OfType<string>());
-
+    public string Title => MeetingText.Title(Summary);
+    public string Details => MeetingText.ListDetails(Summary);
     public bool IsEmpty => MeetingList.IsEmpty(Summary);
-    public bool HasReadableTitle => !IsEmpty;
     public bool IsFailed => Summary.Status == MeetingStatus.Failed;
-    public bool IsCriticalFailure => IsFailed && HasSpeech;
+    public bool IsCriticalFailure => IsFailed && Summary.Duration is not null;
     public string Status => IsEmpty ? "" : MeetingText.Status(Summary.Status) ?? "";
-    public bool HasNeutralStatus => !IsFailed && Status.Length != 0;
-    public bool CanDelete => MeetingList.IsFinished(Summary.Status);
     public string AccessibleName => $"{Title}, {Details}{(Status.Length == 0 ? "" : $", {Status}")}";
     public string OptionsName => $"More options for {Title}";
 }
@@ -59,12 +44,8 @@ internal static class MeetingList
 
 internal static class MeetingText
 {
-    private const string PlaceholderTitle = "New meeting";
-
-    public static bool IsUntitled(string title) => string.Equals(title.Trim(), PlaceholderTitle, StringComparison.Ordinal);
-
-    public static string Title(string title, DateTimeOffset createdAt) =>
-        IsUntitled(title) ? $"Meeting at {Time(createdAt.LocalDateTime)}" : title;
+    public static string Title(MeetingSummary summary) =>
+        summary.IsUntitled ? $"Meeting at {Time(summary.CreatedAt.LocalDateTime)}" : summary.Title;
 
     public static string Time(DateTime local) => local.ToString("t", CultureInfo.CurrentCulture);
 
@@ -116,17 +97,23 @@ internal static class MeetingText
         _ => "Speech appears here once it is transcribed."
     };
 
-    public static string SavedDetails(MeetingDocument document, DateOnly today)
+    public static string ListDetails(MeetingSummary summary) => Details(summary, null,
+        Outcome(summary.Status, summary.Duration is not null),
+        summary.IsUntitled ? null : Time(summary.CreatedAt.LocalDateTime));
+
+    public static string SavedDetails(MeetingSummary summary, DateOnly today)
     {
-        var local = document.CreatedAt.LocalDateTime;
-        return string.Join(" · ", new[]
-        {
-            IsUntitled(document.Title) ? Date(local, today) : $"{Date(local, today)}, {Time(local)}",
-            MeetingSummary.SpeechDuration(document) is { } duration ? Duration(duration) : null,
-            Speakers(MeetingSummary.SpeakerCountOf(document)),
-            Status(document.Status)
-        }.OfType<string>());
+        var local = summary.CreatedAt.LocalDateTime;
+        return Details(summary, summary.IsUntitled ? Date(local, today) : $"{Date(local, today)}, {Time(local)}",
+            Status(summary.Status));
     }
+
+    private static string Details(MeetingSummary summary, string? lead, params string?[] trail) => string.Join(" · ", new[]
+    {
+        lead,
+        summary.Duration is { } duration ? Duration(duration) : null,
+        summary.Duration is null ? null : Speakers(summary.SpeakerCount)
+    }.Concat(trail).OfType<string>());
 
     public static (string Title, string Content) DeleteConfirmation(int count) => count == 1
         ? ("Delete this meeting?", "The saved transcript will be permanently deleted.")

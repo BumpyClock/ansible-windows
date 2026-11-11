@@ -100,9 +100,8 @@ public sealed partial class ShellTitleBar : UserControl
         var action = scrolled && _canvas is { IsActionScrolledOut: true } && _action is { IsVisible: true } ? _action : null;
         if (action is not null)
         {
-            var icon = _canvas?.PrimaryActionIcon;
-            if (!ReferenceEquals(PrimaryActionIcon.IconSource, icon)) PrimaryActionIcon.IconSource = icon;
-            PrimaryActionIcon.Visibility = icon is null ? Visibility.Collapsed : Visibility.Visible;
+            if (!ReferenceEquals(PrimaryActionIcon.IconSource, action.Icon)) PrimaryActionIcon.IconSource = action.Icon;
+            PrimaryActionIcon.Visibility = action.Icon is null ? Visibility.Collapsed : Visibility.Visible;
             PrimaryActionLabel.Text = action.Label;
             PrimaryActionCopy.IsEnabled = action.IsEnabled;
             AutomationProperties.SetName(PrimaryActionCopy, action.AccessibleName);

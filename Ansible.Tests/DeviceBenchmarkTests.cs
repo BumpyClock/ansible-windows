@@ -15,37 +15,38 @@ public sealed class DeviceBenchmarkTests
     }
 
     [Theory]
-    [InlineData(100, 100, NativeBackend.Vulkan)]
-    [InlineData(100, 105, NativeBackend.Vulkan)]
-    [InlineData(100, 106, NativeBackend.Cpu)]
-    [InlineData(120, 90, NativeBackend.Vulkan)]
-    public void SelectsFasterWorkingDeviceWithGpuNearTiePreference(double cpu, double gpu, NativeBackend expected)
+    [InlineData(100, 100, NativeBackend.Vulkan, DeviceChoiceReason.SameTime)]
+    [InlineData(100, 105, NativeBackend.Vulkan, DeviceChoiceReason.GpuPreferredWhenClose)]
+    [InlineData(100, 106, NativeBackend.Cpu, DeviceChoiceReason.Faster)]
+    [InlineData(120, 90, NativeBackend.Vulkan, DeviceChoiceReason.Faster)]
+    public void SelectsFasterWorkingDeviceWithGpuNearTiePreference(double cpu, double gpu, NativeBackend expected,
+        DeviceChoiceReason reason)
     {
         var result = DeviceBenchmark.Select("key", new(NativeBackend.Cpu, cpu, null), new(NativeBackend.Vulkan, gpu, null));
-        Assert.Equal(expected, result.Backend);
+        Assert.Equal((expected, reason), (result.Backend, result.Reason));
         Assert.Contains($"{cpu:F1} ms", result.Summary);
         Assert.Contains($"{gpu:F1} ms", result.Summary);
     }
 
     [Theory]
-    [InlineData(4900, 5100, NativeBackend.Cpu)]     // near tie, only CPU keeps a meeting's pace
-    [InlineData(4800, 4900, NativeBackend.Vulkan)]  // near tie, both keep pace
-    [InlineData(5200, 5300, NativeBackend.Vulkan)]  // near tie, neither keeps pace; the gate rejects it later
-    public void MeetingPaceOutranksTheGpuNearTiePreference(double cpu, double gpu, NativeBackend expected)
+    [InlineData(4900, 5100, NativeBackend.Cpu, DeviceChoiceReason.KeepsMeetingPace)]     // near tie, only CPU keeps a meeting's pace
+    [InlineData(4800, 4900, NativeBackend.Vulkan, DeviceChoiceReason.GpuPreferredWhenClose)]  // near tie, both keep pace
+    [InlineData(5200, 5300, NativeBackend.Vulkan, DeviceChoiceReason.GpuPreferredWhenClose)]  // near tie, neither keeps pace; the gate rejects it later
+    public void MeetingPaceOutranksTheGpuNearTiePreference(double cpu, double gpu, NativeBackend expected, DeviceChoiceReason reason)
     {
         var limit = DeviceBenchmark.PaceLimitMilliseconds(10000);
         var result = DeviceBenchmark.Select("key", new(NativeBackend.Cpu, cpu, null), new(NativeBackend.Vulkan, gpu, null), limit);
-        Assert.Equal(expected, result.Backend);
+        Assert.Equal((expected, reason), (result.Backend, result.Reason));
     }
 
     [Theory]
-    [InlineData(true, NativeBackend.Vulkan)]
-    [InlineData(false, NativeBackend.Cpu)]
-    public void SelectsOnlyWorkingDeviceAndReportsOtherFailure(bool cpuFailed, NativeBackend expected)
+    [InlineData(true, NativeBackend.Vulkan, DeviceChoiceReason.CpuUnavailable)]
+    [InlineData(false, NativeBackend.Cpu, DeviceChoiceReason.GpuUnavailable)]
+    public void SelectsOnlyWorkingDeviceAndReportsOtherFailure(bool cpuFailed, NativeBackend expected, DeviceChoiceReason reason)
     {
         var result = DeviceBenchmark.Select("key", new(NativeBackend.Cpu, cpuFailed ? null : 100, cpuFailed ? "CPU failed" : null),
             new(NativeBackend.Vulkan, cpuFailed ? 100 : null, cpuFailed ? null : "GPU crashed"));
-        Assert.Equal(expected, result.Backend);
+        Assert.Equal((expected, reason), (result.Backend, result.Reason));
         Assert.Contains(cpuFailed ? "CPU failed" : "GPU crashed", result.Summary);
     }
 

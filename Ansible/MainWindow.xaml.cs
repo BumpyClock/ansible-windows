@@ -41,6 +41,8 @@ public sealed partial class MainWindow : Window
     private readonly MeetingCleanupService _meetingCleanup;
     private readonly LocalDiagnosticLog _meetingDiagnostics;
     private readonly AppPaths _paths;
+    private readonly ModelNames _modelNames = new();
+    private readonly Task _modelNamesTask;
     private readonly List<(MeetingSession session, MeetingWindow window, Guid? savedId)> _meetingWindows = [];
     private readonly UiSessionObserver _observer;
     private readonly AppNotices _notices = new();
@@ -112,10 +114,11 @@ public sealed partial class MainWindow : Window
                 new NoticeContent(NoticeSeverity.Warning, title, message), NoticeArea.Meetings));
         _suggestions.Changed += RenderMeetingSuggestion;
         _welcome = new WelcomeDialog(session, () => _shortcut.IsBusy, _notices);
-        _dictation = new DictationPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this), _history, _notices, _shortcut);
-        _settings = new MainPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this),
+        _dictation = new DictationPage(session, _modelNames, () => WinRT.Interop.WindowNative.GetWindowHandle(this), _history, _notices, _shortcut);
+        _settings = new MainPage(session, _modelNames, () => WinRT.Interop.WindowNative.GetWindowHandle(this),
             ChangeHotkey, ChangeDictationMode, CaptureShortcut, diagnostics, _notices,
             ChangeRecordHotkey, EnableRecordChord, captures, ChangeRecordPasteHotkey);
+        _modelNamesTask = _modelNames.LoadAsync(paths.ModelCatalog);
         _settings.ShortcutLessonRequested += OpenShortcutLesson;
         _models = new ModelManagementPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this), modelDownloads,
             () => { Navigate(_pages!.Home); return _dictation.TranscribeFileAsync(); }, diagnostics, _notices);
@@ -872,7 +875,8 @@ public sealed partial class MainWindow : Window
             await Task.WhenAll(meetings.Select(meeting => meeting.window.BeginShutdownAsync()));
             foreach (var meeting in meetings) await meeting.session.DisposeAsync();
             foreach (var meeting in _meetingWindows.ToArray()) meeting.window.Close();
-            await Task.WhenAll(_session.CloseAsync(), _models.DisposeAsync().AsTask(), _dictation.FinishBackgroundWorkAsync(), _settings.JoinAsync());
+            await Task.WhenAll(_session.CloseAsync(), _models.DisposeAsync().AsTask(), _dictation.FinishBackgroundWorkAsync(),
+                _settings.JoinAsync(), _modelNamesTask);
             await _shortcut.JoinAsync();
             if (_recordCancelTask is { } recordCancel) await recordCancel;
             if (_floating is not null) { await _floating.ClosePreviewAsync(); }
@@ -895,7 +899,7 @@ public sealed partial class MainWindow : Window
             var joined = Task.WhenAll(new[]
             {
                 _startupTask, _meetingRecoveryTask, _permissionRetryTask, _microphoneSettingsTask,
-                _suggestions.JoinAsync(), _shortcut.JoinAsync(), _dictation.FinishBackgroundWorkAsync()
+                _suggestions.JoinAsync(), _shortcut.JoinAsync(), _dictation.FinishBackgroundWorkAsync(), _modelNamesTask
             }.OfType<Task>());
             try { await joined; }
             catch (Exception)

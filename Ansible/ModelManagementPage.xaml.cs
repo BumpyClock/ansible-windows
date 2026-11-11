@@ -18,6 +18,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
     private readonly List<ModelCard> _cardList = [];
     private const string OperationNoticeKey = "models-operation";
     private const string CatalogNoticeKey = "models-catalog";
+    private const string VerifyPath = "Open More options, then Model folder, then Verify installed files";
     private ModelDownloadManager? _manager;
     private ThemeSettings? _themeSettings;
     private UiSessionObserver? _observer;
@@ -136,7 +137,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
 
         var catalogMissing = _manager is null && _initialization?.IsCompleted == true;
         _notices.Set(CatalogNoticeKey, catalogMissing ? new NoticeContent(NoticeSeverity.Error, "Model catalog unavailable",
-            "Open More options, then Model folder, then Verify installed files to retry opening the catalog.", IsClosable: false) : null,
+            $"{VerifyPath} to retry opening the catalog.", IsClosable: false) : null,
             NoticeArea.Models);
 
         if (_manager is null) { return; }
@@ -180,7 +181,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         if (index < 0)
         {
             _notices.Set(OperationNoticeKey, new NoticeContent(NoticeSeverity.Warning, "Model not loaded",
-                "Open More options, then Model folder, then Verify installed files to load this model."), NoticeArea.Models);
+                $"{VerifyPath} to load this model."), NoticeArea.Models);
         }
         else
         {

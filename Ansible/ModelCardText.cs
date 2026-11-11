@@ -8,17 +8,6 @@ internal static class ModelCardText
     private const double Megabyte = Kilobyte * 1024;
     private const double Gigabyte = Megabyte * 1024;
 
-    public static string PlainName(NativeModelEntry entry)
-    {
-        var name = entry.DisplayName ?? entry.Id;
-        var cut = name.LastIndexOf(' ');
-        if (entry.Precision is not { Length: > 0 } precision || cut <= 0) return name;
-        var token = name[(cut + 1)..];
-        var isPrecision = token.Equals(precision, StringComparison.OrdinalIgnoreCase)
-            || token.Equals(precision.Split('_')[0], StringComparison.OrdinalIgnoreCase);
-        return isPrecision ? name[..cut].TrimEnd() : name;
-    }
-
     public static string Behavior(NativeModelEntry entry) =>
         ModelSelectionPolicy.IsDiarizationTask(entry.Task) ? "Tells speakers apart in meetings" :
         entry.Family == "vibevoice_asr" && entry.Mode == "offline" ? "Shows text after you finish" :

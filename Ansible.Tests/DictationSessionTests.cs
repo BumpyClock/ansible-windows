@@ -470,7 +470,8 @@ public sealed partial class DictationSessionTests : IDisposable
     [Fact]
     public async Task PreloadPublishesMeasuredDeviceComparisonInANewSnapshot()
     {
-        var comparison = new DeviceComparisonSnapshot("Test model", DeviceComparisonKind.Streaming, 100, 80, NativeBackend.Vulkan, DateTimeOffset.UtcNow);
+        var comparison = new DeviceComparisonSnapshot("test-model", "Test model", DeviceComparisonKind.Streaming, 100, 80,
+            NativeBackend.Vulkan, DeviceChoiceReason.Faster, DateTimeOffset.UtcNow);
         var engine = new FakeEngine { PreparedDeviceComparison = comparison };
         var session = Create(engine);
 
@@ -484,7 +485,8 @@ public sealed partial class DictationSessionTests : IDisposable
     [Fact]
     public async Task BenchmarkMeasuresAutoWithDictationOptionsAndPublishesProgressAndResult()
     {
-        var measured = new DeviceComparisonSnapshot("Test model", DeviceComparisonKind.Streaming, 120, 70, NativeBackend.Vulkan, DateTimeOffset.UtcNow);
+        var measured = new DeviceComparisonSnapshot("test-model", "Test model", DeviceComparisonKind.Streaming, 120, 70,
+            NativeBackend.Vulkan, DeviceChoiceReason.Faster, DateTimeOffset.UtcNow);
         var engine = new FakeEngine
         {
             BenchmarkedComparison = measured,
@@ -541,12 +543,14 @@ public sealed partial class DictationSessionTests : IDisposable
     [Fact]
     public async Task BenchmarkRejectsConcurrentDictationAndCancelKeepsThePreviousComparison()
     {
-        var previous = new DeviceComparisonSnapshot("Test model", DeviceComparisonKind.Streaming, 100, 80, NativeBackend.Vulkan, DateTimeOffset.UtcNow);
+        var previous = new DeviceComparisonSnapshot("test-model", "Test model", DeviceComparisonKind.Streaming, 100, 80,
+            NativeBackend.Vulkan, DeviceChoiceReason.Faster, DateTimeOffset.UtcNow);
         var probing = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var engine = new FakeEngine
         {
             PreparedDeviceComparison = previous,
-            BenchmarkedComparison = new("Test model", DeviceComparisonKind.Streaming, 1, 1, NativeBackend.Cpu, DateTimeOffset.UtcNow),
+            BenchmarkedComparison = new("test-model", "Test model", DeviceComparisonKind.Streaming, 1, 1, NativeBackend.Cpu,
+                DeviceChoiceReason.Faster, DateTimeOffset.UtcNow),
             Benchmarking = async (progress, token) =>
             {
                 progress!.Report(NativeBackend.Cpu);

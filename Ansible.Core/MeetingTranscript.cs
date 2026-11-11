@@ -18,7 +18,7 @@ public sealed partial class MeetingTranscript
         var labels = MeetingSpeakerLabels.Find(text);
         var parsed = new List<(string SpeakerId, string Text)>();
         var start = 0;
-        var speakerId = "Unknown speaker";
+        var speakerId = MeetingTurn.UnattributedSpeakerId;
         foreach (var label in labels)
         {
             AddText(text[start..label.Index]);

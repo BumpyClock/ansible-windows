@@ -21,7 +21,7 @@ public sealed partial class MeetingWindow : Window
     private const string NoticeKey = "meeting";
     private readonly AppNotices _notices = new();
     private MeetingDocument? _document;
-    private string? _pendingTitle;
+    private string? _requestedTitle;
     private string? _shownNotice;
     private readonly bool _savedMeeting;
     private bool _closed;
@@ -137,9 +137,9 @@ public sealed partial class MeetingWindow : Window
 
     private void RenderTitle()
     {
-        var title = _document is null || (_pendingTitle is not null && MeetingText.IsUntitled(_document.Title))
-            ? _pendingTitle ?? "New meeting"
-            : MeetingText.Title(_document.Title, _document.CreatedAt);
+        var title = _requestedTitle ?? (_document is null
+            ? MeetingDocument.UntitledTitle
+            : MeetingText.Title(MeetingSummary.From(_document)));
         MeetingTitle.Text = TitleBarCaption.Text = Title = title;
         AutomationProperties.SetName(TitleButton, $"Rename meeting {title}");
         UpdateTitleToolTip();
@@ -201,7 +201,7 @@ public sealed partial class MeetingWindow : Window
             MeetingSessionPhase.Paused => $"Paused · {elapsed}",
             MeetingSessionPhase.Finishing => "Finishing transcript",
             MeetingSessionPhase.Refining => "Identifying speakers",
-            MeetingSessionPhase.Completed when _document is not null => MeetingText.SavedDetails(_document, DateOnly.FromDateTime(DateTime.Today)),
+            MeetingSessionPhase.Completed when _document is not null => SavedDetails(_document),
             MeetingSessionPhase.Failed => "Stopped",
             _ => ""
         }, recording: state.Phase == MeetingSessionPhase.Recording);
@@ -287,11 +287,12 @@ public sealed partial class MeetingWindow : Window
     {
         RefreshCleanupControls();
         if (_document is null) return;
+        if (_document.Title == _requestedTitle) _requestedTitle = null;
         RenderTitle();
         TranscriptEmpty.Visibility = _document.Turns.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         if (_savedMeeting)
         {
-            ShowDetails(MeetingText.SavedDetails(_document, DateOnly.FromDateTime(DateTime.Today)), recording: false);
+            ShowDetails(SavedDetails(_document), recording: false);
             TranscriptEmpty.Glyph = _document.Status == MeetingStatus.Failed ? ErrorGlyph : MicrophoneGlyph;
             TranscriptEmpty.Title = "No speech transcribed";
             TranscriptEmpty.Detail = MeetingText.EmptyExplanation(_document.Status);
@@ -304,6 +305,9 @@ public sealed partial class MeetingWindow : Window
         _renderedAutoNames = _document.AutoSpeakerNames;
         if (_transcript.Reconcile(_document) && nearBottom && !_savedMeeting) _followTranscriptBottom = true;
     }
+
+    private static string SavedDetails(MeetingDocument document) =>
+        MeetingText.SavedDetails(MeetingSummary.From(document), DateOnly.FromDateTime(DateTime.Today));
 
     private void ShowDetails(string details, bool recording)
     {
@@ -323,8 +327,6 @@ public sealed partial class MeetingWindow : Window
         return button;
     }
 
-    public static Visibility ToVisibility(bool value) => value ? Visibility.Visible : Visibility.Collapsed;
-    public static Visibility VisibleIfText(string value) => ToVisibility(!string.IsNullOrEmpty(value));
 
     private async void SpeakerClicked(object sender, RoutedEventArgs args)
     {
@@ -387,7 +389,8 @@ public sealed partial class MeetingWindow : Window
                 throw new InvalidOperationException("The detected Teams process changed or closed. Refresh the Teams selection before starting.");
             }
         }
-        var title = _pendingTitle;
+        _requestedTitle ??= _document is { IsUntitled: false } failed ? failed.Title : null;
+        var title = _requestedTitle;
         var identity = process is { IsTeams: true } ? new MeetingDetectionCandidate(process.Id, process.StartedUtc) : null;
         var context = identity is null ? new MeetingContextObservation(MeetingCallPresence.Unknown)
             : await _teamsContext.ReadAsync(identity, CancellationToken.None);
@@ -433,7 +436,7 @@ public sealed partial class MeetingWindow : Window
     private async void RenameTitleClicked(object sender, RoutedEventArgs args)
     {
         if (_busy || _closing || _closed || _shutdownPending) return;
-        var current = _document is null ? _pendingTitle ?? "" : MeetingText.IsUntitled(_document.Title) ? "" : _document.Title;
+        var current = _requestedTitle ?? (_document is { IsUntitled: false } document ? document.Title : "");
         var input = new TextBox { Text = current, PlaceholderText = MeetingTitle.Text, MaxLength = 200, Header = "Meeting name" };
         var dialog = new ContentDialog { Title = "Rename meeting", Content = input, PrimaryButtonText = "Save", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Primary };
         dialog.FollowWindowTheme(Root.XamlRoot);
@@ -444,10 +447,11 @@ public sealed partial class MeetingWindow : Window
             if (title.Length == 0 || title == current) return;
             if (_document is null)
             {
-                _pendingTitle = title;
+                _requestedTitle = title;
                 RenderTitle();
                 return;
             }
+            _requestedTitle = null;
             _titleSaveTask = SaveTitleAsync(_titleSaveTask, title);
             await _titleSaveTask;
         }
@@ -809,19 +813,4 @@ public sealed partial class MeetingWindow : Window
     private void HideNotice() => _notices.Set(NoticeKey, null);
     private static string FormatTime(double seconds) => TimeSpan.FromSeconds(Math.Max(0, seconds)).ToString(seconds >= 3600 ? @"h\:mm\:ss" : @"m\:ss");
     private sealed record MeetingProcessChoice(int Id, string DisplayName, bool IsTeams, DateTime StartedUtc);
-}
-
-internal static class MeetingDeletion
-{
-    public static ContentDialog Dialog(int count, XamlRoot root)
-    {
-        var (title, content) = MeetingText.DeleteConfirmation(count);
-        var dialog = new ContentDialog
-        {
-            Title = title, Content = content, PrimaryButtonText = "Delete", CloseButtonText = "Cancel",
-            DefaultButton = ContentDialogButton.Close
-        };
-        dialog.FollowWindowTheme(root);
-        return dialog;
-    }
 }

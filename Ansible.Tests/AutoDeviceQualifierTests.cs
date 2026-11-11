@@ -18,7 +18,9 @@ public sealed class AutoDeviceQualifierTests
         Assert.Equal(NativeDiagnosticSource.Qualification, qualifier.Current.Source);
         Assert.Equal(ticket.Selection, Assert.Single(DeviceBenchmark.ReadCache(fixture.Cache)));
         Assert.Equal(ticket.Selection.MeasuredAt, qualifier.Current.Comparison!.MeasuredAt);
-        Assert.Equal(("Model", DeviceComparisonKind.WholeRecording), (qualifier.Current.Comparison.ModelName, qualifier.Current.Comparison.Kind));
+        Assert.Equal(("model", "Model", DeviceComparisonKind.WholeRecording),
+            (qualifier.Current.Comparison.ModelId, qualifier.Current.Comparison.ModelName, qualifier.Current.Comparison.Kind));
+        Assert.Equal(ticket.Selection.Reason, qualifier.Current.Comparison.Reason);
         Assert.Contains("median of three", qualifier.Current.Summary);
     }
 
