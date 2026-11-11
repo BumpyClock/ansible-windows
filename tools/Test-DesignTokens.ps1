@@ -116,7 +116,7 @@ foreach ($file in $xamlFiles) {
 }
 $platformStyleKeys = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
 foreach ($key in @('AccentButtonStyle', 'SubtleButtonStyle', 'DefaultButtonStyle', 'DefaultContentDialogStyle',
-    'CaptionTextBlockStyle', 'BodyTextBlockStyle', 'BodyStrongTextBlockStyle', 'SubtitleTextBlockStyle',
+    'CaptionTextBlockStyle', 'BodyTextBlockStyle', 'BodyStrongTextBlockStyle', 'BodyLargeTextBlockStyle', 'SubtitleTextBlockStyle',
     'TitleTextBlockStyle', 'TitleLargeTextBlockStyle')) { [void]$platformStyleKeys.Add($key) }
 $styleReferencePattern = '(?:Style|BasedOn)\s*=\s*"\{StaticResource\s+([A-Za-z_][A-Za-z0-9_]*)\}"'
 $semanticReferences = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
@@ -264,8 +264,8 @@ foreach ($file in $csharpFiles) {
 }
 
 # One scale. Text sizes come from WinUI's type ramp (its TextBlock styles, or the ramp tokens for controls that take
-# a FontSize). Radii are WinUI's ControlCornerRadius and OverlayCornerRadius, or PillCornerRadius for a fully round
-# shape. Spacing sits on the 4 DIP grid; 1 and 2 are allowed for hairlines and optical nudges. AppMark.xaml is
+# a FontSize). Radii are WinUI's ControlCornerRadius and OverlayCornerRadius. A fully round shape is the one literal:
+# half the element's own literal Height. Spacing sits on the 4 DIP grid; 1 and 2 are allowed for hairlines and optical nudges. AppMark.xaml is
 # exact brand geometry and is exempt.
 $iconSizes = @('12', '16', '20', '24', '32', '48')
 $spacingProperties = @('Margin', 'Padding', 'Spacing', 'RowSpacing', 'ColumnSpacing')
@@ -280,13 +280,16 @@ function Test-OnGrid {
     $true
 }
 function Test-ScaleValue {
-    param([string]$File, [string]$Element, [string]$Property, [string]$Value)
+    param([string]$File, [string]$Element, [string]$Property, [string]$Value, [string]$Height)
     if ($Value -notmatch '^-?[0-9][0-9.,\s-]*$') { return }
     if ($Property -eq 'FontSize') {
         Assert-Condition ($Element -eq 'FontIcon' -and $Value -in $iconSizes) `
             "${File}: <$Element> FontSize='$Value' is off the scale. Use a WinUI TextBlock style or a ramp token; icons use 12, 16, 20, 24, 32, or 48."
     } elseif ($Property -eq 'CornerRadius') {
-        Assert-Condition $false "${File}: <$Element> CornerRadius='$Value' is a literal. Use ControlCornerRadius, OverlayCornerRadius, or PillCornerRadius."
+        $half = 0.0
+        $round = [double]::TryParse($Height, [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$half) -and
+            [double]$Value -eq $half / 2
+        Assert-Condition $round "${File}: <$Element> CornerRadius='$Value' is a literal. Use ControlCornerRadius or OverlayCornerRadius; a fully round shape uses half its own literal Height."
     } elseif ($Property -in $spacingProperties) {
         Assert-Condition (Test-OnGrid $Value) "${File}: <$Element> $Property='$Value' is off the 4 DIP grid."
     }
@@ -300,7 +303,7 @@ foreach ($file in @((Get-Item -LiteralPath $tokenPath)) + $xamlFiles) {
             continue
         }
         foreach ($attribute in $node.Attributes) {
-            Test-ScaleValue $file.Name $node.LocalName $attribute.LocalName $attribute.Value
+            Test-ScaleValue $file.Name $node.LocalName $attribute.LocalName $attribute.Value $node.GetAttribute('Height')
         }
         $resourceKey = $node.GetAttribute('Key', $namespaceManager.LookupNamespace('x'))
         if ($node.LocalName -eq 'Thickness' -and $resourceKey -notmatch 'BorderThickness$|DividerThickness$') {
@@ -308,9 +311,9 @@ foreach ($file in @((Get-Item -LiteralPath $tokenPath)) + $xamlFiles) {
         } elseif ($node.LocalName -eq 'Double' -and $resourceKey -match '(Gap|Spacing|Inset)$') {
             Assert-Condition (Test-OnGrid $node.InnerText) "$($file.Name): spacing token '$resourceKey' ($($node.InnerText)) is off the 4 DIP grid."
         } elseif ($node.LocalName -eq 'CornerRadius' -and $resourceKey) {
-            Assert-Condition ($resourceKey -eq 'PillCornerRadius') "$($file.Name): radius token '$resourceKey' duplicates the WinUI radii."
+            Assert-Condition $false "$($file.Name): radius token '$resourceKey' duplicates the WinUI radii."
         } elseif ($node.LocalName -eq 'Double' -and $resourceKey -match 'FontSize$') {
-            Assert-Condition ($node.InnerText -in @('12', '14', '20', '28', '40')) "$($file.Name): '$resourceKey' ($($node.InnerText)) is not a WinUI ramp size."
+            Assert-Condition ($node.InnerText -in @('12', '14', '18', '20', '28', '40')) "$($file.Name): '$resourceKey' ($($node.InnerText)) is not a WinUI ramp size."
         }
     }
 }

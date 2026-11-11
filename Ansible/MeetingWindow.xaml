@@ -68,7 +68,7 @@
                                     Background="{x:Null}" BorderThickness="0" Padding="0,4,0,4" HorizontalAlignment="Left"/>
                             <TextBlock Text="{x:Bind TimingText, Mode=OneWay}" Style="{StaticResource CaptionSecondaryStyle}"/>
                             <Border CornerRadius="{StaticResource OverlayCornerRadius}" Padding="12,8" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
-                                <TextBlock Text="{x:Bind Text, Mode=OneWay}" TextWrapping="Wrap" IsTextSelectionEnabled="True" FontSize="{StaticResource BodyFontSize}"/>
+                                <TextBlock Text="{x:Bind Text, Mode=OneWay}" Style="{StaticResource BodyLargeTextBlockStyle}" IsTextSelectionEnabled="True"/>
                             </Border>
                             <Expander Header="Original wording" IsExpanded="{x:Bind IsOriginalExpanded, Mode=TwoWay}"
                                       Visibility="{x:Bind local:MeetingWindow.ToVisibility(HasCleanup), Mode=OneWay}"

@@ -39,7 +39,7 @@
                     <Grid ColumnSpacing="8">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                         <TextBlock Text="{x:Bind DisplayName}" TextTrimming="CharacterEllipsis"
-                                   ToolTipService.ToolTip="{x:Bind DisplayName}" Style="{StaticResource HomeMetricLabelStyle}" />
+                                   ToolTipService.ToolTip="{x:Bind DisplayName}" Style="{StaticResource CaptionSecondaryStyle}" />
                         <TextBlock Grid.Column="1" Text="{x:Bind Sessions}" Style="{StaticResource BodyStrongTextBlockStyle}" />
                     </Grid>
                     <ProgressBar Maximum="{x:Bind MaximumSessions}" Value="{x:Bind Sessions}"
@@ -59,7 +59,7 @@
           AutomationProperties.LocalizedLandmarkType="Your voice, in numbers">
         <Border x:Name="WordsCard" Style="{StaticResource HomeRailCardStyle}">
             <StackPanel>
-                <TextBlock Text="Words dictated · all time on this device" Style="{StaticResource HomeMetricLabelStyle}" TextWrapping="Wrap" />
+                <TextBlock Text="Words dictated · all time on this device" Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap" />
                 <Viewbox Stretch="Uniform" StretchDirection="DownOnly" HorizontalAlignment="Left" MaxHeight="52">
                     <TextBlock x:Name="HomeWordsText" Text="--"
                                FontSize="{StaticResource TitleLargeFontSize}" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"
@@ -71,29 +71,29 @@
                         <StackPanel>
                             <TextBlock x:Name="HomePaceText" Text="--" Style="{StaticResource HomeRailStatValueStyle}"
                                        AutomationProperties.Name="All-time words per microphone minute" />
-                            <TextBlock Text="Words / min" Style="{StaticResource HomeMetricLabelStyle}" TextWrapping="Wrap" />
+                            <TextBlock Text="Words / min" Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap" />
                         </StackPanel>
                         <StackPanel Grid.Column="1">
                             <TextBlock x:Name="HomeSessionsText" Text="--" Style="{StaticResource HomeRailStatValueStyle}"
                                        AutomationProperties.Name="All-time dictations" />
-                            <TextBlock Text="Dictations" Style="{StaticResource HomeMetricLabelStyle}" TextWrapping="Wrap" />
+                            <TextBlock Text="Dictations" Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap" />
                         </StackPanel>
                         <StackPanel Grid.Column="2">
                             <TextBlock x:Name="HomeMicrophoneText" Text="--" Style="{StaticResource HomeRailStatValueStyle}"
                                        AutomationProperties.Name="All-time microphone minutes, pauses included" />
-                            <TextBlock Text="Mic minutes" Style="{StaticResource HomeMetricLabelStyle}" TextWrapping="Wrap" />
+                            <TextBlock Text="Mic minutes" Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap" />
                         </StackPanel>
                     </Grid>
                 </Border>
                 <TextBlock x:Name="HomeInsightsFootnote" Text="Usage statistics are not available yet." Margin="0,12,0,0"
-                           Style="{StaticResource HomeCardFootnoteStyle}" TextWrapping="Wrap" />
+                           Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap" />
                 <!-- Which models produced those words: the same all-time usage, so it shares the card. -->
                 <Border Margin="0,16,0,0" Padding="0,16,0,0" BorderThickness="0,1,0,0" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
                     <StackPanel Spacing="{StaticResource HomeModelsCardGap}">
                         <StackPanel Spacing="2">
                             <TextBlock Text="Most-used models" Style="{StaticResource BodyStrongTextBlockStyle}"
                                        AutomationProperties.HeadingLevel="Level2" />
-                            <TextBlock Text="Dictation + file sessions · all time" Style="{StaticResource HomeCardFootnoteStyle}" TextWrapping="Wrap" />
+                            <TextBlock Text="Dictation + file sessions · all time" Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap" />
                         </StackPanel>
                         <muxc:ItemsRepeater x:Name="HomeModelRows" ItemTemplate="{StaticResource HomeModelTemplateSelector}">
                             <muxc:ItemsRepeater.Layout><muxc:StackLayout Spacing="{StaticResource HomeModelsCardGap}" /></muxc:ItemsRepeater.Layout>
@@ -124,13 +124,13 @@
                     <Grid ColumnSpacing="8">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                         <TextBlock x:Name="ActivityPeriodText" Text="Last 7 days · includes today" VerticalAlignment="Center"
-                                   Style="{StaticResource HomeCardFootnoteStyle}" TextWrapping="Wrap" />
+                                   Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap" />
                         <local:Badge x:Name="HomeStreakPill" Grid.Column="1" Text="--" VerticalAlignment="Center"
                                      ToolTipService.ToolTip="Consecutive local days with completed dictations. Includes yesterday if there are no dictations today." />
                     </Grid>
                 </StackPanel>
                 <TextBlock x:Name="HomeActivityAvailabilityText" Text="Activity statistics are not available yet."
-                           TextWrapping="Wrap" Style="{StaticResource HomeCardFootnoteStyle}" Visibility="Collapsed" />
+                           TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}" Visibility="Collapsed" />
                 <StackPanel x:Name="ActivityChartPanel" Spacing="4">
                     <Viewbox Stretch="Uniform" StretchDirection="DownOnly" MaxHeight="260"
                              HorizontalAlignment="Center">
@@ -153,30 +153,30 @@
                                                    FontSize="{StaticResource TitleFontSize}" FontWeight="SemiBold" />
                                     </Viewbox>
                                     <TextBlock x:Name="ActivityUnitText" Text="dictations" HorizontalAlignment="Center"
-                                               Style="{StaticResource HomeMetricLabelStyle}" />
+                                               Style="{StaticResource CaptionSecondaryStyle}" />
                                 </StackPanel>
                             </Grid>
                             <TextBlock Text="00" Canvas.Left="140" Canvas.Top="2" Width="40" TextAlignment="Center"
-                                       Style="{StaticResource HomeCardMetaStyle}" />
+                                       Style="{StaticResource CaptionSecondaryStyle}" />
                             <TextBlock Text="06" Canvas.Left="293" Canvas.Top="150" Width="27" TextAlignment="Center"
-                                       Style="{StaticResource HomeCardMetaStyle}" />
+                                       Style="{StaticResource CaptionSecondaryStyle}" />
                             <TextBlock Text="12" Canvas.Left="140" Canvas.Top="300" Width="40" TextAlignment="Center"
-                                       Style="{StaticResource HomeCardMetaStyle}" />
+                                       Style="{StaticResource CaptionSecondaryStyle}" />
                             <TextBlock Text="18" Canvas.Left="0" Canvas.Top="150" Width="27" TextAlignment="Center"
-                                       Style="{StaticResource HomeCardMetaStyle}" />
+                                       Style="{StaticResource CaptionSecondaryStyle}" />
                             <Canvas x:Name="ClockHitTargets" Width="320" Height="320" />
                         </Canvas>
                     </Viewbox>
                     <TextBlock x:Name="ActivityScaleText" HorizontalAlignment="Center"
-                               Style="{StaticResource HomeCardFootnoteStyle}" />
+                               Style="{StaticResource CaptionSecondaryStyle}" />
                     <Grid>
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                        <TextBlock x:Name="ActivityStartText" Style="{StaticResource HomeCardFootnoteStyle}" />
+                        <TextBlock x:Name="ActivityStartText" Style="{StaticResource CaptionSecondaryStyle}" />
                         <TextBlock x:Name="ActivityEndText" Grid.Column="1" HorizontalAlignment="Right"
-                                   Style="{StaticResource HomeCardFootnoteStyle}" />
+                                   Style="{StaticResource CaptionSecondaryStyle}" />
                     </Grid>
                     <TextBlock Text="Local completion time. Dot height shows relative activity."
-                               Style="{StaticResource HomeCardFootnoteStyle}" TextWrapping="Wrap" />
+                               Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap" />
                 </StackPanel>
             </StackPanel>
         </Border>

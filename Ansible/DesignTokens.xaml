@@ -146,8 +146,8 @@
     <x:Double x:Key="HomeSectionHeaderMinHeight">36</x:Double>
     <x:Double x:Key="NavLabelGap">12</x:Double>
     <!-- Radii are WinUI's: ControlCornerRadius (4) for controls, rows, chips, and bars; OverlayCornerRadius (8) for
-         cards, the content layer, and panels. PillCornerRadius rounds a shape fully. -->
-    <CornerRadius x:Key="PillCornerRadius">999</CornerRadius>
+         cards, the content layer, and panels. A fully round shape states half its own Height, the one literal radius
+         the token check accepts; WinUI turns an oversized radius into an ellipse. -->
     <Thickness x:Key="CardBorderThickness">1</Thickness>
     <Thickness x:Key="CardPadding">20</Thickness>
     <Thickness x:Key="SettingsCardPadding">24,4,24,4</Thickness>
@@ -211,16 +211,16 @@
     <x:Double x:Key="MotionFastMilliseconds">120</x:Double>
     <x:Double x:Key="MotionNormalMilliseconds">200</x:Double>
 
-
-
     <!-- Type. The ramp is WinUI's own, used by name and never redefined: CaptionTextBlockStyle 12/16,
-         BodyTextBlockStyle 14/20, BodyStrongTextBlockStyle, SubtitleTextBlockStyle 20/28, TitleTextBlockStyle 28/36,
+         BodyTextBlockStyle 14/20, BodyStrongTextBlockStyle, BodyLargeTextBlockStyle 18/24 for transcript reading text,
+         SubtitleTextBlockStyle 20/28, TitleTextBlockStyle 28/36,
          TitleLargeTextBlockStyle 40/52. The sizes below repeat that ramp for controls that take a FontSize. A style
          in this file adds a role (colour, wrapping) to a ramp step; none introduces a size. -->
     <x:Double x:Key="CaptionFontSize">12</x:Double>
     <x:Double x:Key="CaptionLineHeight">16</x:Double>
     <x:Double x:Key="BodyFontSize">14</x:Double>
     <x:Double x:Key="BodyLineHeight">20</x:Double>
+    <x:Double x:Key="BodyLargeFontSize">18</x:Double>
     <x:Double x:Key="SubtitleFontSize">20</x:Double>
     <x:Double x:Key="TitleFontSize">28</x:Double>
     <x:Double x:Key="TitleLargeFontSize">40</x:Double>
@@ -239,14 +239,6 @@
     <Style x:Key="HomeCardTitleStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
         <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
     </Style>
-    <Style x:Key="HomeCardMetaStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionSecondaryStyle}">
-        <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
-    </Style>
-    <Style x:Key="HomeCardFootnoteStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionSecondaryStyle}">
-        <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
-    </Style>
-    <Style x:Key="HomeMetricLabelStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionSecondaryStyle}">
-    </Style>
     <Style x:Key="HistoryEmptyTitleStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
         <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
         <Setter Property="TextAlignment" Value="Center" />
@@ -263,8 +255,9 @@
         <Setter Property="Padding" Value="{StaticResource KeycapPadding}" />
         <Setter Property="MinHeight" Value="{StaticResource KeycapMinHeight}" />
     </Style>
-    <Style x:Key="KeycapTextStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
+    <Style x:Key="KeycapTextStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
         <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="LineHeight" Value="{StaticResource CaptionLineHeight}" />
         <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
     </Style>
     <Style x:Key="SearchKeycapStyle" TargetType="Border" BasedOn="{StaticResource KeycapStyle}">
@@ -279,9 +272,9 @@
         <Setter Property="HorizontalAlignment" Value="Left" />
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
-    <Style x:Key="SearchKeycapTextStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
-        <Setter Property="FontWeight" Value="Normal" />
+    <Style x:Key="SearchKeycapTextStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
         <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+        <Setter Property="LineHeight" Value="{StaticResource CaptionLineHeight}" />
         <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
     </Style>
     <!-- Layering (learn.microsoft.com/windows/apps/design/signature-experiences/layering). Mica is the base layer:
@@ -309,10 +302,9 @@
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Padding" Value="0" />
-        <Setter Property="FontSize" Value="{StaticResource BodyFontSize}" />
+        <Setter Property="FontSize" Value="{StaticResource BodyLargeFontSize}" />
         <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
     </Style>
-
 
         <Style x:Key="HistoryDividerStyle" TargetType="Border">
             <Setter Property="Height" Value="1" />
@@ -321,6 +313,7 @@
         </Style>
 
     <Style x:Key="HistoryTranscriptTextStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
+        <Setter Property="LineHeight" Value="{StaticResource BodyLineHeight}" />
         <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
         <Setter Property="TextWrapping" Value="Wrap" />
         <Setter Property="IsTextSelectionEnabled" Value="True" />
