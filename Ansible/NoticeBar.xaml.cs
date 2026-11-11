@@ -59,7 +59,6 @@ public sealed partial class NoticeBar : UserControl
         {
             var button = new Button { Content = actions[index].Label };
             var position = index;
-            // The newest post's delegate runs: it captured the state the notice now describes.
             button.Click += (_, _) =>
             {
                 _content?.Actions?[position].Invoke();
@@ -81,20 +80,6 @@ public sealed partial class NoticeBar : UserControl
     private void CloseClicked(object sender, RoutedEventArgs args) => CloseRequested?.Invoke(this, EventArgs.Empty);
 }
 
-/// <summary>
-/// Lays a notice out as the stock InfoBar does. Its five children are, in order: the icon, the title, the message,
-/// the action buttons, and the close button. A collapsed child takes no space. The text never wraps raggedly:
-/// <list type="number">
-/// <item>When the title and message fit on one line beside the actions, everything shares one row, centred.</item>
-/// <item>Otherwise, when each fits on a line of its own beside the actions, the message sits under the title and
-/// the actions stay beside them.</item>
-/// <item>Otherwise the actions move under the text, aligned with it, and the close button stays at the top right.</item>
-/// <item>When the text still does not fit on one line, the message starts its own line under the title and wraps
-/// under its own start.</item>
-/// </list>
-/// The choice follows the text and the width, so a short confirmation keeps its Undo beside it in a narrow window and
-/// a long message stacks in a wide one.
-/// </summary>
 public sealed partial class NoticeBarPanel : Panel
 {
     private const double IconGap = 12;
@@ -102,7 +87,6 @@ public sealed partial class NoticeBarPanel : Panel
     private const double ActionsGap = 12;
     private const double CloseGap = 8;
     private const double StackedRowGap = 8;
-    // Buttons on the last row need more room under them than the bar's padding gives a line of text.
     private const double StackedBottomInset = 4;
     private bool _stacked;
     private bool _oneLine;
@@ -162,18 +146,15 @@ public sealed partial class NoticeBarPanel : Panel
         var textTop = Math.Max(0, (firstRow - textHeight) / 2);
         if (_oneLine)
         {
-            // The message follows the title on its line.
             var messageLeft = lead + titleSize.Width + TextGap(title, message);
             title.Arrange(new Rect(lead, textTop, titleSize.Width, titleSize.Height));
             message.Arrange(new Rect(messageLeft, textTop, Math.Max(messageSize.Width, lead + textWidth - messageLeft), messageSize.Height));
         }
         else
         {
-            // The message starts its own line under the title, so both wrap at the same left edge.
             title.Arrange(new Rect(lead, textTop, textWidth, titleSize.Height));
             message.Arrange(new Rect(lead, textTop + titleSize.Height, textWidth, messageSize.Height));
         }
-        // The icon is as tall as one line of text and shares the first line.
         var iconSize = icon.DesiredSize;
         icon.Arrange(new Rect(0, textTop + (Math.Min(textHeight, iconSize.Height) - iconSize.Height) / 2,
             iconSize.Width, iconSize.Height));
@@ -190,7 +171,6 @@ public sealed partial class NoticeBarPanel : Panel
         return finalSize;
     }
 
-    // A collapsed child measures to nothing and takes its gap with it.
     private static double Reserved(UIElement child, double gap) =>
         child.DesiredSize.Width > 0 ? child.DesiredSize.Width + gap : 0;
 

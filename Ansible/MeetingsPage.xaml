@@ -14,10 +14,6 @@
                 <Border Grid.Column="1" Style="{StaticResource HistoryDividerStyle}"/>
             </Grid>
         </DataTemplate>
-        <!-- Every row has the same two text lines, so a status badge never changes its height. The row's hover fill
-             extends 12 DIP left of the list so its text lines up with the day labels and the page heading. The row
-             opens the meeting; the options button sits over the row's right padding as a sibling, never inside it,
-             so the row stays the first button under MeetingGroups and each control keeps its own focus and name. -->
         <DataTemplate x:Key="MeetingRowTemplate" x:DataType="local:MeetingHistoryRow">
             <Grid>
                 <Button Tag="{x:Bind Summary.Id}" Click="MeetingClicked" Style="{StaticResource SubtleButtonStyle}"
@@ -28,8 +24,6 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <!-- A finished meeting with nothing to read shows its title in the secondary colour, so
-                             meetings with transcripts stand out. -->
                         <StackPanel Spacing="2">
                             <TextBlock Text="{x:Bind Title}" Style="{StaticResource RowTitleStyle}"
                                        TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
@@ -41,8 +35,6 @@
                             <TextBlock Text="{x:Bind Details}" Style="{StaticResource CaptionSecondaryStyle}"
                                        TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
                         </StackPanel>
-                        <!-- A badge appears only when the detail line does not already name the state: a failure that
-                             kept saved text (critical icon), or a live or interrupted meeting with speech. -->
                         <local:Badge Grid.Column="1" Text="{x:Bind Status}" VerticalAlignment="Center"
                                      Visibility="{x:Bind local:MeetingsPage.VisibleIf(IsCriticalFailure)}">
                             <local:Badge.Icon>
@@ -72,8 +64,6 @@
                     <TextBlock x:Name="NewMeetingLabel" Text="Start meeting" FontWeight="SemiBold"/>
                 </StackPanel>
             </Button>
-            <!-- The overflow sits after the primary action, at the far edge above the row menus. Shown only while two or more finished meetings hold no speech (MeetingList.Empty); one empty meeting
-                 is deleted from its row. -->
             <Button x:Name="MoreOptionsButton" Style="{StaticResource IconButtonStyle}" VerticalAlignment="Center"
                     Visibility="Collapsed" ToolTipService.ToolTip="More options" AutomationProperties.Name="More options">
                 <FontIcon Glyph="&#xE712;" FontSize="16"/>
@@ -84,12 +74,9 @@
                 </MenuFlyout></Button.Flyout>
             </Button>
         </local:PageCanvas.HeaderActions>
-        <!-- The list spans the page's content width, so the row options sit under the header actions. With no
-             meetings, the shared empty state centres in the space under the heading. -->
         <Grid>
             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
             <StackPanel x:Name="UnreadableMeetings" Spacing="12" Margin="0,0,0,8" Visibility="Collapsed"/>
-            <!-- One flat list of day headers and rows: nested x:Bind item lists do not marshal to WinRT. -->
             <ItemsControl x:Name="MeetingGroups" Grid.Row="1" VerticalAlignment="Top" Visibility="Collapsed"
                           AutomationProperties.Name="Saved meetings">
                 <ItemsControl.ItemTemplateSelector>
@@ -97,7 +84,6 @@
                                                        RowTemplate="{StaticResource MeetingRowTemplate}" />
                 </ItemsControl.ItemTemplateSelector>
             </ItemsControl>
-            <!-- Top-aligned like every page empty state: the backplate sits 64 DIP under the header. -->
             <local:EmptyState x:Name="NoMeetings" Grid.Row="1" Visibility="Collapsed" Glyph="&#xE8F2;"
                               VerticalAlignment="Top" Margin="0,20,0,0"
                               Title="No meetings yet"

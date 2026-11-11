@@ -37,11 +37,8 @@ public sealed partial class DictationPage : Page
     private bool _homeDataInitialized;
     private DateTime _homeDataDate;
     private bool _disposed;
-    // Removing the current transcript's history row must not bring it back as the separate transcript card.
     private Guid? _removedTranscriptOperationId;
-    // While the page scrolls, the wide insights rail stays on screen. HistoryView pins its own header while it has rows.
     private StickyPin? _railPin;
-    // Whether History holds any saved entry. Only then is Home wide with the two-column layout (UpdateHomeWidth).
     private bool _homeHasHistory;
 
     private readonly AppNotices _notices;
@@ -75,7 +72,6 @@ public sealed partial class DictationPage : Page
         HistoryView.CopyRequested += CopyHistoryItem;
         HistoryView.RemoveRequested += RemoveHistoryItem;
         HistoryView.PinHeader(HomeViewport);
-        // Set the width before the page loads, so a page with saved history does not open at the reading width.
         UpdateHomeWidth(_history.Snapshot().Count > 0);
         HistoryChanged();
         _observer = new UiSessionObserver(session, DispatcherQueue, state =>
@@ -176,12 +172,9 @@ public sealed partial class DictationPage : Page
         }
         catch
         {
-            // Installed model snapshots still carry catalog display names. An unavailable catalog adds no label.
         }
     }
 
-    // The catalog entry gives the plain name Speech models shows. An installed snapshot has no precision to drop,
-    // so before the catalog loads, or without it, the snapshot's full name is the only name there is.
     private HomeModelName? HomeModelNameFor(string modelId)
     {
         if (_homeCatalogNames.TryGetValue(modelId, out var catalogName)) { return catalogName; }
@@ -217,7 +210,6 @@ public sealed partial class DictationPage : Page
             _homeUsageError = _state.UsageError;
             var insights = HomeInsightsProjection.Create(_state.Usage, _state.UsageError,
                 HomeModelNameFor, DateOnly.FromDateTime(DateTime.Today), TimeZoneInfo.Local);
-            // After a failed usage write a zero is not proof of no dictations, so History treats the count as unknown.
             _homeDictations = insights.UsageWarning is null ? insights.Dictations : null;
             HomeInsightsColumn.Render(insights);
             PostStorageNotice(UsageNoticeKey, "Some usage statistics are missing", insights.UsageWarning);
@@ -234,7 +226,6 @@ public sealed partial class DictationPage : Page
         PostStorageNotice(HistoryNoticeKey, "History needs attention", model.StorageError);
     }
 
-    // Storage problems are conditions, not events: the notice stays until the error clears and cannot be closed.
     private void PostStorageNotice(string key, string title, string? message) => _notices.Set(key,
         message is null ? null : new NoticeContent(NoticeSeverity.Warning, title, message, IsClosable: false), NoticeArea.Dictation);
 
@@ -268,7 +259,6 @@ public sealed partial class DictationPage : Page
         HistoryView.ShowCopied(item.OperationId);
     }
 
-    // Renders synchronously so the view can move keyboard focus to the row that took the removed row's place.
     private void RemoveHistoryItem(HomeHistoryItem item)
     {
         if (!_history.Remove(item.OperationId)) { return; }
@@ -281,9 +271,6 @@ public sealed partial class DictationPage : Page
         UpdateShortcutLayout();
     }
 
-    // Too narrow for one line, the buttons wrap under the hint and stay left-aligned so the sentence reads on. The
-    // row gap exists only while they wrap: an empty second row must not add height under the button, or the header
-    // centres the button above the title's line.
     private void UpdateShortcutLayout()
     {
         var stackedHelper = HomeViewport.ContentWidth < (double)Application.Current.Resources["ShortcutStackThreshold"];
@@ -293,10 +280,6 @@ public sealed partial class DictationPage : Page
         Grid.SetColumnSpan(ShortcutButtons, stackedHelper ? 2 : 1);
     }
 
-    // Home is two columns only when History has a saved entry to fill one: an empty History beside the rail is a
-    // near-empty column. Without entries (a search that matches nothing still has entries) the page keeps the reading
-    // width and stacks, so the two insights cards do not stretch across a wide window. Runs on every history render,
-    // so the first saved entry and the last removal switch the layout live.
     private void UpdateHomeWidth(bool hasHistory)
     {
         if (_homeHasHistory == hasHistory && HomeViewport.Wide == hasHistory) return;
@@ -307,17 +290,12 @@ public sealed partial class DictationPage : Page
 
     private void HomeColumnsSizeChanged(object sender, SizeChangedEventArgs args) => UpdateHomeColumns(args.NewSize.Width);
 
-    // Wide: history beside a fixed insights rail that sticks at the history header's content top. History takes the
-    // star row, so it is at least as tall as the rail and the rail can travel within it. Stacked (narrow, or no saved
-    // history): history comes first, so its header, search, and empty state are in the first viewport, and the
-    // insights cards follow it in a strip after the normal grid gap. Only the two-column rail is pinned.
     private void UpdateHomeColumns(double width)
     {
         var stacked = !_homeHasHistory || width < (double)Application.Current.Resources["HomeRailStackThreshold"];
         if (stacked) { _railPin?.Dispose(); _railPin = null; }
         else if (!_disposed)
         {
-            // The rail top lines up with the stuck header's content and keeps the same gap above the visible bottom.
             var gap = HistoryView.StuckContentTop;
             _railPin ??= HomeViewport.Pin(HomeInsightsColumn, HistoryView, gap, gap);
         }

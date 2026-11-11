@@ -54,16 +54,11 @@
                 </StackPanel>
             </Button>
         </Grid>
-        <!-- Pages sit on one inset content layer; cards are the only container level inside it. The page's single
-             scroller and its scrollbar stay inside the layer, whose content is clipped to the rounded corners. Pages are
-             cached and swap instantly: sidebar navigation is frequent and flat, so an entrance would replay on every
-             switch without explaining anything. -->
         <Border x:Name="ContentLayer" Grid.Row="1" Grid.Column="1" Margin="{StaticResource ContentLayerMargin}"
                 Style="{StaticResource ContentLayerStyle}">
             <ContentControl x:Name="MainContent" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
                             IsTabStop="False" SizeChanged="MainContentSizeChanged" />
         </Border>
-        <!-- Outside MainContent so Exit stays available while shutdown disables the pages. -->
         <local:NoticeHost x:Name="Notices" Grid.Row="1" Grid.Column="1" Margin="{StaticResource ContentLayerMargin}" />
     </Grid>
 </Window>

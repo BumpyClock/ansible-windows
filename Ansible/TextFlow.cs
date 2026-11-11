@@ -1,11 +1,7 @@
 namespace Ansible;
 
-/// <summary>Line-breaking help for wrapped help text.</summary>
 internal static class TextFlow
 {
-    /// <summary>
-    /// Joins the last two words with a no-break space, so wrapped text never ends in a one-word line.
-    /// </summary>
     public static string NoWidow(string? text)
     {
         if (string.IsNullOrEmpty(text)) return "";

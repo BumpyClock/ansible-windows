@@ -18,10 +18,8 @@ public sealed partial class ModelCard : UserControl
     private bool _removeDiscardsPartial;
     private bool _companion;
     private const string MemoryEstimateTip = "Memory is an estimate made before loading, not measured use.";
-    // Segoe Fluent Icons: Microphone for a dictation model, People for the meeting speaker companion.
     private const string DictationGlyph = "\uE720";
     private const string CompanionGlyph = "\uE716";
-    // Below this row width the buttons move under the name so the name and badges keep readable space.
     private const double StackedActionsWidth = 600;
 
     public ModelCard()
@@ -33,7 +31,6 @@ public sealed partial class ModelCard : UserControl
 
     public string ModelId { get; private set; } = "";
 
-    /// <summary>The name the row shows: the catalog display name without its quantization suffix.</summary>
     public string DisplayName => _name;
 
     public event Action<string>? PrimaryRequested;
@@ -88,15 +85,12 @@ public sealed partial class ModelCard : UserControl
         ApplyIcon();
     }
 
-    // busyReason explains a Download or Resume that waits on another model operation.
     public void Update(ModelDownloadSnapshot snapshot, bool idle, bool managerIdle, bool managerBusy, bool active, bool canSelect,
         string busyReason = "Wait for the current model operation to finish.")
     {
         var state = snapshot.State;
         _state = state;
 
-        // The group heading says In use, Installed or Available. One badge says what an in-use model is used for;
-        // the other calls out a state the person must act on.
         InUseBadge.Text = _companion ? "In use for meetings" : "In use for dictation";
         InUseBadge.Visibility = active || _companion && snapshot.HasModelFile ? Visibility.Visible : Visibility.Collapsed;
         var stateLabel = ModelCardText.StateLabel(snapshot.Supported, state);
@@ -109,7 +103,6 @@ public sealed partial class ModelCard : UserControl
         var showProgress = state is ModelInstallState.Downloading or ModelInstallState.Paused or ModelInstallState.Verifying;
         ProgressPanel.Visibility = showProgress ? Visibility.Visible : Visibility.Collapsed;
         DownloadProgress.Value = snapshot.Progress;
-        // Verification reports no progress, so the bar shows activity rather than a fill level.
         DownloadProgress.IsIndeterminate = state == ModelInstallState.Verifying;
         ProgressText.Text = state switch
         {
@@ -125,9 +118,6 @@ public sealed partial class ModelCard : UserControl
             ErrorNotice.Show(new NoticeContent(NoticeSeverity.Error, "Model file problem", error, IsClosable: false));
         ErrorNotice.Visibility = snapshot.Error is null ? Visibility.Collapsed : Visibility.Visible;
 
-        // One transfer action per row, always a default button: a page of models has no single primary action.
-        // While a transfer runs the action stops it; an installed file has no transfer action because Use for
-        // dictation or the In use group covers it.
         var transferring = state is ModelInstallState.Downloading or ModelInstallState.Verifying;
         var label = ModelCardText.PrimaryAction(state);
         PrimaryButton.Content = label;
@@ -137,8 +127,7 @@ public sealed partial class ModelCard : UserControl
               state is ModelInstallState.NotInstalled or ModelInstallState.Paused or ModelInstallState.Failed);
         var showPrimary = !active && (transferring || !snapshot.HasModelFile);
         PrimaryHost.Visibility = showPrimary ? Visibility.Visible : Visibility.Collapsed;
-        // A disabled button shows no tooltip, so the host explains a wait on another model operation. A Border has
-        // no automation peer, so the button carries the same help text for keyboard and Narrator users.
+        // A Border has no automation peer, so the button carries the same help text for keyboard and Narrator users.
         var waitReason = !transferring && !PrimaryButton.IsEnabled && managerBusy && snapshot.Supported ? busyReason : null;
         ToolTipService.SetToolTip(PrimaryHost, waitReason);
         AutomationProperties.SetHelpText(PrimaryHost, waitReason ?? "");
@@ -153,15 +142,10 @@ public sealed partial class ModelCard : UserControl
             _ => $"{label} {_name}"
         });
 
-        // Use for dictation appears only when it can be clicked; a disabled button cannot explain itself. A row that
-        // is still downloading or verifying offers Pause or Stop only, so selection follows a finished install.
-        // The diarization companion never offers it: it is not a dictation model.
         var showUse = !_companion && state == ModelInstallState.Installed && !active && snapshot.Supported && canSelect;
         UseButton.Visibility = showUse ? Visibility.Visible : Visibility.Collapsed;
-        // An empty button group takes no space, so it adds no gap when it sits under the name.
         ActionsPanel.Visibility = showProgress || showPrimary || showUse ? Visibility.Visible : Visibility.Collapsed;
 
-        // An installed file takes precedence; after removal a leftover partial surfaces as Discard.
         _removeDiscardsPartial = !snapshot.HasModelFile && snapshot.HasPartial;
         var removable = snapshot.HasModelFile || snapshot.HasPartial;
         RemoveSeparator.Visibility = RemoveItem.Visibility = removable ? Visibility.Visible : Visibility.Collapsed;
@@ -182,7 +166,6 @@ public sealed partial class ModelCard : UserControl
 
     private void OnLoaded(object sender, RoutedEventArgs e) => ApplyIcon();
 
-    // More keeps its corner; only the transfer and selection buttons move under the name.
     private void RowSizeChanged(object sender, SizeChangedEventArgs args)
     {
         var stacked = args.NewSize.Width < StackedActionsWidth;
@@ -211,11 +194,8 @@ public sealed partial class ModelCard : UserControl
             System.Diagnostics.Debug.WriteLine($"Ansible: high-contrast icon update for '{ModelId}' could not be dispatched.");
     }
 
-    // A mark with a "{name}-dark.png" loads that file in the dark theme.
     private static bool HasDarkVariant(string assetName) => assetName == "vibevoice";
 
-    // The glyph shows until a maker's mark opens, and stays when there is none, High Contrast is on, or loading
-    // fails. The mark sits on the themed tile.
     private void ApplyIcon()
     {
         TileGlyph.Visibility = Visibility.Visible;

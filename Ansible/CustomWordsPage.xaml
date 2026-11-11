@@ -6,8 +6,6 @@
     <local:PageCanvas Title="Dictionary"
                       Subtitle="Words you add here help Ansible recognize them when you speak. They are stored on this device.">
         <local:PageCanvas.HeaderActions>
-            <!-- The page's task is the field and Add below, so the header holds only the overflow. Import is a
-                 rare bulk command in its menu, as on Meetings. -->
             <Button x:Name="MoreOptionsButton" Style="{StaticResource IconButtonStyle}" VerticalAlignment="Center"
                     ToolTipService.ToolTip="More options" AutomationProperties.Name="More options">
                 <FontIcon Glyph="&#xE712;" FontSize="16"/>
@@ -29,9 +27,6 @@
             <TextBlock x:Name="BusyText" Text="Finish the current operation to change your dictionary."
                        Margin="0,0,0,12" Visibility="Collapsed" Style="{StaticResource CaptionSecondaryStyle}" />
 
-            <!-- One field finds and adds. The field and Add are one unit at the stock 32 control height. The line
-                 under the field is its helper text: how many words the dictionary holds, or why a word was rejected.
-                 Both share the one line, so a validation message never moves the list. -->
             <Grid ColumnSpacing="8" RowSpacing="4">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" MaxWidth="420" />
@@ -79,9 +74,6 @@
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
-            <!-- The shared empty state. RenderWords fills it for an empty dictionary and for a search with no match.
-                 It is centred with its backplate 64 DIP under the field: the list's 12 DIP margin, this 28 DIP margin,
-                 and the empty state's own 24 DIP padding. -->
             <local:EmptyState x:Name="EmptyWords" Margin="0,28,0,0" VerticalAlignment="Top" Visibility="Collapsed"
                               IconData="{StaticResource DictionaryIconData}"
                               AutomationProperties.AutomationId="CustomWordsEmptyState" />

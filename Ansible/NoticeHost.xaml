@@ -6,18 +6,12 @@
              AutomationProperties.Name="Notifications" AutomationProperties.LandmarkType="Custom"
              PointerEntered="HostPointerEntered" PointerExited="HostPointerExited"
              GotFocus="HostGotFocus" LostFocus="HostLostFocus">
-    <!-- Sits at the bottom of the content panel. The window ends the page's scroll viewport above the host's height,
-         so notices are docked in a band under the page's scroll viewport and never cover page content. The bars
-         fill one column, which the window lines up with the page's column (AlignWith); the space past the column's
-         cap stays empty. No background, so the band beside the bars shows the content layer and passes input
-         through. -->
     <Grid x:Name="Layout" Margin="{StaticResource NoticeHostMargin}">
         <Grid.ColumnDefinitions><ColumnDefinition x:Name="BarColumn" Width="*" /></Grid.ColumnDefinitions>
         <StackPanel Spacing="{StaticResource NoticeHostSpacing}">
             <Button x:Name="MoreButton" HorizontalAlignment="Left" Height="28" Padding="12,0" CornerRadius="14"
                     FontSize="{StaticResource CaptionFontSize}" Visibility="Collapsed" Click="MoreClicked"
                     AutomationProperties.AutomationId="MoreNoticesButton" />
-            <!-- Theme transitions follow the Windows animation setting: notices rise into place and the others slide. -->
             <StackPanel x:Name="Bars" Spacing="{StaticResource NoticeHostSpacing}">
                 <StackPanel.ChildrenTransitions>
                     <TransitionCollection>

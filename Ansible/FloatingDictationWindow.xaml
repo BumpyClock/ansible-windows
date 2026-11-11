@@ -10,9 +10,6 @@
             HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
             Loaded="PreviewLoaded" SizeChanged="PreviewSizeChanged" ActualThemeChanged="ThemeChanged"
             Background="{ThemeResource SolidBackgroundFillColorBaseBrush}" BorderBrush="{ThemeResource TextFillColorPrimaryBrush}">
-        <!-- The native composition pill draws the visible overlay. This region-empty host sizes the
-             window and resolves the theme text colour from BorderBrush for high-contrast drawing.
-             Width, Height, and CornerRadius come from FloatingPreviewPresentation in code. -->
         <Border x:Name="PillBorder" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
                 BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}" BorderThickness="0"
                 HorizontalAlignment="Center">

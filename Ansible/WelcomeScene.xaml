@@ -4,8 +4,6 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <UserControl.Resources>
         <!-- Parts built in code take these styles so ThemeResource brushes follow theme changes. -->
-        <!-- Lesson keycaps share KeycapStyle's fill, bottom edge, and corner radius at a larger size. The face
-             layers fill the cap's grid, so the shared padding and minimum height do not apply. -->
         <Style x:Key="SceneCapFaceStyle" TargetType="Border" BasedOn="{StaticResource KeycapStyle}">
             <Setter Property="Padding" Value="0" />
             <Setter Property="MinHeight" Value="0" />
@@ -53,7 +51,6 @@
                 <RowDefinition Height="80" />
                 <RowDefinition Height="20" />
             </Grid.RowDefinitions>
-            <!-- A long chord shrinks the row rather than widening the dialog. -->
             <Viewbox StretchDirection="DownOnly" AutomationProperties.AccessibilityView="Raw" IsHitTestVisible="False">
                 <StackPanel Orientation="Horizontal" Spacing="16">
                     <StackPanel x:Name="Keys" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" />
@@ -63,7 +60,6 @@
                                 Background="{ThemeResource SolidBackgroundFillColorBaseBrush}" BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}" BorderThickness="1">
                             <StackPanel x:Name="Bars" Orientation="Horizontal" Spacing="4" Height="20" VerticalAlignment="Center" />
                         </Border>
-                        <!-- The accent ring marks a live microphone. -->
                         <Border x:Name="ListeningRing" Height="36" CornerRadius="18" BorderBrush="{ThemeResource AccentTextFillColorPrimaryBrush}"
                                 BorderThickness="1.5" Opacity="0" />
                     </Grid>

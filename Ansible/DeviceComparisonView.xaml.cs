@@ -7,8 +7,6 @@ namespace Ansible;
 
 public sealed partial class DeviceComparisonView : UserControl
 {
-    // The bars stay readable down to this width; with the divider, gaps, and result column the wide arrangement needs
-    // their sum, so a narrower panel stacks the result under the bars instead.
     private const double MinimumMetricsWidth = 400;
 
     private DeviceComparisonSnapshot? _comparison;
@@ -24,12 +22,6 @@ public sealed partial class DeviceComparisonView : UserControl
         Render();
     }
 
-    /// <summary>
-    /// Shows the last comparison in plain words. <paramref name="modelName"/> is the plain name the page shows; the
-    /// comparison's full catalog name becomes its tooltip. Without measurements the panel explains why from
-    /// <paramref name="choice"/>, the saved processor, and keeps the engine's technical <paramref name="summary"/>
-    /// one hover away.
-    /// </summary>
     internal void Show(DeviceComparisonSnapshot? comparison, string summary, string modelName, NativeBackend choice)
     {
         _comparison = comparison;
@@ -53,7 +45,6 @@ public sealed partial class DeviceComparisonView : UserControl
         ComparisonMetrics.Visibility = _hasMeasurements ? Visibility.Visible : Visibility.Collapsed;
         ComparisonDetails.Visibility = _hasMeasurements ? Visibility.Visible : Visibility.Collapsed;
         SummaryOnlyText.Visibility = _hasMeasurements ? Visibility.Collapsed : Visibility.Visible;
-        // A manual processor skips the test, so it never produces a comparison of its own.
         SummaryOnlyText.Text = _choice == NativeBackend.Auto
             ? "No speed test result yet."
             : $"Auto is off, so Ansible uses the {DeviceName(_choice)} you chose and skips the speed test.";
@@ -73,14 +64,12 @@ public sealed partial class DeviceComparisonView : UserControl
         ShowValue(CpuComparisonValue, cpuValid ? cpu : null, comparison?.CpuError);
         ShowValue(GpuComparisonValue, gpuValid ? gpu : null, comparison?.GpuError);
 
-        // Lower elapsed time leads. A tie or a single valid measurement has no slower device to contrast.
         var leader = cpuValid && gpuValid
             ? cpu!.Value < gpu!.Value ? "CpuLeads" : gpu.Value < cpu.Value ? "GpuLeads" : "NoLeader"
             : cpuValid ? "CpuLeads" : "GpuLeads";
         VisualStateManager.GoToState(this, leader, false);
 
         var recommended = comparison!.RecommendedBackend;
-        // Each model and kind keeps its own result, so the panel names the one it shows.
         var kind = comparison.Kind switch
         {
             DeviceComparisonKind.Meeting => "meetings",
@@ -99,9 +88,6 @@ public sealed partial class DeviceComparisonView : UserControl
     private static string DeviceName(NativeBackend backend) =>
         backend == NativeBackend.Cpu ? "CPU" : "graphics card";
 
-    // Why Auto picked this processor, following DeviceBenchmark.Select. The graphics card wins when it is faster or
-    // within five percent of the CPU, unless only the CPU keeps a meeting's pace. So with both times valid, a CPU pick
-    // was always strictly faster. A device that failed its test or a later recognition has no valid time.
     private static string Reason(NativeBackend recommended, double? cpu, double? gpu)
     {
         if (cpu is null) return "The CPU could not be used.";
@@ -112,7 +98,6 @@ public sealed partial class DeviceComparisonView : UserControl
             : "The CPU was only slightly faster, and Auto prefers the graphics card when they are this close.";
     }
 
-    // A failed device shows one plain word. The exact time, or the engine's error, stays one hover away.
     private static void ShowValue(TextBlock value, double? milliseconds, string? error)
     {
         value.Text = milliseconds is { } measured ? FormatSeconds(measured) : error is null ? "Unavailable" : "Failed";
@@ -128,7 +113,6 @@ public sealed partial class DeviceComparisonView : UserControl
         return $"{local.ToString("d MMM yyyy", culture)}, {local.ToString("t", culture)}";
     }
 
-    // One decimal under 10 seconds, whole seconds from there. Rounding to tenths comes first, so 9.96 s reads "10 s".
     private static string FormatSeconds(double milliseconds)
     {
         var culture = CultureInfo.CurrentCulture;
@@ -151,7 +135,6 @@ public sealed partial class DeviceComparisonView : UserControl
         ApplyLayout();
     }
 
-    // Wide: bars | divider | result. Compact: result stacks under the bars and the divider is dropped.
     private void ApplyLayout()
     {
         var gap = (double)Application.Current.Resources["BenchmarkColumnGap"];

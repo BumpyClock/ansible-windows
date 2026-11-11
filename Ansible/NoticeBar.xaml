@@ -4,19 +4,12 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="using:Ansible"
              HorizontalAlignment="Stretch">
-    <!-- One control for every notification, drawn as a docked bar like the stock InfoBar: flat, with the card
-         stroke and the control corner radius. NoticeHost docks it in the band under the page; a page may place it
-         inline only for a condition that explains that page. -->
     <Border x:Name="Surface"
             Background="{ThemeResource SolidBackgroundFillColorQuarternaryBrush}"
             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
             BorderThickness="1"
             CornerRadius="{StaticResource ControlCornerRadius}"
             Padding="16,8,8,8">
-        <!-- The panel takes its five children in this order: icon, title, message, actions, close. The title and
-             message share one line beside the actions when they fit, or one line each when those fit. Otherwise the
-             actions move under the text, and when the text still does not fit on one line the message gets its
-             own lines under the title. -->
         <local:NoticeBarPanel>
             <Grid x:Name="IconHost" Width="20" Height="20" AutomationProperties.AccessibilityView="Raw">
                 <!-- ThemeResource fills keep the disc correct when the theme changes while a notice shows. -->

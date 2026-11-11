@@ -29,13 +29,6 @@
             <Setter Property="Opacity" Value="0" />
         </Style>
     </ContentDialog.Resources>
-    <!-- A fixed width and a step area as tall as the tallest step keep the dialog still across steps and states.
-         Every step has the same parts at the same heights: a heading, one line of description, and a block of two
-         icon rows (a statement over two lines of detail) or the practice field with its status. The footer then sits
-         24 DIP under the content on every step. A step whose text wraps shorter is centred in the space it leaves, so
-         the gap is shared above and below it instead of opening above the footer. The footer is the stock
-         ContentDialog button row, set from code per step: Next (Done on the last step) as the accent default, Back
-         from step 2, and Skip for now until the last step. The step pager sits in the content above it. -->
     <Grid x:Name="LessonRoot" Width="640" RowSpacing="24">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -54,7 +47,6 @@
                            AutomationProperties.HeadingLevel="Level1" />
                 <TextBlock x:Name="Description" Style="{StaticResource SecondaryTextStyle}" TextWrapping="Wrap" />
             </StackPanel>
-            <!-- Every icon row is an icon tile, a Body Strong statement, and secondary Body detail. -->
             <StackPanel x:Name="IntroPanel" Grid.Row="1" Spacing="24" VerticalAlignment="Center">
                 <Grid ColumnSpacing="12">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
@@ -100,7 +92,6 @@
                              PlaceholderText="Click here, then use your shortcut." Padding="8,8,48,8"
                              AutomationProperties.Name="Practice field"
                              AutomationProperties.AutomationId="WelcomePracticeField" />
-                    <!-- Pops in only when a real practice dictation lands in the field. -->
                     <Grid x:Name="Celebration" Width="28" Height="28" Margin="0,0,12,12" HorizontalAlignment="Right" VerticalAlignment="Bottom"
                           IsHitTestVisible="False" Visibility="Collapsed" AutomationProperties.AccessibilityView="Raw">
                         <Ellipse x:Name="Burst" Stroke="{ThemeResource AccentTextFillColorPrimaryBrush}" StrokeThickness="2" Opacity="0" RenderTransformOrigin="0.5,0.5">
@@ -112,7 +103,6 @@
                         </Border>
                     </Grid>
                 </Grid>
-                <!-- A fixed slot: the status and its one action change with the session without moving anything below. -->
                 <Grid Height="40" Margin="0,4,0,0" ColumnSpacing="12">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                     <TextBlock x:Name="PracticeStatus" MaxLines="2" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"

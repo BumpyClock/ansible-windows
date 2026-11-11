@@ -17,8 +17,6 @@ internal sealed partial class HomeModelTemplateSelector : DataTemplateSelector
 
 public sealed partial class HomeInsightsView : UserControl
 {
-    // A strip card is never narrower than this: the 260 DIP activity clock plus card padding and border. The strip
-    // after history drops a column and wraps to a new row first.
     private const double StripCardMinWidth = 300;
 
     private HomeInsightsViewModel? _model;
@@ -28,7 +26,6 @@ public sealed partial class HomeInsightsView : UserControl
         InitializeComponent();
     }
 
-    /// <summary>False stacks the cards as a side rail. True flows them into columns as a strip after history.</summary>
     internal bool Strip
     {
         get => RailCards.MinColumnWidth < double.PositiveInfinity;
@@ -39,8 +36,6 @@ public sealed partial class HomeInsightsView : UserControl
         }
     }
 
-    // In a strip the cards fill their row so both end on one line. In the rail each keeps its natural height, except
-    // the rhythm card without statistics, which fills its row to centre its message.
     private void UpdateCardHeights()
     {
         WordsCard.VerticalAlignment = Strip ? VerticalAlignment.Stretch : VerticalAlignment.Top;
@@ -98,7 +93,6 @@ public sealed partial class HomeInsightsView : UserControl
         AutomationProperties.SetName(ActivityTotalText, activity.TotalText);
         AutomationProperties.SetHelpText(ActivityTotalText,
             $"{activity.PeriodText}. {string.Join(". ", activity.Hours.Select(hour => hour.Description))}");
-        // An empty period keeps the ring and says when the last dictation was, when usage knows it.
         ActivityScaleText.Text = activity.IsEmpty
             ? _model.LastDictationText ?? "No dictations in this period"
             : $"Busiest hour · {activity.ScaleText}";
@@ -143,7 +137,6 @@ public sealed partial class HomeInsightsView : UserControl
         ClockTicks.Data = ticks;
     }
 
-    // Shown only when usage statistics are unavailable. A period with no dictations still draws the graph.
     private void ShowActivityMessage(string title, string? detail)
     {
         ActivityEmptyState.Title = title;

@@ -18,11 +18,9 @@ public sealed partial class MeetingWindow : Window
     private readonly MeetingSession _session;
     private readonly MeetingStore _store;
     private readonly string? _diagnosticsDirectory;
-    // One notice slot: the newest error or model notice replaces the last, and starting an action clears it.
     private const string NoticeKey = "meeting";
     private readonly AppNotices _notices = new();
     private MeetingDocument? _document;
-    // A name given before Start; the session document does not exist until then.
     private string? _pendingTitle;
     private string? _shownNotice;
     private readonly bool _savedMeeting;
@@ -88,7 +86,6 @@ public sealed partial class MeetingWindow : Window
         InitializeComponent();
         Root.RequestedTheme = theme;
         Notices.Attach(_notices);
-        // Notices float over the transcript's bottom edge; padding past them keeps the last lines reachable.
         var transcriptPadding = TranscriptRows.Padding;
         Notices.CoveredHeightChanged += (_, _) => TranscriptRows.Padding =
             transcriptPadding with { Bottom = transcriptPadding.Bottom + Notices.CoveredHeight };
@@ -112,7 +109,6 @@ public sealed partial class MeetingWindow : Window
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
         AppWindow.Resize(new Windows.Graphics.SizeInt32(640, 900));
         RefreshProcesses();
-        // Opening focus goes to the meeting's next step or its transcript, never to the rename control.
         Root.Loaded += (_, _) => (_savedMeeting ? (Control)TranscriptRows : StartButton).Focus(FocusState.Programmatic);
         AppWindow.Closing += ClosingRequested;
         Closed += (_, _) =>
@@ -137,13 +133,10 @@ public sealed partial class MeetingWindow : Window
         }
     }
 
-    // One line in the footer beside its button at the window's narrowest width. The capture setup states that audio is never stored.
     private const string SavedText = "Saved on this device";
 
-    /// <summary>The heading, title bar caption, and taskbar name: the meeting's name, or when it started.</summary>
     private void RenderTitle()
     {
-        // A name given before Start shows until the session saves it, so it never flickers to the generated name.
         var title = _document is null || (_pendingTitle is not null && MeetingText.IsUntitled(_document.Title))
             ? _pendingTitle ?? "New meeting"
             : MeetingText.Title(_document.Title, _document.CreatedAt);
@@ -154,7 +147,6 @@ public sealed partial class MeetingWindow : Window
 
     private void MeetingTitleTrimmedChanged(TextBlock sender, IsTextTrimmedChangedEventArgs args) => UpdateTitleToolTip();
 
-    // A trimmed heading shows its full name on hover; a heading that fits says what selecting it does.
     private void UpdateTitleToolTip() =>
         ToolTipService.SetToolTip(TitleButton, MeetingTitle.IsTextTrimmed ? MeetingTitle.Text : "Rename meeting");
 
@@ -247,7 +239,6 @@ public sealed partial class MeetingWindow : Window
             MeetingSessionPhase.Completed => (MicrophoneGlyph, "No speech transcribed", MeetingText.EmptyExplanation(MeetingStatus.Completed)),
             _ => (MicrophoneGlyph, "Ready when you are", "Start the meeting to see what each person says here.")
         };
-        // The notice lives for the whole meeting; open it once per text so a dismissal sticks.
         if (state.SelectionNotice != _shownNotice)
         {
             _shownNotice = state.SelectionNotice;
@@ -304,7 +295,6 @@ public sealed partial class MeetingWindow : Window
             TranscriptEmpty.Glyph = _document.Status == MeetingStatus.Failed ? ErrorGlyph : MicrophoneGlyph;
             TranscriptEmpty.Title = "No speech transcribed";
             TranscriptEmpty.Detail = MeetingText.EmptyExplanation(_document.Status);
-            // A saved meeting with nothing to read offers its one useful next step.
             TranscriptEmpty.Footer ??= CreateEmptyDeleteButton();
         }
         if (ReferenceEquals(_renderedTurns, _document.Turns) && ReferenceEquals(_renderedNames, _document.SpeakerNames) && ReferenceEquals(_renderedAutoNames, _document.AutoSpeakerNames)) return;
@@ -312,7 +302,6 @@ public sealed partial class MeetingWindow : Window
         _renderedTurns = _document.Turns;
         _renderedNames = _document.SpeakerNames;
         _renderedAutoNames = _document.AutoSpeakerNames;
-        // A live meeting follows new speech; a saved meeting opens at its first segment.
         if (_transcript.Reconcile(_document) && nearBottom && !_savedMeeting) _followTranscriptBottom = true;
     }
 
@@ -364,8 +353,6 @@ public sealed partial class MeetingWindow : Window
     {
         if (!_followTranscriptBottom || _transcriptScroll is null) return;
         _followTranscriptBottom = false;
-        // Follow only after normal layout has computed the extent. Never force layout for
-        // every transcript update, or move a reader who is reviewing earlier speech.
         _transcriptScroll.ChangeView(null, _transcriptScroll.ScrollableHeight, null, true);
     }
 
@@ -446,7 +433,6 @@ public sealed partial class MeetingWindow : Window
     private async void RenameTitleClicked(object sender, RoutedEventArgs args)
     {
         if (_busy || _closing || _closed || _shutdownPending) return;
-        // An untitled meeting opens an empty field; its generated name is only a hint and is never saved.
         var current = _document is null ? _pendingTitle ?? "" : MeetingText.IsUntitled(_document.Title) ? "" : _document.Title;
         var input = new TextBox { Text = current, PlaceholderText = MeetingTitle.Text, MaxLength = 200, Header = "Meeting name" };
         var dialog = new ContentDialog { Title = "Rename meeting", Content = input, PrimaryButtonText = "Save", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Primary };
@@ -825,7 +811,6 @@ public sealed partial class MeetingWindow : Window
     private sealed record MeetingProcessChoice(int Id, string DisplayName, bool IsTeams, DateTime StartedUtc);
 }
 
-/// <summary>The one confirmation before saved meetings are permanently deleted, shared by the meeting window and the Meetings list.</summary>
 internal static class MeetingDeletion
 {
     public static ContentDialog Dialog(int count, XamlRoot root)

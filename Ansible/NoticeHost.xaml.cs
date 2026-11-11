@@ -12,11 +12,6 @@ using Windows.UI.ViewManagement;
 
 namespace Ansible;
 
-/// <summary>
-/// Renders the window's AppNotices that apply to the current page as floating NoticeBars, most severe first.
-/// Owns auto-dismiss timers. Reports the height it covers so each window keeps its content clear of the notices; the
-/// main window shortens the page's scroll viewport, so notices sit in a band under the page's scroll viewport.
-/// </summary>
 public sealed partial class NoticeHost : UserControl
 {
     private readonly Dictionary<string, Grid> _bars = [];
@@ -46,10 +41,6 @@ public sealed partial class NoticeHost : UserControl
 
     public event EventHandler? CoveredHeightChanged;
 
-    /// <summary>
-    /// Lines the bars up with a page's column: the same left and right insets and the same width cap, so a notice
-    /// reads as part of the page it is docked under.
-    /// </summary>
     public void AlignWith(double left, double right, double maxWidth)
     {
         var margin = (Thickness)Application.Current.Resources["NoticeHostMargin"];
@@ -97,7 +88,6 @@ public sealed partial class NoticeHost : UserControl
                 _bars[key] = wrapper = CreateBar(key);
                 Bars.Children.Insert(index, wrapper);
             }
-            // A notice that changes rank moves in place, keeping its element, focus, and announcement state.
             else if (Bars.Children.IndexOf(wrapper) is var current && current != index)
                 Bars.Children.Move((uint)current, (uint)index);
             var bar = (NoticeBar)wrapper.Children[0];
@@ -115,7 +105,6 @@ public sealed partial class NoticeHost : UserControl
     {
         var bar = new NoticeBar();
         bar.CloseRequested += (_, _) => Close(key);
-        // The wrapper carries the exit motion and the Escape handler.
         var wrapper = new Grid();
         wrapper.Children.Add(bar);
         wrapper.KeyDown += (_, args) =>
@@ -139,7 +128,6 @@ public sealed partial class NoticeHost : UserControl
         else if (_notices.Confirmation is { } confirmation) _notices.EndConfirmation(confirmation);
     }
 
-    // Removal plays a short fade and drop. Skipped when Windows animations are off.
     private static void AddHideAnimation(UIElement element)
     {
         var resources = Application.Current.Resources;
@@ -174,7 +162,6 @@ public sealed partial class NoticeHost : UserControl
         Render();
     }
 
-    // The confirmation timer pauses while the reader is pointing at or focused inside the notices.
     private void SyncTimer(NoticeConfirmation? confirmation)
     {
         if (ReferenceEquals(_timed, confirmation)) return;

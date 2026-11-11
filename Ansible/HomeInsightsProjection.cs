@@ -3,9 +3,6 @@ using System.Globalization;
 
 namespace Ansible;
 
-/// <summary>
-/// A model as Home names it: the plain name Speech models shows, and the full catalog name for its tooltip.
-/// </summary>
 internal sealed record HomeModelName(string Name, string FullName)
 {
     internal static HomeModelName From(NativeModelEntry entry) =>
@@ -87,7 +84,6 @@ internal static class HomeInsightsProjection
             streak++;
             cursor = cursor.AddDays(-1);
         }
-        // After a failed usage write the newest record may not be the last dictation, so the date is left out.
         var lastDictation = usageError is null && dictations.Length > 0
             ? DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(dictations.Max(entry => entry.CompletedAt), timeZone).DateTime)
             : (DateOnly?)null;

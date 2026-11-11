@@ -13,7 +13,6 @@
             <Setter Property="MinHeight" Value="{StaticResource BenchmarkBarHeight}" />
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Minimum" Value="0" />
-            <!-- The track must read against the panel fill in both themes and stay lighter than the slower bar. -->
             <Setter Property="Background" Value="{ThemeResource ControlAltFillColorQuarternaryBrush}" />
             <Setter Property="Foreground" Value="{ThemeResource ControlStrongFillColorDisabledBrush}" />
         </Style>
@@ -36,8 +35,6 @@
     <Border Background="{ThemeResource ControlAltFillColorSecondaryBrush}"
             CornerRadius="{StaticResource OverlayCornerRadius}"
             Padding="{StaticResource BenchmarkPanelPadding}">
-        <!-- The faster measured device gets the accent bar and primary text; the other stays on the neutral track.
-             The accent fill is the one ProgressBar uses: olive on light and citron on dark, so it holds 3:1 on the track. -->
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup x:Name="LeaderStates">
                 <VisualState x:Name="NoLeader" />
@@ -105,7 +102,6 @@
                 <TextBlock x:Name="ComparisonDetailsText" Style="{StaticResource BenchmarkFootnoteStyle}" />
             </StackPanel>
 
-            <!-- Empty state shares the first row; it never shows alongside measurements. -->
             <TextBlock x:Name="SummaryOnlyText" Grid.ColumnSpan="3"
                        Style="{StaticResource CaptionSecondaryStyle}"
                        Visibility="Collapsed" />

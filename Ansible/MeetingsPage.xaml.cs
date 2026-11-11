@@ -60,7 +60,6 @@ public sealed partial class MeetingsPage : Page
             if (_shutdown.IsCancellationRequested) return;
             _notices.Set(ErrorNoticeKey, null);
             var summaries = result.Summaries;
-            // Day headings are relative, so a new local date re-renders even when no meeting changed.
             var today = DateOnly.FromDateTime(DateTime.Today);
             if (_rendered && _displayedDate == today && _displayedSummaries.SequenceEqual(summaries) &&
                 _displayedFailures.SequenceEqual(result.Failures)) return;
@@ -92,7 +91,6 @@ public sealed partial class MeetingsPage : Page
             UnreadableMeetings.Visibility = result.Failures.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
             NoMeetings.Visibility = summaries.Count == 0 && result.Failures.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
             MeetingGroups.Visibility = summaries.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
-            // One empty meeting is deleted from its row; several get one header menu action.
             var empty = MeetingList.Empty(summaries).Count;
             MoreOptionsButton.Visibility = empty >= 2 ? Visibility.Visible : Visibility.Collapsed;
             AutomationProperties.SetName(DeleteEmptyMenuItem, $"Delete {empty} empty meetings");
@@ -166,7 +164,6 @@ public sealed partial class MeetingsPage : Page
         await _openTask;
     }
 
-    // Built from the row's id when opened, so the menu never depends on a binding reaching flyout items.
     private void MeetingOptionsClicked(object sender, RoutedEventArgs args)
     {
         if (sender is not Button { Tag: Guid id } button ||
@@ -212,7 +209,6 @@ public sealed partial class MeetingsPage : Page
         catch (Exception error) { ShowError(error); }
         finally { _deleteDialog = null; }
         if (!deleted || _shutdown.IsCancellationRequested) return;
-        // A listing started before the delete may still be running; wait for it, then list again.
         if (_refreshTask is not null) await _refreshTask;
         await (_refreshTask = RefreshCoreAsync());
         NewMeetingButton.Focus(FocusState.Programmatic);

@@ -8,8 +8,6 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="HomeStyles.xaml" />
             </ResourceDictionary.MergedDictionaries>
-            <!-- Insertion status reads as row metadata: an icon and a word, no pill. Colour carries the outcome:
-                 an accent check when the field confirmed it, muted when unverified, amber when the text did not arrive. -->
             <Style x:Key="HistoryTagTextStyle" TargetType="TextBlock" BasedOn="{StaticResource HistoryMetaTextStyle}">
                 <Setter Property="TextWrapping" Value="NoWrap" />
             </Style>
@@ -30,12 +28,9 @@
             <Style x:Key="HistoryCopyIconStyle" TargetType="FontIcon">
                 <Setter Property="FontSize" Value="{StaticResource IconButtonGlyphSize}" />
             </Style>
-            <!-- Text that never reached the app keeps an amber Copy so the recovery action stays obvious. -->
             <Style x:Key="HistoryNeedsCopyIconStyle" TargetType="FontIcon" BasedOn="{StaticResource HistoryCopyIconStyle}">
                 <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCautionBrush}" />
             </Style>
-            <!-- Rows sit on the page surface. The negative margin keeps row text aligned with the section header
-                 while the hover fill extends past it. -->
             <Style x:Key="HomeHistoryRowStyle" TargetType="Border" BasedOn="{StaticResource HistoryRowStyle}">
                 <Setter Property="Padding" Value="12" />
                 <Setter Property="Margin" Value="-12,0" />
@@ -43,20 +38,13 @@
             <Thickness x:Key="HomeHistoryGroupMargin">0,16,0,8</Thickness>
         </ResourceDictionary>
     </UserControl.Resources>
-    <!-- History is as tall as its content. Wide, the page may stretch it beside the rail; the extra space stays
-         below the content. -->
     <Grid x:Name="HistorySection" RowSpacing="{StaticResource SectionHeaderGap}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
-        <!-- Rows are built in code; this anchor supplies the hover fill resolved for this element's theme. -->
         <Border x:Name="HoverFillAnchor" Visibility="Collapsed" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
-        <!-- While History shows rows, the header sticks to the top of the page scroller (PinHeader) and draws above
-             the rows that scroll under it. Its fill repeats the window's two layers, Mica under the content layer fill, so it hides those rows
-             without a visible band. The fill reaches past the row hover fill on both sides and adds breathing room above and below
-             while stuck; matching negative margins keep the layout where it was. -->
         <Grid x:Name="HistoryHeaderGrid" Style="{StaticResource HomeSectionHeaderStyle}" Margin="-12,-12,-12,-8"
               Padding="12,12,12,8" Background="Transparent" Canvas.ZIndex="1"
               SizeChanged="HistoryHeaderSizeChanged">
@@ -92,18 +80,14 @@
                     HorizontalAlignment="Right" VerticalAlignment="Center" IsHitTestVisible="False">
                 <TextBlock Text="Ctrl K" Style="{StaticResource SearchKeycapTextStyle}" />
             </Border>
-            <!-- A hairline under the stuck header. It exists only while the header is pinned, and the pin fades it in
-                 only while rows pass underneath. -->
             <Border x:Name="HistoryHeaderDivider" Grid.ColumnSpan="4" Grid.RowSpan="2" Margin="-12,0,-12,-8"
                     Style="{StaticResource HistoryDividerStyle}" VerticalAlignment="Bottom" IsHitTestVisible="False"
                     Visibility="Collapsed" />
         </Grid>
-        <!-- History flows in the page scroller. No card, no fixed height, no nested scroller. -->
         <StackPanel x:Name="HistoryContent" Grid.Row="1">
             <TextBlock x:Name="OversizedNotice" TextWrapping="Wrap" Margin="0,4,0,8"
                        Style="{StaticResource CaptionSecondaryStyle}" Visibility="Collapsed" />
             <StackPanel x:Name="HistoryRows" SizeChanged="HistoryRowsSizeChanged">
-                <!-- Full rebuilds (search, first render) detach these; only real history changes animate. -->
                 <StackPanel.ChildrenTransitions>
                     <TransitionCollection>
                         <AddDeleteThemeTransition />
@@ -112,10 +96,6 @@
                 </StackPanel.ChildrenTransitions>
             </StackPanel>
         </StackPanel>
-        <!-- No rows: the app's one empty state, a glyph, title, and detail line; the page header already shows the
-             shortcut (RenderEmptyState). It is top-aligned and centred,
-             with its backplate 64 DIP under the header: two 8 DIP row gaps, this 24 DIP margin, and the empty
-             state's own 24 DIP padding. -->
         <local:EmptyState x:Name="EmptyMessage" Grid.Row="2" Glyph="&#xE720;" Visibility="Collapsed"
                           VerticalAlignment="Top" Margin="0,24,0,0" />
     </Grid>

@@ -11,7 +11,6 @@ namespace Ansible;
 
 public sealed partial class MainWindow : Window
 {
-    // Notice keys, one per source. A source's newest notice replaces its previous one.
     private const string SessionNoticeKey = "session";
     private const string MicrophonePermissionNoticeKey = "microphone-permission";
     private const string MicrophoneCheckNoticeKey = "microphone-check";
@@ -65,7 +64,6 @@ public sealed partial class MainWindow : Window
     private bool _closing;
     private bool _popupFailed;
     private bool _creatingFloating;
-    // Caret of the shortcut destination, read once at press time. Null for in-app dictation or an unknown caret.
     private CaretBounds? _overlayAnchor;
     private bool? _capturePrivacy;
     private PageCanvas? _noticeCanvas;
@@ -113,7 +111,6 @@ public sealed partial class MainWindow : Window
             (title, message) => _notices.Set(MeetingDetectionNoticeKey,
                 new NoticeContent(NoticeSeverity.Warning, title, message), NoticeArea.Meetings));
         _suggestions.Changed += RenderMeetingSuggestion;
-        // Page callbacks run after _pages is assigned below.
         _welcome = new WelcomeDialog(session, () => _shortcut.IsBusy, _notices);
         _dictation = new DictationPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this), _history, _notices, _shortcut);
         _settings = new MainPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this),
@@ -169,7 +166,6 @@ public sealed partial class MainWindow : Window
         var startupStarted = startupGeneration is null ? 0 : Stopwatch.GetTimestamp();
         try
         {
-            // Let the initial Window.Activate finish before Windows can display consent.
             await Task.Yield();
             token.ThrowIfCancellationRequested();
             var permissionStarted = startupGeneration is null ? 0 : Stopwatch.GetTimestamp();
@@ -179,7 +175,6 @@ public sealed partial class MainWindow : Window
             catch (Exception error)
             {
                 permissionFailure = error;
-                // The preflight retains Unavailable and blocks capture. File/model workflows still initialize.
                 Debug.WriteLine($"Ansible: microphone permission preflight failed, HRESULT 0x{error.HResult:X8}.");
             }
             finally
@@ -282,7 +277,6 @@ public sealed partial class MainWindow : Window
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { return; }
         catch (Exception error) { notice = new(NoticeSeverity.Error, "Meeting recovery failed", error.Message); }
-        // Initialization publishes its own notice. Report recovery problems afterward without delaying dictation.
         if (notice is not null && _startupTask is not null) await _startupTask;
         if (token.IsCancellationRequested || _closed || _closing) return;
         if (notice is not null) _notices.Set(MeetingRecoveryNoticeKey, notice, NoticeArea.Meetings);
@@ -302,7 +296,6 @@ public sealed partial class MainWindow : Window
             _notices.Set(MicrophonePermissionNoticeKey, null);
             return;
         }
-        // Short on purpose. The notice shows two buttons beside the text, and a longer body pushes them onto their own row.
         var message = status switch
         {
             MicrophonePermissionStatus.DeniedByUser => "Turn it on for Ansible and desktop apps.",
@@ -315,13 +308,11 @@ public sealed partial class MainWindow : Window
             [new("Open Windows Settings", OpenMicrophoneSettings), new("Check again", CheckMicrophonePermission)]),
             dismissed: () =>
             {
-                // Dismissal holds for this status only; a different failure, or opening Settings, shows it again.
                 if (_microphonePermission.Status != MicrophonePermissionStatus.Allowed)
                     _dismissedMicrophonePermissionStatus = _microphonePermission.Status;
             });
     }
 
-    // A check already in progress ignores the request; the notice keeps its actions rather than reflowing.
     private async void CheckMicrophonePermission()
     {
         if (_closing || _closed || !_permissionCheckComplete || _permissionRetryTask is { IsCompleted: false }) return;
@@ -372,7 +363,6 @@ public sealed partial class MainWindow : Window
         AppTitleBar.SetCompact(compact);
         foreach (var button in _pages.Sidebar.Select(page => page.Nav))
         {
-            // A local value outlasts Navigate's style swaps, so the icon stays centred in the compact rail.
             button.HorizontalContentAlignment = compact ? HorizontalAlignment.Center : HorizontalAlignment.Left;
             if (button.Content is StackPanel content)
             {
@@ -380,7 +370,6 @@ public sealed partial class MainWindow : Window
                 foreach (var label in content.Children.OfType<TextBlock>())
                     label.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
             }
-            // The rail has no labels, so each entry names itself on hover and keyboard focus, beside the rail.
             ToolTipService.SetToolTip(button, compact ? AutomationProperties.GetName(button) : null);
             ToolTipService.SetPlacement(button, Microsoft.UI.Xaml.Controls.Primitives.PlacementMode.Right);
         }
@@ -388,7 +377,6 @@ public sealed partial class MainWindow : Window
 
     private void NoticeColumnChanged(object? sender, EventArgs args) => AlignNotices();
 
-    // The notice band shares the current page's column, so a notice starts and ends where the page content does.
     private void AlignNotices()
     {
         if (_noticeCanvas is null) return;
@@ -403,11 +391,9 @@ public sealed partial class MainWindow : Window
             _dismissedMicrophonePermissionStatus = null;
             RenderMicrophonePermission();
         }
-        // Reselecting the current page keeps its state and scroll position.
         if (ReferenceEquals(MainContent.Content, page.Page)) return;
         MainContent.Content = page.Page;
         foreach (var item in _pages.Sidebar) item.SetSelected(ReferenceEquals(item.Nav, page.Nav));
-        // Notices sit in a band under the current page's scroll viewport, so only that page ends its viewport above them.
         if (_noticeCanvas is not null)
         {
             _noticeCanvas.BottomInset = 0;
@@ -421,8 +407,7 @@ public sealed partial class MainWindow : Window
         AppTitleBar.ShowPage(page.Title, page.Canvas);
     }
 
-    // The content layer's border draws rounded corners but does not clip; clip the layer so the page scrollbar and
-    // content stay inside the corners.
+    // The content layer's border draws rounded corners but does not clip.
     private void MainContentSizeChanged(object sender, SizeChangedEventArgs args)
     {
         var visual = ElementCompositionPreview.GetElementVisual(MainContent);
@@ -431,8 +416,7 @@ public sealed partial class MainWindow : Window
             radius, radius, radius, radius);
     }
 
-    // A window hidden to the tray or minimized is not showing the lesson, so it must not hold the global shortcut.
-    // AppWindow.IsVisible stays true for a minimized window, so the presenter state is checked separately.
+    // AppWindow.IsVisible stays true for a minimized window.
     private WelcomeDialog? CurrentWelcome() =>
         !_closed && AppWindow.IsVisible
         && AppWindow.Presenter is not OverlappedPresenter { State: OverlappedPresenterState.Minimized }
@@ -450,7 +434,7 @@ public sealed partial class MainWindow : Window
         ShowWelcome();
     }
 
-    // The lesson opens over whichever page is current. Only one ContentDialog may be open per XamlRoot.
+    // Only one ContentDialog may be open per XamlRoot.
     private async void ShowWelcome()
     {
         if (_closing || _closed || _welcome.IsShowing) return;
@@ -546,7 +530,6 @@ public sealed partial class MainWindow : Window
 
     private void RenderMeetingSuggestion()
     {
-        // Open notetaker is ignored while a confirmation runs; MeetingSuggestions guards the second request.
         _notices.Set(MeetingSuggestionNoticeKey, _suggestions.Offer is null ? null : new NoticeContent(NoticeSeverity.Information,
             "Teams microphone is active.", "Start local notetaking? Recording starts only when you click Start.",
             [new("Open notetaker", OpenSuggestedMeeting)]), dismissed: _suggestions.Dismiss);
@@ -558,7 +541,7 @@ public sealed partial class MainWindow : Window
         {
             var window = OpenMeeting(null);
             if (!window.SelectDetectedMeeting(candidate)) return false;
-            window.Activate(); // Opening the notetaker does not start capture.
+            window.Activate();
             return true;
         });
         if (!_closing && !_closed && outcome is MeetingSuggestionOutcome.Rejected or MeetingSuggestionOutcome.Failed)
@@ -752,7 +735,6 @@ public sealed partial class MainWindow : Window
     {
         try
         {
-            // The caps follow the chord on every step, before the lesson decides whether it may dictate.
             if (_welcome.IsShowing) _welcome.ShowShortcutHeld(pressed);
             if (pressed && CurrentWelcome() is { AcceptsShortcut: false }) return;
             if (pressed) { await _shortcut.PressedAsync(_configuredHotkey); }
@@ -786,7 +768,6 @@ public sealed partial class MainWindow : Window
 
     private void PrepareRecordCapture()
     {
-        // Snapshot runs synchronously on accepted activation, before the native capture worker can see a frame.
         try { _floating?.ForceRecordPrivacy(true); }
         catch (Exception error) { ShowCapturePrivacyFailure(error.Message); throw; }
     }
@@ -871,7 +852,7 @@ public sealed partial class MainWindow : Window
         if (_closing) { return; }
         _closing = true;
         MainContent.IsEnabled = false;
-        // The dialog sits in the popup layer, outside MainContent, so it is closed rather than disabled.
+        // The dialog sits in the popup layer, outside MainContent.
         _welcome.Dismiss();
         _notices.Set(ShutdownErrorNoticeKey, null);
         _shortcut.BeginShutdown();

@@ -1,7 +1,4 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<!-- The one empty state: a glyph on a round backplate, a title, an optional line of help, and an optional slot
-     under it (a shortcut hint, a button). Every page and card that has nothing to show uses this, at this scale.
-     A page whose sidebar icon is drawn artwork passes the same path data as IconData in place of a glyph. -->
 <UserControl x:Class="Ansible.EmptyState"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"

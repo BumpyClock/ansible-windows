@@ -188,7 +188,6 @@ public sealed class MeetingListProjectionTests
         Assert.False(completed.HasNeutralStatus);
         Assert.Equal("Interrupted", interrupted.Status);
         Assert.True(interrupted.HasNeutralStatus);
-        // Every saved state has a label decision; an unmapped state would throw.
         foreach (var status in Enum.GetValues<MeetingStatus>()) MeetingText.Status(status);
     }
 

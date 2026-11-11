@@ -3,12 +3,9 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="using:Ansible">
     <Window.SystemBackdrop><MicaBackdrop /></Window.SystemBackdrop>
-    <!-- Header and footer stay fixed; the transcript between them is the window's one scrolling region. -->
     <Grid x:Name="Root" ActualThemeChanged="RootThemeChanged">
         <Grid.RowDefinitions><RowDefinition Height="48"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
         <Border Grid.Row="1" Grid.RowSpan="3" Margin="8,0,8,8" Style="{StaticResource ContentLayerStyle}" />
-        <!-- The drag region: the app mark and the meeting title, with the main window brand's left inset and gap.
-             The right margin and the brand margin's own right inset keep the title clear of the caption buttons. -->
         <Grid x:Name="TitleBar" Margin="0,0,128,0" Padding="{StaticResource SidebarBrandMargin}"
               ColumnSpacing="{StaticResource NavLabelGap}">
             <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
@@ -17,13 +14,10 @@
                        Style="{StaticResource CaptionSecondaryStyle}"/>
         </Grid>
 
-        <!-- The title line holds the heading, its rename pencil, and More options on one vertical centre. A long
-             title trims to one line and shows in full in the heading's tooltip. -->
         <Grid Grid.Row="1" Margin="8,0" Padding="16,12,12,16" ColumnSpacing="8" RowSpacing="4"
               BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" BorderThickness="0,0,0,1">
             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-            <!-- The heading is the rename control, the same pattern as the speaker labels below. -->
             <Button x:Name="TitleButton" Style="{StaticResource SubtleButtonStyle}" Padding="8,4"
                     HorizontalAlignment="Left" VerticalAlignment="Center"
                     Click="RenameTitleClicked" ToolTipService.ToolTip="Rename meeting">
@@ -81,7 +75,6 @@
         </Grid>
 
         <Grid Grid.Row="2" Margin="8,0">
-            <!-- Padding sits inside the scroller, so the stock scrollbar runs in the right gutter beside the text. -->
             <ListView x:Name="TranscriptRows" SelectionMode="None" IsItemClickEnabled="False"
                       Padding="16,16,16,24" Loaded="TranscriptLoaded" LayoutUpdated="TranscriptLayoutUpdated"
                       ScrollViewer.VerticalScrollBarVisibility="Visible"
@@ -118,7 +111,6 @@
                                            VerticalAlignment="Center"
                                            Visibility="{x:Bind local:MeetingWindow.VisibleIfText(TimingText), Mode=OneWay}"/>
                             </StackPanel>
-                            <!-- Text sits 8 in from the row edge so it lines up with the speaker name inside its button. -->
                             <TextBlock Text="{x:Bind Text, Mode=OneWay}" Style="{StaticResource HistoryTranscriptTextStyle}"
                                        Margin="8,0"/>
                             <HyperlinkButton Content="{x:Bind OriginalToggleText, Mode=OneWay}" Click="OriginalToggleClicked"
@@ -135,7 +127,6 @@
             <local:EmptyState x:Name="TranscriptEmpty" Glyph="&#xE720;" Title="Ready when you are"
                               Detail="Start the meeting to see what each person says here."/>
         </Grid>
-        <!-- Floats over the bottom of the transcript area and never moves content; the footer controls stay reachable. -->
         <local:NoticeHost x:Name="Notices" Grid.Row="2"/>
 
         <Grid Grid.Row="3" Margin="8,0,8,8" Padding="24,16" ColumnSpacing="8"

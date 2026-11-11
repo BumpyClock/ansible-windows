@@ -3,12 +3,6 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Microsoft.UI.Xaml.Controls">
-    <!--
-        Colour. Neutral text, fills, strokes, and materials are WinUI's own theme resources, used by name and never
-        redefined here, so Mica, Acrylic, High Contrast, and transparency fallbacks stay the platform's. The only
-        colour this dictionary owns is the citron brand accent: the ramp WinUI derives its accent brushes from, the
-        primary button, the activity ramp, and the app mark.
-    -->
     <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Light">
             <!-- WinUI derives its accent brushes from this ramp: toggles, sliders, progress, and accent text. -->
@@ -23,14 +17,12 @@
             <Color x:Key="BrandAccentStrongColor">#B9D63F</Color>
             <Color x:Key="BrandAccentSoftColor">#E9F797</Color>
             <Color x:Key="BrandOnAccentColor">#19210D</Color>
-            <!-- The accent as a graphic on a neutral surface: olive on light, citron on dark. -->
             <Color x:Key="BrandAccentGraphicColor">#526719</Color>
 
             <SolidColorBrush x:Key="AppOnAccentBrush" Color="{StaticResource BrandOnAccentColor}" />
             <SolidColorBrush x:Key="AccentSoftBrush" Color="{StaticResource BrandAccentGraphicColor}" Opacity="0.12" />
             <SolidColorBrush x:Key="ActivityMediumBrush" Color="{StaticResource BrandAccentGraphicColor}" Opacity="0.55" />
 
-            <!-- The primary button is citron with ink text in both themes. -->
             <SolidColorBrush x:Key="AccentButtonBackground" Color="{StaticResource BrandAccentColor}" />
             <SolidColorBrush x:Key="AccentButtonBackgroundPointerOver" Color="{StaticResource BrandAccentStrongColor}" />
             <SolidColorBrush x:Key="AccentButtonBackgroundPressed" Color="{StaticResource BrandAccentSoftColor}" />
@@ -70,14 +62,12 @@
             <Color x:Key="BrandAccentStrongColor">#B9D63F</Color>
             <Color x:Key="BrandAccentSoftColor">#E9F797</Color>
             <Color x:Key="BrandOnAccentColor">#19210D</Color>
-            <!-- The accent as a graphic on a neutral surface: olive on light, citron on dark. -->
             <Color x:Key="BrandAccentGraphicColor">#D3EB62</Color>
 
             <SolidColorBrush x:Key="AppOnAccentBrush" Color="{StaticResource BrandOnAccentColor}" />
             <SolidColorBrush x:Key="AccentSoftBrush" Color="{StaticResource BrandAccentGraphicColor}" Opacity="0.12" />
             <SolidColorBrush x:Key="ActivityMediumBrush" Color="{StaticResource BrandAccentGraphicColor}" Opacity="0.55" />
 
-            <!-- The primary button is citron with ink text in both themes. -->
             <SolidColorBrush x:Key="AccentButtonBackground" Color="{StaticResource BrandAccentColor}" />
             <SolidColorBrush x:Key="AccentButtonBackgroundPointerOver" Color="{StaticResource BrandAccentStrongColor}" />
             <SolidColorBrush x:Key="AccentButtonBackgroundPressed" Color="{StaticResource BrandAccentSoftColor}" />
@@ -115,10 +105,7 @@
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 
-    <!-- Dimensions, type, motion, and shared styles. -->
     <x:Double x:Key="PageContentMaxWidth">1440</x:Double>
-    <!-- Lists and forms read best in a narrower measure. A page that is one column of rows caps its header and
-         content here; Home takes the full width while it shows history beside the insights rail. -->
     <x:Double x:Key="PageReadingMaxWidth">1000</x:Double>
     <Thickness x:Key="PagePadding">36,24,40,40</Thickness>
     <Thickness x:Key="CompactPagePadding">16</Thickness>
@@ -129,28 +116,18 @@
     <GridLength x:Key="HistorySearchColumnWidth">280</GridLength>
     <Thickness x:Key="PageSectionBottomMargin">0,0,0,20</Thickness>
     <x:Double x:Key="PageSectionSpacing">28</x:Double>
-    <!-- Window notices dock in a band under the page. The main window replaces the side insets with the page
-         column's; the meeting window keeps these. -->
     <Thickness x:Key="NoticeHostMargin">24,8,24,16</Thickness>
     <x:Double x:Key="NoticeHostSpacing">8</x:Double>
     <x:Double x:Key="CardGap">20</x:Double>
     <x:Double x:Key="SectionHeaderGap">8</x:Double>
-    <!-- Home grid: a 320 DIP insights rail beside history, 32 DIP apart. Below 1040 DIP of page content the rail
-         would squeeze history, so the cards follow it as a strip. An empty history is always followed by the strip. -->
     <GridLength x:Key="HomeRailColumnWidth">320</GridLength>
     <x:Double x:Key="HomeRailStackThreshold">1040</x:Double>
     <x:Double x:Key="HomeGridGap">32</x:Double>
     <x:Double x:Key="NavSelectionBarWidth">3</x:Double>
     <x:Double x:Key="HomeSectionHeaderMinHeight">36</x:Double>
     <x:Double x:Key="NavLabelGap">12</x:Double>
-    <!-- Radii are WinUI's: ControlCornerRadius (4) for controls, rows, chips, and bars; OverlayCornerRadius (8) for
-         cards, the content layer, and panels. A fully round shape states half its own Height, the one literal radius
-         the token check accepts; WinUI turns an oversized radius into an ellipse. -->
     <Thickness x:Key="CardBorderThickness">1</Thickness>
     <Thickness x:Key="CardPadding">20</Thickness>
-    <!-- Every card insets its content 20 DIP from the sides. A settings card adds only 4 DIP above and below,
-         because each row brings its own vertical padding. A page header action above a column of in-card
-         actions takes the same side inset so the two line up. -->
     <Thickness x:Key="SettingsCardPadding">20,4,20,4</Thickness>
     <Thickness x:Key="CardInsetActionMargin">0,0,20,0</Thickness>
     <GridLength x:Key="SidebarColumnWidth">248</GridLength>
@@ -158,9 +135,7 @@
     <x:Double x:Key="CompactNavigationThreshold">1000</x:Double>
     <Thickness x:Key="CompactSidebarPadding">4,12,4,12</Thickness>
     <Thickness x:Key="SidebarPadding">12,12,12,12</Thickness>
-    <!-- The brand sits in the title bar row above the sidebar, aligned with the navigation icons. -->
     <Thickness x:Key="SidebarBrandMargin">24,0,12,0</Thickness>
-    <!-- The page area is an inset content layer under the title bar, beside the sidebar. -->
     <Thickness x:Key="ContentLayerMargin">0,4,4,4</Thickness>
     <Thickness x:Key="TitleBarPageTitleMargin">40,0,12,0</Thickness>
     <Thickness x:Key="CompactTitleBarPageTitleMargin">20,0,12,0</Thickness>
@@ -168,7 +143,6 @@
     <x:Double x:Key="BenchmarkValueMaxWidth">160</x:Double>
     <x:Double x:Key="SettingsRowRowSpacing">12</x:Double>
     <x:Double x:Key="SettingsRowDescriptionSpacing">4</x:Double>
-    <!-- About 85 characters of caption text per line. -->
     <x:Double x:Key="SettingsRowDescriptionMaxWidth">480</x:Double>
     <x:Double x:Key="SettingsWideMinWidth">700</x:Double>
     <Thickness x:Key="SettingsRowPadding">0,20</Thickness>
@@ -196,7 +170,6 @@
     <x:Double x:Key="SectionBadgeMinHeight">28</x:Double>
     <x:Double x:Key="SectionBadgeMaxWidth">240</x:Double>
     <Thickness x:Key="HistorySearchPadding">36,8,68,8</Thickness>
-    <!-- History timeline rows (Pencil P4f14c rows xwIiZ..tSBom). -->
     <Thickness x:Key="HistoryRowPadding">20,12,12,12</Thickness>
     <GridLength x:Key="HistoryTimeColumnWidth">64</GridLength>
     <x:Double x:Key="HistoryRowColumnGap">20</x:Double>
@@ -205,15 +178,9 @@
     <x:Double x:Key="IconButtonGlyphSize">16</x:Double>
     <x:Double x:Key="HistoryActionGap">2</x:Double>
     <x:Double x:Key="PillBackdropTintOpacity">0.8</x:Double>
-    <!-- Motion. Theme transitions follow the Windows animation setting on their own. -->
     <x:Double x:Key="MotionFastMilliseconds">120</x:Double>
     <x:Double x:Key="MotionNormalMilliseconds">200</x:Double>
 
-    <!-- Type. The ramp is WinUI's own, used by name and never redefined: CaptionTextBlockStyle 12/16,
-         BodyTextBlockStyle 14/20, BodyStrongTextBlockStyle, BodyLargeTextBlockStyle 18/24 for the dictation result,
-         SubtitleTextBlockStyle 20/28, TitleTextBlockStyle 28/36,
-         TitleLargeTextBlockStyle 40/52. The sizes below repeat that ramp for controls that take a FontSize. A style
-         in this file adds a role (colour, wrapping) to a ramp step; none introduces a size. -->
     <x:Double x:Key="CaptionFontSize">12</x:Double>
     <x:Double x:Key="CaptionLineHeight">16</x:Double>
     <x:Double x:Key="BodyFontSize">14</x:Double>
@@ -230,7 +197,6 @@
         <Setter Property="TextWrapping" Value="Wrap" />
         <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
     </Style>
-    <!-- The title of a list or settings row. Group headings above rows are Body Strong, so a row title is Body. -->
     <Style x:Key="RowTitleStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
         <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
     </Style>
@@ -267,10 +233,6 @@
         <Setter Property="LineHeight" Value="{StaticResource CaptionLineHeight}" />
         <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
     </Style>
-    <!-- Layering (learn.microsoft.com/windows/apps/design/signature-experiences/layering). Mica is the base layer:
-         the title bar and sidebar sit directly on it. The content layer is WinUI's layer fill, one contiguous surface
-         that holds the page; cards segment content on it with WinUI's card fill and stroke. Every fill and stroke is
-         the platform's, so theme, High Contrast, inactive-window, and transparency fallbacks stay the platform's. -->
     <Style x:Key="ContentLayerStyle" TargetType="Border">
         <Setter Property="Background" Value="{ThemeResource LayerFillColorDefaultBrush}" />
         <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
@@ -321,8 +283,6 @@
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
     </Style>
-    <!-- Transparent at rest. The default Button template resolves hover and pressed fills
-         from the theme dictionaries above, including the platform High Contrast pairing. -->
     <Style x:Key="IconButtonStyle" TargetType="Button">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
@@ -357,7 +317,6 @@
         <Setter Property="Background" Value="{ThemeResource ControlFillColorDefaultBrush}" />
         <Setter Property="Foreground" Value="{ThemeResource ActivityMediumBrush}" />
     </Style>
-    <!-- Settings unit -->
     <Thickness x:Key="SettingsRowDividerThickness">0,1,0,0</Thickness>
     <Thickness x:Key="SettingsChildRowPadding">28,20,0,20</Thickness>
     <x:Double x:Key="SettingsFieldWidth">220</x:Double>

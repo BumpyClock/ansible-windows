@@ -9,8 +9,6 @@
         <StaticResource x:Key="ProgressBarTrackCornerRadius" ResourceKey="ControlCornerRadius" />
         <StaticResource x:Key="ProgressBarCornerRadius" ResourceKey="ControlCornerRadius" />
     </Page.Resources>
-    <!-- With saved history Home is two columns, history beside the insights rail, so it takes the full page width.
-         Without any, it stacks at the reading width. Code sets Wide from the history (UpdateHomeWidth). -->
     <local:PageCanvas x:Name="HomeViewport"
                       Title="Good afternoon"
                       SizeChanged="HomeViewportSizeChanged">
@@ -59,9 +57,6 @@
                     </StackPanel>
             </StackPanel>
         </local:PageCanvas.HeaderActions>
-        <!-- PageCanvas gives its content at least the viewport height. The history row takes what the cards above leave,
-             so in the wide layout the rail has a column to travel in; the PageCanvas scroller stays the only vertical
-             scroller. -->
         <Grid>
             <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
             <Border x:Name="RetainedCaptureCard" Margin="{StaticResource PageSectionBottomMargin}" Style="{StaticResource CardStyle}" Visibility="Collapsed">
@@ -85,10 +80,8 @@
                 </Grid.ColumnDefinitions>
 
                 <local:HomeHistoryView x:Name="HistoryView" Grid.Column="0" />
-                <!-- As a rail it sticks beside the history header while the page scrolls (UpdateHomeColumns). -->
                 <local:HomeInsightsView x:Name="HomeInsightsColumn" Grid.Column="1" VerticalAlignment="Top" Canvas.ZIndex="1" />
             </Grid>
-            <!-- A result that is not in saved history (WAV, oversized) sits above history so a long list cannot bury it. -->
             <Border x:Name="TranscriptCard" Grid.Row="1" Margin="{StaticResource PageSectionBottomMargin}" Style="{StaticResource CardStyle}" MinHeight="160" Visibility="Collapsed">
                 <Grid RowSpacing="8">
                     <Grid.RowDefinitions>

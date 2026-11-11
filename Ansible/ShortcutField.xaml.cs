@@ -3,7 +3,6 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace Ansible;
 
-/// <summary>A shortcut shown as keycaps. The hidden <see cref="CaptureBox"/> receives focus and keys while recording.</summary>
 public sealed partial class ShortcutField : UserControl
 {
     private string _shown = "";
@@ -12,10 +11,8 @@ public sealed partial class ShortcutField : UserControl
 
     internal TextBox CaptureBox => Box;
 
-    /// <summary>Shows a shortcut such as "Ctrl + Space" with one keycap per key.</summary>
     internal void ShowShortcut(string text)
     {
-        // The page renders on every session snapshot; rebuild the keycaps only when something changed.
         if (text == _shown && Keycaps.Visibility == Visibility.Visible) return;
         _shown = text;
         CaptureBox.Text = text;
@@ -36,7 +33,6 @@ public sealed partial class ShortcutField : UserControl
         }
     }
 
-    /// <summary>Replaces the keycaps with a prompt or message while recording.</summary>
     internal void ShowStatus(string text)
     {
         CaptureBox.Text = text;

@@ -1,15 +1,11 @@
 <UserControl x:Class="Ansible.PageCanvas"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <!-- No background, so the notice band under the viewport (BottomInset, set as the viewport's bottom margin) shows the
-         plain content layer. -->
     <UserControl.Content>
         <ScrollViewer x:Name="Viewport" HorizontalScrollBarVisibility="Disabled" HorizontalScrollMode="Disabled"
                       HorizontalContentAlignment="Stretch" VerticalScrollBarVisibility="Auto"
                       AutomationProperties.AutomationId="PageViewport" SizeChanged="ViewportSizeChanged"
                       ViewChanged="ViewportViewChanged">
-            <!-- One column holds the header and the content. Its MaxWidth is the page's width cap (Wide), so both
-                 share a right edge and start at the page padding; the space past the cap stays empty. -->
             <Grid x:Name="ContentHost" Padding="{StaticResource PagePadding}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition x:Name="ContentColumn" Width="*" />
@@ -18,11 +14,6 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
-                <!-- The title and the actions share the first row. The title's line box plus its margin is 40 DIP, the
-                     tallest header button, so the title sits at the same height on every page and the actions centre
-                     on it; taller actions grow downward and leave the title in place. The subtitle has its own row
-                     under both. On a narrow page whose title and actions do not fit on one row, the actions move to
-                     the last row. -->
                 <Grid x:Name="HeaderLayout" Margin="{StaticResource PageSectionBottomMargin}"
                       SizeChanged="HeaderSizeChanged">
                     <Grid.RowDefinitions>
@@ -37,8 +28,6 @@
                                Text="{x:Bind Subtitle, Mode=OneWay}" Style="{StaticResource PageSubtitleStyle}" />
                     <StackPanel x:Name="HeaderActionsPanel" Grid.Column="1" Orientation="Horizontal"
                                 Spacing="8" VerticalAlignment="Center" SizeChanged="HeaderActionsSizeChanged" />
-                    <!-- Measures the title on one line, so the header can tell whether the actions fit beside it. The
-                         Canvas gives it unlimited width and takes no space; it is never drawn or announced. -->
                     <Canvas Width="0" Height="0" HorizontalAlignment="Left" VerticalAlignment="Top"
                             IsHitTestVisible="False" Opacity="0" AutomationProperties.AccessibilityView="Raw">
                         <TextBlock x:Name="TitleProbe" Text="{x:Bind Title, Mode=OneWay}" TextWrapping="NoWrap"

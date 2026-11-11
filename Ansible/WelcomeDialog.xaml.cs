@@ -9,16 +9,10 @@ using Windows.UI.ViewManagement;
 
 namespace Ansible;
 
-/// <summary>How the lesson closed. Finished covers Done and Skip for now; both save completion.</summary>
 internal enum WelcomeExit { Finished, ModelsRequested, Interrupted }
 
-/// <summary>
-/// The three-step shortcut lesson, shown modally over the main window. Steps 1 and 2 only light the keycaps;
-/// step 3 lets the global shortcut dictate into a practice field in the dialog.
-/// </summary>
 public sealed partial class WelcomeDialog : ContentDialog
 {
-    /// <summary>The notice key for failures in the welcome lesson, shared with the window that completes it.</summary>
     internal const string NoticeKey = "welcome";
     private const int PracticeStep = 2;
     private readonly DictationSession _session;
@@ -48,13 +42,10 @@ public sealed partial class WelcomeDialog : ContentDialog
         AddHandler(KeyUpEvent, new KeyEventHandler((_, args) => Scene.KeyChanged(args.Key, down: false)), handledEventsToo: true);
     }
 
-    /// <summary>True from the show request until the dialog has closed, so a second request cannot open it twice.</summary>
     internal bool IsShowing => _showing;
 
     internal bool AcceptsShortcut => _open && _step == PracticeStep && (PracticeBox.FocusState != FocusState.Unfocused || _shortcutBusy());
 
-    /// <summary>Shows the lesson from its first step and returns how it closed.</summary>
-    /// <exception cref="InvalidOperationException">The lesson, or another dialog on this XamlRoot, is already open.</exception>
     internal async Task<WelcomeExit> ShowLessonAsync(XamlRoot root)
     {
         if (_showing) throw new InvalidOperationException("The welcome lesson is already open.");
@@ -75,10 +66,9 @@ public sealed partial class WelcomeDialog : ContentDialog
         finally { _showing = false; }
     }
 
-    /// <summary>Closes the lesson without completing it, for shutdown.</summary>
     internal void Dismiss() => Leave(WelcomeExit.Interrupted);
 
-    // Escape skips, or cancels a running practice dictation. Enter is the dialog's own: DefaultButton is Primary,
+    // Enter is the dialog's own: DefaultButton is Primary,
     // so the stock dialog takes the step's next action unless a button or the practice field already used it.
     private void KeyPressed(object sender, KeyRoutedEventArgs args)
     {
@@ -90,7 +80,6 @@ public sealed partial class WelcomeDialog : ContentDialog
         }
     }
 
-    /// <summary>The global shortcut's press or release, so the caps show the chord the hook consumed.</summary>
     internal void ShowShortcutHeld(bool held) => Scene.ChordChanged(held);
 
     internal IShortcutTextTarget CapturePracticeTarget()
@@ -104,12 +93,11 @@ public sealed partial class WelcomeDialog : ContentDialog
 
     private void LessonOpened(ContentDialog sender, ContentDialogOpenedEventArgs args)
     {
-        // Shutdown can ask to close between ShowAsync and Opened.
         if (_forceClose) { Hide(); return; }
         _open = true;
         _observer = new UiSessionObserver(_session, DispatcherQueue, _ => Render(), Scene.ShowLevel);
         _readinessTimer.Start();
-        // The stock buttons are template parts. Name them so UI Automation clients find them by a stable id.
+        // The stock buttons are template parts.
         foreach (var (part, id) in new[] { ("PrimaryButton", "NextButton"), ("SecondaryButton", "BackButton"), ("CloseButton", "SkipButton") })
             if (GetTemplateChild(part) is Button button) AutomationProperties.SetAutomationId(button, id);
         RenderSteps(_step, animate: false);
@@ -118,8 +106,6 @@ public sealed partial class WelcomeDialog : ContentDialog
 
     private void FocusPrimary() => (GetTemplateChild("PrimaryButton") as Button)?.Focus(FocusState.Programmatic);
 
-    // Every close sets _forceClose first: Done, Skip for now, Escape, and shutdown. Skip and Escape refuse while a
-    // practice dictation runs; only shutdown forces it.
     private void LessonClosing(ContentDialog sender, ContentDialogClosingEventArgs args)
     {
         if (!_forceClose) args.Cancel = true;
@@ -151,8 +137,7 @@ public sealed partial class WelcomeDialog : ContentDialog
         IntroPanel.Visibility = _step == 0 ? Visibility.Visible : Visibility.Collapsed;
         ShortcutPanel.Visibility = _step == 1 ? Visibility.Visible : Visibility.Collapsed;
         PracticePanel.Visibility = _step == PracticeStep ? Visibility.Visible : Visibility.Collapsed;
-        // The stock footer: an empty button text hides that button. Done already finishes the lesson, so the last
-        // step offers no second way out, and Back has nowhere to go on the first step.
+        // The stock footer: an empty button text hides that button.
         PrimaryButtonText = _step == PracticeStep ? "Done" : "Next";
         SecondaryButtonText = _step > 0 ? "Back" : "";
         CloseButtonText = _step == PracticeStep ? "" : "Skip for now";
@@ -184,11 +169,10 @@ public sealed partial class WelcomeDialog : ContentDialog
 
     private void RenderNavigationReadiness()
     {
-        // The stock close button cannot be disabled; Skip while a practice dictation runs cancels it instead.
+        // The stock close button cannot be disabled.
         IsPrimaryButtonEnabled = IsSecondaryButtonEnabled = ModelsButton.IsEnabled = IsIdle;
     }
 
-    // Stepping keeps the dialog open (args.Cancel); only Done and Skip for now let the stock close proceed.
     private void NextClicked(ContentDialog sender, ContentDialogButtonClickEventArgs args)
     {
         if (IsIdle && _step == PracticeStep) { Finish(WelcomeExit.Finished); return; }
@@ -220,12 +204,10 @@ public sealed partial class WelcomeDialog : ContentDialog
         var previous = _step;
         _step = step;
         RenderSteps(previous, _uiSettings.AnimationsEnabled);
-        // Back and Skip can collapse under the pointer; keep focus inside the lesson.
         if (_step == PracticeStep) PracticeBox.Focus(FocusState.Programmatic);
         else FocusPrimary();
     }
 
-    // Base values always hold the end state, so stopping a motion early, or reduced motion, still lands there.
     private void RenderSteps(int previous, bool animate)
     {
         Render();
@@ -243,7 +225,6 @@ public sealed partial class WelcomeDialog : ContentDialog
         }
         AutomationProperties.SetName(StepDots, $"Step {_step + 1} of 3");
         if (!animate || previous == _step) return;
-        // The new step slides in from the side it comes from while fading up.
         story.Children.Add(Animate(StepShift, "X", 0, 360, from: 28 * Math.Sign(_step - previous)));
         story.Children.Add(Animate(StepBody, "Opacity", 1, 220, from: 0));
         _stepMotion = story;
@@ -263,7 +244,6 @@ public sealed partial class WelcomeDialog : ContentDialog
         return animation;
     }
 
-    // Runs only from a real insertion into the practice field.
     private void Celebrate()
     {
         Celebration.Visibility = Visibility.Visible;
@@ -285,7 +265,6 @@ public sealed partial class WelcomeDialog : ContentDialog
         story.Begin();
     }
 
-    // Records the exit and lets the close already under way (a stock button) proceed.
     private void Finish(WelcomeExit exit)
     {
         if (!_showing || _forceClose) return;
@@ -293,7 +272,6 @@ public sealed partial class WelcomeDialog : ContentDialog
         _forceClose = true;
     }
 
-    // Closes from outside a button click: Escape, the models button, and shutdown.
     private void Leave(WelcomeExit exit)
     {
         if (!_showing || _forceClose) return;
@@ -342,14 +320,10 @@ public sealed partial class WelcomeDialog : ContentDialog
 
 /// <summary>
 /// A ContentDialog opens in the popup layer, which follows the application theme and ignores a theme requested on
-/// the window's content root. Every dialog calls this before ShowAsync so it opens in its window's theme.
+/// the window's content root.
 /// </summary>
 internal static class DialogTheme
 {
-    /// <summary>
-    /// Attaches the dialog to the window and mirrors the theme requested on the window's content root. Default stays
-    /// Default, so the dialog keeps following a Windows theme change while it is open.
-    /// </summary>
     public static void FollowWindowTheme(this ContentDialog dialog, XamlRoot root)
     {
         dialog.XamlRoot = root;

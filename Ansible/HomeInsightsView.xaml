@@ -6,14 +6,12 @@
       xmlns:muxc="using:Microsoft.UI.Xaml.Controls">
     <UserControl.Resources>
         <ResourceDictionary>
-            <!-- A stat is a Subtitle value over a caption label. Labels wrap between words, never inside one. -->
             <Style x:Key="HomeStatValueStyle" TargetType="TextBlock" BasedOn="{StaticResource SubtitleTextBlockStyle}">
                 <Setter Property="TextWrapping" Value="NoWrap" />
             </Style>
             <Style x:Key="HomeStatLabelStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionSecondaryStyle}">
                 <Setter Property="TextWrapping" Value="WrapWholeWords" />
             </Style>
-            <!-- Model rows pair a name and a count of the same size, so both sit on one baseline. -->
             <DataTemplate x:Key="PrimaryModelTemplate" x:DataType="local:HomeModelViewModel">
                 <StackPanel Spacing="{StaticResource HomeModelRowsGap}">
                     <Grid ColumnSpacing="8">
@@ -46,18 +44,10 @@
                                              SecondaryTemplate="{StaticResource SecondaryModelTemplate}" />
         </ResourceDictionary>
     </UserControl.Resources>
-    <!-- Two cards: all-time usage with its models, and the daily rhythm. As a rail they stack in one column and
-         each keeps its natural height. As a strip after history they flow into columns and fill their row, so side
-         by side they end on one line; the usage card then spreads the spare height equally across the gaps between
-         its blocks. The empty rhythm card always fills its row, with its message centred.
-         Both cards open with the same header, a title over a caption at the card's top-left, so side by side the
-         two headers line up. -->
     <local:CardFlowPanel x:Name="RailCards" RowSpacing="16" ColumnSpacing="16" VerticalAlignment="Top"
           AutomationProperties.Name="Your voice, in numbers" AutomationProperties.LandmarkType="Custom"
           AutomationProperties.LocalizedLandmarkType="Your voice, in numbers">
         <Border x:Name="WordsCard" Style="{StaticResource CardStyle}" VerticalAlignment="Top">
-            <!-- Five blocks with an empty star row between each pair. At natural height the star rows are empty, so
-                 the margins alone set the gaps. Stretched, the spare height splits equally across the four gaps. -->
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" /><RowDefinition Height="*" />
@@ -73,7 +63,6 @@
                 </StackPanel>
                 <TextBlock x:Name="HomeWordsText" Grid.Row="2" Text="--" Margin="0,4,0,0" TextWrapping="NoWrap"
                            Style="{StaticResource TitleLargeTextBlockStyle}" />
-                <!-- Three stat groups reflow to fewer columns before a label would have to break. -->
                 <local:CardFlowPanel Grid.Row="4" MinColumnWidth="76" ColumnSpacing="12" RowSpacing="12" Margin="0,12,0,0">
                     <StackPanel>
                         <TextBlock x:Name="HomePaceText" Text="--" Style="{StaticResource HomeStatValueStyle}" />
@@ -90,7 +79,6 @@
                 </local:CardFlowPanel>
                 <TextBlock x:Name="HomeInsightsFootnote" Grid.Row="6" Text="Usage statistics are not available yet." Margin="0,12,0,0"
                            Style="{StaticResource HomeStatLabelStyle}" />
-                <!-- Which models produced those words: the same all-time usage, so it shares the card. -->
                 <Border Grid.Row="8" Margin="0,16,0,0" Padding="0,16,0,0" BorderThickness="0,1,0,0" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
                     <StackPanel Spacing="{StaticResource HomeModelsCardGap}">
                         <StackPanel Spacing="2">
@@ -111,8 +99,6 @@
         <Border x:Name="RhythmCard" Style="{StaticResource CardStyle}" VerticalAlignment="Top">
             <Grid RowSpacing="12">
                 <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-                <!-- The period switch sits beside the title. It is top-aligned and lifted by about half its extra
-                     height so its labels share the title's line; its taller box never pushes the title down. -->
                 <Grid ColumnSpacing="12">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                     <StackPanel Spacing="2">
@@ -129,13 +115,9 @@
                     </muxc:SelectorBar>
                 </Grid>
 
-                <!-- Usage statistics are unavailable, so there is nothing to plot. -->
                 <local:EmptyState x:Name="ActivityEmptyState" Grid.Row="1" Glyph="&#xE823;" Visibility="Collapsed" />
 
-                <!-- The radial graph is drawn the same way for every period, including one with no dictations: the
-                     dotted ring, hour ticks and labels, and the centre total are the card. -->
                 <StackPanel x:Name="ActivityChartPanel" Grid.Row="1" Spacing="4" VerticalAlignment="Top">
-                    <!-- Shown only for a real streak. -->
                     <local:Badge x:Name="HomeStreakPill" Text="" Margin="0,0,0,8" Visibility="Collapsed"
                                  ToolTipService.ToolTip="Consecutive local days with completed dictations. Includes yesterday if there are no dictations today." />
                     <Viewbox Stretch="Uniform" StretchDirection="DownOnly" MaxHeight="260"

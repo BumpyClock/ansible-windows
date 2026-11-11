@@ -52,11 +52,6 @@ public sealed partial class ShellTitleBar : UserControl
         Follow(null, null);
     }
 
-    /// <summary>
-    /// Follows the sidebar. Expanded, the brand spans the sidebar and the page name starts at the content's left
-    /// edge. Compact, the app name is the only label left in the shell, so it stays: the mark sits centred over the
-    /// icon rail, the name follows it, and the page name follows the name.
-    /// </summary>
     public void SetCompact(bool compact)
     {
         var resources = Application.Current.Resources;
@@ -64,7 +59,6 @@ public sealed partial class ShellTitleBar : UserControl
         var rail = ((GridLength)resources["CompactSidebarColumnWidth"]).Value;
         Brand.Margin = compact ? new Thickness((rail - BrandMark.Width) / 2, 0, 0, 0) : (Thickness)resources["SidebarBrandMargin"];
         PageTitle.Margin = (Thickness)resources[compact ? "CompactTitleBarPageTitleMargin" : "TitleBarPageTitleMargin"];
-        // The page name and the action copy move with the brand; keep the copy clickable where it now sits.
         RefreshDragRegions();
     }
 
@@ -97,7 +91,6 @@ public sealed partial class ShellTitleBar : UserControl
 
     private void HeaderScrolledOutChanged(object? sender, EventArgs args) => Render();
 
-    // Deferred so a page that updates several properties of its action renders the copy once.
     private void ActionChanged() => DispatcherQueue.TryEnqueue(Render);
 
     private void Render()
@@ -115,7 +108,7 @@ public sealed partial class ShellTitleBar : UserControl
             AutomationProperties.SetName(PrimaryActionCopy, action.AccessibleName);
         }
         var changed = SetShown(PageTitle, scrolled) | SetShown(PrimaryActionCopy, action is not null);
-        // The TitleBar keeps visible controls in its content clickable; refresh its regions after the button toggles.
+        // The TitleBar keeps visible controls in its content clickable.
         if (changed) RefreshDragRegions();
     }
 
@@ -135,7 +128,6 @@ public sealed partial class ShellTitleBar : UserControl
         if (_action is { IsEnabled: true } action) action.Invoke();
     }
 
-    // The page name and action fade and rise into the title bar, and fade out. Skipped when Windows animations are off.
     private void AddAnimations()
     {
         if (!new Windows.UI.ViewManagement.UISettings().AnimationsEnabled) return;

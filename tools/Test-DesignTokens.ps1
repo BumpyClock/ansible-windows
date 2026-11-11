@@ -136,8 +136,6 @@ foreach ($file in $xamlFiles) {
     }
 }
 
-# Neutral text, fills, strokes, and materials belong to WinUI. The only WinUI keys this dictionary may redefine
-# are the accent ramp and the accent button, and only in Light and Dark so the platform owns High Contrast.
 $allowedPlatformOverride = '^(?:SystemAccentColor(?:Light|Dark)?[1-3]?|AccentButton(?:Background|Foreground|BorderBrush)(?:PointerOver|Pressed)?)$'
 $platformKeyPattern = '^(?:Text|Control|Subtle|Card|Layer|Solid|Smoke|Surface|Divider|System|Acrylic|Accent(?:Fill|TextFill|Button)|Button|ListViewItem|ToggleSwitch|ComboBox)[A-Za-z0-9]*$'
 foreach ($themeName in @('Light', 'Dark', 'HighContrast')) {
@@ -159,8 +157,6 @@ foreach ($key in $themeBrushKeys | Sort-Object -Unique) {
     }
 }
 
-# Light and Dark brushes use local canonical colors. High Contrast brush colors
-# must remain ThemeResource references so Windows can update a live HC palette.
 foreach ($themeName in @('Light', 'Dark')) {
     $themeNode = $tokenDocument.SelectSingleNode("//*[local-name()='ResourceDictionary' and @x:Key='$themeName']", $namespaceManager)
     foreach ($brush in $themeNode.SelectNodes('./*[local-name()="SolidColorBrush" and @x:Key]', $namespaceManager)) {
@@ -262,10 +258,6 @@ foreach ($file in $csharpFiles) {
     }
 }
 
-# One scale. Text sizes come from WinUI's type ramp (its TextBlock styles, or the ramp tokens for controls that take
-# a FontSize). Radii are WinUI's ControlCornerRadius and OverlayCornerRadius. A fully round shape is the one literal:
-# half the element's own literal Height. Spacing sits on the 4 DIP grid; 1 and 2 are allowed for hairlines and optical nudges. AppMark.xaml is
-# exact brand geometry and is exempt.
 $iconSizes = @('12', '16', '20', '24', '32', '48')
 $spacingProperties = @('Margin', 'Padding', 'Spacing', 'RowSpacing', 'ColumnSpacing')
 function Test-OnGrid {
@@ -317,8 +309,7 @@ foreach ($file in @((Get-Item -LiteralPath $tokenPath)) + $xamlFiles) {
     }
 }
 
-# XAML compiles with an unknown StaticResource key and then fails when the page loads. Every key a view names must
-# be defined in this app's XAML or be one of the WinUI resources listed here.
+# XAML compiles with an unknown StaticResource key and then fails when the page loads.
 $platformResourceKeys = @('ControlCornerRadius', 'OverlayCornerRadius') + @($platformStyleKeys)
 $definedKeys = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
 foreach ($key in $tokenKeys + $platformResourceKeys) { [void]$definedKeys.Add($key) }
@@ -334,8 +325,6 @@ foreach ($file in @((Get-Item -LiteralPath $tokenPath)) + $xamlFiles) {
     }
 }
 
-# A token nothing references is dead. Remove it instead of keeping it for later. XAML references a key through a
-# resource markup extension; C# through a quoted key. A key's own x:Key definition is not a reference.
 $xamlReferenceText = (@($xamlFiles) + @(Get-Item -LiteralPath $tokenPath) |
     ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw }) -join "`n"
 $codeReferenceText = ($csharpFiles | ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw }) -join "`n"

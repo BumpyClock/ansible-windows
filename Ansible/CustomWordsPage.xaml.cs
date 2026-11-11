@@ -8,8 +8,6 @@ namespace Ansible;
 
 public sealed partial class CustomWordsPage : Page
 {
-    // An empty dictionary shows the sidebar's Dictionary mark (IconData in XAML), so its glyph is empty.
-    // A search with no match shows the Segoe Fluent Icons Search glyph.
     private const string SearchGlyph = "";
     private readonly DictationSession _session;
     private readonly Action _openModels;
@@ -59,7 +57,6 @@ public sealed partial class CustomWordsPage : Page
         ValidateEditor();
     }
 
-    // The warning explains why the words do nothing, so it names the real model and any installed model that uses them.
     private void RenderCompatibility(string dictionary)
     {
         var model = _state.SelectedModel;
@@ -95,7 +92,6 @@ public sealed partial class CustomWordsPage : Page
             if (_editingRow?.Word == _rows[index].Word) _editingRow = null;
             _rows.RemoveAt(index);
         }
-        // Preserve unchanged rows so dictionary updates do not discard their focused controls.
         for (var index = 0; index < filtered.Length; index++)
         {
             if (index < _rows.Count && _rows[index].Word == filtered[index]) continue;
@@ -145,7 +141,6 @@ public sealed partial class CustomWordsPage : Page
             return;
         }
         if (_editingRow == row) { EndEdit(row); return; }
-        // A rename replaces the row, which takes the focused editor with it. Keep focus on the renamed word.
         ShowFieldError("");
         FocusRow(_rows.IndexOf(_rows.FirstOrDefault(model => model.Word == renamed)!));
     }
@@ -161,7 +156,6 @@ public sealed partial class CustomWordsPage : Page
 
     private void AddFromField()
     {
-        // Enter submits even when Add is disabled, so a rejected word explains itself instead of doing nothing.
         if (!_state.IsIdle || string.IsNullOrWhiteSpace(SearchBox.Text)) return;
         var before = _session.State.Settings.CustomDictionary;
         if (!ApplyEdit(new CustomVocabulary.Edit.Add(SearchBox.Text, SingleEntry: true), _state.SelectedModel, out var error))
@@ -169,7 +163,6 @@ public sealed partial class CustomWordsPage : Page
             ShowFieldError(error);
             return;
         }
-        // A duplicate changes nothing; its existing row already shows in the filtered list.
         if (_session.State.Settings.CustomDictionary == before) return;
         var entry = CustomVocabulary.Normalize(SearchBox.Text);
         ShowFieldError("");
@@ -193,7 +186,6 @@ public sealed partial class CustomWordsPage : Page
         AddWordLabel.Text = addable ? $"Add \"{text}\"" : "Add";
     }
 
-    // The error takes the helper line under the field; the word count returns when it clears.
     private void ShowFieldError(string error)
     {
         FieldValidationText.Text = error;
@@ -219,7 +211,6 @@ public sealed partial class CustomWordsPage : Page
         FocusRow(Math.Min(Math.Max(index, 0), _rows.Count - 1));
     }
 
-    // Focuses the row at index, or the search field when there is no such row.
     private void FocusRow(int index)
     {
         if (index < 0 || index >= _rows.Count) { SearchBox.Focus(FocusState.Programmatic); return; }
@@ -229,7 +220,6 @@ public sealed partial class CustomWordsPage : Page
         else SearchBox.Focus(FocusState.Programmatic);
     }
 
-    // Undo keeps newer words and restores saved vocabulary even if the current model cannot use it.
     private void RestoreWord(string word) => ApplyEdit(new CustomVocabulary.Edit.Add(word), null, out _);
 
     private bool ApplyEdit(CustomVocabulary.Edit edit, AudioModel? model, out string error)
@@ -287,7 +277,6 @@ public sealed partial class CustomWordsPage : Page
         finally
         {
             _editorOpen = false;
-            // The menu item is gone once the menu closes, so focus returns to the button that opened it.
             MoreOptionsButton.Focus(FocusState.Programmatic);
         }
     }

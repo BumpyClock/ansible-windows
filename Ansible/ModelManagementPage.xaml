@@ -5,10 +5,6 @@
       xmlns:local="using:Ansible">
     <local:PageCanvas Title="Speech models" Subtitle="Recognition runs on this device. One model handles dictation at a time.">
         <local:PageCanvas.HeaderActions>
-            <!-- The page's task is choosing and downloading models, so the header holds only the overflow, as on
-                 Meetings. Its menu holds the two utilities. Model folder opens the folder flyout attached to this
-                 button, which keeps the path, Choose folder, Verify installed files, and the backend line. The
-                 button takes the card inset so it sits in one column with the More options button of each row. -->
             <Button x:Name="MoreOptionsButton" Style="{StaticResource IconButtonStyle}" VerticalAlignment="Center"
                     Margin="{StaticResource CardInsetActionMargin}"
                     ToolTipService.ToolTip="More options" AutomationProperties.Name="More options">
@@ -43,9 +39,6 @@
                 </FlyoutBase.AttachedFlyout>
             </Button>
         </local:PageCanvas.HeaderActions>
-        <!-- Install state is the group: In use, Installed, Available. Render moves each row into its group and
-             keeps catalog order inside it. Empty groups collapse. Each group is a Body Strong heading with a caption
-             directly under it, then its rows, as on Settings. -->
         <StackPanel Spacing="{StaticResource PageSectionSpacing}">
             <StackPanel x:Name="InUseSection" Spacing="{StaticResource SectionHeaderGap}" Visibility="Collapsed">
                 <StackPanel Spacing="2">

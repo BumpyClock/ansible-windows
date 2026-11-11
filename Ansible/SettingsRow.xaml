@@ -32,7 +32,6 @@
                        Style="{StaticResource CaptionSecondaryStyle}" />
         </StackPanel>
 
-        <!-- A toggle's On/Off label sits before the switch, as in Windows Settings, so every control ends at the right edge. -->
         <Grid x:Name="ControlPresenter" Grid.Row="1" VerticalAlignment="Center">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />

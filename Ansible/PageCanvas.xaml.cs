@@ -28,7 +28,6 @@ public sealed partial class PageCanvas : UserControl
             UpdateLayoutBounds();
             UpdateHeader();
             UpdateHeaderScrolledOut();
-            // Cached pages leave and rejoin the window; restart the pins rather than trust animations across that.
             foreach (var pin in _pins) pin.Stop();
             UpdatePins();
         };
@@ -41,38 +40,21 @@ public sealed partial class PageCanvas : UserControl
     /// </summary>
     public bool IsTitleScrolledOut { get; private set; }
 
-    /// <summary>
-    /// True while the header actions have scrolled fully above the viewport, or the whole header row has when the page
-    /// has no header actions. The window title bar then shows its copy of <see cref="PrimaryAction"/>, so the action
-    /// never appears twice.
-    /// </summary>
     public bool IsActionScrolledOut { get; private set; }
 
     /// <summary>Raised when <see cref="IsTitleScrolledOut"/> or <see cref="IsActionScrolledOut"/> changes.</summary>
     public event EventHandler? HeaderScrolledOutChanged;
 
-    /// <summary>
-    /// The height of the window's notice band at the bottom of the page. The scroll viewport ends this far above the
-    /// page's bottom edge, so notices sit in a band under the viewport and never cover page content. The viewport top
-    /// and the scroll offset stay where they are.
-    /// </summary>
     public double BottomInset
     {
         get => Viewport.Margin.Bottom;
         set
         {
             if (Viewport.Margin.Bottom == value) return;
-            // The resize raises ViewportSizeChanged and a layout pass, which refresh the bounds, header and pins.
             Viewport.Margin = new Thickness(0, 0, 0, value);
         }
     }
 
-    /// <summary>
-    /// The page's width cap. A page that is one column of rows reads best in a narrower measure, so by default the
-    /// header and content together are at most PageReadingMaxWidth wide. A page with side-by-side columns sets
-    /// Wide and gets PageContentMaxWidth. Either way the page starts at the page padding and the header actions end
-    /// at the content's right edge. A page may change it while it shows.
-    /// </summary>
     public bool Wide
     {
         get => _wide;
@@ -121,7 +103,6 @@ public sealed partial class PageCanvas : UserControl
     {
         var pin = new StickyPin(this, element, bounds, top, bottom, indicator);
         _pins.Add(pin);
-        // Sizes and positions anywhere above the pin move it, so every layout pass rechecks the pins.
         if (_pins.Count == 1) Viewport.LayoutUpdated += ViewportLayoutUpdated;
         UpdatePins();
         return pin;
@@ -175,7 +156,6 @@ public sealed partial class PageCanvas : UserControl
         UpdateHeaderScrolledOut();
     }
 
-    // A new title or a resized action changes whether the actions fit beside the title.
     private void HeaderActionsSizeChanged(object sender, SizeChangedEventArgs args)
     {
         if (args.PreviousSize.Width == args.NewSize.Width) return;
@@ -183,9 +163,6 @@ public sealed partial class PageCanvas : UserControl
         UpdateHeaderScrolledOut();
     }
 
-    // Side by side, the title and the actions share the first row and leave together. Stacked, the title leaves first
-    // and the actions, under the subtitle, leave last. A page without a title, or without actions, uses the header row
-    // instead, which holds the heading and the actions in both layouts.
     private void UpdateHeaderScrolledOut()
     {
         var header = IsAbove(HeaderLayout);
@@ -200,7 +177,6 @@ public sealed partial class PageCanvas : UserControl
     private static bool IsShown(FrameworkElement element) =>
         element.Visibility == Visibility.Visible && element.ActualHeight > 0;
 
-    // True when the element's bottom edge is at or above the viewport top, or within `remaining` DIPs below it.
     private bool IsAbove(FrameworkElement element, double remaining = 0) =>
         IsLoaded && IsShown(HeaderLayout) && IsShown(element)
         && element.TransformToVisual(Viewport).TransformPoint(new Point(0, element.ActualHeight)).Y <= remaining;
@@ -217,9 +193,6 @@ public sealed partial class PageCanvas : UserControl
         HeaderActionsPanel.Visibility = hasActions ? Visibility.Visible : Visibility.Collapsed;
         foreach (var action in HeaderActions.OfType<FrameworkElement>())
             action.MaxWidth = ContentWidth;
-        // Side by side, the actions sit at the right of the title's row and centre on the title. A narrow page keeps
-        // them there while the one-line title, the gap, and the actions fit in the column, and otherwise stacks them
-        // under the subtitle, left-aligned. Without a heading they lead the row.
         var resources = Application.Current.Resources;
         var gap = (double)resources["CardGap"];
         var fits = TitleProbe.ActualWidth + gap + ActionsWidth() <= ContentWidth;
@@ -236,8 +209,6 @@ public sealed partial class PageCanvas : UserControl
             ? Orientation.Vertical : Orientation.Horizontal;
     }
 
-    // The actions' width on one row. It sums the actions themselves, so it does not change with the panel's
-    // orientation or position and the layout choice cannot flip back and forth.
     private double ActionsWidth()
     {
         var width = 0.0;
@@ -257,12 +228,10 @@ public sealed partial class PageCanvas : UserControl
     {
         if (!IsLoaded || _pins.Count == 0) return;
         _scrollProperties ??= ElementCompositionPreview.GetScrollViewerManipulationPropertySet(Viewport);
-        // The viewport ends above the notice band, so a tall pinned element stops above the notices too.
         foreach (var pin in _pins) pin.Update(_scrollProperties, ContentHost, Viewport.ActualHeight);
     }
 
-    // Focus inside a stuck element asks the scroller to reveal its layout position, which has scrolled away; the
-    // scroller would jump back to it. Where the element is drawn fully visible, nothing needs to scroll.
+    // Focus inside a stuck element asks the scroller to reveal its layout position, which has scrolled away.
     private void ContentBringIntoViewRequested(UIElement sender, BringIntoViewRequestedEventArgs args)
     {
         if (args.Handled || args.TargetElement is not { } target) return;
@@ -277,9 +246,7 @@ public sealed partial class PageCanvas : UserControl
         var resources = Application.Current.Resources;
         ContentHost.Padding = (Thickness)resources[Viewport.ActualWidth < (double)resources["CompactPageThreshold"]
             ? "CompactPagePadding" : "PagePadding"];
-        // The cap is on the column inside the padding, so the page starts at the padding and never centres.
         ContentColumn.MaxWidth = MaxContentWidth;
-        // The page flows in one scroller; content fills at least the viewport so footers sit at the bottom.
         ContentHost.MinHeight = Viewport.ActualHeight;
         var column = Column;
         if (column == _column) return;

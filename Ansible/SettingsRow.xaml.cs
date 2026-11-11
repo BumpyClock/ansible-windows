@@ -89,12 +89,10 @@ public sealed partial class SettingsRow : UserControl
 
     private void LayoutSizeChanged(object sender, SizeChangedEventArgs args) => ApplyLayout(args.NewSize.Width);
 
-    // The stock ToggleSwitch draws its On/Off text after the switch. The row draws it before the switch instead,
-    // and the empty template column after the switch is pulled back so the switch ends at the right edge.
+    // The stock ToggleSwitch draws its On/Off text after the switch.
     private void AttachToggle(ToggleSwitch? toggle)
     {
         ToggleStateText.Visibility = toggle is null ? Visibility.Collapsed : Visibility.Visible;
-        // The gap belongs to the On/Off label. Without one it would inset the control from the label's left edge.
         ControlPresenter.ColumnSpacing = toggle is null ? 0 : 12;
         if (toggle is null) return;
         toggle.OnContent = null;
@@ -112,7 +110,6 @@ public sealed partial class SettingsRow : UserControl
         ToggleStateText.Opacity = toggle.IsEnabled ? 1 : 0.5;
     }
 
-    // Divider and padding follow ShowDivider and IsChild. Code is their only source so the two cannot disagree.
     private void ApplyChrome()
     {
         var resources = Application.Current.Resources;
@@ -120,9 +117,6 @@ public sealed partial class SettingsRow : UserControl
         LayoutRoot.Padding = (Thickness)resources[IsChild ? "SettingsChildRowPadding" : "SettingsRowPadding"];
     }
 
-    // One rule for every row. Wide rows put the control beside the label at the right edge. Narrow rows stack it
-    // under the label at the label's left edge, except a ToggleSwitch, which is short enough to stay beside the label.
-    // The grid keeps one visual tree; the inactive track and its spacing collapse so they add no geometry.
     private void ApplyLayout(double width)
     {
         if (ControlContent is not FrameworkElement control || LayoutRoot is null)

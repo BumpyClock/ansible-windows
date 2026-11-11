@@ -14,8 +14,6 @@
         </Style>
     </Page.Resources>
 
-    <!-- One page holds every section, top to bottom. A section is a heading, an optional caption, and one card of
-         rows. -->
     <local:PageCanvas Title="Settings"
                       Subtitle="How Ansible listens, recognizes speech, and handles your data.">
         <StackPanel Spacing="{StaticResource PageSectionSpacing}">
@@ -23,7 +21,6 @@
                 <TextBlock Text="Dictation" Style="{StaticResource SettingsSectionTitleStyle}" />
                 <Border Style="{StaticResource SettingsCardStyle}">
                     <StackPanel>
-                        <!-- Rows slide when an insertion row appears. -->
                         <StackPanel.ChildrenTransitions>
                             <TransitionCollection>
                                 <RepositionThemeTransition IsStaggeringEnabled="False" />
@@ -51,7 +48,6 @@
                                         AutomationProperties.AutomationId="ChangeShortcutButton"
                                         AutomationProperties.Name="Change shortcut"
                                         Click="ChangeShortcutClicked" />
-                                <!-- Shown only when the shortcut differs from the default. -->
                                 <Button x:Name="ResetShortcutButton" Content="Reset" VerticalAlignment="Center"
                                         AutomationProperties.AutomationId="ResetShortcutButton"
                                         AutomationProperties.Name="Reset shortcut"
@@ -200,7 +196,6 @@
                         <local:SettingsRow Title="Processor"
                                            Description="Auto measures the CPU and graphics card on a sample recording and uses the faster one for each model. Choosing CPU or graphics card skips the test."
                                            ControlWidth="{StaticResource SettingsFieldWidth}">
-                            <!-- Items are labels only. The index maps to Auto, CPU, and Vulkan in MainPage.xaml.cs. -->
                             <ComboBox x:Name="BackendChoice"
                                       AutomationProperties.Name="Processor"
                                       AutomationProperties.AutomationId="BackendChoice"
@@ -211,7 +206,6 @@
                             </ComboBox>
                         </local:SettingsRow>
 
-                        <!-- The busy ring sits inside the button, so the button keeps one size and one edge. -->
                         <local:SettingsRow x:Name="BenchmarkRow" Title="Compare processors">
                             <Button x:Name="BenchmarkButton" MinWidth="128"
                                     AutomationProperties.AutomationId="BenchmarkButton"
@@ -269,7 +263,6 @@
                                 </ComboBox>
                             </local:SettingsRow>
 
-                            <!-- OpenAI has no default model, so its model stays in view with the key. -->
                             <StackPanel x:Name="OpenAICleanupFields">
                                 <local:SettingsRow Title="Model" IsChild="True"
                                                    Description="Required. Enter the name of a model your OpenAI account can use."
@@ -279,7 +272,6 @@
                                              AutomationProperties.Name="OpenAI cleanup model"
                                              LostFocus="CleanupModelCommitted" KeyDown="CleanupModelKeyDown" />
                                 </local:SettingsRow>
-                                <!-- The key field and its two buttons share one field width, so both edges line up with the fields above. -->
                                 <local:SettingsRow x:Name="OpenAIKeyRow" Title="API key" IsChild="True"
                                                    ControlWidth="{StaticResource SettingsFieldWidth}">
                                     <StackPanel Spacing="8">
@@ -309,9 +301,7 @@
                                               Toggled="AutomaticCleanupToggled" />
                             </local:SettingsRow>
 
-                            <!-- Rarely changed fields wait under Advanced, closed each time the page opens. The row
-                                 expands like a settings expander: a chevron at its end points down when closed and
-                                 up when open. The button names its action, because a Button reports no expanded state. -->
+                            <!-- The button names its action, because a Button reports no expanded state. -->
                             <local:SettingsRow x:Name="CleanupAdvancedRow" Title="Advanced">
                                 <Button x:Name="CleanupAdvancedButton" Style="{StaticResource IconButtonStyle}"
                                         ToolTipService.ToolTip="Show advanced settings"

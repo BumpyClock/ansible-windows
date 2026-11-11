@@ -3,13 +3,8 @@ using System.Globalization;
 
 namespace Ansible;
 
-/// <summary>
-/// How a row tag reads. Inserted uses the accent. Unverified is quiet secondary text. NotInserted is amber,
-/// and its row keeps Copy visible because the text did not fully reach the app.
-/// </summary>
 internal enum HomeHistoryTagTone { Inserted, Unverified, NotInserted }
 
-/// <summary>A row tag for a real insertion outcome.</summary>
 internal sealed record HomeHistoryTag(string Label, string Glyph, HomeHistoryTagTone Tone, string Meaning)
 {
     public bool NeedsCopy => Tone == HomeHistoryTagTone.NotInserted;
@@ -17,7 +12,6 @@ internal sealed record HomeHistoryTag(string Label, string Glyph, HomeHistoryTag
 
 internal sealed record HomeHistoryEntry(HomeHistoryItem Item, HomeModelName? Model)
 {
-    // Only real insertion outcomes get a tag. In-app dictations, deferred, and pending deliveries have none.
     public HomeHistoryTag? Tag => Item.Delivery switch
     {
         TextDeliveryStatus.Verified => new("Inserted", "\uE73E", HomeHistoryTagTone.Inserted,"Inserted and confirmed in the target field."),
@@ -60,18 +54,10 @@ internal sealed record HomeHistoryViewModel(
 
 internal enum HomeHistoryEmptyKind { NoMatches, NothingSaved, FirstRun }
 
-/// <summary>What History says when it shows no rows.</summary>
 internal sealed record HomeHistoryEmptyState(HomeHistoryEmptyKind Kind, string Title, string Detail);
 
 internal static class HomeHistoryProjection
 {
-    /// <summary>
-    /// Null while rows match. Usage counts survive removed and unsaved history rows, so "No dictations yet" needs
-    /// usage that is known and holds no dictation. Otherwise the empty state first says what happens next, new
-    /// dictations appear here, and when usage counts dictations that History does not hold, adds that those are no
-    /// longer saved, so the lifetime stats beside it do not read as missing rows. A storage failure may hide rows
-    /// that are still on disk, so it gets the wording that is true either way.
-    /// </summary>
     internal static HomeHistoryEmptyState? EmptyState(HomeHistoryViewModel model, string query, int? dictations) =>
         model.HasMatches ? null
         : model.HasHistory ? new(HomeHistoryEmptyKind.NoMatches, "No matches", $"No saved transcript contains \"{query}\".")

@@ -14,8 +14,6 @@ Requires the winapp CLI and Windows Developer Mode. Replaces the running develop
 param(
     [Parameter(Mandatory)][string]$Round,
     [ValidateSet('light', 'dark')][string[]]$Theme = @('light', 'dark'),
-    # Limits the run to some pages, or to 'extras' (welcome lesson and meeting window), for a quick local probe.
-    # Review rounds use the full matrix.
     [string[]]$Only,
     [switch]$SkipBuild
 )
@@ -69,9 +67,7 @@ function Set-WindowSize {
     $context = [DesignCapture]::SetThreadDpiAwarenessContext([IntPtr]::new(-4))
     try {
         $scale = [DesignCapture]::GetDpiForWindow($Handle) / 96.0
-        # Park the pointer on the title bar so no control renders its hover state.
         [DesignCapture]::SetWindowPos($Handle, [IntPtr]::Zero, 0, 40, [int]($WidthDips * $scale), [int]($HeightDips * $scale), 0x0014) | Out-Null
-        # The title bar is empty between the page action and the caption buttons at every size.
         $script:parkX = [int](($WidthDips - 220) * $scale)
         $script:parkY = 40 + [int](20 * $scale)
         $script:scale = $scale
@@ -80,8 +76,6 @@ function Set-WindowSize {
     Start-Sleep -Milliseconds 700
 }
 
-# True when the app name in the title bar is drawn in the active colour. The title bar dims its content when the
-# window is inactive, and the foreground window alone does not prove what was drawn, so the frame itself is read.
 function Test-TitleBarActive {
     param([string]$Path)
     $bitmap = [System.Drawing.Bitmap]::new($Path)
@@ -96,18 +90,13 @@ function Test-TitleBarActive {
                 if ($luma -gt $high) { $high = $luma }
             }
         }
-        # Active text contrasts with the bar by about 210 levels (150 under a dialog's smoke layer). Inactive text
-        # contrasts by about 90.
         ($high - $low) -ge 120
     } finally { $bitmap.Dispose() }
 }
 
 function Save-Window {
     param([IntPtr]$Handle, [string]$Name)
-    # An inactive window dims its title bar, so a main-window frame counts only if the window held the foreground
-    # and the frame shows an active title bar. The window is activated with one click on its empty title bar; a
-    # second click within the double-click time would maximize it. Another program can take the foreground at any
-    # moment, so retry.
+    # The window is activated with one click on its empty title bar; a second click within the double-click time would maximize it.
     $path = Join-Path $out "$Name.png"
     $click = $false
     for ($attempt = 1; $attempt -le 4; $attempt++) {
@@ -151,7 +140,6 @@ function Get-PageScroller {
     if ($viewport.TryGetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern, [ref]$pattern)) { $pattern }
 }
 
-# One stop per 90% of a viewport, top to bottom. -1 means the page does not scroll.
 function Get-ScrollStops {
     param([IntPtr]$Handle)
     $scroller = Get-PageScroller $Handle
@@ -168,7 +156,6 @@ function Set-PageScroll {
     (Get-PageScroller $Handle).SetScrollPercent(-1, $Percent)
 }
 
-# Home says no model is loaded until the session finishes starting. Capturing earlier records a transient state.
 function Wait-SessionReady {
     param([IntPtr]$Handle)
     Start-Sleep -Seconds 4
@@ -225,7 +212,6 @@ foreach ($mode in $Theme) {
     }
 
     if ($Only -and 'extras' -notin $Only) { continue }
-    # Extras at the wide size: the welcome lesson and a saved meeting transcript window.
     Set-WindowSize $window $sizes.wide[0] $sizes.wide[1]
     Invoke-Ui @('invoke', 'SettingsNav', '-w', "$window", '-q') | Out-Null
     Start-Sleep -Milliseconds 900
@@ -234,7 +220,7 @@ foreach ($mode in $Theme) {
     Invoke-Ui @('invoke', 'ShortcutLessonButton', '-w', "$window", '-q') | Out-Null
     Start-Sleep -Milliseconds 1500
     Save-Window $window "welcome-$mode-wide-1"
-    # Close by pointer-style invoke. A key press would switch the app to keyboard focus visuals for later frames.
+    # A key press would switch the app to keyboard focus visuals for later frames.
     Invoke-Ui @('invoke', 'SkipButton', '-w', "$window", '-q') | Out-Null
     Start-Sleep -Milliseconds 800
 
@@ -244,7 +230,6 @@ foreach ($mode in $Theme) {
     if ($rows -match '(?m)^\s+(btn-[0-9a-z-]+) Button') {
         # A real click, so the transcript window opens in pointer mode without keyboard focus visuals.
         Invoke-Ui @('click', $Matches[1], '-w', "$window", '-q') | Out-Null
-        # The transcript window appears a moment after the click, later on a busy machine.
         $deadline = (Get-Date).AddSeconds(10)
         do {
             Start-Sleep -Milliseconds 700

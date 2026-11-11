@@ -39,10 +39,6 @@ public sealed partial class HomeHistoryView : UserControl
 
     internal string Query => HistorySearchBox.Text.Trim();
 
-    /// <summary>
-    /// What the empty state needs beyond saved rows: completed dictations from usage (null while unknown). Changing
-    /// it redraws only the empty state, so row animations are untouched. The page header owns the shortcut hint.
-    /// </summary>
     internal void SetEmptyContext(int? dictations)
     {
         if (_dictations == dictations) return;
@@ -58,21 +54,14 @@ public sealed partial class HomeHistoryView : UserControl
         HistoryContent.BringIntoViewRequested += HistoryContentBringIntoViewRequested;
     }
 
-    /// <summary>Where content beside history should stick so its top lines up with the stuck header's content.</summary>
     internal double StuckContentTop => HistoryHeaderGrid.Padding.Top;
 
-    /// <summary>
-    /// Sticks the header row (title, count, search) to the top of <paramref name="canvas"/> while rows scroll under it.
-    /// The header sticks only while History shows at least one row; with none it scrolls with the page, so it never
-    /// names the content below it. Render creates and disposes the pin as rows come and go.
-    /// </summary>
     internal void PinHeader(PageCanvas canvas)
     {
         _pinCanvas = canvas;
         UpdateHeaderPin();
     }
 
-    /// <summary>Returns the header to its layout position for good.</summary>
     internal void UnpinHeader()
     {
         _pinCanvas = null;
@@ -96,7 +85,6 @@ public sealed partial class HomeHistoryView : UserControl
         }
     }
 
-    // A row revealed by keyboard focus must land below the stuck header, not under it.
     private void HistoryContentBringIntoViewRequested(UIElement sender, BringIntoViewRequestedEventArgs args)
     {
         var rect = args.TargetRect;
@@ -105,11 +93,6 @@ public sealed partial class HomeHistoryView : UserControl
         args.TargetRect = new Windows.Foundation.Rect(rect.X, rect.Y - header, rect.Width, rect.Height + header);
     }
 
-    /// <summary>
-    /// Renders the projection. Rows are reused by operation, so with <paramref name="animate"/> a new dictation,
-    /// a removal, or a delivery outcome changes only what changed. Search and date changes rebuild without
-    /// transitions so every row does not animate at once.
-    /// </summary>
     internal void Render(HomeHistoryViewModel model, bool animate)
     {
         _model = model;
@@ -118,9 +101,7 @@ public sealed partial class HomeHistoryView : UserControl
         HistoryCountPill.Text = query.Length > 0 && model.HasHistory
             ? $"{model.Groups.Sum(group => group.Entries.Count):N0} of {count:N0}"
             : $"{count:N0} {(count == 1 ? "transcription" : "transcriptions")}";
-        // With nothing saved the empty state says so; a zero count beside it would repeat it.
         HistoryCountPill.Visibility = model.HasHistory ? Visibility.Visible : Visibility.Collapsed;
-        // With nothing saved there is nothing to search. A search that matches nothing keeps the box so the query can change.
         var searchVisibility = model.HasHistory ? Visibility.Visible : Visibility.Collapsed;
         HistorySearchBox.Visibility = searchVisibility;
         HistorySearchIcon.Visibility = searchVisibility;
@@ -160,7 +141,7 @@ public sealed partial class HomeHistoryView : UserControl
             HistoryRows.ChildrenTransitions = null;
             HistoryRows.Children.Clear();
             foreach (var element in desired) { HistoryRows.Children.Add(element); }
-            // Rows leaving the tree do not reliably raise PointerExited or LostFocus; start rebuilt rows at rest.
+            // Rows leaving the tree do not reliably raise PointerExited or LostFocus.
             foreach (var row in _rows.Values.Where(row => row.Hovered || row.Focused))
             {
                 row.Hovered = false;
@@ -174,7 +155,6 @@ public sealed partial class HomeHistoryView : UserControl
             });
         }
 
-        // Filtered-out rows stay cached so clearing a search restores them without rebuilding.
         var all = model.AllOperationIds;
         foreach (var id in _rows.Keys.Where(id => !all.Contains(id)).ToArray())
         {
@@ -197,7 +177,6 @@ public sealed partial class HomeHistoryView : UserControl
         EmptyMessage.Detail = empty.Detail;
     }
 
-    /// <summary>Shows the copied state on a row after the page put its transcript on the clipboard.</summary>
     internal void ShowCopied(Guid operationId)
     {
         RestoreCopied();
@@ -208,7 +187,6 @@ public sealed partial class HomeHistoryView : UserControl
         _copiedTimer.Start();
     }
 
-    /// <summary>Removes and inserts only the changed children. Fails when existing children would need to move.</summary>
     private bool TryReconcile(List<UIElement> desired)
     {
         var children = HistoryRows.Children;
@@ -274,7 +252,6 @@ public sealed partial class HomeHistoryView : UserControl
         tagContent.Children.Add(row.TagIcon);
         tagContent.Children.Add(row.TagText);
         row.TagHost = new Border { Child = tagContent, VerticalAlignment = VerticalAlignment.Center, Visibility = Visibility.Collapsed };
-        // A left-aligned star column lets the meta line trim before it pushes the tag out of the row.
         var metaLine = new Grid { ColumnSpacing = (double)resources["HistoryMetaGap"], HorizontalAlignment = HorizontalAlignment.Left };
         metaLine.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         metaLine.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -333,14 +310,14 @@ public sealed partial class HomeHistoryView : UserControl
     private void UpdateRowState(HistoryRowView row)
     {
         var active = row.Hovered || row.MenuOpen;
-        // High Contrast hover is the system highlight, which would hide window-text transcript. Keep rows plain there.
+        // High Contrast hover is the system highlight, which would hide window-text transcript.
         var highContrast = _accessibility.HighContrast;
         if (highContrast) { row.Root.ClearValue(Border.BackgroundProperty); }
         else { row.Root.Background = active ? HoverFillAnchor.Background : RestFill(); }
         row.Actions.Opacity = active || row.Focused || highContrast || row.NeedsCopy ? 1 : ActionsRestOpacity;
     }
 
-    // The hover fill at zero alpha. The brush fade interpolates every channel, so resting on Transparent
+    // The brush fade interpolates every channel, so resting on Transparent
     // (white at zero alpha) would pass through translucent white on the way in and out.
     private SolidColorBrush RestFill()
     {
@@ -352,7 +329,6 @@ public sealed partial class HomeHistoryView : UserControl
 
     private static void ApplyRowLayout(HistoryRowView row, bool narrow)
     {
-        // Narrow rows put the time above the transcript instead of clipping a fixed time column.
         Grid.SetColumnSpan(row.Time, narrow ? 2 : 1);
         Grid.SetRow(row.Body, narrow ? 1 : 0);
         Grid.SetRowSpan(row.Body, narrow ? 1 : 2);
@@ -402,7 +378,6 @@ public sealed partial class HomeHistoryView : UserControl
         var index = HistoryRows.Children.IndexOf(row.Root);
         RemoveRequested?.Invoke(row.Item);
         if (HistoryRows.Children.Contains(row.Root)) { return; }
-        // Keep keyboard users in the list: focus the row that took this one's place, or search when none is left.
         var next = HistoryRows.Children.Skip(Math.Max(0, index)).Concat(HistoryRows.Children.Take(Math.Max(0, index)).Reverse())
             .Select(child => _rows.Values.FirstOrDefault(candidate => ReferenceEquals(candidate.Root, child)))
             .FirstOrDefault(candidate => candidate is not null);
@@ -505,14 +480,12 @@ public sealed partial class HomeHistoryView : UserControl
             if (Time.Text != entry.TimeText)
             {
                 Time.Text = entry.TimeText;
-                // Copy and More names carry the row time so a screen reader can tell rows apart.
                 ToolTipService.SetToolTip(Copy, ReferenceEquals(view._copiedRow, this) ? "Copied" : "Copy transcript");
                 AutomationProperties.SetName(Copy, $"Copy transcript from {entry.TimeText}");
                 ToolTipService.SetToolTip(More, "More actions");
                 AutomationProperties.SetName(More, $"More actions for transcript from {entry.TimeText}");
             }
             if (Meta.Text != entry.MetadataText) { Meta.Text = entry.MetadataText; }
-            // The row shows the plain model name; the tooltip keeps the full catalog name.
             var modelTip = entry.Model?.FullName;
             if (!Equals(ToolTipService.GetToolTip(Meta), modelTip)) { ToolTipService.SetToolTip(Meta, modelTip); }
             if (deliveryChanged) { view.UpdateTag(this, entry.Tag); }

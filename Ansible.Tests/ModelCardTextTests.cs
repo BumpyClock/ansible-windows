@@ -9,7 +9,6 @@ public sealed class ModelCardTextTests : IDisposable
     private const long OneHundredSixtyMegabytes = 160L * 1024 * 1024;
     private readonly CultureInfo _previousCulture = CultureInfo.CurrentCulture;
 
-    // Sizes format with the current culture, so the expected decimal point needs a fixed one.
     public ModelCardTextTests() => CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
 
     public void Dispose() => CultureInfo.CurrentCulture = _previousCulture;

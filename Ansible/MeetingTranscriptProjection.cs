@@ -5,7 +5,6 @@ using Ansible.Core;
 
 namespace Ansible;
 
-/// <summary>Groups adjacent speaker turns without changing the saved recognition boundaries.</summary>
 internal sealed class MeetingTranscriptProjection
 {
     public ObservableCollection<MeetingTranscriptRow> Rows { get; } = [];
@@ -38,8 +37,7 @@ internal sealed class MeetingTranscriptProjection
     }
 }
 
-// Public for the XAML compiler's typed bindings. This type has no WinUI dependency so the
-// reconciliation and recycled-row state can be checked without starting a window.
+// Public for the XAML compiler's typed bindings.
 public sealed class MeetingTranscriptRow : INotifyPropertyChanged
 {
     private MeetingTurn[] _turns = [];
@@ -62,7 +60,6 @@ public sealed class MeetingTranscriptRow : INotifyPropertyChanged
     public string Text => _text;
     public string OriginalText => _originalText;
     public bool HasCleanup => _hasCleanup;
-    /// <summary>When the block starts, and whether it may still change. Empty when neither is known.</summary>
     public string TimingText => _timingText;
     public string OriginalToggleText => _isOriginalExpanded ? "Hide original wording" : "Show original wording";
 
@@ -102,12 +99,10 @@ public sealed class MeetingTranscriptRow : INotifyPropertyChanged
                 ? string.Join(" ", _turns.Select(turn => turn.OriginalText ?? turn.Text)) : "";
             var hasCleanup = _turns.Any(turn => turn.OriginalText is not null && turn.OriginalText != turn.Text);
             var timing = string.Join(" · ", new[] { FormatTurnTime(_turns), _turns.Any(turn => turn.IsProvisional) ? "Updating" : null }.OfType<string>());
-            // Unchanged completed blocks keep text selection while the live tail is revised.
             if (_text != text) { _text = text; Notify(nameof(Text)); }
             if (_originalText != original) { _originalText = original; Notify(nameof(OriginalText)); }
             if (_hasCleanup != hasCleanup) { _hasCleanup = hasCleanup; Notify(nameof(HasCleanup)); }
             if (_timingText != timing) { _timingText = timing; Notify(nameof(TimingText)); }
-            // Extending or cleaning the same speaker block keeps its expanded original.
             if (previous is not null && (previous.StartSeconds != first.StartSeconds || previous.Source != first.Source ||
                 (previous.OriginalText ?? previous.Text) != (first.OriginalText ?? first.Text)))
                 IsOriginalExpanded = false;
@@ -117,8 +112,6 @@ public sealed class MeetingTranscriptRow : INotifyPropertyChanged
 
     private void Notify([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     private static string FormatTime(double seconds) => TimeSpan.FromSeconds(Math.Max(0, seconds)).ToString(seconds >= 3600 ? @"h\:mm\:ss" : @"m\:ss");
-    // A block shows its start only when every part of it has a time; chunk times are approximate, except zero:
-    // the start of the meeting is exact, so it never reads "About 0:00".
     private static string? FormatTurnTime(IReadOnlyList<MeetingTurn> turns)
     {
         if (turns.Any(turn => turn.TimingQuality == MeetingTimingQuality.Unknown)) return null;
