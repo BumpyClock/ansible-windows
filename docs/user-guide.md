@@ -582,11 +582,19 @@ the meeting join within about two seconds. Devices that another app holds in
 exclusive mode are skipped. Use headphones: echo cancellation is not
 implemented.
 
-The optional **Teams app for speaker names** choice is used only for automatic
-speaker naming. It does not limit what audio is recorded. The lookup is
+The optional **Teams app** choice supplies the meeting title, automatic stop,
+and automatic speaker naming. It does not limit what audio is recorded. The lookup is
 read-only Windows accessibility. It does not change Teams settings. Teams process audio
 can be silent to Windows application loopback even when you hear the call,
 which is why recording uses output devices instead.
+
+Ansible imports the title only from a confirmed Teams call window and only while
+your transcript still has its default **New meeting** title. A title you enter is
+kept. After observing an active call, Ansible finishes captured speech and saves
+the transcript when the call is confirmed absent for at least five seconds over
+multiple checks. Silence, Teams mute, minimization, and unreadable accessibility
+state do not end your notes. Unsupported call layouts may require you to use
+**End** manually. Without a selected Teams app, stopping remains manual.
 
 While recording, the window shows a microphone line and a **Speakers and
 headphones** line with the device count. Each line uses one of
@@ -650,7 +658,9 @@ speaker when someone else speaks next.
 VibeVoice meetings keep that model's speaker labels. Rename a speaker by
 selecting its heading. When Teams is selected, the app reads visible
 participant tiles through Windows accessibility. It looks for explicit speaking
-markers on named tiles or their visible descendants. Current Teams labels such
+markers on named tiles, their accessibility descendants, or an enclosing surface
+with one unambiguous participant tile. Screen-reader-only marker labels are
+included even when not drawn on screen. Current Teams labels such
 as **video is on**, **video is off**, **Myself video**, mute state, and
 **Has control of production tools** are tile descriptions, not names. Names that
 contain commas stay intact. Unmuted, video on, and roster presence do not prove
@@ -711,7 +721,7 @@ can be retried. Failed wording cleanup keeps the completed original for retry.
 The Meetings list supports
 reopening saved text; each transcript window offers Copy, text export, and Delete.
 If a meeting fails before any speech is transcribed, its window restores the
-**Teams app for speaker names** choice and offers **Try again** after resources are released.
+**Teams app** choice and offers **Try again** after resources are released.
 Resolve the displayed error before retrying. The failed attempt stays saved.
 Capture is limited to two hours. A full 30-second recognition queue or capture
 failure stops the meeting with an error and keeps text already produced. Native

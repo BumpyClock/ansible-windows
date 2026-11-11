@@ -160,6 +160,8 @@ public sealed partial class MeetingWindow : Window
     {
         _version = state.Version;
         _document = state.Document;
+        if (state.Phase is not (MeetingSessionPhase.Starting or MeetingSessionPhase.Recording or MeetingSessionPhase.Paused))
+            _contextStop?.Cancel();
         var active = _session.IsActive || state.Phase is MeetingSessionPhase.Starting or MeetingSessionPhase.Recording or MeetingSessionPhase.Paused or MeetingSessionPhase.Finishing or MeetingSessionPhase.Refining;
         var preparing = state.Phase == MeetingSessionPhase.Starting;
         var finishing = state.Phase is MeetingSessionPhase.Finishing or MeetingSessionPhase.Refining;
@@ -324,6 +326,8 @@ public sealed partial class MeetingWindow : Window
 
     private async Task StartMeetingAsync()
     {
+        await StopFollowingTeamsAsync();
+        _notices.Set("teams-context", null);
         var process = (ProcessChoice.SelectedItem as ComboBoxItem)?.Tag as MeetingProcessChoice;
         if (_selectedDetectedMeeting is { } detected)
         {
@@ -345,8 +349,14 @@ public sealed partial class MeetingWindow : Window
             }
         }
         var title = MeetingTitle.Text;
+        var identity = process is { IsTeams: true } ? new MeetingDetectionCandidate(process.Id, process.StartedUtc) : null;
+        var context = identity is null ? new MeetingContextObservation(MeetingCallPresence.Unknown)
+            : await _teamsContext.ReadAsync(identity, CancellationToken.None);
+        if (_closing || _closed || _shutdownPending) return;
         await _session.StartAsync(new MeetingCaptureRequest(process is { IsTeams: true } ? process.Id : null));
         if (!string.IsNullOrWhiteSpace(title) && title != "New meeting") await _session.RenameAsync(title);
+        if (identity is not null && !_shutdownPending && !_closing)
+            FollowTeamsCall(identity, context);
     }
 
     private async void PauseClicked(object sender, RoutedEventArgs args) => await RunActionAsync(() =>
@@ -530,6 +540,7 @@ public sealed partial class MeetingWindow : Window
 
     private async Task CloseAfterSavingAsync()
     {
+        await StopFollowingTeamsAsync();
         await _titleSaveTask;
         await _session.DisposeAsync();
         _allowClose = true;
@@ -636,8 +647,10 @@ public sealed partial class MeetingWindow : Window
     internal async Task BeginShutdownAsync()
     {
         _shutdownPending = true;
+        _contextStop?.Cancel();
         RefreshCleanupControls();
         await CancelCleanupAsync();
+        await StopFollowingTeamsAsync();
         await _titleSaveTask;
     }
 
@@ -690,8 +703,8 @@ public sealed partial class MeetingWindow : Window
         if (NamingHelpText is null) return;
         var teams = (ProcessChoice.SelectedItem as ComboBoxItem)?.Tag is MeetingProcessChoice { IsTeams: true };
         NamingHelpText.Text = teams
-            ? "Teams speaker names are applied only when confidently matched. Click any speaker label to correct it."
-            : "Automatic names require a selected Teams app. Speakers keep editable model labels when names are unavailable.";
+            ? "Uses the Teams meeting title and finishes notes when the observed call ends. Speaker names require a confident match and remain editable."
+            : "Select Teams for the meeting title, automatic stop, and speaker names. Otherwise, use End to finish your notes.";
     }
     private void RefreshProcessesClicked(object sender, RoutedEventArgs args) => RefreshProcesses();
     private void RefreshProcesses()

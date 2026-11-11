@@ -92,7 +92,7 @@
                     <TextBlock Text="Records your default microphone and everything playing on your speakers and headphones, including notifications and other apps." Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap"/>
                     <Grid x:Name="ProcessSelector" ColumnSpacing="8">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                        <ComboBox x:Name="ProcessChoice" Header="Teams app for speaker names (optional)" HorizontalAlignment="Stretch" SelectionChanged="MeetingProcessChanged"/>
+                        <ComboBox x:Name="ProcessChoice" Header="Teams app (optional)" HorizontalAlignment="Stretch" SelectionChanged="MeetingProcessChanged"/>
                         <Button Grid.Column="1" Content="Refresh" Click="RefreshProcessesClicked" VerticalAlignment="Bottom"/>
                     </Grid>
                     <TextBlock x:Name="NamingHelpText" Text="Automatic speaker names are available for Teams meetings. Other speakers keep editable model labels." Style="{StaticResource CaptionSecondaryStyle}"/>

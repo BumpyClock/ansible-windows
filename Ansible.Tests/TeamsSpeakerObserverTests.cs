@@ -108,6 +108,47 @@ public sealed class TeamsSpeakerObserverTests(ITestOutputHelper output)
         Assert.Equal(MeetingSpeakerReadStatus.Readable, observation.Status);
         Assert.Equal(new[] { "Morgan" }, observation.SpeakingNames);
     }
+    [Fact]
+    public void ExplicitMarkerSiblingUsesOnlyUniqueParticipantTile()
+    {
+        var observation = TeamsSpeakerClassifier.Classify([
+            new("Participant surface", ControlType: 50032),
+            new("Morgan, Video on", Parent: 0),
+            new("Active speaker", Parent: 0, ControlType: 50020)], 50);
+        Assert.Equal(MeetingSpeakerReadStatus.Readable, observation.Status);
+        Assert.Equal(new[] { "Morgan" }, observation.SpeakingNames);
+    }
+    [Fact]
+    public void OffscreenMarkerUnderVisibleParticipantTileRemainsEvidence()
+    {
+        var observation = TeamsSpeakerClassifier.Classify([
+            new("Participant surface", ControlType: 50032),
+            new("Morgan, Video on", Parent: 0),
+            new("Active speaker", Parent: 1, ControlType: 50020, IsOffscreen: true)], 50);
+        Assert.Equal(MeetingSpeakerReadStatus.Readable, observation.Status);
+        Assert.Equal(new[] { "Morgan" }, observation.SpeakingNames);
+    }
+    [Fact]
+    public void ExplicitMarkerWithMultipleParticipantSiblingsIsAmbiguous()
+    {
+        var observation = TeamsSpeakerClassifier.Classify([
+            new("Participant surface", ControlType: 50032),
+            new("Morgan, Video on", Parent: 0),
+            new("Jordan, Video on", Parent: 0),
+            new("Active speaker", Parent: 0, ControlType: 50020)], 50);
+        Assert.Equal(MeetingSpeakerReadStatus.Unavailable, observation.Status);
+        Assert.Empty(observation.SpeakingNames);
+    }
+    [Fact]
+    public void ArbitraryChatMarkerCannotAttributeToUnrelatedTile()
+    {
+        var observation = TeamsSpeakerClassifier.Classify([
+            new("Morgan, Video on", Parent: 0),
+            new("Chat history", ControlType: 50032),
+            new("Active speaker", Parent: 1, ControlType: 50020)], 50);
+        Assert.Equal(MeetingSpeakerReadStatus.Unavailable, observation.Status);
+        Assert.Empty(observation.SpeakingNames);
+    }
     [Theory]
     [InlineData("Active speaker", "")]
     [InlineData("", "Speaking")]

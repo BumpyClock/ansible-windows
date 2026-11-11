@@ -9,6 +9,50 @@ public sealed class MeetingSpeakerEvidenceSessionTests : IDisposable
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "Ansible-meeting-evidence-session-" + Guid.NewGuid().ToString("N"));
 
     [Fact]
+    public async Task TeamsTitleImportPreservesUserTitleAndDoesNotRenameFinishedMeetings()
+    {
+        await using var session = Create(new Engine(), CreateCaptures());
+        await session.StartAsync(new());
+        await session.AdoptTeamsTitleAsync("Design review");
+        Assert.Equal("Design review", session.Document!.Title);
+        await session.RenameAsync("My notes");
+        await session.AdoptTeamsTitleAsync("Another Teams title");
+        Assert.Equal("My notes", session.Document.Title);
+        await session.RenameAsync("New meeting");
+        await session.EndAsync();
+        await session.AdoptTeamsTitleAsync("Late observation");
+        Assert.Equal("New meeting", session.Document.Title);
+    }
+
+    [Fact]
+    public async Task ConfirmedTeamsCallEndDrainsSpeechAndCompletesTheNormalMeetingLifecycle()
+    {
+        var engine = new Engine();
+        var captures = CreateCaptures();
+        await using var session = Create(engine, captures);
+        await session.StartAsync(new());
+        await SendAsync(captures.Captures[0], engine, 2, 2);
+        engine.ReportTimed([Turn(0, 2, "Last spoken words")]);
+        var ends = 0;
+        await MeetingContextMonitor.FollowAsync(new EndedCall(), new(42, DateTime.UtcNow),
+            new(MeetingCallPresence.Active, "Design review"), session.AdoptTeamsTitleAsync,
+            async () => { ends++; await session.EndAsync(); }, default).WaitAsync(TimeSpan.FromSeconds(12));
+        Assert.Equal(1, ends);
+        Assert.Equal(MeetingSessionPhase.Completed, session.State.Phase);
+        Assert.Equal(MeetingStatus.Completed, session.Document!.Status);
+        Assert.Equal("Design review", session.Document.Title);
+        Assert.Equal("Last spoken words", Assert.Single(session.Document.Turns).Text);
+        Assert.True(captures.Captures[0].IsReleased);
+        Assert.False(session.IsActive);
+    }
+
+    private sealed class EndedCall : IMeetingContextReader
+    {
+        public Task<MeetingContextObservation> ReadAsync(MeetingDetectionCandidate identity, CancellationToken cancellationToken)
+            => Task.FromResult(new MeetingContextObservation(MeetingCallPresence.Absent));
+    }
+
+    [Fact]
     public async Task TimingRefinementUsesStreamCoordinatesAfterAudioRingRollsOver()
     {
         var engine = new Engine();

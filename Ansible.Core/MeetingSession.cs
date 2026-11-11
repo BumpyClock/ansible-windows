@@ -591,6 +591,26 @@ public sealed class MeetingSession : IAsyncDisposable
         finally { _commands.Release(); }
     }
 
+    /// <summary>Imports a verified Teams call title only while the user has left the default title unchanged.</summary>
+    public async Task AdoptTeamsTitleAsync(string title)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(title);
+        if (title.Trim().Length > 500) throw new ArgumentException("Meeting titles can contain at most 500 characters.");
+        await _commands.WaitAsync();
+        try
+        {
+            lock (_gate)
+            {
+                if (!_reserved || _state.Document is not { Title: "New meeting" } document) return;
+                _state = _state with { Version = _state.Version + 1,
+                    Document = document with { Title = title.Trim(), UpdatedAt = DateTimeOffset.UtcNow } };
+            }
+            Publish();
+            await SaveAsync();
+        }
+        finally { _commands.Release(); }
+    }
+
     public async Task ApplyCleanupAsync(IReadOnlyList<string> texts)
     {
         await _commands.WaitAsync();

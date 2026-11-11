@@ -43,6 +43,11 @@ send finalized text to GitHub Copilot CLI or the OpenAI API after you enable it
 in **Settings > Transcript cleanup** and a meeting ends successfully. Text you copy or insert is subject to the
 clipboard and destination app's storage policies. Model downloads require network access.
 
+Select Teams in the notetaker to import a verified call-window title and finish
+notes when the observed call ends. Custom titles are preserved. Unreadable call
+state keeps recording until you select End. Remote speaker names still require
+explicit Teams speaking evidence; model labels remain when that evidence is unavailable.
+
 Local diagnostics are off by default. You can enable them in Settings to save
 bounded operational metadata for recognition, delivery, meetings, capture,
 downloads, and storage on this device. They are separate from usage statistics

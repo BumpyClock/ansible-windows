@@ -557,7 +557,14 @@ failures emit a Trace warning with the HRESULT at most once per minute. Kind, st
 numbers. Meeting playback is endpoint loopback of every active render device,
 summed with saturation into one playback stream. Teams process loopback was
 measured silent (about 0.000015 RMS) while endpoint loopback carried the call,
-so `MeetingCaptureRequest.ProcessId` is used only for speaker naming. The
+so `MeetingCaptureRequest.ProcessId` identifies Teams for naming and call context,
+not audio routing. `TeamsMeetingContextReader` confirms call controls before
+reading a window title. `MeetingContextMonitor` imports that title only while
+the default title remains unchanged. After observing a call, it requires at
+least three absent readings spanning five seconds before invoking normal End.
+An unreadable tree or a still-existing call window with unavailable controls
+does not prove call end. The window joins its monitor before shutdown or reuse.
+Call titles remain transcript metadata, never local diagnostic fields. The
 first output scan runs before the microphone starts. Later scans run every two
 seconds on a dedicated MTA thread that opens, initializes, and services
 endpoints, then queues them. The capture thread only starts queued endpoints,
