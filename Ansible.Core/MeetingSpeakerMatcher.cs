@@ -46,17 +46,23 @@ public sealed class MeetingSpeakerMatcher
         var evidence = new Dictionary<string, SpeakerEvidence>(StringComparer.Ordinal);
         var sortedTurns = document.Turns.OrderBy(turn => turn.StartSeconds).ThenBy(turn => turn.EndSeconds).ToArray();
         var overlapping = new bool[sortedTurns.Length];
-        var furthestEnd = double.NegativeInfinity;
-        var furthestIndex = -1;
-        for (var index = 0; index < sortedTurns.Length; index++)
+        // Separate capture channels can speak simultaneously without making the remote
+        // voice ambiguous. Unknown provenance still overlaps either possible channel.
+        foreach (var source in new[] { MeetingAudioSource.Microphone, MeetingAudioSource.Playback })
         {
-            var turn = sortedTurns[index];
-            if (turn.StartSeconds < furthestEnd)
+            var furthestEnd = double.NegativeInfinity;
+            var furthestIndex = -1;
+            for (var index = 0; index < sortedTurns.Length; index++)
             {
-                overlapping[index] = true;
-                overlapping[furthestIndex] = true;
+                var turn = sortedTurns[index];
+                if (turn.Source != source && turn.Source != MeetingAudioSource.Mixed) continue;
+                if (turn.StartSeconds < furthestEnd)
+                {
+                    overlapping[index] = true;
+                    overlapping[furthestIndex] = true;
+                }
+                if (turn.EndSeconds > furthestEnd) { furthestEnd = turn.EndSeconds; furthestIndex = index; }
             }
-            if (turn.EndSeconds > furthestEnd) { furthestEnd = turn.EndSeconds; furthestIndex = index; }
         }
         for (var index = 0; index < sortedTurns.Length; index++)
         {

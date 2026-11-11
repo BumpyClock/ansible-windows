@@ -45,7 +45,7 @@ public sealed partial class TeamsSpeakerObserver : IMeetingSpeakerObserver
     private static unsafe void Run(int processId, DateTime created, Func<long> samplePosition,
         Action<MeetingSpeakerObservation> report, Action<TeamsSpeakerReadDiagnostics> diagnostics, CancellationToken token)
     {
-        nint automation = 0, walker = 0, tileCondition = 0, cache = 0;
+        nint automation = 0, subtreeCache = 0, tileCondition = 0, cache = 0;
         bool com = false;
         bool failureReported = false;
         var lastRead = new TeamsSpeakerReadDiagnostics(0, 0, false);
@@ -68,14 +68,22 @@ public sealed partial class TeamsSpeakerObserver : IMeetingSpeakerObserver
             Check(((delegate* unmanaged[Stdcall]<nint, uint, int>)Slot(automation, 61))(automation, 200));
             Check(((delegate* unmanaged[Stdcall]<nint, uint, int>)Slot(automation, 63))(automation, 200));
             nint result = 0;
-            Check(((delegate* unmanaged[Stdcall]<nint, nint*, int>)Slot(automation, 16))(automation, &result));
-            walker = result;
             tileCondition = CreateTileCondition(automation);
             Check(((delegate* unmanaged[Stdcall]<nint, nint*, int>)Slot(automation, 20))(automation, &result));
             cache = result;
             foreach (var property in new[] { 30003, 30005, 30011, 30013, 30022, 30026 })
                 Check(((delegate* unmanaged[Stdcall]<nint, int, int>)Slot(cache, 3))(cache, property));
             Check(((delegate* unmanaged[Stdcall]<nint, int, int>)Slot(cache, 7))(cache, 1));
+            Check(((delegate* unmanaged[Stdcall]<nint, nint*, int>)Slot(cache, 5))(cache, &result));
+            subtreeCache = result;
+            Check(((delegate* unmanaged[Stdcall]<nint, int, int>)Slot(subtreeCache, 7))(subtreeCache, 7));
+            nint rawView = 0;
+            Check(((delegate* unmanaged[Stdcall]<nint, nint*, int>)Slot(automation, 17))(automation, &rawView));
+            try
+            {
+                Check(((delegate* unmanaged[Stdcall]<nint, nint, int>)Slot(subtreeCache, 9))(subtreeCache, rawView));
+            }
+            finally { Release(rawView); }
             while (!token.IsCancellationRequested)
             {
                 var position = Math.Max(0, samplePosition());
@@ -84,7 +92,7 @@ public sealed partial class TeamsSpeakerObserver : IMeetingSpeakerObserver
                 {
                     using var process = Process.GetProcessById(processId);
                     if (process.StartTime.ToUniversalTime() != created || !IsTeamsProcess(process.ProcessName)) break;
-                    observation = Read(automation, walker, tileCondition, cache, processId, position, RecordDiagnostics, token);
+                    observation = Read(automation, subtreeCache, tileCondition, cache, processId, position, RecordDiagnostics, token);
                 }
                 catch (Exception error) when (error is COMException or ArgumentException or InvalidOperationException)
                 {
@@ -102,12 +110,12 @@ public sealed partial class TeamsSpeakerObserver : IMeetingSpeakerObserver
         }
         finally
         {
-            Release(cache); Release(tileCondition); Release(walker); Release(automation);
+            Release(subtreeCache); Release(cache); Release(tileCondition); Release(automation);
             if (com) CoUninitialize();
         }
     }
 
-    private static unsafe MeetingSpeakerObservation Read(nint automation, nint walker, nint tileCondition, nint cache, int processId,
+    private static unsafe MeetingSpeakerObservation Read(nint automation, nint subtreeCache, nint tileCondition, nint cache, int processId,
         long position, Action<TeamsSpeakerReadDiagnostics> diagnostics, CancellationToken token)
     {
         var windows = EnumerateWindows(processId);
@@ -118,7 +126,7 @@ public sealed partial class TeamsSpeakerObserver : IMeetingSpeakerObserver
         {
             if (timer.ElapsedMilliseconds > 750 || token.IsCancellationRequested)
             {
-                diagnostics(new(windows.Count, nodes.Count, true));
+                diagnostics(new(windows.Count, nodes.Count, true, NodeShapes: TeamsSpeakerClassifier.Describe(nodes)));
                 return new(position, [], null, MeetingSpeakerReadStatus.Unavailable);
             }
             nint root = 0, tiles = 0;
@@ -132,7 +140,7 @@ public sealed partial class TeamsSpeakerObserver : IMeetingSpeakerObserver
                 Check(((delegate* unmanaged[Stdcall]<nint, int*, int>)Slot(tiles, 3))(tiles, &count));
                 if (count > 256)
                 {
-                    diagnostics(new(windows.Count, nodes.Count, true));
+                    diagnostics(new(windows.Count, nodes.Count, true, NodeShapes: TeamsSpeakerClassifier.Describe(nodes)));
                     return new(position, [], null, MeetingSpeakerReadStatus.Unavailable);
                 }
                 for (var candidate = 0; candidate < count; candidate++)
@@ -141,11 +149,20 @@ public sealed partial class TeamsSpeakerObserver : IMeetingSpeakerObserver
                     Check(((delegate* unmanaged[Stdcall]<nint, int, nint*, int>)Slot(tiles, 4))(tiles, candidate, &tile));
                     try
                     {
-                        if (timer.ElapsedMilliseconds > 750 || token.IsCancellationRequested ||
-                            TeamsSpeakerClassifier.IsTile(ReadNode(tile, -1)) &&
-                            !Walk(walker, cache, tile, -1, 0, nodes, timer, token))
+                        var complete = true;
+                        if (TeamsSpeakerClassifier.IsTile(ReadNode(tile, -1)))
                         {
-                            diagnostics(new(windows.Count, nodes.Count, true));
+                            // Fetch a tile once, then walk its in-process cached children. TreeWalker
+                            // calls per child previously exhausted the read budget on live calls.
+                            nint snapshot = 0;
+                            Check(((delegate* unmanaged[Stdcall]<nint, nint, nint*, int>)Slot(tile, 9))(
+                                tile, subtreeCache, &snapshot));
+                            try { complete = WalkCached(snapshot, -1, 0, nodes, timer, token); }
+                            finally { Release(snapshot); }
+                        }
+                        if (timer.ElapsedMilliseconds > 750 || token.IsCancellationRequested || !complete)
+                        {
+                            diagnostics(new(windows.Count, nodes.Count, true, NodeShapes: TeamsSpeakerClassifier.Describe(nodes)));
                             return new(position, [], null, MeetingSpeakerReadStatus.Unavailable);
                         }
                     }
@@ -156,14 +173,14 @@ public sealed partial class TeamsSpeakerObserver : IMeetingSpeakerObserver
         }
         if (timer.ElapsedMilliseconds > 750 || token.IsCancellationRequested)
         {
-            diagnostics(new(windows.Count, nodes.Count, true));
+            diagnostics(new(windows.Count, nodes.Count, true, NodeShapes: TeamsSpeakerClassifier.Describe(nodes)));
             return new(position, [], null, MeetingSpeakerReadStatus.Unavailable);
         }
-        diagnostics(new(windows.Count, nodes.Count, false));
+        diagnostics(new(windows.Count, nodes.Count, false, NodeShapes: TeamsSpeakerClassifier.Describe(nodes)));
         return TeamsSpeakerClassifier.Classify(nodes, position);
     }
 
-    private static unsafe bool Walk(nint walker, nint cache, nint element, int parent, int depth, List<TeamsSpeakerNode> nodes,
+    private static unsafe bool WalkCached(nint element, int parent, int depth, List<TeamsSpeakerNode> nodes,
         Stopwatch timer, CancellationToken token)
     {
         if (depth > 32 || nodes.Count >= 256 || timer.ElapsedMilliseconds > 750 || token.IsCancellationRequested) return false;
@@ -172,20 +189,24 @@ public sealed partial class TeamsSpeakerObserver : IMeetingSpeakerObserver
         if (offscreen != 0) return true;
         var index = nodes.Count;
         nodes.Add(ReadNode(element, parent));
-        nint child = 0;
-        Check(((delegate* unmanaged[Stdcall]<nint, nint, nint, nint*, int>)Slot(walker, 10))(walker, element, cache, &child));
-        while (child != 0)
+        nint children = 0;
+        Check(((delegate* unmanaged[Stdcall]<nint, nint*, int>)Slot(element, 19))(element, &children));
+        if (children == 0) return true;
+        try
         {
-            nint next = 0;
-            try
+            int count = 0;
+            Check(((delegate* unmanaged[Stdcall]<nint, int*, int>)Slot(children, 3))(children, &count));
+            if (count > 256 - nodes.Count) return false;
+            for (var childIndex = 0; childIndex < count; childIndex++)
             {
-                if (!Walk(walker, cache, child, index, depth + 1, nodes, timer, token)) return false;
-                Check(((delegate* unmanaged[Stdcall]<nint, nint, nint, nint*, int>)Slot(walker, 12))(walker, child, cache, &next));
+                nint child = 0;
+                Check(((delegate* unmanaged[Stdcall]<nint, int, nint*, int>)Slot(children, 4))(children, childIndex, &child));
+                try { if (!WalkCached(child, index, depth + 1, nodes, timer, token)) return false; }
+                finally { Release(child); }
             }
-            finally { Release(child); }
-            child = next;
+            return true;
         }
-        return true;
+        finally { Release(children); }
     }
 
     private static unsafe nint CreateTileCondition(nint automation)
@@ -305,7 +326,7 @@ public sealed partial class TeamsSpeakerObserver : IMeetingSpeakerObserver
     [LibraryImport("ole32.dll")] private static partial void CoUninitialize();
     [LibraryImport("ole32.dll")] private static partial int CoCreateInstance(in Guid clsid, nint outer, uint context, in Guid iid, out nint instance);
     [LibraryImport("oleaut32.dll")] private static partial uint SysStringLen(nint text);
-    [LibraryImport("oleaut32.dll")] private static partial void SysFreeString(nint text);
+    [LibraryImport("oleaut32.dll")] private static partial void SysFreeString(nint value);
     [LibraryImport("user32.dll")] private static partial int EnumWindows(nint callback, nint context);
     [LibraryImport("user32.dll")] private static partial uint GetWindowThreadProcessId(nint window, out uint processId);
     [LibraryImport("user32.dll")] private static partial int IsWindowVisible(nint window);
@@ -315,7 +336,13 @@ public sealed partial class TeamsSpeakerObserver : IMeetingSpeakerObserver
 internal sealed record TeamsSpeakerNode(string Name, string AutomationId = "", string HelpText = "",
     string ItemStatus = "", int Parent = -1, int ControlType = 50011);
 
-internal sealed record TeamsSpeakerReadDiagnostics(int WindowCount, int NodeCount, bool BudgetExceeded, int? ErrorHResult = null);
+internal sealed record TeamsSpeakerReadDiagnostics(int WindowCount, int NodeCount, bool BudgetExceeded, int? ErrorHResult = null,
+    IReadOnlyList<TeamsSpeakerNodeShape>? NodeShapes = null);
+
+internal sealed record TeamsSpeakerNodeShape(int Parent, int ControlType, int NameLength, int AutomationIdLength,
+    int HelpTextLength, int ItemStatusLength, bool IsTile, bool HasKnownTileAutomationId,
+    bool HasTileDescription, bool HasSelfPrefix, bool HasParsedName, bool HasSpeakingMarker,
+    bool HasSilentMarker);
 
 internal static class TeamsSpeakerClassifier
 {
@@ -324,6 +351,14 @@ internal static class TeamsSpeakerClassifier
         "Video on", "Video off", "video is on", "video is off",
         "Has control of production tools", "muted", "Unmuted"];
     internal static readonly string[] TileAutomationIds = ["video-tile", "participant-tile"];
+
+    internal static IReadOnlyList<TeamsSpeakerNodeShape> Describe(IReadOnlyList<TeamsSpeakerNode> nodes) =>
+        nodes.Select(node => new TeamsSpeakerNodeShape(node.Parent, node.ControlType, node.Name.Length,
+            node.AutomationId.Length, node.HelpText.Length, node.ItemStatus.Length, IsTile(node),
+            TileAutomationIds.Any(marker => node.AutomationId.Contains(marker, StringComparison.OrdinalIgnoreCase)),
+            TileDescriptionStart(node.Name) >= 0,
+            node.Name.StartsWith(SelfTilePrefix, StringComparison.OrdinalIgnoreCase),
+            ParseName(node.Name) is not null, ExplicitlySpeaking(node), ExplicitlyNotSpeaking(node))).ToArray();
 
     internal static MeetingSpeakerObservation Classify(IReadOnlyList<TeamsSpeakerNode> nodes, long position)
     {
