@@ -6,26 +6,24 @@
       xmlns:muxc="using:Microsoft.UI.Xaml.Controls">
     <UserControl.Resources>
         <ResourceDictionary>
-            <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="HomeStyles.xaml" />
-            </ResourceDictionary.MergedDictionaries>
-            <Style x:Key="InsightNumberStyle" TargetType="TextBlock" BasedOn="{StaticResource TitleTextBlockStyle}">
-                <Setter Property="FontSize" Value="{StaticResource SubtitleFontSize}" />
-                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <!-- A stat is a Subtitle value over a caption label. Labels wrap between words, never inside one. -->
+            <Style x:Key="HomeStatValueStyle" TargetType="TextBlock" BasedOn="{StaticResource SubtitleTextBlockStyle}">
+                <Setter Property="TextWrapping" Value="NoWrap" />
             </Style>
-            <!-- Rail cards use 16 DIP vertical and 24 DIP horizontal padding. CardStyle's 20 DIP all round makes the stacked rail taller. -->
-            <Style x:Key="HomeRailCardStyle" TargetType="Border" BasedOn="{StaticResource CardStyle}">
-                <Setter Property="Padding" Value="24,16" />
+            <Style x:Key="HomeStatLabelStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionSecondaryStyle}">
+                <Setter Property="TextWrapping" Value="WrapWholeWords" />
             </Style>
-            <Style x:Key="HomeRailStatValueStyle" TargetType="TextBlock" BasedOn="{StaticResource InsightNumberStyle}">
-                <Setter Property="FontSize" Value="{StaticResource SubtitleFontSize}" />
+            <Style x:Key="HomeChartAxisStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionSecondaryStyle}">
+                <Setter Property="TextWrapping" Value="NoWrap" />
+                <Setter Property="IsHitTestVisible" Value="False" />
             </Style>
+            <!-- Model rows pair a name and a count of the same size, so both sit on one baseline. -->
             <DataTemplate x:Key="PrimaryModelTemplate" x:DataType="local:HomeModelViewModel">
                 <StackPanel Spacing="{StaticResource HomeModelRowsGap}">
                     <Grid ColumnSpacing="8">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                         <Ellipse Style="{StaticResource HomeModelDotStyle}" />
-                        <TextBlock Grid.Column="1" Text="{x:Bind DisplayName}" TextTrimming="CharacterEllipsis"
+                        <TextBlock Grid.Column="1" Text="{x:Bind DisplayName}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
                                    ToolTipService.ToolTip="{x:Bind DisplayName}" Style="{StaticResource BodyTextBlockStyle}" />
                         <TextBlock Grid.Column="2" Text="{x:Bind Sessions}" Style="{StaticResource BodyStrongTextBlockStyle}" />
                     </Grid>
@@ -38,8 +36,8 @@
                 <StackPanel Spacing="{StaticResource HomeModelRowsGap}">
                     <Grid ColumnSpacing="8">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                        <TextBlock Text="{x:Bind DisplayName}" TextTrimming="CharacterEllipsis"
-                                   ToolTipService.ToolTip="{x:Bind DisplayName}" Style="{StaticResource CaptionSecondaryStyle}" />
+                        <TextBlock Text="{x:Bind DisplayName}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                   ToolTipService.ToolTip="{x:Bind DisplayName}" Style="{StaticResource SecondaryTextStyle}" />
                         <TextBlock Grid.Column="1" Text="{x:Bind Sessions}" Style="{StaticResource BodyStrongTextBlockStyle}" />
                     </Grid>
                     <ProgressBar Maximum="{x:Bind MaximumSessions}" Value="{x:Bind Sessions}"
@@ -53,66 +51,63 @@
         </ResourceDictionary>
     </UserControl.Resources>
     <!-- Two cards: all-time usage with its models, and the daily rhythm. As a rail they stack in one column; as a
-         strip above history they flow into columns. -->
+         strip above history they flow into columns. Each card keeps its natural height (VerticalAlignment Top), so a
+         short card never carries dead space; only the empty rhythm card fills its row, with its message centred. -->
     <local:CardFlowPanel x:Name="RailCards" RowSpacing="16" ColumnSpacing="16" VerticalAlignment="Top"
           AutomationProperties.Name="Your voice, in numbers" AutomationProperties.LandmarkType="Custom"
           AutomationProperties.LocalizedLandmarkType="Your voice, in numbers">
-        <Border x:Name="WordsCard" Style="{StaticResource HomeRailCardStyle}">
+        <Border x:Name="WordsCard" Style="{StaticResource CardStyle}" VerticalAlignment="Top">
             <StackPanel>
-                <TextBlock Text="Words dictated · all time on this device" Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap" />
-                <Viewbox Stretch="Uniform" StretchDirection="DownOnly" HorizontalAlignment="Left" MaxHeight="52">
-                    <TextBlock x:Name="HomeWordsText" Text="--"
-                               FontSize="{StaticResource TitleLargeFontSize}" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                               AutomationProperties.Name="All-time words dictated" />
-                </Viewbox>
-                <Border Margin="0,16,0,0" Padding="0,16,0,0" BorderThickness="0,1,0,0" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
-                    <Grid ColumnSpacing="12">
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                        <StackPanel>
-                            <TextBlock x:Name="HomePaceText" Text="--" Style="{StaticResource HomeRailStatValueStyle}"
-                                       AutomationProperties.Name="All-time words per microphone minute" />
-                            <TextBlock Text="Words / min" Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap" />
-                        </StackPanel>
-                        <StackPanel Grid.Column="1">
-                            <TextBlock x:Name="HomeSessionsText" Text="--" Style="{StaticResource HomeRailStatValueStyle}"
-                                       AutomationProperties.Name="All-time dictations" />
-                            <TextBlock Text="Dictations" Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap" />
-                        </StackPanel>
-                        <StackPanel Grid.Column="2">
-                            <TextBlock x:Name="HomeMicrophoneText" Text="--" Style="{StaticResource HomeRailStatValueStyle}"
-                                       AutomationProperties.Name="All-time microphone minutes, pauses included" />
-                            <TextBlock Text="Mic minutes" Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap" />
-                        </StackPanel>
-                    </Grid>
-                </Border>
+                <StackPanel Spacing="2">
+                    <TextBlock Text="Words dictated" Style="{StaticResource HomeCardTitleStyle}"
+                               AutomationProperties.HeadingLevel="Level2" />
+                    <TextBlock Text="All time on this device" Style="{StaticResource HomeStatLabelStyle}" />
+                </StackPanel>
+                <TextBlock x:Name="HomeWordsText" Text="--" Margin="0,4,0,0" TextWrapping="NoWrap"
+                           Style="{StaticResource TitleLargeTextBlockStyle}" />
+                <!-- Three stat groups reflow to fewer columns before a label would have to break. -->
+                <local:CardFlowPanel MinColumnWidth="76" ColumnSpacing="12" RowSpacing="12" Margin="0,12,0,0">
+                    <StackPanel>
+                        <TextBlock x:Name="HomePaceText" Text="--" Style="{StaticResource HomeStatValueStyle}" />
+                        <TextBlock Text="Words / min" Style="{StaticResource HomeStatLabelStyle}" />
+                    </StackPanel>
+                    <StackPanel>
+                        <TextBlock x:Name="HomeSessionsText" Text="--" Style="{StaticResource HomeStatValueStyle}" />
+                        <TextBlock Text="Dictations" Style="{StaticResource HomeStatLabelStyle}" />
+                    </StackPanel>
+                    <StackPanel>
+                        <TextBlock x:Name="HomeMicrophoneText" Text="--" Style="{StaticResource HomeStatValueStyle}" />
+                        <TextBlock Text="Mic minutes" Style="{StaticResource HomeStatLabelStyle}" />
+                    </StackPanel>
+                </local:CardFlowPanel>
                 <TextBlock x:Name="HomeInsightsFootnote" Text="Usage statistics are not available yet." Margin="0,12,0,0"
-                           Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap" />
+                           Style="{StaticResource HomeStatLabelStyle}" />
                 <!-- Which models produced those words: the same all-time usage, so it shares the card. -->
                 <Border Margin="0,16,0,0" Padding="0,16,0,0" BorderThickness="0,1,0,0" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
                     <StackPanel Spacing="{StaticResource HomeModelsCardGap}">
                         <StackPanel Spacing="2">
-                            <TextBlock Text="Most-used models" Style="{StaticResource BodyStrongTextBlockStyle}"
+                            <TextBlock Text="Most-used models" Style="{StaticResource HomeCardTitleStyle}"
                                        AutomationProperties.HeadingLevel="Level2" />
-                            <TextBlock Text="Dictation + file sessions · all time" Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap" />
+                            <TextBlock Text="Dictation and file sessions · all time" Style="{StaticResource HomeStatLabelStyle}" />
                         </StackPanel>
                         <muxc:ItemsRepeater x:Name="HomeModelRows" ItemTemplate="{StaticResource HomeModelTemplateSelector}">
                             <muxc:ItemsRepeater.Layout><muxc:StackLayout Spacing="{StaticResource HomeModelsCardGap}" /></muxc:ItemsRepeater.Layout>
                         </muxc:ItemsRepeater>
-                        <TextBlock x:Name="NoModelDataText" Text="No completed sessions yet." TextWrapping="Wrap"
+                        <TextBlock x:Name="NoModelDataText" Text="No completed sessions yet." TextWrapping="WrapWholeWords"
                                    Style="{StaticResource SecondaryTextStyle}" Visibility="Collapsed" />
                     </StackPanel>
                 </Border>
             </StackPanel>
         </Border>
 
-        <Border x:Name="RhythmCard" Style="{StaticResource HomeRailCardStyle}">
-            <StackPanel Spacing="12">
+        <Border x:Name="RhythmCard" Style="{StaticResource CardStyle}" VerticalAlignment="Top">
+            <Grid RowSpacing="12">
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                 <StackPanel Spacing="2">
                     <Grid ColumnSpacing="8">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                        <TextBlock Text="Daily rhythm" VerticalAlignment="Center" Style="{StaticResource BodyStrongTextBlockStyle}"
-                                   AutomationProperties.HeadingLevel="Level2"
-                                   TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="Daily rhythm" VerticalAlignment="Center" Style="{StaticResource HomeCardTitleStyle}"
+                                   AutomationProperties.HeadingLevel="Level2" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
                         <muxc:SelectorBar x:Name="ActivityPeriodSelector" Grid.Column="1"
                                           SelectionChanged="ActivityPeriodChanged"
                                           AutomationProperties.Name="Activity period">
@@ -120,65 +115,67 @@
                             <muxc:SelectorBarItem Text="Month" />
                         </muxc:SelectorBar>
                     </Grid>
-                    <!-- The streak sits beside the period line: beside the heading it was clipped by Week and Month. -->
                     <Grid ColumnSpacing="8">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                         <TextBlock x:Name="ActivityPeriodText" Text="Last 7 days · includes today" VerticalAlignment="Center"
-                                   Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap" />
-                        <local:Badge x:Name="HomeStreakPill" Grid.Column="1" Text="--" VerticalAlignment="Center"
+                                   Style="{StaticResource HomeStatLabelStyle}" />
+                        <!-- Shown only for a real streak; "no streak" would only repeat an empty chart. -->
+                        <local:Badge x:Name="HomeStreakPill" Grid.Column="1" Text="" VerticalAlignment="Center" Visibility="Collapsed"
                                      ToolTipService.ToolTip="Consecutive local days with completed dictations. Includes yesterday if there are no dictations today." />
                     </Grid>
                 </StackPanel>
-                <TextBlock x:Name="HomeActivityAvailabilityText" Text="Activity statistics are not available yet."
-                           TextWrapping="Wrap" Style="{StaticResource CaptionSecondaryStyle}" Visibility="Collapsed" />
-                <StackPanel x:Name="ActivityChartPanel" Spacing="4">
-                    <Viewbox Stretch="Uniform" StretchDirection="DownOnly" MaxHeight="260"
-                             HorizontalAlignment="Center">
-                        <Canvas x:Name="ActivityClock" Width="320" Height="320"
-                                AutomationProperties.Name="Dictations by local completion hour">
-                            <Path x:Name="ClockBackgroundDots" Fill="{ThemeResource ControlStrongFillColorDisabledBrush}"
-                                  IsHitTestVisible="False" AutomationProperties.AccessibilityView="Raw" />
-                            <Path x:Name="ClockActiveDots" Fill="{ThemeResource AccentTextFillColorPrimaryBrush}"
-                                  IsHitTestVisible="False" AutomationProperties.AccessibilityView="Raw" />
-                            <Path x:Name="ClockTicks" Stroke="{ThemeResource TextFillColorSecondaryBrush}" StrokeThickness="1"
-                                  IsHitTestVisible="False" AutomationProperties.AccessibilityView="Raw" />
-                            <Ellipse Canvas.Left="92" Canvas.Top="92" Width="136" Height="136"
-                                     Stroke="{ThemeResource DividerStrokeColorDefaultBrush}" StrokeThickness="1"
-                                     IsHitTestVisible="False" AutomationProperties.AccessibilityView="Raw" />
-                            <Grid Canvas.Left="94" Canvas.Top="94" Width="132" Height="132"
-                                  IsHitTestVisible="False">
-                                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="4">
-                                    <Viewbox MaxWidth="116" MaxHeight="40" StretchDirection="DownOnly">
-                                        <TextBlock x:Name="ActivityTotalText" Text="--"
-                                                   FontSize="{StaticResource TitleFontSize}" FontWeight="SemiBold" />
-                                    </Viewbox>
-                                    <TextBlock x:Name="ActivityUnitText" Text="dictations" HorizontalAlignment="Center"
-                                               Style="{StaticResource CaptionSecondaryStyle}" />
-                                </StackPanel>
-                            </Grid>
-                            <TextBlock Text="00" Canvas.Left="140" Canvas.Top="2" Width="40" TextAlignment="Center"
-                                       Style="{StaticResource CaptionSecondaryStyle}" />
-                            <TextBlock Text="06" Canvas.Left="293" Canvas.Top="150" Width="27" TextAlignment="Center"
-                                       Style="{StaticResource CaptionSecondaryStyle}" />
-                            <TextBlock Text="12" Canvas.Left="140" Canvas.Top="300" Width="40" TextAlignment="Center"
-                                       Style="{StaticResource CaptionSecondaryStyle}" />
-                            <TextBlock Text="18" Canvas.Left="0" Canvas.Top="150" Width="27" TextAlignment="Center"
-                                       Style="{StaticResource CaptionSecondaryStyle}" />
-                            <Canvas x:Name="ClockHitTargets" Width="320" Height="320" />
-                        </Canvas>
-                    </Viewbox>
-                    <TextBlock x:Name="ActivityScaleText" HorizontalAlignment="Center"
-                               Style="{StaticResource CaptionSecondaryStyle}" />
-                    <Grid>
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                        <TextBlock x:Name="ActivityStartText" Style="{StaticResource CaptionSecondaryStyle}" />
-                        <TextBlock x:Name="ActivityEndText" Grid.Column="1" HorizontalAlignment="Right"
-                                   Style="{StaticResource CaptionSecondaryStyle}" />
+
+                <!-- No data: one quiet message where the chart would be. Nothing is drawn for activity that did not happen. -->
+                <StackPanel x:Name="ActivityEmptyPanel" Grid.Row="1" Spacing="8" Padding="0,24"
+                            HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed">
+                    <FontIcon Glyph="&#xE823;" FontSize="24" Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                              AutomationProperties.AccessibilityView="Raw" />
+                    <TextBlock x:Name="HomeActivityAvailabilityText" Text="Activity statistics are not available yet."
+                               Style="{StaticResource SecondaryTextStyle}" TextWrapping="WrapWholeWords"
+                               HorizontalAlignment="Center" TextAlignment="Center" />
+                </StackPanel>
+
+                <StackPanel x:Name="ActivityChartPanel" Grid.Row="1" Spacing="4" VerticalAlignment="Top">
+                    <!-- Only the ring geometry scales (320 to 256 DIP). Axis labels and the total are laid over it at
+                         their real type sizes, so no chart text drops below Caption. -->
+                    <Grid Width="256" Height="256" HorizontalAlignment="Center">
+                        <Viewbox Stretch="Uniform">
+                            <Canvas x:Name="ActivityClock" Width="320" Height="320"
+                                    AutomationProperties.Name="Dictations by local completion hour">
+                                <Path x:Name="ClockBackgroundDots" Fill="{ThemeResource ControlStrongFillColorDisabledBrush}"
+                                      IsHitTestVisible="False" AutomationProperties.AccessibilityView="Raw" />
+                                <Path x:Name="ClockActiveDots" Fill="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                      IsHitTestVisible="False" AutomationProperties.AccessibilityView="Raw" />
+                                <Path x:Name="ClockTicks" Stroke="{ThemeResource TextFillColorSecondaryBrush}" StrokeThickness="1"
+                                      IsHitTestVisible="False" AutomationProperties.AccessibilityView="Raw" />
+                                <Ellipse Canvas.Left="92" Canvas.Top="92" Width="136" Height="136"
+                                         Stroke="{ThemeResource DividerStrokeColorDefaultBrush}" StrokeThickness="1"
+                                         IsHitTestVisible="False" AutomationProperties.AccessibilityView="Raw" />
+                                <Canvas x:Name="ClockHitTargets" Width="320" Height="320" />
+                            </Canvas>
+                        </Viewbox>
+                        <TextBlock Text="00" HorizontalAlignment="Center" VerticalAlignment="Top" Style="{StaticResource HomeChartAxisStyle}" />
+                        <TextBlock Text="06" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource HomeChartAxisStyle}" />
+                        <TextBlock Text="12" HorizontalAlignment="Center" VerticalAlignment="Bottom" Style="{StaticResource HomeChartAxisStyle}" />
+                        <TextBlock Text="18" HorizontalAlignment="Left" VerticalAlignment="Center" Style="{StaticResource HomeChartAxisStyle}" />
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
+                            <TextBlock x:Name="ActivityTotalText" Text="--" HorizontalAlignment="Center" TextWrapping="NoWrap"
+                                       Style="{StaticResource TitleTextBlockStyle}" />
+                            <TextBlock x:Name="ActivityUnitText" Text="dictations" HorizontalAlignment="Center"
+                                       Style="{StaticResource HomeChartAxisStyle}" />
+                        </StackPanel>
+                    </Grid>
+                    <Grid Margin="0,4,0,0" ColumnSpacing="8">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <TextBlock x:Name="ActivityStartText" Style="{StaticResource HomeChartAxisStyle}" />
+                        <TextBlock x:Name="ActivityScaleText" Grid.Column="1" HorizontalAlignment="Center"
+                                   Style="{StaticResource HomeChartAxisStyle}" TextTrimming="CharacterEllipsis" />
+                        <TextBlock x:Name="ActivityEndText" Grid.Column="2" Style="{StaticResource HomeChartAxisStyle}" />
                     </Grid>
                     <TextBlock Text="Local completion time. Dot height shows relative activity."
-                               Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap" />
+                               Style="{StaticResource HomeStatLabelStyle}" />
                 </StackPanel>
-            </StackPanel>
+            </Grid>
         </Border>
     </local:CardFlowPanel>
 </UserControl>

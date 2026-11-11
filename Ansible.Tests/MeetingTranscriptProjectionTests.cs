@@ -63,7 +63,7 @@ public sealed class MeetingTranscriptProjectionTests
         Assert.Equal("First speech.", row.Text);
         Assert.Equal("speaker_0", projection.Rows[1].SpeakerId);
         Assert.Equal("Second speech.", projection.Rows[1].Text);
-        Assert.Contains("provisional", row.TimingText);
+        Assert.Contains("Updating", row.TimingText);
     }
 
     [Fact]
@@ -129,6 +129,7 @@ public sealed class MeetingTranscriptProjectionTests
         Assert.Equal("Chosen name", row.SpeakerName);
         Assert.Equal("Rename speaker Chosen name", row.RenameSpeakerName);
         Assert.True(row.IsOriginalExpanded);
+        Assert.Equal("Hide original wording", row.OriginalToggleText);
         Assert.Equal("Original.", row.OriginalText);
         Assert.True(row.HasCleanup);
         Assert.False(projection.Reconcile(document with { }));
@@ -159,7 +160,7 @@ public sealed class MeetingTranscriptProjectionTests
         var projection = new MeetingTranscriptProjection();
         var turn = Turn("speaker_0", 62, "Speech.") with { TimingQuality = MeetingTimingQuality.Aligned };
         projection.Reconcile(new MeetingDocument { Turns = [turn] });
-        Assert.Equal("1:02 · ASR-aligned", projection.Rows[0].TimingText);
+        Assert.Equal("1:02", projection.Rows[0].TimingText);
         Assert.Equal("speaker_0", projection.Rows[0].SpeakerName);
 
         Assert.True(projection.Reconcile(new MeetingDocument()));
@@ -210,7 +211,7 @@ public sealed class MeetingTranscriptProjectionTests
         Assert.Equal("Speaker 1", row.SpeakerName);
         Assert.Equal("First edited sentence. second sentence third edited sentence", row.Text);
         Assert.Equal("first raw sentence second sentence third raw sentence", row.OriginalText);
-        Assert.Equal("1:05 to 1:27 · ASR-aligned · wording edited", row.TimingText);
+        Assert.Equal("1:05", row.TimingText);
         Assert.True(row.HasCleanup);
         Assert.Equal(3, document.Turns.Count);
         Assert.Equal("first raw sentence", document.Turns[0].OriginalText);
@@ -221,8 +222,7 @@ public sealed class MeetingTranscriptProjectionTests
         Assert.Same(row, Assert.Single(projection.Rows));
         Assert.True(row.IsOriginalExpanded);
         Assert.EndsWith("third raw sentence live tail", row.OriginalText);
-        Assert.Contains("provisional", row.TimingText);
-        Assert.Contains("to 1:37", row.TimingText);
+        Assert.Equal("1:05 · Updating", row.TimingText);
     }
 
     [Fact]
@@ -233,10 +233,27 @@ public sealed class MeetingTranscriptProjectionTests
         var projection = new MeetingTranscriptProjection();
         projection.Reconcile(new() { Turns = [first, second] });
         var row = Assert.Single(projection.Rows);
-        Assert.Contains("approximate chunk time", row.TimingText);
-        Assert.DoesNotContain("ASR-aligned", row.TimingText);
+        Assert.Equal("About 0:00", row.TimingText);
         projection.Reconcile(new() { Turns = [first, second with { TimingQuality = MeetingTimingQuality.Unknown }] });
-        Assert.Equal("Time unavailable", row.TimingText);
+        Assert.Equal("", row.TimingText);
+        projection.Reconcile(new() { Turns = [first, second with { TimingQuality = MeetingTimingQuality.Unknown, IsProvisional = true }] });
+        Assert.Equal("Updating", row.TimingText);
+    }
+
+    [Fact]
+    public void OriginalToggleLabelFollowsExpansion()
+    {
+        var projection = new MeetingTranscriptProjection();
+        projection.Reconcile(new() { Turns = [Turn("speaker_0", 0, "Edited.") with { OriginalText = "Original." }] });
+        var row = projection.Rows[0];
+        var properties = new List<string?>();
+        row.PropertyChanged += (_, args) => properties.Add(args.PropertyName);
+
+        Assert.Equal("Show original wording", row.OriginalToggleText);
+        row.IsOriginalExpanded = true;
+
+        Assert.Equal("Hide original wording", row.OriginalToggleText);
+        Assert.Contains(nameof(MeetingTranscriptRow.OriginalToggleText), properties);
     }
 
     private static MeetingTurn Turn(string speaker, double start, string text) => new(speaker, start, start + 2, text);

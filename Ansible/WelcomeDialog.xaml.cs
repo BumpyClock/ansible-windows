@@ -69,7 +69,7 @@ public sealed partial class WelcomeDialog : ContentDialog
             PracticeBox.Text = "";
             Celebration.Visibility = Visibility.Collapsed;
             Scene.Reset();
-            XamlRoot = root;
+            this.FollowWindowTheme(root);
             await ShowAsync();
             return _exit;
         }
@@ -152,7 +152,9 @@ public sealed partial class WelcomeDialog : ContentDialog
         IntroPanel.Visibility = _step == 0 ? Visibility.Visible : Visibility.Collapsed;
         ShortcutPanel.Visibility = _step == 1 ? Visibility.Visible : Visibility.Collapsed;
         PracticePanel.Visibility = _step == PracticeStep ? Visibility.Visible : Visibility.Collapsed;
-        NextButton.Content = _step switch { 0 => "Get started", 1 => "Try it", _ => "Done" };
+        NextButton.Content = _step == PracticeStep ? "Done" : "Next";
+        // Done already finishes the lesson, so the last step offers no second way out.
+        SkipButton.Visibility = _step == PracticeStep ? Visibility.Collapsed : Visibility.Visible;
         BackButton.Visibility = _step > 0 ? Visibility.Visible : Visibility.Collapsed;
         RenderNavigationReadiness();
         ModelsButton.Visibility = !state.CanStart && state.IsIdle ? Visibility.Visible : Visibility.Collapsed;
@@ -207,7 +209,7 @@ public sealed partial class WelcomeDialog : ContentDialog
         var previous = _step;
         _step = step;
         RenderSteps(previous, _uiSettings.AnimationsEnabled);
-        // Back can collapse under the pointer; keep focus inside the lesson.
+        // Back and Skip can collapse under the pointer; keep focus inside the lesson.
         if (_step == PracticeStep) PracticeBox.Focus(FocusState.Programmatic);
         else NextButton.Focus(FocusState.Programmatic);
     }
@@ -316,6 +318,23 @@ public sealed partial class WelcomeDialog : ContentDialog
             catch (Exception error) { completion.SetException(error); }
         })) completion.SetException(new InvalidOperationException("The practice window is no longer available."));
         return completion.Task;
+    }
+}
+
+/// <summary>
+/// A ContentDialog opens in the popup layer, which follows the application theme and ignores a theme requested on
+/// the window's content root. Every dialog calls this before ShowAsync so it opens in its window's theme.
+/// </summary>
+internal static class DialogTheme
+{
+    /// <summary>
+    /// Attaches the dialog to the window and mirrors the theme requested on the window's content root. Default stays
+    /// Default, so the dialog keeps following a Windows theme change while it is open.
+    /// </summary>
+    public static void FollowWindowTheme(this ContentDialog dialog, XamlRoot root)
+    {
+        dialog.XamlRoot = root;
+        dialog.RequestedTheme = root.Content is FrameworkElement content ? content.RequestedTheme : ElementTheme.Default;
     }
 }
 

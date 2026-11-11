@@ -23,7 +23,7 @@ public sealed partial class MainPage : Page
     private readonly LocalDiagnosticLog _diagnostics;
     private readonly DispatcherTimer _diagnosticStatusTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private bool _recordingShortcut;
-    private TextBox? _shortcutCaptureBox;
+    private ShortcutField? _captureField;
     private Task? _captureSizeTask;
     private Task? _captureDeleteTask;
     private bool _wasRecordTake;
@@ -65,14 +65,17 @@ public sealed partial class MainPage : Page
             OpenAICleanupEffortChoice.Items.Add(effort);
         }
         const string typingHelp = "Click to record a new shortcut. Esc cancels. The completed transcript is inserted once after recognition succeeds. Held Ctrl, Alt, Shift or Win keys delay insertion until released. Some editors cannot distinguish fields within the same window. Hold to talk finishes when you release the shortcut; otherwise press it again to finish. Cancelling recognition inserts no text. Check the destination before dictating.";
-        ToolTipService.SetToolTip(HotkeyCaptureBox, typingHelp);
-        AutomationProperties.SetHelpText(HotkeyCaptureBox, typingHelp);
-        // TextBox handles pointer presses itself, so listen for handled presses to restart capture on click.
-        HotkeyCaptureBox.AddHandler(PointerPressedEvent, new PointerEventHandler((_, _) => StartShortcutCapture(HotkeyCaptureBox)), true);
-        RecordHotkeyCaptureBox.AddHandler(PointerPressedEvent, new PointerEventHandler((_, _) => StartShortcutCapture(RecordHotkeyCaptureBox)), true);
-        RecordPasteHotkeyCaptureBox.AddHandler(PointerPressedEvent, new PointerEventHandler((_, _) => StartShortcutCapture(RecordPasteHotkeyCaptureBox)), true);
+        ToolTipService.SetToolTip(HotkeyField.CaptureBox, typingHelp);
+        AutomationProperties.SetHelpText(HotkeyField.CaptureBox, typingHelp);
+        AutomationProperties.SetAutomationId(HotkeyField.CaptureBox, "HotkeyCaptureBox");
+        AutomationProperties.SetName(HotkeyField.CaptureBox, "Shortcut");
+        AutomationProperties.SetName(RecordHotkeyField.CaptureBox, "Record shortcut");
+        AutomationProperties.SetName(RecordPasteHotkeyField.CaptureBox, "Paste capture shortcut");
+        WireShortcutField(HotkeyField);
+        WireShortcutField(RecordHotkeyField);
+        WireShortcutField(RecordPasteHotkeyField);
         _rendering = true;
-        SetShortcutDisplay(_state.Settings.Shortcut.DisplayText);
+        ShowShortcuts();
         PushToTalkChoice.SelectedIndex = _state.Settings.PushToTalk ? 0 : 1;
         RenderInsertion(_state.IsIdle);
         _rendering = false;
@@ -137,8 +140,8 @@ public sealed partial class MainPage : Page
             UsageToggle.IsEnabled = idle;
             ToolTipService.SetToolTip(UsageToggle,$"Stored on this device. Never audio or text. Session dates, model, word counts, and timing. File: {_session.UsagePath}");
             AutomationProperties.SetHelpText(UsageToggle, _session.UsagePath);
-            if (!_recordingShortcut) { SetShortcutDisplay(_state.Settings.Shortcut.DisplayText); }
-            HotkeyCaptureBox.IsEnabled = idle;
+            if (!_recordingShortcut) { ShowShortcuts(); }
+            HotkeyField.IsEnabled = idle;
             ResetShortcutButton.Visibility = _state.Settings.Shortcut != DictationShortcut.Default ? Visibility.Visible : Visibility.Collapsed;
             ResetShortcutButton.IsEnabled = idle;
             ChangeShortcutButton.IsEnabled = idle;
@@ -148,16 +151,14 @@ public sealed partial class MainPage : Page
             RecordToggleModeToggle.IsEnabled = idle;
             IncludeVideoLinkToggle.IsOn = _state.Settings.IncludeVideoLink;
             IncludeVideoLinkToggle.IsEnabled = idle;
-            RecordHotkeyCaptureBox.IsEnabled = idle;
+            RecordHotkeyField.IsEnabled = idle;
             ChangeRecordShortcutButton.IsEnabled = idle;
             ResetRecordShortcutButton.IsEnabled = idle;
             ResetRecordShortcutButton.Visibility = _state.Settings.RecordShortcut != DictationShortcut.RecordDefault ? Visibility.Visible : Visibility.Collapsed;
-            if (_shortcutCaptureBox != RecordHotkeyCaptureBox) RecordHotkeyCaptureBox.Text = _state.Settings.RecordShortcut.DisplayText;
-            RecordPasteHotkeyCaptureBox.IsEnabled = idle;
+            RecordPasteHotkeyField.IsEnabled = idle;
             ChangeRecordPasteShortcutButton.IsEnabled = idle;
             ResetRecordPasteShortcutButton.IsEnabled = idle;
             ResetRecordPasteShortcutButton.Visibility = _state.Settings.RecordPasteShortcut != DictationShortcut.RecordPasteDefault ? Visibility.Visible : Visibility.Collapsed;
-            if (_shortcutCaptureBox != RecordPasteHotkeyCaptureBox) RecordPasteHotkeyCaptureBox.Text = _state.Settings.RecordPasteShortcut.DisplayText;
             DeleteCapturesButton.IsEnabled = !_joining && idle && _captureSizeTask is not { IsCompleted: false } && _captureDeleteTask is not { IsCompleted: false };
             if (!_joining && _wasRecordTake && !_state.IsRecordTake && _captureSizeTask is not { IsCompleted: false })
                 _captureSizeTask = RefreshCaptureSizeAsync();
@@ -192,8 +193,7 @@ public sealed partial class MainPage : Page
             : model is null ? "Install a dictation model to benchmark CPU and Vulkan."
             : _state.CanStart ? $"Measure CPU and Vulkan again for {model.DisplayName ?? model.Id}."
             : "Benchmarking is available when no other work is running.";
-        BenchmarkStatusText.Text = status;
-        ToolTipService.SetToolTip(BenchmarkStatusText, status);
+        BenchmarkRow.Description = status;
         BenchmarkProgress.IsActive = running;
         BenchmarkButton.Content = running ? "Cancel" : "Run benchmark";
         BenchmarkButton.IsEnabled = running ? _state.IsBenchmarking : _state.CanStart;
@@ -222,8 +222,8 @@ public sealed partial class MainPage : Page
         InsertionChoice.SelectedIndex = typing ? 1 : 0;
         InsertionChoice.IsEnabled = idle;
         InsertionRow.Description = typing
-            ? "Types characters at a steady pace and keeps your clipboard. Slower than paste."
-            : "Replaces your clipboard with the dictated text and sends the paste shortcut. The text stays available for apps that paste later. Requests exclusion from clipboard history and cloud sync.";
+            ? "Types each character at a steady pace and leaves your clipboard alone. Slower than paste."
+            : "Puts the text on your clipboard and presses the paste shortcut. The text stays on the clipboard, and Windows is asked to keep it out of clipboard history and cloud sync.";
         PasteShortcutRow.Visibility = typing ? Visibility.Collapsed : Visibility.Visible;
         PasteShortcutChoice.IsEnabled = idle;
         PasteShortcutChoice.SelectedIndex = (int)_state.Settings.PasteShortcut;
@@ -282,8 +282,8 @@ public sealed partial class MainPage : Page
         CopilotCleanupFields.Visibility = copilot ? Visibility.Visible : Visibility.Collapsed;
         OpenAICleanupFields.Visibility = copilot ? Visibility.Collapsed : Visibility.Visible;
         CleanupProviderRow.Description = copilot
-            ? "Uses the installed Copilot CLI and its signed-in account. Run copilot login if needed. No OpenAI API key is used. No fallback to another service or account."
-            : "Sends text directly to the OpenAI Responses API. Requires an OpenAI API model with structured outputs and separate API billing. Copilot model names are not automatically mapped. No fallback to another service or account.";
+            ? "Uses the Copilot CLI installed on this PC and its signed-in account. Run copilot login if needed. Never falls back to another service or account."
+            : "Sends text to the OpenAI Responses API. Needs a model that supports structured outputs and API billing separate from ChatGPT. Copilot model names are not mapped. Never falls back to another service or account.";
     }
 
     private void RenderKeyStatus()
@@ -292,7 +292,7 @@ public sealed partial class MainPage : Page
         {
             OpenAIKeyRow.Description = MeetingCleanupService.HasKey
                 ? "API key saved in Windows Credential Locker. It is not stored in settings or logs."
-                : "No API key saved. The key is stored in Windows Credential Locker, not settings or logs.";
+                : "No key saved yet. Keys are kept in Windows Credential Locker, never in settings or logs.";
         }
         catch (Exception) { OpenAIKeyRow.Description ="Windows Credential Locker could not be read. Save the key again or check Windows credential access."; }
     }
@@ -412,8 +412,8 @@ public sealed partial class MainPage : Page
     {
         DiagnosticsRow.Description = _diagnostics.Error ??
             (_diagnostics.DroppedEvents > 0
-                ? $"Diagnostics are saving. {_diagnostics.DroppedEvents} records were lost in this run."
-                : "Off by default. When enabled, operational metadata stays on this device. No audio or transcript text is recorded.");
+                ? $"{_diagnostics.DroppedEvents} diagnostic records were lost in this run."
+                : "Keeps a log of app events on this device for troubleshooting. No audio or transcript text is recorded.");
     }
 
     private void OverlayFollowsCaretToggled(object sender, RoutedEventArgs args)
@@ -480,16 +480,16 @@ public sealed partial class MainPage : Page
     }
 
     private void ChangeShortcutClicked(object sender, RoutedEventArgs args) =>
-        HotkeyCaptureBox.Focus(FocusState.Programmatic);
+        HotkeyField.CaptureBox.Focus(FocusState.Programmatic);
 
     private void ChangeRecordShortcutClicked(object sender, RoutedEventArgs args) =>
-        RecordHotkeyCaptureBox.Focus(FocusState.Programmatic);
+        RecordHotkeyField.CaptureBox.Focus(FocusState.Programmatic);
 
     private void ResetRecordShortcutClicked(object sender, RoutedEventArgs args) =>
         Try(() => _changeRecordHotkey(DictationShortcut.RecordDefault), "Record shortcut unavailable");
 
     private void ChangeRecordPasteShortcutClicked(object sender, RoutedEventArgs args) =>
-        RecordPasteHotkeyCaptureBox.Focus(FocusState.Programmatic);
+        RecordPasteHotkeyField.CaptureBox.Focus(FocusState.Programmatic);
 
     private void ResetRecordPasteShortcutClicked(object sender, RoutedEventArgs args) =>
         Try(() => _changeRecordPasteHotkey(DictationShortcut.RecordPasteDefault), "Paste capture shortcut unavailable");
@@ -564,29 +564,38 @@ public sealed partial class MainPage : Page
     private void ResetShortcutClicked(object sender, RoutedEventArgs args) =>
         Try(() => _changeHotkey(DictationShortcut.Default), "Shortcut unavailable");
 
-    private void ShortcutGotFocus(object sender, RoutedEventArgs args) => StartShortcutCapture((TextBox)sender);
-
-    // Focus, click, or Enter on the shortcut box records a new shortcut.
-    private void StartShortcutCapture(TextBox box)
+    // Focus, click, or Enter on a shortcut field records a new shortcut.
+    private void WireShortcutField(ShortcutField field)
     {
-        if (_recordingShortcut || !box.IsEnabled) { return; }
+        var box = field.CaptureBox;
+        box.GotFocus += (_, _) => StartShortcutCapture(field);
+        box.KeyDown += (_, args) => ShortcutKeyDown(field, args);
+        box.KeyUp += (_, args) => ShortcutKeyUp(args);
+        box.LostFocus += (_, _) => EndShortcutCapture();
+        // TextBox handles pointer presses itself, so listen for handled presses to restart capture on click.
+        box.AddHandler(PointerPressedEvent, new PointerEventHandler((_, _) => StartShortcutCapture(field)), true);
+    }
+
+    private void StartShortcutCapture(ShortcutField field)
+    {
+        if (_recordingShortcut || !field.IsEnabled) { return; }
         try
         {
             _captureShortcut(true);
-            _shortcutCaptureBox = box;
+            _captureField = field;
             _recordingShortcut = true;
             _pendingShortcut = null;
             _shortcutPrimarySeen = false;
-            SetShortcutDisplay("Press a shortcut; Esc cancels");
+            field.ShowStatus("Press a shortcut; Esc cancels");
         }
         catch (Exception error) { ReportError(error); }
     }
 
-    private void ShortcutKeyDown(object sender, KeyRoutedEventArgs args)
+    private void ShortcutKeyDown(ShortcutField field, KeyRoutedEventArgs args)
     {
-        if (!_recordingShortcut)
+        if (_captureField is not { } capturing)
         {
-            if (args.Key == VirtualKey.Enter) { args.Handled = true; StartShortcutCapture((TextBox)sender); }
+            if (args.Key == VirtualKey.Enter) { args.Handled = true; StartShortcutCapture(field); }
             return;
         }
         // Tab is never a valid shortcut. Let it move focus; LostFocus ends the capture.
@@ -605,7 +614,7 @@ public sealed partial class MainPage : Page
                 var candidate = new DictationShortcut(modifiers, 0);
                 _pendingShortcut = candidate.IsModifierOnly ? candidate : null;
                 if (_pendingShortcut is { } modifierOnly)
-                    SetShortcutDisplay($"{modifierOnly.DisplayText} (release to apply)");
+                    capturing.ShowStatus($"{modifierOnly.DisplayText} (release to apply)");
             }
             return;
         }
@@ -614,16 +623,16 @@ public sealed partial class MainPage : Page
         var shortcut = new DictationShortcut(modifiers, (uint)args.Key);
         if (!shortcut.IsValid)
         {
-            SetShortcutDisplay("Use Ctrl + Win, Alt + Win, F1-F11, or a modified letter or digit");
+            capturing.ShowStatus("Use Ctrl + Win, Alt + Win, F1-F11, or a modified letter or digit");
             return;
         }
         _pendingShortcut = shortcut;
-        SetShortcutDisplay($"{shortcut.DisplayText} (release to apply)");
+        capturing.ShowStatus($"{shortcut.DisplayText} (release to apply)");
     }
 
-    private void ShortcutKeyUp(object sender, KeyRoutedEventArgs args)
+    private void ShortcutKeyUp(KeyRoutedEventArgs args)
     {
-        if (!_recordingShortcut) { return; }
+        if (_captureField is not { } capturing) { return; }
         if (_pendingShortcut is not { } shortcut)
         {
             // An invalid chord leaves nothing pending. Releasing its primary key must end it, or a later
@@ -639,8 +648,8 @@ public sealed partial class MainPage : Page
         args.Handled = true;
         Try(() =>
         {
-            if (_shortcutCaptureBox == RecordPasteHotkeyCaptureBox) _changeRecordPasteHotkey(shortcut);
-            else if (_shortcutCaptureBox == RecordHotkeyCaptureBox) _changeRecordHotkey(shortcut);
+            if (capturing == RecordPasteHotkeyField) _changeRecordPasteHotkey(shortcut);
+            else if (capturing == RecordHotkeyField) _changeRecordHotkey(shortcut);
             else _changeHotkey(shortcut);
         }, "Shortcut unavailable");
         EndShortcutCapture();
@@ -655,8 +664,6 @@ public sealed partial class MainPage : Page
             or VirtualKey.Menu or VirtualKey.LeftMenu or VirtualKey.RightMenu
             or VirtualKey.LeftWindows or VirtualKey.RightWindows;
 
-    private void ShortcutLostFocus(object sender, RoutedEventArgs args) => EndShortcutCapture();
-
     private void EndShortcutCapture()
     {
         if (!_recordingShortcut) { return; }
@@ -665,35 +672,16 @@ public sealed partial class MainPage : Page
         _shortcutPrimarySeen = false;
         try { _captureShortcut(false); }
         catch (Exception error) { ReportError(error, "Shortcut unavailable"); }
-        SetShortcutDisplay(_session.State.Settings.Shortcut.DisplayText);
-        RecordHotkeyCaptureBox.Text = _session.State.Settings.RecordShortcut.DisplayText;
-        RecordPasteHotkeyCaptureBox.Text = _session.State.Settings.RecordPasteShortcut.DisplayText;
-        _shortcutCaptureBox = null;
+        _captureField = null;
+        ShowShortcuts();
     }
 
-    private void SetShortcutDisplay(string text)
+    // The field being recorded keeps its prompt; the others show their saved shortcut.
+    private void ShowShortcuts()
     {
-        if (_recordingShortcut && _shortcutCaptureBox is { } box && box != HotkeyCaptureBox)
-        {
-            box.Text = text;
-            return;
-        }
-        HotkeyCaptureBox.Text = text;
-        if (_recordingShortcut)
-        {
-            HotkeyKeycaps.Visibility = Visibility.Collapsed;
-            HotkeyCaptureStatus.Visibility = Visibility.Visible;
-            HotkeyCaptureStatus.Text = text;
-            return;
-        }
-
-        HotkeyCaptureStatus.Visibility = Visibility.Collapsed;
-        HotkeyKeycaps.Visibility = Visibility.Visible;
-        var parts = text.Split(" + ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var hasModifier = parts.Length > 1;
-        HotkeyModifierKeycap.Visibility = hasModifier ? Visibility.Visible : Visibility.Collapsed;
-        HotkeyPlusText.Visibility = hasModifier ? Visibility.Visible : Visibility.Collapsed;
-        HotkeyModifierText.Text = hasModifier ? string.Join(" + ", parts[..^1]) : string.Empty;
-        HotkeyPrimaryText.Text = parts.Length == 0 ? text : parts[^1];
+        var settings = _session.State.Settings;
+        if (_captureField != HotkeyField) HotkeyField.ShowShortcut(settings.Shortcut.DisplayText);
+        if (_captureField != RecordHotkeyField) RecordHotkeyField.ShowShortcut(settings.RecordShortcut.DisplayText);
+        if (_captureField != RecordPasteHotkeyField) RecordPasteHotkeyField.ShowShortcut(settings.RecordPasteShortcut.DisplayText);
     }
 }

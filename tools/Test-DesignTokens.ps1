@@ -318,13 +318,33 @@ foreach ($file in @((Get-Item -LiteralPath $tokenPath)) + $xamlFiles) {
     }
 }
 
-# A token nothing references is dead. Remove it instead of keeping it for later.
-$referenceText = (@($xamlFiles) + @(Get-Item -LiteralPath $tokenPath) + @(Get-ChildItem -LiteralPath (Join-Path $RepoRoot 'Ansible') -Filter '*.cs' -File) |
+# XAML compiles with an unknown StaticResource key and then fails when the page loads. Every key a view names must
+# be defined in this app's XAML or be one of the WinUI resources listed here.
+$platformResourceKeys = @('ControlCornerRadius', 'OverlayCornerRadius') + @($platformStyleKeys)
+$definedKeys = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+foreach ($key in $tokenKeys + $platformResourceKeys) { [void]$definedKeys.Add($key) }
+foreach ($file in $xamlFiles) {
+    foreach ($match in [regex]::Matches((Get-Content -LiteralPath $file.FullName -Raw), 'x:Key="([^"]+)"')) {
+        [void]$definedKeys.Add($match.Groups[1].Value)
+    }
+}
+foreach ($file in @((Get-Item -LiteralPath $tokenPath)) + $xamlFiles) {
+    foreach ($match in [regex]::Matches((Get-Content -LiteralPath $file.FullName -Raw), '(?:\{StaticResource\s+|ResourceKey=")([A-Za-z_][A-Za-z0-9_]*)')) {
+        Assert-Condition $definedKeys.Contains($match.Groups[1].Value) `
+            "$($file.Name): StaticResource '$($match.Groups[1].Value)' is not defined in the app's XAML or the known WinUI resources."
+    }
+}
+
+# A token nothing references is dead. Remove it instead of keeping it for later. XAML references a key through a
+# resource markup extension; C# through a quoted key. A key's own x:Key definition is not a reference.
+$xamlReferenceText = (@($xamlFiles) + @(Get-Item -LiteralPath $tokenPath) |
     ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw }) -join "`n"
+$codeReferenceText = ($csharpFiles | ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw }) -join "`n"
 foreach ($key in $tokenKeys | Sort-Object -Unique) {
     if ($key -in @('Light', 'Dark', 'HighContrast') -or $key -match $allowedPlatformOverride) { continue }
     $escaped = [regex]::Escape($key)
-    Assert-Condition ($referenceText -match "(?:Resource |ResourceKey=`")$escaped\b|`"$escaped`"") "Token '$key' is not referenced anywhere. Remove it."
+    Assert-Condition ($xamlReferenceText -match "(?:Resource |ResourceKey=`")$escaped\b" -or $codeReferenceText -match "`"$escaped`"") `
+        "Token '$key' is not referenced anywhere. Remove it."
 }
 
 $interAssets = @(Get-ChildItem -LiteralPath (Join-Path $RepoRoot 'Ansible') -Recurse -File |

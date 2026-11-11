@@ -26,6 +26,9 @@ public sealed partial class HomeHistoryView : UserControl
     private TransitionCollection? _transitions;
     private long _transitionGeneration;
     private bool _narrow;
+    private HomeHistoryViewModel? _model;
+    private int? _dictations;
+    private string? _shortcut;
 
     internal event Action? QueryChanged;
     internal event Action<HomeHistoryItem>? CopyRequested;
@@ -33,8 +36,21 @@ public sealed partial class HomeHistoryView : UserControl
 
     internal string Query => HistorySearchBox.Text.Trim();
 
-    /// <summary>How to dictate, shown when nothing is saved yet. The page sets it from the current shortcut.</summary>
-    internal string EmptyHint { get; set; } = "Choose Dictate to start your history.";
+    /// <summary>
+    /// What the empty state needs beyond saved rows: completed dictations from usage (null while unknown) and the
+    /// current shortcut. Changing either redraws only the empty state, so row animations are untouched.
+    /// </summary>
+    internal void SetEmptyContext(int? dictations, bool pushToTalk, string shortcut)
+    {
+        var lead = pushToTalk ? "Hold" : "Press";
+        if (_dictations == dictations && _shortcut == shortcut && EmptyShortcutLead.Text == lead) return;
+        _dictations = dictations;
+        if (_shortcut != shortcut) ShortcutKeycaps.Show(EmptyShortcutKeys, shortcut);
+        _shortcut = shortcut;
+        EmptyShortcutLead.Text = lead;
+        EmptyShortcutTail.Text = pushToTalk ? "in any app and speak" : "in any app to start and stop";
+        RenderEmptyState();
+    }
 
     public HomeHistoryView()
     {
@@ -66,16 +82,17 @@ public sealed partial class HomeHistoryView : UserControl
     /// </summary>
     internal void Render(HomeHistoryViewModel model, bool animate)
     {
+        _model = model;
         var count = model.AllOperationIds.Count;
         var query = Query;
         HistoryCountPill.Text = query.Length > 0 && model.HasHistory
             ? $"{model.Groups.Sum(group => group.Entries.Count):N0} of {count:N0}"
             : $"{count:N0} {(count == 1 ? "transcription" : "transcriptions")}";
+        // With nothing saved the empty state says so; a zero count beside it would repeat it.
+        HistoryCountPill.Visibility = model.HasHistory ? Visibility.Visible : Visibility.Collapsed;
         OversizedNotice.Text = $"A transcript over {HomeDictationHistory.MaximumCharacters:N0} characters stays in the current result and is not added to saved history.";
         OversizedNotice.Visibility = model.OversizedCurrentResult ? Visibility.Visible : Visibility.Collapsed;
-        EmptyState.Visibility = model.HasMatches ? Visibility.Collapsed : Visibility.Visible;
-        EmptyTitle.Text = model.HasHistory ? "No matches" : "No dictations yet";
-        EmptyDetail.Text = model.HasHistory ? $"No saved transcript contains \"{query}\"." : EmptyHint;
+        RenderEmptyState();
         animate &= HistoryRows.Children.Count > 0;
 
         var desired = new List<UIElement>();
@@ -129,6 +146,18 @@ public sealed partial class HomeHistoryView : UserControl
         }
         foreach (var label in _groupHeaders.Keys.Where(label => !liveGroups.Contains(label)).ToArray())
             _groupHeaders.Remove(label);
+    }
+
+    private void RenderEmptyState()
+    {
+        if (_model is null) return;
+        var empty = HomeHistoryProjection.EmptyState(_model, Query, _dictations);
+        var noMatches = empty?.Kind == HomeHistoryEmptyKind.NoMatches;
+        NoMatchesState.Visibility = noMatches ? Visibility.Visible : Visibility.Collapsed;
+        EmptyState.Visibility = empty is not null && !noMatches ? Visibility.Visible : Visibility.Collapsed;
+        if (empty is null) return;
+        (noMatches ? NoMatchesTitle : EmptyTitle).Text = empty.Title;
+        (noMatches ? NoMatchesDetail : EmptyDetail).Text = empty.Detail;
     }
 
     /// <summary>Shows the copied state on a row after the page put its transcript on the clipboard.</summary>
@@ -215,7 +244,7 @@ public sealed partial class HomeHistoryView : UserControl
         metaLine.Children.Add(row.Meta);
         Grid.SetColumn(row.TagHost, 1);
         metaLine.Children.Add(row.TagHost);
-        row.Body = new StackPanel { Spacing = 6 };
+        row.Body = new StackPanel { Spacing = 4 };
         row.Body.Children.Add(row.Transcript);
         row.Body.Children.Add(metaLine);
         row.Layout.Children.Add(row.Body);
@@ -292,7 +321,7 @@ public sealed partial class HomeHistoryView : UserControl
         Grid.SetRowSpan(row.Body, narrow ? 1 : 2);
         Grid.SetColumn(row.Body, narrow ? 0 : 1);
         Grid.SetColumnSpan(row.Body, narrow ? 2 : 1);
-        row.Time.Margin = narrow ? new Thickness(0, 0, 0, 4) : new Thickness(0, 3, 0, 0);
+        row.Time.Margin = narrow ? new Thickness(0, 0, 0, 4) : new Thickness(0, 2, 0, 0);
     }
 
     private void HistoryRowsSizeChanged(object sender, SizeChangedEventArgs args)
@@ -390,7 +419,7 @@ public sealed partial class HomeHistoryView : UserControl
             Grid.SetColumn(HistorySearchIcon, 0); Grid.SetColumnSpan(HistorySearchIcon, 2); Grid.SetRow(HistorySearchIcon, 1);
             Grid.SetColumn(HistorySearchShortcut, 0); Grid.SetColumnSpan(HistorySearchShortcut, 2); Grid.SetRow(HistorySearchShortcut, 1);
             HistorySearchBox.HorizontalAlignment = HorizontalAlignment.Stretch;
-            HistoryHeaderGrid.RowSpacing = 10;
+            HistoryHeaderGrid.RowSpacing = 8;
         }
         else
         {

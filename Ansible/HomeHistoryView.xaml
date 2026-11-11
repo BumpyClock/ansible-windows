@@ -43,10 +43,13 @@
             <Thickness x:Key="HomeHistoryGroupMargin">0,16,0,8</Thickness>
         </ResourceDictionary>
     </UserControl.Resources>
+    <!-- The page stretches History to the bottom of the viewport. The empty state takes that space, capped so it
+         stays in the upper part of a tall column instead of sinking below the fold. -->
     <Grid x:Name="HistorySection" RowSpacing="{StaticResource SectionHeaderGap}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" MaxHeight="480" />
         </Grid.RowDefinitions>
         <!-- Rows are built in code; this anchor supplies the hover fill resolved for this element's theme. -->
         <Border x:Name="HoverFillAnchor" Visibility="Collapsed" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
@@ -106,16 +109,32 @@
                     </TransitionCollection>
                 </StackPanel.ChildrenTransitions>
             </StackPanel>
-            <Grid x:Name="EmptyState" Margin="0,8,0,0" Visibility="Collapsed">
-                <Rectangle Stroke="{ThemeResource DividerStrokeColorDefaultBrush}" StrokeThickness="1" StrokeDashArray="4,3"
-                           RadiusX="12" RadiusY="12" IsHitTestVisible="False" />
-                <StackPanel Padding="24,48" Spacing="{StaticResource HistoryEmptyGap}" HorizontalAlignment="Center">
-                    <TextBlock x:Name="EmptyTitle" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center"
-                               Style="{StaticResource HistoryEmptyTitleStyle}" />
-                    <TextBlock x:Name="EmptyDetail" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center"
-                               Style="{StaticResource HistoryEmptyDetailStyle}" />
-                </StackPanel>
-            </Grid>
+            <!-- A search miss answers where the results would be, just under the search box. -->
+            <StackPanel x:Name="NoMatchesState" Padding="24,48" Spacing="{StaticResource HistoryEmptyGap}"
+                        HorizontalAlignment="Center" Visibility="Collapsed">
+                <TextBlock x:Name="NoMatchesTitle" TextWrapping="WrapWholeWords" HorizontalAlignment="Center"
+                           Style="{StaticResource HistoryEmptyTitleStyle}" />
+                <TextBlock x:Name="NoMatchesDetail" TextWrapping="WrapWholeWords" HorizontalAlignment="Center"
+                           Style="{StaticResource HistoryEmptyDetailStyle}" />
+            </StackPanel>
+        </StackPanel>
+        <!-- Nothing saved: one centred invitation to dictate, with the real shortcut as keycaps. -->
+        <StackPanel x:Name="EmptyState" Grid.Row="2" Padding="24,48" Spacing="8" MaxWidth="440"
+                    HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed">
+            <Border Width="64" Height="64" CornerRadius="32" Margin="0,0,0,8" HorizontalAlignment="Center"
+                    Background="{ThemeResource SubtleFillColorSecondaryBrush}">
+                <FontIcon Glyph="&#xE720;" FontSize="32" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                          AutomationProperties.AccessibilityView="Raw" />
+            </Border>
+            <TextBlock x:Name="EmptyTitle" Style="{StaticResource SubtitleTextBlockStyle}" TextWrapping="WrapWholeWords"
+                       HorizontalAlignment="Center" TextAlignment="Center" AutomationProperties.HeadingLevel="Level3" />
+            <TextBlock x:Name="EmptyDetail" Style="{StaticResource SecondaryTextStyle}" TextWrapping="WrapWholeWords"
+                       HorizontalAlignment="Center" TextAlignment="Center" />
+            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0" HorizontalAlignment="Center">
+                <TextBlock x:Name="EmptyShortcutLead" Style="{StaticResource SecondaryTextStyle}" VerticalAlignment="Center" />
+                <StackPanel x:Name="EmptyShortcutKeys" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" />
+                <TextBlock x:Name="EmptyShortcutTail" Style="{StaticResource SecondaryTextStyle}" VerticalAlignment="Center" />
+            </StackPanel>
         </StackPanel>
     </Grid>
 </UserControl>

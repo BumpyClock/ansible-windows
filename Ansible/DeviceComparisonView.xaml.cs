@@ -78,8 +78,15 @@ public sealed partial class DeviceComparisonView : UserControl
         };
         ComparisonTitleText.Text = $"Last device comparison: {comparison.ModelName}, {kind}";
         RecommendationBadge.Text = $"Auto chose {(recommended == NativeBackend.Cpu ? "CPU" : "Vulkan")}";
-        ComparisonDetailsText.Text = $"Public sample measured {comparison.MeasuredAt.ToUniversalTime():yyyy-MM-dd HH:mm:ss'Z'}. " +
-            "Loading and warmup excluded. Other models and uses are compared separately.";
+        ComparisonDetailsText.Text = $"Measured {FormatLocalTime(comparison.MeasuredAt)} on the bundled public sample, " +
+            "excluding model loading and warmup. Each model and use is compared separately.";
+    }
+
+    private static string FormatLocalTime(DateTimeOffset measuredAt)
+    {
+        var local = measuredAt.ToLocalTime();
+        var culture = CultureInfo.CurrentCulture;
+        return $"{local.ToString("d MMM yyyy", culture)}, {local.ToString("t", culture)}";
     }
 
     private static string FormatMilliseconds(double milliseconds) =>

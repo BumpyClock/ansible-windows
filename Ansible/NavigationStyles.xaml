@@ -1,39 +1,37 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Sidebar entries keep stock NavigationView item proportions: 36 DIP tall, a 16 DIP icon, Body text at regular
+         weight in the primary text colour, the subtle fills for hover and press, and a 3 by 16 DIP accent indicator
+         on the current page. Button still owns keyboard activation, automation, and system focus visuals. -->
     <Style x:Key="NavigationButtonStyle" TargetType="Button">
         <Setter Property="HorizontalAlignment" Value="Stretch" />
         <Setter Property="HorizontalContentAlignment" Value="Left" />
-        <Setter Property="Background" Value="Transparent" />
-        <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Background" Value="{ThemeResource SubtleFillColorTransparentBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
         <Setter Property="Padding" Value="12,0" />
-        <Setter Property="MinHeight" Value="{StaticResource NavHeight}" />
+        <Setter Property="MinHeight" Value="36" />
         <Setter Property="FontSize" Value="{StaticResource BodyFontSize}" />
         <Setter Property="UseSystemFocusVisuals" Value="True" />
-    </Style>
-    <Style x:Key="SelectedNavigationButtonStyle" TargetType="Button" BasedOn="{StaticResource NavigationButtonStyle}">
-        <Setter Property="Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
-        <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
-        <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Template">
             <Setter.Value>
-                <!-- The selected page keeps its own fill and foreground in every interactive state, with an accent bar
-                     at its leading edge. Button still owns keyboard activation, automation, and system focus visuals. -->
                 <ControlTemplate TargetType="Button">
-                    <Grid x:Name="SelectedBackground" Background="{TemplateBinding Background}"
+                    <Grid x:Name="ItemBackground" Background="{TemplateBinding Background}"
                           CornerRadius="{TemplateBinding CornerRadius}">
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CommonStates">
                                 <VisualState x:Name="Normal" />
                                 <VisualState x:Name="PointerOver">
                                     <VisualState.Setters>
-                                        <Setter Target="SelectedBackground.Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
+                                        <Setter Target="ItemBackground.Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="Pressed">
                                     <VisualState.Setters>
-                                        <Setter Target="SelectedBackground.Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
+                                        <Setter Target="ItemBackground.Background" Value="{ThemeResource SubtleFillColorTertiaryBrush}" />
+                                        <Setter Target="Presenter.Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="Disabled">
@@ -43,25 +41,64 @@
                                 </VisualState>
                             </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
-                        <Rectangle Width="{StaticResource NavSelectionBarWidth}" Margin="{StaticResource NavSelectionBarMargin}"
-                                   RadiusX="1.5" RadiusY="1.5" HorizontalAlignment="Left" Fill="{ThemeResource AppAccentBrush}" />
                         <ContentPresenter x:Name="Presenter" Content="{TemplateBinding Content}"
                                           ContentTemplate="{TemplateBinding ContentTemplate}"
                                           Margin="{TemplateBinding Padding}"
                                           HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                                          Foreground="{TemplateBinding Foreground}"
-                                          FontWeight="{TemplateBinding FontWeight}" />
+                                          Foreground="{TemplateBinding Foreground}" />
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style x:Key="SelectedNavigationButtonStyle" TargetType="Button" BasedOn="{StaticResource NavigationButtonStyle}">
+        <Setter Property="Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <!-- The current page keeps its fill at rest and adds the accent indicator at its leading edge. -->
+                <ControlTemplate TargetType="Button">
+                    <Grid x:Name="ItemBackground" Background="{TemplateBinding Background}"
+                          CornerRadius="{TemplateBinding CornerRadius}">
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="PointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="ItemBackground.Background" Value="{ThemeResource SubtleFillColorTertiaryBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="Presenter.Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Disabled">
+                                    <VisualState.Setters>
+                                        <Setter Target="Presenter.Foreground" Value="{ThemeResource TextFillColorDisabledBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                        <Rectangle Width="{StaticResource NavSelectionBarWidth}" Height="16" RadiusX="1.5" RadiusY="1.5"
+                                   HorizontalAlignment="Left" VerticalAlignment="Center"
+                                   Fill="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                        <ContentPresenter x:Name="Presenter" Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Margin="{TemplateBinding Padding}"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          Foreground="{TemplateBinding Foreground}" />
                     </Grid>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
     </Style>
     <Style x:Key="NavigationIconStyle" TargetType="Path">
-        <Setter Property="Width" Value="{StaticResource IconSize}" />
-        <Setter Property="Height" Value="{StaticResource IconSize}" />
+        <Setter Property="Width" Value="16" />
+        <Setter Property="Height" Value="16" />
         <Setter Property="Stretch" Value="Uniform" />
-        <Setter Property="Fill" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+        <Setter Property="Fill" Value="{ThemeResource TextFillColorPrimaryBrush}" />
     </Style>
     <Style x:Key="SelectedNavigationIconStyle" TargetType="Path" BasedOn="{StaticResource NavigationIconStyle}">
         <Setter Property="Fill" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />

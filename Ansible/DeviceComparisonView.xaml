@@ -6,8 +6,8 @@
     <UserControl.Resources>
         <StaticResource x:Key="ProgressBarTrackHeight" ResourceKey="BenchmarkBarHeight" />
         <StaticResource x:Key="ProgressBarIndicatorHeight" ResourceKey="BenchmarkBarHeight" />
-        <StaticResource x:Key="ProgressBarTrackCornerRadius" ResourceKey="BenchmarkBarCornerRadius" />
-        <StaticResource x:Key="ProgressBarCornerRadius" ResourceKey="BenchmarkBarCornerRadius" />
+        <StaticResource x:Key="ProgressBarTrackCornerRadius" ResourceKey="ControlCornerRadius" />
+        <StaticResource x:Key="ProgressBarCornerRadius" ResourceKey="ControlCornerRadius" />
         <Style x:Key="BenchmarkBarStyle" TargetType="ProgressBar">
             <Setter Property="Height" Value="{StaticResource BenchmarkBarHeight}" />
             <Setter Property="MinHeight" Value="{StaticResource BenchmarkBarHeight}" />
@@ -16,27 +16,20 @@
             <Setter Property="Background" Value="{ThemeResource ControlFillColorDefaultBrush}" />
             <Setter Property="Foreground" Value="{ThemeResource ControlStrongFillColorDisabledBrush}" />
         </Style>
-        <Style x:Key="BenchmarkDeviceStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
-            <Setter Property="FontSize" Value="{StaticResource CaptionFontSize}" />
+        <Style x:Key="BenchmarkDeviceStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionSecondaryStyle}">
             <Setter Property="FontWeight" Value="Medium" />
             <Setter Property="Width" Value="{StaticResource BenchmarkLabelWidth}" />
             <Setter Property="VerticalAlignment" Value="Center" />
-            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
         </Style>
-        <Style x:Key="BenchmarkValueStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
-            <Setter Property="FontSize" Value="{StaticResource CaptionFontSize}" />
+        <Style x:Key="BenchmarkValueStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionSecondaryStyle}">
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="MinWidth" Value="{StaticResource BenchmarkValueMinWidth}" />
             <Setter Property="MaxWidth" Value="{StaticResource BenchmarkValueMaxWidth}" />
             <Setter Property="TextAlignment" Value="Right" />
-            <Setter Property="TextWrapping" Value="Wrap" />
             <Setter Property="VerticalAlignment" Value="Center" />
-            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
         </Style>
         <Style x:Key="BenchmarkFootnoteStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionSecondaryStyle}">
-            <Setter Property="FontSize" Value="{StaticResource CaptionFontSize}" />
             <Setter Property="LineHeight" Value="{StaticResource CaptionLineHeight}" />
-            <Setter Property="TextWrapping" Value="Wrap" />
         </Style>
     </UserControl.Resources>
     <Border Background="{ThemeResource ControlAltFillColorSecondaryBrush}"
@@ -76,7 +69,7 @@
 
             <StackPanel x:Name="ComparisonMetrics" Spacing="{StaticResource BenchmarkRowGap}" VerticalAlignment="Center">
                 <StackPanel Spacing="2">
-                    <TextBlock x:Name="ComparisonTitleText" Text="Last device comparison" FontWeight="Medium" TextWrapping="Wrap"
+                    <TextBlock x:Name="ComparisonTitleText" Text="Last device comparison" FontWeight="SemiBold"
                                Style="{StaticResource CaptionSecondaryStyle}" />
                     <TextBlock Text="Lower elapsed time is better." Style="{StaticResource BenchmarkFootnoteStyle}" />
                 </StackPanel>
@@ -106,7 +99,7 @@
 
             <StackPanel x:Name="ComparisonDetails" Grid.Column="2" Width="{StaticResource BenchmarkResultWidth}"
                         Spacing="12" VerticalAlignment="Center">
-                <local:Badge x:Name="RecommendationBadge" Background="{ThemeResource AccentSoftBrush}" />
+                <local:Badge x:Name="RecommendationBadge" HorizontalAlignment="Left" Background="{ThemeResource AccentSoftBrush}" />
                 <TextBlock x:Name="ComparisonDetailsText" Style="{StaticResource BenchmarkFootnoteStyle}" />
             </StackPanel>
 

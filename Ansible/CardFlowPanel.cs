@@ -7,7 +7,8 @@ namespace Ansible;
 /// <summary>
 /// Lays cards out in equal-width columns, left to right and then down. The column count is the most columns of at
 /// least MinColumnWidth that fit, never more than the number of cards. The default MinColumnWidth is infinite,
-/// which stacks the cards in one column.
+/// which stacks the cards in one column. Each row is as tall as its tallest card; a card's own VerticalAlignment
+/// decides whether it fills that height (Stretch) or keeps its natural height (Top).
 /// </summary>
 public sealed partial class CardFlowPanel : Panel
 {

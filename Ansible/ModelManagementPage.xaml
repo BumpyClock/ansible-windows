@@ -35,12 +35,12 @@
                         <StackPanel Spacing="12" MaxWidth="380">
                             <TextBlock x:Name="FolderText" TextWrapping="Wrap" IsTextSelectionEnabled="True"
                                        Style="{StaticResource SecondaryTextStyle}" />
-                            <StackPanel Spacing="12">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
                                 <Button x:Name="FolderButton" Content="Choose folder" Click="ChooseFolderClicked"
-                                        MinHeight="40" AutomationProperties.AutomationId="ChooseModelFolder"
+                                        AutomationProperties.AutomationId="ChooseModelFolder"
                                         ToolTipService.ToolTip="Changing folders does not move or delete model files." />
                                 <Button x:Name="RefreshButton" Content="Verify installed files" Click="RefreshClicked"
-                                        IsEnabled="False" MinHeight="40" AutomationProperties.AutomationId="VerifyModelFiles" />
+                                        IsEnabled="False" AutomationProperties.AutomationId="VerifyModelFiles" />
                             </StackPanel>
                             <TextBlock x:Name="BackendText" Style="{StaticResource CaptionSecondaryStyle}" />
                         </StackPanel>
@@ -75,7 +75,7 @@
                     <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                     <TextBlock Text="Available" Style="{StaticResource ModelGroupHeadingStyle}"
                                AutomationProperties.HeadingLevel="Level2" />
-                    <TextBlock Grid.Column="1" Text="Pinned downloads, verified by SHA-256." Style="{StaticResource ModelGroupNoteStyle}" />
+                    <TextBlock Grid.Column="1" Text="Each download is checked before it is installed." Style="{StaticResource ModelGroupNoteStyle}" />
                 </Grid>
                 <StackPanel x:Name="AvailableRows" Spacing="8" />
             </StackPanel>

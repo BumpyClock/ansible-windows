@@ -78,9 +78,9 @@ public sealed partial class ShellTitleBar : UserControl
     {
         if (!ReferenceEquals(_canvas, canvas))
         {
-            if (_canvas is not null) _canvas.HeadingScrolledOutChanged -= HeadingScrolledOutChanged;
+            if (_canvas is not null) _canvas.HeaderScrolledOutChanged -= HeaderScrolledOutChanged;
             _canvas = canvas;
-            if (canvas is not null) canvas.HeadingScrolledOutChanged += HeadingScrolledOutChanged;
+            if (canvas is not null) canvas.HeaderScrolledOutChanged += HeaderScrolledOutChanged;
         }
         if (!ReferenceEquals(_action, action))
         {
@@ -90,7 +90,7 @@ public sealed partial class ShellTitleBar : UserControl
         }
     }
 
-    private void HeadingScrolledOutChanged(object? sender, EventArgs args) => Render();
+    private void HeaderScrolledOutChanged(object? sender, EventArgs args) => Render();
 
     // Deferred so a page that updates several properties of its action renders the copy once.
     private void ActionChanged() => DispatcherQueue.TryEnqueue(Render);
@@ -98,11 +98,14 @@ public sealed partial class ShellTitleBar : UserControl
     private void Render()
     {
         if (_closed) return;
-        var scrolled = _canvas is { IsHeadingScrolledOut: true } && PageTitle.Text.Length > 0;
+        var scrolled = _canvas is { IsHeaderScrolledOut: true } && PageTitle.Text.Length > 0;
         var action = scrolled && _action is { IsVisible: true } ? _action : null;
         if (action is not null)
         {
-            PrimaryActionCopy.Content = action.Label;
+            var icon = _canvas?.PrimaryActionIcon;
+            if (!ReferenceEquals(PrimaryActionIcon.IconSource, icon)) PrimaryActionIcon.IconSource = icon;
+            PrimaryActionIcon.Visibility = icon is null ? Visibility.Collapsed : Visibility.Visible;
+            PrimaryActionLabel.Text = action.Label;
             PrimaryActionCopy.IsEnabled = action.IsEnabled;
             AutomationProperties.SetName(PrimaryActionCopy, action.AccessibleName);
         }

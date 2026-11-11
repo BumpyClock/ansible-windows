@@ -5,17 +5,14 @@
              xmlns:local="using:Ansible"
              HorizontalAlignment="Stretch">
     <UserControl.Resources>
-        <Style x:Key="DetailLabelStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionSecondaryStyle}">
-            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
-        </Style>
         <Style x:Key="DetailValueStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionSecondaryStyle}">
             <Setter Property="IsTextSelectionEnabled" Value="True" />
         </Style>
     </UserControl.Resources>
-    <!-- One full-width row per model. The page's group heading carries the install state; the row carries
-         facts, actions, and details that expand in place. -->
-    <Border x:Name="CardBorder" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-            BorderThickness="1" CornerRadius="{StaticResource OverlayCornerRadius}" Padding="16">
+    <!-- One full-width row per model. The page's group heading carries the install state. The row says what the
+         model does and what it costs in plain words, offers at most one transfer or selection button, and keeps
+         details and removal in the More menu. Every row has the same three text lines, so rows are the same height. -->
+    <Border x:Name="CardBorder" Style="{StaticResource CardStyle}" Padding="16">
         <!-- The in-use outline is a visual state with a ThemeResource setter, so it follows theme and High Contrast. -->
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup x:Name="OutlineStates">
@@ -27,10 +24,11 @@
                 </VisualState>
             </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
-        <Grid x:Name="RowLayout" ColumnSpacing="16" SizeChanged="RowSizeChanged">
+        <Grid x:Name="RowLayout" ColumnSpacing="12" SizeChanged="RowSizeChanged">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="40" />
                 <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
@@ -40,93 +38,108 @@
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <Border Width="40" Height="40" CornerRadius="{StaticResource OverlayCornerRadius}" Background="{ThemeResource ControlFillColorDefaultBrush}"
+            <!-- The maker's mark when the app ships one; otherwise a neutral glyph for what the model does. -->
+            <Border Width="40" Height="40" CornerRadius="{StaticResource ControlCornerRadius}" Background="{ThemeResource ControlFillColorDefaultBrush}"
                     VerticalAlignment="Center" AutomationProperties.AccessibilityView="Raw">
                 <Grid>
+                    <FontIcon x:Name="TileGlyph" FontSize="20" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     <Image x:Name="IconImage" Width="28" Height="28" Stretch="Uniform"
                            Visibility="Collapsed" ImageOpened="IconOpened" ImageFailed="IconFailed" />
-                    <TextBlock x:Name="Monogram" FontSize="{StaticResource BodyFontSize}" FontWeight="Bold"
-                               Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                               HorizontalAlignment="Center" VerticalAlignment="Center" />
                 </Grid>
             </Border>
 
             <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
-                <!-- Name and chips flow like text: chips follow the name and wrap below it when the row is narrow. -->
+                <!-- Name and badges flow like text: a badge follows the name and wraps below it when the row is narrow.
+                     The name sits in a slot as tall as a badge, so rows with and without one are the same height. -->
                 <local:ModelRowWrapPanel HorizontalSpacing="8" VerticalSpacing="4">
-                    <TextBlock x:Name="NameText" Style="{StaticResource BodyStrongTextBlockStyle}" TextWrapping="Wrap" />
-                    <local:Badge x:Name="RoleBadge" Background="{ThemeResource AccentSoftBrush}" Visibility="Collapsed" />
-                    <local:Badge x:Name="CustomWordsBadge" Text="Custom words"
-                                 Visibility="Collapsed" />
+                    <Grid MinHeight="28">
+                        <TextBlock x:Name="NameText" Style="{StaticResource BodyStrongTextBlockStyle}" TextWrapping="Wrap"
+                                   VerticalAlignment="Center" />
+                    </Grid>
+                    <local:Badge x:Name="InUseBadge" Background="{ThemeResource AccentSoftBrush}" Visibility="Collapsed" />
+                    <local:Badge x:Name="StateBadge" Visibility="Collapsed" />
                 </local:ModelRowWrapPanel>
-                <!-- One line of facts: an exceptional state, then behaviour, sizes, or transfer progress. -->
-                <TextBlock x:Name="FactsText" Style="{StaticResource CaptionSecondaryStyle}">
-                    <Run x:Name="StateRun" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}" /><Run x:Name="SeparatorRun" /><Run x:Name="CaptionRun" />
-                </TextBlock>
+                <TextBlock x:Name="SummaryText" Style="{StaticResource CaptionSecondaryStyle}" />
+                <TextBlock x:Name="FootprintText" Style="{StaticResource CaptionSecondaryStyle}" />
             </StackPanel>
 
-            <StackPanel x:Name="ActionsPanel" Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+            <StackPanel x:Name="ActionsPanel" Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                 <StackPanel x:Name="ProgressPanel" Width="160" Spacing="4" Margin="0,0,8,0" VerticalAlignment="Center"
                             Visibility="Collapsed">
                     <ProgressBar x:Name="DownloadProgress" Minimum="0" Maximum="100" />
                     <TextBlock x:Name="ProgressText" Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="NoWrap"
                                TextTrimming="CharacterEllipsis" />
                 </StackPanel>
-                <!-- Update owns the style: accent for enabled forward steps, default for Pause, Stop and disabled.
-                     A disabled button shows no tooltip, so the transparent host carries the reason. -->
+                <!-- A disabled button shows no tooltip, so the transparent host carries the reason. -->
                 <Border x:Name="PrimaryHost" Background="Transparent">
-                    <Button x:Name="PrimaryButton" Content="Download" MinHeight="32" Click="PrimaryClicked" />
+                    <Button x:Name="PrimaryButton" Content="Download" Click="PrimaryClicked" />
                 </Border>
-                <Button x:Name="UseButton" Content="Use for dictation" MinHeight="32" Click="UseClicked" Visibility="Collapsed" />
-                <Button x:Name="RemoveButton" Style="{StaticResource IconButtonStyle}" Click="RemoveClicked"
-                        Visibility="Collapsed">
-                    <Button.Resources>
-                        <SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="Transparent" />
-                    </Button.Resources>
-                    <FontIcon Glyph="&#xE74D;" FontSize="16" />
-                </Button>
-                <Button x:Name="DetailsButton" Style="{StaticResource IconButtonStyle}" Click="DetailsClicked"
-                        ToolTipService.ToolTip="Details">
-                    <FontIcon Glyph="&#xE946;" FontSize="16" />
-                </Button>
+                <Button x:Name="UseButton" Content="Use for dictation" Click="UseClicked" Visibility="Collapsed" />
             </StackPanel>
 
-            <local:NoticeBar x:Name="ErrorNotice" Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,12,0,0"
+            <!-- More stays in the row's corner at every width. Removal lives here so it never sits beside the name. -->
+            <Button x:Name="MoreButton" Grid.Column="3" Style="{StaticResource IconButtonStyle}" VerticalAlignment="Center"
+                    ToolTipService.ToolTip="More options">
+                <FontIcon Glyph="&#xE712;" FontSize="16" />
+                <Button.Flyout>
+                    <MenuFlyout Placement="BottomEdgeAlignedRight">
+                        <MenuFlyoutItem x:Name="DetailsItem" Text="Show details" Click="DetailsClicked">
+                            <MenuFlyoutItem.Icon>
+                                <FontIcon Glyph="&#xE946;" />
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutSeparator x:Name="RemoveSeparator" Visibility="Collapsed" />
+                        <MenuFlyoutItem x:Name="RemoveItem" Text="Remove from this device" Click="RemoveClicked"
+                                        Visibility="Collapsed">
+                            <MenuFlyoutItem.Icon>
+                                <FontIcon Glyph="&#xE74D;" />
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                    </MenuFlyout>
+                </Button.Flyout>
+            </Button>
+
+            <local:NoticeBar x:Name="ErrorNotice" Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="3" Margin="0,12,0,0"
                              Visibility="Collapsed" />
 
-            <!-- Details flow inside the page scroller; they never scroll on their own. -->
-            <Border x:Name="DetailsPanel" Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,12,0,0"
+            <!-- Details flow inside the page scroller; they never scroll on their own. Exact identifiers live here. -->
+            <Border x:Name="DetailsPanel" Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="3" Margin="0,12,0,0"
                     Padding="0,12,0,0" BorderThickness="0,1,0,0" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
                     Visibility="Collapsed">
                 <StackPanel Spacing="8">
                     <Grid x:Name="AboutRow" ColumnSpacing="16">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="120" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                        <TextBlock Text="About" Style="{StaticResource DetailLabelStyle}" />
+                        <TextBlock Text="About" Style="{StaticResource CaptionSecondaryStyle}" />
                         <TextBlock x:Name="DescriptionText" Grid.Column="1" Style="{StaticResource DetailValueStyle}" />
                     </Grid>
                     <Grid ColumnSpacing="16">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="120" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                        <TextBlock Text="Languages" Style="{StaticResource DetailLabelStyle}" />
+                        <TextBlock Text="Languages" Style="{StaticResource CaptionSecondaryStyle}" />
                         <TextBlock x:Name="LanguagesText" Grid.Column="1" Style="{StaticResource DetailValueStyle}" />
                     </Grid>
                     <Grid ColumnSpacing="16">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="120" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                        <TextBlock Text="Custom words" Style="{StaticResource DetailLabelStyle}" />
+                        <TextBlock Text="Dictionary" Style="{StaticResource CaptionSecondaryStyle}" />
                         <TextBlock x:Name="CustomWordsText" Grid.Column="1" Style="{StaticResource DetailValueStyle}" />
                     </Grid>
                     <Grid ColumnSpacing="16">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="120" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                        <TextBlock Text="License" Style="{StaticResource DetailLabelStyle}" />
+                        <TextBlock Text="License" Style="{StaticResource CaptionSecondaryStyle}" />
                         <TextBlock x:Name="LicenseDetailText" Grid.Column="1" Style="{StaticResource DetailValueStyle}" />
                     </Grid>
                     <Grid ColumnSpacing="16">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="120" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                        <TextBlock Text="Source" Style="{StaticResource DetailLabelStyle}" />
+                        <TextBlock Text="Catalog name" Style="{StaticResource CaptionSecondaryStyle}" />
+                        <TextBlock x:Name="CatalogNameText" Grid.Column="1" Style="{StaticResource DetailValueStyle}" />
+                    </Grid>
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="120" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <TextBlock Text="Source" Style="{StaticResource CaptionSecondaryStyle}" />
                         <TextBlock x:Name="SourceText" Grid.Column="1" Style="{StaticResource DetailValueStyle}" />
                     </Grid>
                     <Grid ColumnSpacing="16">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="120" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                        <TextBlock Text="Verification" Style="{StaticResource DetailLabelStyle}" />
+                        <TextBlock Text="Verification" Style="{StaticResource CaptionSecondaryStyle}" />
                         <StackPanel Grid.Column="1" Spacing="2">
                             <TextBlock x:Name="PrecisionText" Style="{StaticResource DetailValueStyle}" />
                             <TextBlock x:Name="ByteCountText" Style="{StaticResource DetailValueStyle}" />
@@ -135,7 +148,7 @@
                     </Grid>
                     <Grid ColumnSpacing="16">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="120" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                        <TextBlock Text="Location" Style="{StaticResource DetailLabelStyle}" />
+                        <TextBlock Text="Location" Style="{StaticResource CaptionSecondaryStyle}" />
                         <TextBlock x:Name="LocationText" Grid.Column="1" Style="{StaticResource DetailValueStyle}" />
                     </Grid>
                 </StackPanel>

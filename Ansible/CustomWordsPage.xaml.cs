@@ -103,7 +103,7 @@ public sealed partial class CustomWordsPage : Page
         CountText.Text = $"{entries.Length} of {CustomVocabulary.MaximumEntries}";
         var empty = filtered.Length == 0;
         EmptyState.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
-        EmptyTitle.Visibility = entries.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        EmptyIcon.Visibility = EmptyTitle.Visibility = entries.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         EmptyHelp.Text = entries.Length == 0
             ? "Add names, product terms, and acronyms the model gets wrong."
             : $"No match. Press Enter to add \"{query}\".";
@@ -266,7 +266,7 @@ public sealed partial class CustomWordsPage : Page
         _editorOpen = true;
         try
         {
-            EntryDialog.XamlRoot = XamlRoot;
+            EntryDialog.FollowWindowTheme(XamlRoot);
             EntryBox.Text = "";
             ValidateEditor();
             await EntryDialog.ShowAsync();

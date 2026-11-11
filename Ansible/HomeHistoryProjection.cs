@@ -58,8 +58,23 @@ internal sealed record HomeHistoryViewModel(
     IReadOnlySet<Guid> AllOperationIds,
     string? StorageError = null);
 
+internal enum HomeHistoryEmptyKind { NoMatches, NothingSaved, FirstRun }
+
+/// <summary>What History says when it shows no rows.</summary>
+internal sealed record HomeHistoryEmptyState(HomeHistoryEmptyKind Kind, string Title, string Detail);
+
 internal static class HomeHistoryProjection
 {
+    /// <summary>
+    /// Null while rows match. Usage counts survive removed and unsaved history rows, so "No dictations yet" needs
+    /// usage that is known and holds no dictation; unknown usage gets the wording that is true either way.
+    /// </summary>
+    internal static HomeHistoryEmptyState? EmptyState(HomeHistoryViewModel model, string query, int? dictations) =>
+        model.HasMatches ? null
+        : model.HasHistory ? new(HomeHistoryEmptyKind.NoMatches, "No matches", $"No saved transcript contains \"{query}\".")
+        : dictations == 0 ? new(HomeHistoryEmptyKind.FirstRun, "No dictations yet", "Your transcripts appear here after you dictate.")
+        : new(HomeHistoryEmptyKind.NothingSaved, "No saved transcripts", "New dictations appear here.");
+
     internal static HomeHistoryViewModel Create(
         IReadOnlyList<HomeHistoryItem> all,
         string query,

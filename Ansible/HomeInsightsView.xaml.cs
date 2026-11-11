@@ -17,8 +17,9 @@ internal sealed partial class HomeModelTemplateSelector : DataTemplateSelector
 
 public sealed partial class HomeInsightsView : UserControl
 {
-    // A strip card is never narrower than this. The strip drops a column and wraps to a new row first.
-    private const double StripCardMinWidth = 220;
+    // A strip card is never narrower than this: the 256 DIP activity clock plus card padding and border. The strip
+    // drops a column and wraps to a new row first.
+    private const double StripCardMinWidth = 300;
 
     private HomeInsightsViewModel? _model;
 
@@ -40,8 +41,8 @@ public sealed partial class HomeInsightsView : UserControl
         HomePaceText.Text = model.PaceText;
         HomeSessionsText.Text = model.SessionsText;
         HomeWordsText.Text = model.WordsText;
-        HomeStreakPill.Text = model.StreakText;
-        HomeStreakPill.Visibility = model.Activity is null ? Visibility.Collapsed : Visibility.Visible;
+        HomeStreakPill.Text = model.StreakText ?? "";
+        HomeStreakPill.Visibility = model.StreakText is null ? Visibility.Collapsed : Visibility.Visible;
         HomeMicrophoneText.Text = model.MicrophoneMinutesText;
         ToolTipService.SetToolTip(HomePaceText, $"{model.PaceText} words per microphone minute, pauses included");
         ToolTipService.SetToolTip(HomeSessionsText, $"{model.SessionsText} dictations, all time");
@@ -69,16 +70,21 @@ public sealed partial class HomeInsightsView : UserControl
         ActivityPeriodSelector.IsEnabled = _model.HourlyActivity is not null;
         if (_model.HourlyActivity is null)
         {
-            ActivityTotalText.Text = "--";
-            HomeActivityAvailabilityText.Text = _model.AvailabilityMessage ?? "Activity statistics are not available yet.";
-            HomeActivityAvailabilityText.Visibility = Visibility.Visible;
-            ActivityChartPanel.Visibility = Visibility.Collapsed;
+            ShowActivityMessage(_model.AvailabilityMessage ?? "Activity statistics are not available yet.");
             return;
         }
 
         var activity = HomeInsightsProjection.CreateActivity(_model.HourlyActivity, _model.Today,
             ActivityPeriodSelector.SelectedItem != WeekPeriodItem);
         ActivityPeriodText.Text = activity.PeriodText;
+        if (activity.IsEmpty)
+        {
+            ShowActivityMessage("No dictations in this period.");
+            return;
+        }
+        ActivityEmptyPanel.Visibility = Visibility.Collapsed;
+        ActivityChartPanel.Visibility = Visibility.Visible;
+        RhythmCard.VerticalAlignment = VerticalAlignment.Top;
         ActivityTotalText.Text = activity.TotalValueText;
         ActivityUnitText.Text = activity.UnitText;
         AutomationProperties.SetName(ActivityTotalText, activity.TotalText);
@@ -87,9 +93,6 @@ public sealed partial class HomeInsightsView : UserControl
         ActivityScaleText.Text = $"Busiest hour · {activity.ScaleText}";
         ActivityStartText.Text = activity.StartText;
         ActivityEndText.Text = activity.EndText;
-        HomeActivityAvailabilityText.Text = "No dictations in this period.";
-        HomeActivityAvailabilityText.Visibility = activity.IsEmpty ? Visibility.Visible : Visibility.Collapsed;
-        ActivityChartPanel.Visibility = Visibility.Visible;
         AutomationProperties.SetName(ActivityClock,
             $"{activity.TotalText}. {activity.PeriodText}. Clockwise from midnight. Each sector is one local completion hour.");
         var background = new GeometryGroup();
@@ -105,11 +108,8 @@ public sealed partial class HomeInsightsView : UserControl
         foreach (var hour in activity.Hours)
         {
             var angle = hour.Hour * Math.Tau / 24 - Math.PI / 2;
-            ticks.Children.Add(new LineGeometry
-            {
-                StartPoint = ClockPoint(angle, 129),
-                EndPoint = ClockPoint(angle, hour.Hour % 6 == 0 ? 138 : 133)
-            });
+            // Every tick is short: the hour labels sit just outside the ring at their own size, not on long ticks.
+            ticks.Children.Add(new LineGeometry { StartPoint = ClockPoint(angle, 129), EndPoint = ClockPoint(angle, 133) });
             var end = angle + Math.Tau / 24;
             var sector = new PathFigure { StartPoint = ClockPoint(angle, 70), IsClosed = true, IsFilled = true };
             sector.Segments.Add(new LineSegment { Point = ClockPoint(angle, 127) });
@@ -127,6 +127,16 @@ public sealed partial class HomeInsightsView : UserControl
             ClockHitTargets.Children.Add(shape);
         }
         ClockTicks.Data = ticks;
+    }
+
+    // One calm message replaces the chart, its scale, dates, and footnote. In a strip the card then fills its row
+    // beside the usage card and centres the message, instead of leaving a short card beside a tall one.
+    private void ShowActivityMessage(string message)
+    {
+        HomeActivityAvailabilityText.Text = message;
+        ActivityEmptyPanel.Visibility = Visibility.Visible;
+        ActivityChartPanel.Visibility = Visibility.Collapsed;
+        RhythmCard.VerticalAlignment = VerticalAlignment.Stretch;
     }
 
     private static Point ClockPoint(double angle, double radius) =>

@@ -297,7 +297,7 @@ height and allow outer overflow in short windows, so warnings cannot collapse th
 `SettingsRow` owns the shared adaptive setting
 layout; pages provide labels, descriptions, and controls.
 `Badge` sizes to its label up to 240 effective pixels, trims overflow, and uses
-6px rounded corners with a 28px minimum height.
+the WinUI control corner radius with a 28px minimum height.
 
 ## Tests
 

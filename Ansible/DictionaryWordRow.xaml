@@ -17,13 +17,14 @@
                 </VisualState>
             </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
-        <Grid MinHeight="44" Padding="12,4,8,4" ColumnSpacing="8">
+        <Grid MinHeight="40" Padding="12,4,4,4" ColumnSpacing="8">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <Grid VerticalAlignment="Center">
-                <TextBlock x:Name="WordLabel" TextWrapping="Wrap" VerticalAlignment="Center" />
+                <TextBlock x:Name="WordLabel" Style="{StaticResource BodyTextBlockStyle}" TextWrapping="Wrap"
+                           VerticalAlignment="Center" />
                 <TextBox x:Name="Editor" Visibility="Collapsed" VerticalAlignment="Center" KeyDown="EditorKeyDown" />
             </Grid>
             <Grid Grid.Column="1" VerticalAlignment="Center">
@@ -39,7 +40,7 @@
                 </StackPanel>
                 <StackPanel x:Name="EditActions" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
                             Visibility="Collapsed">
-                    <Button Content="Save" Style="{StaticResource AppPrimaryButtonStyle}" Click="SaveClicked" />
+                    <Button Content="Save" Click="SaveClicked" />
                     <Button Content="Cancel" Click="CancelClicked" />
                 </StackPanel>
             </Grid>

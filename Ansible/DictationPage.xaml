@@ -6,8 +6,8 @@
     <Page.Resources>
         <StaticResource x:Key="ProgressBarTrackHeight" ResourceKey="HomeModelTrackHeight" />
         <StaticResource x:Key="ProgressBarIndicatorHeight" ResourceKey="HomeModelTrackHeight" />
-        <StaticResource x:Key="ProgressBarTrackCornerRadius" ResourceKey="HomeModelTrackCornerRadius" />
-        <StaticResource x:Key="ProgressBarCornerRadius" ResourceKey="HomeModelTrackCornerRadius" />
+        <StaticResource x:Key="ProgressBarTrackCornerRadius" ResourceKey="ControlCornerRadius" />
+        <StaticResource x:Key="ProgressBarCornerRadius" ResourceKey="ControlCornerRadius" />
     </Page.Resources>
     <local:PageCanvas x:Name="HomeViewport"
                       Title="Good afternoon"
@@ -15,7 +15,7 @@
         <local:PageCanvas.HeaderActions>
             <StackPanel x:Name="DictateControl" Spacing="8" VerticalAlignment="Center"
                         SizeChanged="DictateControlSizeChanged">
-                    <Grid x:Name="ShortcutControlGrid" ColumnSpacing="16" RowSpacing="8" VerticalAlignment="Center">
+                    <Grid x:Name="ShortcutControlGrid" ColumnSpacing="12" RowSpacing="8" VerticalAlignment="Center">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
@@ -25,11 +25,11 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <StackPanel x:Name="ShortcutHint" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                            <TextBlock x:Name="ShortcutModeText" Text="Hold" Style="{StaticResource CaptionSecondaryStyle}" VerticalAlignment="Center" />
+                            <TextBlock x:Name="ShortcutModeText" Text="Hold" Style="{StaticResource SecondaryTextStyle}" VerticalAlignment="Center" />
                             <StackPanel x:Name="ShortcutKeys" Orientation="Horizontal" Spacing="4" />
-                            <TextBlock x:Name="ShortcutTailText" Text="anywhere, or" Style="{StaticResource CaptionSecondaryStyle}" VerticalAlignment="Center" />
+                            <TextBlock Text="anywhere, or" Style="{StaticResource SecondaryTextStyle}" VerticalAlignment="Center" />
                         </StackPanel>
-                        <StackPanel x:Name="ShortcutButtons" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                        <StackPanel x:Name="ShortcutButtons" Grid.Column="1" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Left">
                             <Button x:Name="CompactDictateButton" Click="RecordClicked"
                                     Height="40" Padding="16,0" Style="{StaticResource AppPrimaryButtonStyle}"
                                     AutomationProperties.Name="Start dictation">
@@ -57,9 +57,10 @@
                     </StackPanel>
             </StackPanel>
         </local:PageCanvas.HeaderActions>
-        <!-- Content height follows history; the PageCanvas scroller is the only vertical scroller. -->
-        <Grid VerticalAlignment="Top">
-            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+        <!-- PageCanvas gives its content at least the viewport height. The history row takes what the cards above leave,
+             so an empty history fills the column; the PageCanvas scroller stays the only vertical scroller. -->
+        <Grid>
+            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
             <Border x:Name="RetainedCaptureCard" Margin="{StaticResource PageSectionBottomMargin}" Style="{StaticResource CardStyle}" Visibility="Collapsed">
                 <StackPanel Spacing="8">
                     <TextBlock Text="Latest screen and ink capture" Style="{StaticResource BodyStrongTextBlockStyle}" />

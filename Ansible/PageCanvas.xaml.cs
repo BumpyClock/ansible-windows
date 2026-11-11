@@ -27,7 +27,7 @@ public sealed partial class PageCanvas : UserControl
         {
             UpdateLayoutBounds();
             UpdateHeader();
-            UpdateHeadingScrolledOut();
+            UpdateHeaderScrolledOut();
             // Cached pages leave and rejoin the window; restart the pins rather than trust animations across that.
             foreach (var pin in _pins) pin.Stop();
             UpdatePins();
@@ -35,10 +35,13 @@ public sealed partial class PageCanvas : UserControl
         ContentHost.BringIntoViewRequested += ContentBringIntoViewRequested;
     }
 
-    /// <summary>True while the page title has scrolled above the viewport. The window title bar then shows the page.</summary>
-    public bool IsHeadingScrolledOut { get; private set; }
+    /// <summary>
+    /// True while the whole header row, heading and actions, has scrolled above the viewport. The window title bar
+    /// then shows the page name and the primary action, so the action never appears twice.
+    /// </summary>
+    public bool IsHeaderScrolledOut { get; private set; }
 
-    public event EventHandler? HeadingScrolledOutChanged;
+    public event EventHandler? HeaderScrolledOutChanged;
 
     /// <summary>Extra bottom padding for floating window content, such as notices, so the last rows can scroll above it.</summary>
     public double BottomInset
@@ -93,44 +96,51 @@ public sealed partial class PageCanvas : UserControl
     public double ContentWidth =>Math.Max(0, ContentHost.ActualWidth - ContentHost.Padding.Left - ContentHost.Padding.Right);
 
     /// <summary>
-    /// The header action the window title bar repeats once the heading scrolls out. Pages with one declare it
+    /// The header action the window title bar repeats once the header scrolls out. Pages with one declare it
     /// while they are constructed, before navigation shows them.
     /// </summary>
     public PageAction? PrimaryAction { get; set; }
+
+    /// <summary>
+    /// The icon of <see cref="PrimaryAction"/>, for the title bar's copy. A page whose primary button shows an icon
+    /// declares the same icon here; a text-only action leaves it unset.
+    /// </summary>
+    public IconSource? PrimaryActionIcon { get; set; }
 
     private void ViewportSizeChanged(object sender, SizeChangedEventArgs args)
     {
         UpdateLayoutBounds();
         UpdateHeader();
-        UpdateHeadingScrolledOut();
+        UpdateHeaderScrolledOut();
     }
 
-    private void ViewportViewChanged(object? sender, ScrollViewerViewChangedEventArgs args) => UpdateHeadingScrolledOut();
+    private void ViewportViewChanged(object? sender, ScrollViewerViewChangedEventArgs args) => UpdateHeaderScrolledOut();
 
     private static void HeaderChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
     {
         var canvas = (PageCanvas)sender;
         canvas.UpdateHeader();
-        canvas.UpdateHeadingScrolledOut();
+        canvas.UpdateHeaderScrolledOut();
     }
 
     private void HeaderSizeChanged(object sender, SizeChangedEventArgs args)
     {
         UpdateHeader();
-        UpdateHeadingScrolledOut();
+        UpdateHeaderScrolledOut();
     }
 
-    private void UpdateHeadingScrolledOut()
+    private void UpdateHeaderScrolledOut()
     {
         var scrolledOut = false;
-        if (IsLoaded && TitleText.Visibility == Visibility.Visible && TitleText.ActualHeight > 0)
+        // The header row holds the heading and the actions in both the side-by-side and the stacked layout.
+        if (IsLoaded && HeaderLayout.Visibility == Visibility.Visible && HeaderLayout.ActualHeight > 0)
         {
-            var bottom = TitleText.TransformToVisual(Viewport).TransformPoint(new Point(0, TitleText.ActualHeight)).Y;
+            var bottom = HeaderLayout.TransformToVisual(Viewport).TransformPoint(new Point(0, HeaderLayout.ActualHeight)).Y;
             scrolledOut = bottom <= 0;
         }
-        if (scrolledOut == IsHeadingScrolledOut) return;
-        IsHeadingScrolledOut = scrolledOut;
-        HeadingScrolledOutChanged?.Invoke(this, EventArgs.Empty);
+        if (scrolledOut == IsHeaderScrolledOut) return;
+        IsHeaderScrolledOut = scrolledOut;
+        HeaderScrolledOutChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void UpdateHeader()

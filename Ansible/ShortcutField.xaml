@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl x:Class="Ansible.ShortcutField"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Read-only keycaps over a transparent TextBox. Focus or click on the box records a new shortcut. -->
+    <Grid MaxWidth="280" MinHeight="32">
+        <StackPanel x:Name="Keycaps" Orientation="Horizontal" Spacing="8"
+                    HorizontalAlignment="Left" VerticalAlignment="Center" />
+        <TextBlock x:Name="Status" Visibility="Collapsed" VerticalAlignment="Center"
+                   Style="{StaticResource CaptionSecondaryStyle}" />
+        <TextBox x:Name="Box" IsReadOnly="True"
+                 Background="Transparent" BorderThickness="0"
+                 Foreground="Transparent" Opacity="0.01" />
+    </Grid>
+</UserControl>

@@ -7,17 +7,10 @@
     Opened="LessonOpened" Closing="LessonClosing" Closed="LessonClosed">
     <ContentDialog.Resources>
         <x:Double x:Key="ContentDialogMaxWidth">720</x:Double>
-        <x:Double x:Key="ContentDialogMaxHeight">860</x:Double>
-        <!-- Skip and Back are quiet text buttons; only the step's next action is filled. -->
-        <Style x:Key="LessonSubtleButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderBrush" Value="Transparent" />
-            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
-        </Style>
         <Style x:Key="LessonIconStyle" TargetType="Border">
             <Setter Property="Width" Value="32" />
             <Setter Property="Height" Value="32" />
-            <Setter Property="CornerRadius" Value="{StaticResource OverlayCornerRadius}" />
+            <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
             <Setter Property="VerticalAlignment" Value="Top" />
             <Setter Property="Background" Value="{ThemeResource AccentSoftBrush}" />
         </Style>
@@ -34,71 +27,68 @@
             <Setter Property="Opacity" Value="0" />
         </Style>
     </ContentDialog.Resources>
-    <!-- A fixed width and a body as tall as the practice step keep the dialog still across steps and states.
-         The lesson draws its own header and footer; the stock button row would show three equal buttons. -->
+    <!-- A fixed width and a step area as tall as the tallest step keep the dialog still across steps and states.
+         Every step is a heading, one line of description, and a block about 160 tall: two icon rows, or the practice
+         field with its status. The lesson draws its own footer; the stock button row would show three equal buttons. -->
     <Grid x:Name="LessonRoot" Width="640" RowSpacing="24">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
-        <Grid Margin="0,-8,-8,-8">
-            <TextBlock Text="WELCOME TO ANSIBLE" CharacterSpacing="140" VerticalAlignment="Center" Style="{StaticResource CaptionSecondaryStyle}" />
-            <Button x:Name="SkipButton" Content="Skip for now" HorizontalAlignment="Right" Click="SkipClicked"
-                    Style="{StaticResource LessonSubtleButtonStyle}" />
-        </Grid>
-        <local:WelcomeScene x:Name="Scene" Grid.Row="1" />
-        <StackPanel x:Name="StepBody" Grid.Row="2" Spacing="16" MinHeight="324">
+        <local:WelcomeScene x:Name="Scene" />
+        <StackPanel x:Name="StepBody" Grid.Row="1" Spacing="20" MinHeight="240">
             <StackPanel.RenderTransform><TranslateTransform x:Name="StepShift" /></StackPanel.RenderTransform>
-            <StackPanel Spacing="8">
+            <StackPanel Spacing="4">
                 <TextBlock x:Name="Heading" Style="{StaticResource TitleTextBlockStyle}" TextWrapping="Wrap"
                            AutomationProperties.HeadingLevel="Level1" />
-                <TextBlock x:Name="Description" FontSize="{StaticResource BodyFontSize}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                <TextBlock x:Name="Description" Style="{StaticResource SecondaryTextStyle}" TextWrapping="Wrap" />
             </StackPanel>
+            <!-- Every icon row is an icon tile, a Body Strong statement, and secondary Body detail. -->
             <StackPanel x:Name="IntroPanel" Spacing="16">
-                <Grid ColumnSpacing="16">
+                <Grid ColumnSpacing="12">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                     <Border Style="{StaticResource LessonIconStyle}"><FontIcon Glyph="&#xE720;" Style="{StaticResource LessonGlyphStyle}" /></Border>
-                    <StackPanel Grid.Column="1" Spacing="4">
+                    <StackPanel Grid.Column="1" Spacing="2">
                         <TextBlock Text="Speak naturally. Keep your flow." Style="{StaticResource BodyStrongTextBlockStyle}" TextWrapping="Wrap" />
                         <TextBlock Text="Focus a text field in another app. Use your shortcut to speak, and Ansible inserts the finished words there."
-                                   Style="{StaticResource BodyTextBlockStyle}" TextWrapping="Wrap" />
+                                   Style="{StaticResource SecondaryTextStyle}" TextWrapping="Wrap" />
                     </StackPanel>
                 </Grid>
-                <Grid ColumnSpacing="16">
+                <Grid ColumnSpacing="12">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                     <Border Style="{StaticResource LessonIconStyle}"><FontIcon Glyph="&#xE72E;" Style="{StaticResource LessonGlyphStyle}" /></Border>
-                    <TextBlock Grid.Column="1" VerticalAlignment="Center" Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap"
-                               Text="Recognition runs on this device. Audio is never saved or uploaded. Successful dictations are saved in your local history." />
+                    <StackPanel Grid.Column="1" Spacing="2">
+                        <TextBlock Text="Recognition runs on this device." Style="{StaticResource BodyStrongTextBlockStyle}" TextWrapping="Wrap" />
+                        <TextBlock Text="Audio is never saved or uploaded. Successful dictations are saved in your local history."
+                                   Style="{StaticResource SecondaryTextStyle}" TextWrapping="Wrap" />
+                    </StackPanel>
                 </Grid>
             </StackPanel>
             <StackPanel x:Name="ShortcutPanel" Spacing="16" Visibility="Collapsed">
-                <Grid ColumnSpacing="16">
+                <Grid ColumnSpacing="12">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                     <Border Style="{StaticResource LessonIconStyle}"><FontIcon Glyph="&#xE765;" Style="{StaticResource LessonGlyphStyle}" /></Border>
-                    <StackPanel Grid.Column="1" Spacing="4">
+                    <StackPanel Grid.Column="1" Spacing="2">
                         <TextBlock x:Name="ShortcutInstruction" Style="{StaticResource BodyStrongTextBlockStyle}" TextWrapping="Wrap" />
-                        <TextBlock x:Name="ShortcutDetail" Style="{StaticResource BodyTextBlockStyle}" TextWrapping="Wrap" />
+                        <TextBlock x:Name="ShortcutDetail" Style="{StaticResource SecondaryTextStyle}" TextWrapping="Wrap" />
                     </StackPanel>
                 </Grid>
-                <Grid ColumnSpacing="16">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                    <Border Style="{StaticResource LessonIconStyle}"><FontIcon Glyph="&#xE720;" Style="{StaticResource LessonGlyphStyle}" /></Border>
-                    <TextBlock Grid.Column="1" VerticalAlignment="Center" Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap"
-                               Text="The keys above follow your keyboard. Your microphone is off until you start a dictation." />
-                </Grid>
-                <Grid ColumnSpacing="16">
+                <Grid ColumnSpacing="12">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                     <Border Style="{StaticResource LessonIconStyle}"><FontIcon Glyph="&#xE713;" Style="{StaticResource LessonGlyphStyle}" /></Border>
-                    <TextBlock Grid.Column="1" VerticalAlignment="Center" Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap"
-                               Text="Change the shortcut, or replay this lesson, in Settings > Shortcut." />
+                    <StackPanel Grid.Column="1" Spacing="2">
+                        <TextBlock Text="Your microphone is off until you start a dictation." Style="{StaticResource BodyStrongTextBlockStyle}" TextWrapping="Wrap" />
+                        <TextBlock Text="The keys above follow your keyboard. Change the shortcut, or replay this lesson, in Settings > Shortcut."
+                                   Style="{StaticResource SecondaryTextStyle}" TextWrapping="Wrap" />
+                    </StackPanel>
                 </Grid>
             </StackPanel>
             <StackPanel x:Name="PracticePanel" Spacing="12" Visibility="Collapsed">
                 <Grid>
-                    <TextBox x:Name="PracticeBox" Header="Practice field" AcceptsReturn="True" TextWrapping="Wrap"
-                             Height="112" PlaceholderText="Click here, then use your shortcut." Padding="8,8,48,8"
+                    <TextBox x:Name="PracticeBox" AcceptsReturn="True" TextWrapping="Wrap" Height="80"
+                             PlaceholderText="Click here, then use your shortcut." Padding="8,8,48,8"
+                             AutomationProperties.Name="Practice field"
                              AutomationProperties.AutomationId="WelcomePracticeField" />
                     <!-- Pops in only when a real practice dictation lands in the field. -->
                     <Grid x:Name="Celebration" Width="28" Height="28" Margin="0,0,12,12" HorizontalAlignment="Right" VerticalAlignment="Bottom"
@@ -112,28 +102,34 @@
                         </Border>
                     </Grid>
                 </Grid>
-                <!-- Fixed slots: status and actions change with the session without moving anything below. -->
-                <TextBlock x:Name="PracticeStatus" Height="40" MaxLines="2" TextTrimming="CharacterEllipsis"
-                           Style="{StaticResource BodyTextBlockStyle}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
-                <Grid Height="32">
-                    <Button x:Name="CancelPracticeButton" Content="Cancel dictation" Click="CancelPracticeClicked" Visibility="Collapsed" />
-                    <Button x:Name="ModelsButton" Content="Set up a speech model" Click="ModelsClicked" Visibility="Collapsed" />
+                <!-- A fixed slot: the status and its one action change with the session without moving anything below. -->
+                <Grid Height="40" ColumnSpacing="12">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <TextBlock x:Name="PracticeStatus" MaxLines="2" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                               Style="{StaticResource BodyTextBlockStyle}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+                    <Button x:Name="CancelPracticeButton" Grid.Column="1" Content="Cancel dictation" VerticalAlignment="Center"
+                            Click="CancelPracticeClicked" Visibility="Collapsed" />
+                    <Button x:Name="ModelsButton" Grid.Column="1" Content="Set up a speech model" VerticalAlignment="Center"
+                            Click="ModelsClicked" Visibility="Collapsed" />
                 </Grid>
-                <TextBlock Text="Nothing is sent to another app or the clipboard here. Practice dictations also appear in your local history."
+                <TextBlock Text="Nothing is sent to another app or the clipboard. Practice dictations also appear in your local history."
                            Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap" />
             </StackPanel>
         </StackPanel>
-        <!-- One cell, so the pips centre on the dialog whatever the buttons' widths. -->
-        <Grid Grid.Row="3">
-            <Button x:Name="BackButton" Content="Back" HorizontalAlignment="Left" Click="BackClicked" Visibility="Collapsed"
-                    Style="{StaticResource LessonSubtleButtonStyle}" />
+        <!-- One cell, so the pips centre on the dialog whatever the buttons' widths. Skip leaves the lesson from the
+             quiet side; Back and the step's one filled action sit together on the right. -->
+        <Grid Grid.Row="2">
+            <Button x:Name="SkipButton" Content="Skip for now" HorizontalAlignment="Left" Click="SkipClicked"
+                    Style="{StaticResource SubtleButtonStyle}" />
             <StackPanel x:Name="StepDots" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" VerticalAlignment="Center">
                 <Grid Width="6" Height="6"><Border Style="{StaticResource StepDotStyle}" /><Border Style="{StaticResource CurrentStepDotStyle}" /></Grid>
                 <Grid Width="6" Height="6"><Border Style="{StaticResource StepDotStyle}" /><Border Style="{StaticResource CurrentStepDotStyle}" /></Grid>
                 <Grid Width="6" Height="6"><Border Style="{StaticResource StepDotStyle}" /><Border Style="{StaticResource CurrentStepDotStyle}" /></Grid>
             </StackPanel>
-            <Button x:Name="NextButton" HorizontalAlignment="Right" MinWidth="120" Click="NextClicked"
-                    Style="{StaticResource AppPrimaryButtonStyle}" />
+            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                <Button x:Name="BackButton" Content="Back" Click="BackClicked" Visibility="Collapsed" />
+                <Button x:Name="NextButton" MinWidth="96" Click="NextClicked" Style="{StaticResource AppPrimaryButtonStyle}" />
+            </StackPanel>
         </Grid>
     </Grid>
 </ContentDialog>

@@ -44,6 +44,38 @@ public sealed class HomeProjectionTests
         Assert.Equal("Speech model", entry.ModelName);
     }
 
+    [Theory]
+    [InlineData(0, "FirstRun")]
+    [InlineData(2, "NothingSaved")]
+    [InlineData(null, "NothingSaved")]
+    public void EmptyHistoryClaimsNoDictationsOnlyWhenUsageKnowsThereWereNone(int? dictations, string kind)
+    {
+        var model = HomeHistoryProjection.Create([], "", false, _ => null, new DateTime(2026, 10, 20));
+
+        var empty = HomeHistoryProjection.EmptyState(model, "", dictations);
+
+        Assert.NotNull(empty);
+        Assert.Equal(kind, empty.Kind.ToString());
+        if (empty.Kind == HomeHistoryEmptyKind.FirstRun) Assert.Equal("No dictations yet", empty.Title);
+        else Assert.DoesNotContain("No dictations", empty.Title);
+    }
+
+    [Fact]
+    public void SearchWithoutMatchesNamesTheQueryAndMatchingRowsShowNoEmptyState()
+    {
+        var item = History(DateTimeOffset.Now, "speech");
+        var today = DateTime.Today;
+
+        var missed = HomeHistoryProjection.Create([item], "absent", false, _ => null, today);
+        var matched = HomeHistoryProjection.Create([item], "speech", false, _ => null, today);
+
+        var empty = HomeHistoryProjection.EmptyState(missed, "absent", 0);
+        Assert.NotNull(empty);
+        Assert.Equal(HomeHistoryEmptyKind.NoMatches, empty.Kind);
+        Assert.Contains("\"absent\"", empty.Detail);
+        Assert.Null(HomeHistoryProjection.EmptyState(matched, "speech", 0));
+    }
+
     [Fact]
     public void HistoryGroupsOutsideTheCurrentYearNameTheYear()
     {
@@ -67,14 +99,16 @@ public sealed class HomeProjectionTests
         Assert.Equal("--", missing.SessionsText);
         Assert.Equal("--", missing.WordsText);
         Assert.Equal("--", missing.MicrophoneMinutesText);
-        Assert.Equal("--", missing.StreakText);
+        Assert.Null(missing.StreakText);
+        Assert.Null(missing.Dictations);
         Assert.Equal("Cannot read local usage.", missing.AvailabilityMessage);
         Assert.Null(missing.Activity);
         Assert.Null(missing.HourlyActivity);
         Assert.Equal("0", empty.SessionsText);
         Assert.Equal("0", empty.WordsText);
         Assert.Equal(0.ToString("N1"), empty.MicrophoneMinutesText);
-        Assert.Equal("No streak", empty.StreakText);
+        Assert.Null(empty.StreakText);
+        Assert.Equal(0, empty.Dictations);
         Assert.NotNull(empty.Activity);
         Assert.Empty(empty.HourlyActivity!);
         Assert.Null(empty.AvailabilityMessage);
@@ -111,6 +145,7 @@ public sealed class HomeProjectionTests
         var model = HomeInsightsProjection.Create(document, null, id => id, new DateOnly(2026, 10, 20), TimeZoneInfo.Utc);
 
         Assert.Equal("2", model.SessionsText);
+        Assert.Equal(2, model.Dictations);
         Assert.Equal("60", model.WordsText);
         Assert.Equal("60", model.PaceText);
         Assert.Equal(2, model.Models[0].Sessions);

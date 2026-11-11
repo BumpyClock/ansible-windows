@@ -261,7 +261,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
             var content = new StackPanel { Spacing = 8 };
             content.Children.Add(new TextBlock
             {
-                Text = freed > 0 ? $"Frees {ModelCard.FormatBytes(freed)} on this device." : "Deletes the saved resume data.",
+                Text = freed > 0 ? $"Frees {ModelCardText.Size(freed)} on this device." : "Deletes the saved resume data.",
                 Style = (Style)Application.Current.Resources["BodyTextBlockStyle"]
             });
             content.Children.Add(new TextBlock
@@ -272,14 +272,14 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
             });
             var dialog = new ContentDialog
             {
-                XamlRoot = XamlRoot,
                 Style = (Style)Application.Current.Resources["DefaultContentDialogStyle"],
-                Title = partial ? "Discard partial download?" : $"Remove {selected.Model.DisplayName ?? selected.Model.Id}?",
+                Title = partial ? "Discard partial download?" : $"Remove {DisplayName(id)}?",
                 Content = content,
                 PrimaryButtonText = partial ? "Discard" : "Remove",
                 CloseButtonText = "Cancel",
                 DefaultButton = ContentDialogButton.Close
             };
+            dialog.FollowWindowTheme(XamlRoot);
             if (await dialog.ShowAsync() == ContentDialogResult.Primary)
                 await MaintainAsync(token => partial ? _manager.DiscardPartialAsync(id, token) :
                     _manager.RemoveAsync(id, token));

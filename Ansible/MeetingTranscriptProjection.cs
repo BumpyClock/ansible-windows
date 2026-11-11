@@ -62,7 +62,9 @@ public sealed class MeetingTranscriptRow : INotifyPropertyChanged
     public string Text => _text;
     public string OriginalText => _originalText;
     public bool HasCleanup => _hasCleanup;
+    /// <summary>When the block starts, and whether it may still change. Empty when neither is known.</summary>
     public string TimingText => _timingText;
+    public string OriginalToggleText => _isOriginalExpanded ? "Hide original wording" : "Show original wording";
 
     public bool IsOriginalExpanded
     {
@@ -72,6 +74,7 @@ public sealed class MeetingTranscriptRow : INotifyPropertyChanged
             if (_isOriginalExpanded == value) return;
             _isOriginalExpanded = value;
             Notify();
+            Notify(nameof(OriginalToggleText));
         }
     }
 
@@ -98,7 +101,7 @@ public sealed class MeetingTranscriptRow : INotifyPropertyChanged
             var original = _turns.Any(turn => turn.OriginalText is not null)
                 ? string.Join(" ", _turns.Select(turn => turn.OriginalText ?? turn.Text)) : "";
             var hasCleanup = _turns.Any(turn => turn.OriginalText is not null && turn.OriginalText != turn.Text);
-            var timing = $"{FormatTurnTime(_turns)}{(_turns.Any(turn => turn.IsProvisional) ? " · provisional" : "")}{(hasCleanup ? " · wording edited" : "")}";
+            var timing = string.Join(" · ", new[] { FormatTurnTime(_turns), _turns.Any(turn => turn.IsProvisional) ? "Updating" : null }.OfType<string>());
             // Unchanged completed blocks keep text selection while the live tail is revised.
             if (_text != text) { _text = text; Notify(nameof(Text)); }
             if (_originalText != original) { _originalText = original; Notify(nameof(OriginalText)); }
@@ -114,12 +117,11 @@ public sealed class MeetingTranscriptRow : INotifyPropertyChanged
 
     private void Notify([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     private static string FormatTime(double seconds) => TimeSpan.FromSeconds(Math.Max(0, seconds)).ToString(seconds >= 3600 ? @"h\:mm\:ss" : @"m\:ss");
-    private static string FormatTurnTime(IReadOnlyList<MeetingTurn> turns)
+    // A block shows its start only when every part of it has a time; chunk times are approximate.
+    private static string? FormatTurnTime(IReadOnlyList<MeetingTurn> turns)
     {
-        if (turns.Any(turn => turn.TimingQuality == MeetingTimingQuality.Unknown)) return "Time unavailable";
+        if (turns.Any(turn => turn.TimingQuality == MeetingTimingQuality.Unknown)) return null;
         var time = FormatTime(turns[0].StartSeconds);
-        if (turns.Count > 1) time += $" to {FormatTime(turns.Max(turn => turn.EndSeconds))}";
-        return turns.All(turn => turn.TimingQuality == MeetingTimingQuality.Aligned)
-            ? $"{time} · ASR-aligned" : $"≈ {time} · approximate chunk time";
+        return turns.All(turn => turn.TimingQuality == MeetingTimingQuality.Aligned) ? time : $"About {time}";
     }
 }

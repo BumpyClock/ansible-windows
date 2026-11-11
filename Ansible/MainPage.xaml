@@ -7,15 +7,14 @@
         <Style x:Key="SettingsSectionTitleStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
             <Setter Property="AutomationProperties.HeadingLevel" Value="Level2" />
         </Style>
-        <Style x:Key="SettingsLedeStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionSecondaryStyle}">
-            <Setter Property="FontSize" Value="{StaticResource CaptionFontSize}" />
+        <Style x:Key="SettingsSectionDescriptionStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionSecondaryStyle}">
             <Setter Property="LineHeight" Value="{StaticResource CaptionLineHeight}" />
-            <Setter Property="TextWrapping" Value="Wrap" />
             <Setter Property="MaxWidth" Value="{StaticResource SettingsRowDescriptionMaxWidth}" />
             <Setter Property="HorizontalAlignment" Value="Left" />
         </Style>
     </Page.Resources>
 
+    <!-- Every section is a heading, an optional description directly under it, then one card. -->
     <local:PageCanvas x:Name="SettingsCanvas"
                       Title="Settings"
                       Subtitle="How Ansible listens, recognizes speech, and handles your data.">
@@ -38,9 +37,9 @@
                         </StackPanel.ChildrenTransitions>
 
                         <local:SettingsRow Title="Activation"
-                                           Description="Hold the shortcut while you speak, or press once to start and again to stop."
+                                           Description="Hold the shortcut while you speak, or press it once to start and again to stop."
                                            ShowDivider="False"
-                                           WideWidth="{StaticResource SettingsFieldWidth}">
+                                           ControlWidth="{StaticResource SettingsFieldWidth}">
                             <ComboBox x:Name="PushToTalkChoice"
                                       AutomationProperties.AutomationId="PushToTalkToggle"
                                       AutomationProperties.Name="Activation"
@@ -50,48 +49,20 @@
                             </ComboBox>
                         </local:SettingsRow>
 
-                        <local:SettingsRow Title="Shortcut">
-                            <StackPanel x:Name="ShortcutControl" Orientation="Horizontal" Spacing="8">
-                                <!-- Read-only keycap. Focus or click records a new shortcut; Esc cancels. -->
-                                <Grid MinWidth="140" MaxWidth="280" MinHeight="32">
-                                    <StackPanel x:Name="HotkeyKeycaps" Orientation="Horizontal"
-                                                HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
-                                        <Border x:Name="HotkeyModifierKeycap" Style="{StaticResource KeycapStyle}">
-                                            <TextBlock x:Name="HotkeyModifierText" Style="{StaticResource KeycapTextStyle}" />
-                                        </Border>
-                                        <TextBlock x:Name="HotkeyPlusText" Text="+" VerticalAlignment="Center"
-                                                   Style="{StaticResource CaptionSecondaryStyle}" />
-                                        <Border x:Name="HotkeyPrimaryKeycap" Style="{StaticResource KeycapStyle}">
-                                            <TextBlock x:Name="HotkeyPrimaryText" Style="{StaticResource KeycapTextStyle}" />
-                                        </Border>
-                                    </StackPanel>
-                                    <TextBlock x:Name="HotkeyCaptureStatus" Visibility="Collapsed"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center"
-                                               TextAlignment="Center" TextWrapping="Wrap"
-                                               Style="{StaticResource CaptionSecondaryStyle}" />
-                                    <TextBox x:Name="HotkeyCaptureBox"
-                                             AutomationProperties.AutomationId="HotkeyCaptureBox"
-                                             AutomationProperties.Name="Shortcut"
-                                             IsReadOnly="True" TextAlignment="Center"
-                                             Background="Transparent" BorderThickness="0"
-                                             Foreground="Transparent" Opacity="0.01"
-                                             GotFocus="ShortcutGotFocus" KeyDown="ShortcutKeyDown"
-                                             KeyUp="ShortcutKeyUp" LostFocus="ShortcutLostFocus" />
-                                </Grid>
+                        <local:SettingsRow Title="Shortcut"
+                                           Description="Select Change, then press the keys you want. Esc cancels.">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <local:ShortcutField x:Name="HotkeyField" VerticalAlignment="Center" />
                                 <Button x:Name="ChangeShortcutButton" Content="Change" VerticalAlignment="Center"
                                         AutomationProperties.AutomationId="ChangeShortcutButton"
                                         AutomationProperties.Name="Change shortcut"
                                         Click="ChangeShortcutClicked" />
                                 <!-- Shown only when the shortcut differs from the default. -->
                                 <HyperlinkButton x:Name="ResetShortcutButton" Content="Reset" VerticalAlignment="Center"
-                                                 Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
-                                                 FontSize="{StaticResource BodyFontSize}" FontWeight="Medium"
                                                  AutomationProperties.AutomationId="ResetShortcutButton"
                                                  AutomationProperties.Name="Reset shortcut"
                                                  Visibility="Collapsed" Click="ResetShortcutClicked" />
                                 <HyperlinkButton x:Name="PracticeShortcutButton" Content="Practice" VerticalAlignment="Center"
-                                                 Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
-                                                 FontSize="{StaticResource BodyFontSize}" FontWeight="Medium"
                                                  AutomationProperties.AutomationId="ShortcutLessonButton"
                                                  AutomationProperties.Name="Practice the shortcut"
                                                  Click="PracticeShortcutClicked" />
@@ -99,8 +70,7 @@
                         </local:SettingsRow>
 
                         <local:SettingsRow Title="Show overlay at the text cursor"
-                                           Description="Falls back to the bottom of the screen when Windows cannot report the cursor position."
-                                           CompactAlignment="Left">
+                                           Description="Otherwise, or when Windows cannot report the cursor position, the overlay sits at the bottom of the screen.">
                             <ToggleSwitch x:Name="OverlayFollowsCaretToggle"
                                           AutomationProperties.AutomationId="OverlayFollowsCaretToggle"
                                           AutomationProperties.Name="Show overlay at the text cursor"
@@ -108,7 +78,7 @@
                         </local:SettingsRow>
 
                         <local:SettingsRow x:Name="InsertionRow" Title="Text insertion"
-                                           WideWidth="{StaticResource SettingsFieldWidth}">
+                                           ControlWidth="{StaticResource SettingsFieldWidth}">
                             <ComboBox x:Name="InsertionChoice"
                                       AutomationProperties.AutomationId="InsertionChoice"
                                       AutomationProperties.Name="Text insertion"
@@ -120,8 +90,8 @@
 
                         <local:SettingsRow x:Name="PasteShortcutRow" IsChild="True"
                                            Title="Paste shortcut"
-                                           Description="Use the shortcut your editor or terminal accepts. Applies to all paste dictation. Not detected automatically."
-                                           WideWidth="{StaticResource SettingsFieldWidth}">
+                                           Description="The keys sent to paste. Pick the ones your editor or terminal accepts, because Ansible cannot detect them."
+                                           ControlWidth="{StaticResource SettingsFieldWidth}">
                             <ComboBox x:Name="PasteShortcutChoice"
                                       AutomationProperties.AutomationId="PasteShortcutChoice"
                                       AutomationProperties.Name="Paste shortcut"
@@ -134,12 +104,12 @@
 
                         <local:SettingsRow x:Name="TypingGapRow" IsChild="True"
                                            Visibility="Collapsed"
-                                           Title="Gap between characters (ms)"
-                                           Description="0 sends all text at once, which some apps such as Notepad garble. Windows may round short gaps up to about 15 ms."
-                                           WideWidth="{StaticResource SettingsNumberWidth}">
+                                           Title="Delay between characters (ms)"
+                                           Description="At 0, all text is sent at once, which slow apps such as Notepad can garble. Windows may round short delays up to about 15 ms."
+                                           ControlWidth="{StaticResource SettingsNumberWidth}">
                             <NumberBox x:Name="TypingGapBox"
                                        AutomationProperties.AutomationId="TypingGapBox"
-                                       AutomationProperties.Name="Gap between typed characters in milliseconds"
+                                       AutomationProperties.Name="Delay between typed characters in milliseconds"
                                        Minimum="0" Maximum="200" SmallChange="5" LargeChange="20"
                                        SpinButtonPlacementMode="Inline" ValidationMode="InvalidInputOverwritten"
                                        ValueChanged="TypingGapChanged" />
@@ -149,45 +119,46 @@
             </StackPanel>
 
             <StackPanel Spacing="{StaticResource SectionHeaderGap}">
-                <TextBlock Text="Record chord" Style="{StaticResource SettingsSectionTitleStyle}" />
+                <TextBlock Text="Screen and ink" Style="{StaticResource SettingsSectionTitleStyle}" />
                 <Border Style="{StaticResource SettingsCardStyle}">
                     <StackPanel>
-                        <local:SettingsRow Title="Dictate with screen and ink" ShowDivider="False" CompactAlignment="Left"
-                                           Description="Records the monitor under the pointer with silent video. Drag to draw. Clicks and scrolling are blocked on all monitors. Esc discards the take. Nothing is pasted until you use Paste capture. Recordings stay on this device for up to seven days or 2 GB.">
-                            <ToggleSwitch x:Name="RecordChordToggle" AutomationProperties.Name="Enable record chord"
+                        <local:SettingsRow Title="Dictate with screen and ink" ShowDivider="False"
+                                           Description="Records the screen under the pointer as video without audio, and lets you draw on it. Clicks and scrolling are blocked on every monitor while recording. Esc discards the take.">
+                            <ToggleSwitch x:Name="RecordChordToggle" AutomationProperties.Name="Enable screen and ink recording"
                                           Toggled="RecordChordToggled" />
                         </local:SettingsRow>
-                        <local:SettingsRow Title="Record shortcut" Description="Captures dictation, screen, and ink together.">
+                        <local:SettingsRow Title="Record shortcut" Description="Records speech, screen, and ink together.">
                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                <TextBox x:Name="RecordHotkeyCaptureBox" IsReadOnly="True" MinWidth="150"
-                                         AutomationProperties.Name="Record shortcut" TextAlignment="Center"
-                                         GotFocus="ShortcutGotFocus" KeyDown="ShortcutKeyDown" KeyUp="ShortcutKeyUp"
-                                         LostFocus="ShortcutLostFocus" />
-                                <Button x:Name="ChangeRecordShortcutButton" Content="Change" Click="ChangeRecordShortcutClicked" />
-                                <HyperlinkButton x:Name="ResetRecordShortcutButton" Content="Reset" Click="ResetRecordShortcutClicked"
+                                <local:ShortcutField x:Name="RecordHotkeyField" VerticalAlignment="Center" />
+                                <Button x:Name="ChangeRecordShortcutButton" Content="Change" VerticalAlignment="Center"
+                                        AutomationProperties.Name="Change record shortcut"
+                                        Click="ChangeRecordShortcutClicked" />
+                                <HyperlinkButton x:Name="ResetRecordShortcutButton" Content="Reset" VerticalAlignment="Center"
+                                                 Click="ResetRecordShortcutClicked"
                                                  AutomationProperties.Name="Reset record shortcut" />
                             </StackPanel>
                         </local:SettingsRow>
-                        <local:SettingsRow Title="Paste capture shortcut" Description="After recording finishes, focus a chat or text field and press this shortcut to paste the latest take's text, ink markers, pictures, and optional video link.">
+                        <local:SettingsRow Title="Paste capture shortcut"
+                                           Description="Pastes the latest take's text, ink markers, pictures, and optional video link into the focused chat or text field.">
                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                <TextBox x:Name="RecordPasteHotkeyCaptureBox" IsReadOnly="True" MinWidth="150"
-                                         AutomationProperties.Name="Paste capture shortcut" TextAlignment="Center"
-                                         GotFocus="ShortcutGotFocus" KeyDown="ShortcutKeyDown" KeyUp="ShortcutKeyUp"
-                                         LostFocus="ShortcutLostFocus" />
-                                <Button x:Name="ChangeRecordPasteShortcutButton" Content="Change" Click="ChangeRecordPasteShortcutClicked" />
-                                <HyperlinkButton x:Name="ResetRecordPasteShortcutButton" Content="Reset" Click="ResetRecordPasteShortcutClicked"
+                                <local:ShortcutField x:Name="RecordPasteHotkeyField" VerticalAlignment="Center" />
+                                <Button x:Name="ChangeRecordPasteShortcutButton" Content="Change" VerticalAlignment="Center"
+                                        AutomationProperties.Name="Change paste capture shortcut"
+                                        Click="ChangeRecordPasteShortcutClicked" />
+                                <HyperlinkButton x:Name="ResetRecordPasteShortcutButton" Content="Reset" VerticalAlignment="Center"
+                                                 Click="ResetRecordPasteShortcutClicked"
                                                  AutomationProperties.Name="Reset paste capture shortcut" />
                             </StackPanel>
                         </local:SettingsRow>
-                        <local:SettingsRow Title="Press once to start and stop" CompactAlignment="Left"
-                                           Description="Release the keys to draw with your touchpad. Press the record shortcut again to finish. Independent of voice dictation's activation mode.">
+                        <local:SettingsRow Title="Press once to start and stop"
+                                           Description="Lets you release the record shortcut and draw with your touchpad. Press the shortcut again to finish. Separate from the dictation Activation setting.">
                             <ToggleSwitch x:Name="RecordToggleModeToggle"
                                           AutomationProperties.AutomationId="RecordToggleModeToggle"
                                           AutomationProperties.Name="Press record shortcut once to start and stop"
                                           Toggled="RecordToggleModeToggled" />
                         </local:SettingsRow>
-                        <local:SettingsRow Title="Include video link in pasted text" CompactAlignment="Left"
-                                           Description="Adds a local file URL. Web and cloud agents cannot open it. The URL reveals this device's local path.">
+                        <local:SettingsRow Title="Include video link in pasted text"
+                                           Description="Adds a link to the video file on this device. Web and cloud apps cannot open it, and the link reveals the file's local path.">
                             <ToggleSwitch x:Name="IncludeVideoLinkToggle" AutomationProperties.Name="Include video link in pasted text"
                                           Toggled="IncludeVideoLinkToggled" />
                         </local:SettingsRow>
@@ -199,8 +170,10 @@
             </StackPanel>
 
             <StackPanel Spacing="{StaticResource SectionHeaderGap}">
-                <TextBlock Text="Recognition" Style="{StaticResource SettingsSectionTitleStyle}" />
-                <TextBlock Text="Applies to the next dictation." Style="{StaticResource SettingsLedeStyle}" />
+                <StackPanel Spacing="2">
+                    <TextBlock Text="Recognition" Style="{StaticResource SettingsSectionTitleStyle}" />
+                    <TextBlock Text="Changes apply to the next dictation." Style="{StaticResource SettingsSectionDescriptionStyle}" />
+                </StackPanel>
                 <Border Style="{StaticResource SettingsCardStyle}">
                     <StackPanel>
                         <StackPanel.ChildrenTransitions>
@@ -210,9 +183,9 @@
                         </StackPanel.ChildrenTransitions>
 
                         <local:SettingsRow Title="Microphone boost (dB)"
-                                           Description="For quiet speech or whispering. 0 is off; try 6 or 12 dB first. Higher boost also raises background noise and can distort louder speech."
+                                           Description="Raises quiet speech. 0 is off. Try 6 or 12 dB first, because more boost also amplifies background noise and can distort loud speech."
                                            ShowDivider="False"
-                                           WideWidth="{StaticResource SettingsNumberWidth}">
+                                           ControlWidth="{StaticResource SettingsNumberWidth}">
                             <NumberBox x:Name="MicrophoneBoostBox"
                                        AutomationProperties.AutomationId="MicrophoneBoostBox"
                                        AutomationProperties.Name="Microphone boost in decibels"
@@ -223,16 +196,16 @@
                         </local:SettingsRow>
 
                         <local:SettingsRow Title="Language hint"
-                                           Description="Leave empty to use the model default."
-                                           WideWidth="{StaticResource SettingsFieldWidth}">
+                                           Description="Leave empty to use the model's default language."
+                                           ControlWidth="{StaticResource SettingsFieldWidth}">
                             <TextBox x:Name="LanguageBox"
                                      AutomationProperties.Name="Language hint" PlaceholderText="Model default"
                                      TextChanged="LanguageChanged" />
                         </local:SettingsRow>
 
                         <local:SettingsRow Title="Processor"
-                                           Description="Auto compares CPU and GPU on a bundled speech sample and keeps the faster working device for each model. A manual choice skips the comparison. Applies to the next recognition."
-                                           WideWidth="{StaticResource SettingsFieldWidth}">
+                                           Description="Auto tests the CPU and GPU on a bundled speech sample and uses the faster one for each model. Choosing CPU or Vulkan skips the test."
+                                           ControlWidth="{StaticResource SettingsFieldWidth}">
                             <ComboBox x:Name="BackendChoice"
                                       AutomationProperties.Name="Processor"
                                       AutomationProperties.AutomationId="BackendChoice"
@@ -243,23 +216,17 @@
                             </ComboBox>
                         </local:SettingsRow>
 
-                        <!-- Fixed height and reserved ring space keep the page still while a benchmark runs. -->
-                        <Grid x:Name="BenchmarkActions" ColumnSpacing="12" MinHeight="32" Margin="0,0,0,12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock x:Name="BenchmarkStatusText" VerticalAlignment="Center"
-                                       Style="{StaticResource CaptionSecondaryStyle}"
-                                       MaxLines="1" TextTrimming="CharacterEllipsis"
-                                       AutomationProperties.LiveSetting="Polite" />
-                            <ProgressRing x:Name="BenchmarkProgress" Grid.Column="1" Width="16" Height="16"
-                                          IsActive="False" AutomationProperties.Name="Device benchmark running" />
-                            <Button x:Name="BenchmarkButton" Grid.Column="2" MinWidth="128" Content="Run benchmark"
-                                    AutomationProperties.AutomationId="BenchmarkButton"
-                                    Click="BenchmarkClicked" />
-                        </Grid>
+                        <!-- The ring keeps its space while idle so the button never moves during a benchmark. -->
+                        <local:SettingsRow x:Name="BenchmarkRow" Title="Compare processors">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <Button x:Name="BenchmarkButton" MinWidth="128" Content="Run benchmark"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.AutomationId="BenchmarkButton"
+                                        Click="BenchmarkClicked" />
+                                <ProgressRing x:Name="BenchmarkProgress" Width="16" Height="16" VerticalAlignment="Center"
+                                              IsActive="False" AutomationProperties.Name="Device benchmark running" />
+                            </StackPanel>
+                        </local:SettingsRow>
 
                         <local:DeviceComparisonView x:Name="DeviceComparison" Margin="{StaticResource SettingsBenchmarkMargin}" />
                     </StackPanel>
@@ -270,20 +237,22 @@
                 <TextBlock Text="Meetings" Style="{StaticResource SettingsSectionTitleStyle}" />
                 <Border Style="{StaticResource SettingsCardStyle}">
                     <local:SettingsRow Title="Suggest notes when Teams uses the microphone"
-                                       Description="Checks app activity without recording audio. You must click Start to capture a meeting. Calendar access is not used."
-                                       ShowDivider="False" CompactAlignment="Left">
+                                       Description="Checks which apps use the microphone, never the audio, and offers a notetaker. Nothing is captured until you click Start. Your calendar is not used."
+                                       ShowDivider="False">
                         <ToggleSwitch x:Name="AutoDetectMeetingsToggle"
                                       AutomationProperties.AutomationId="AutoDetectMeetingsChoice"
                                       AutomationProperties.Name="Suggest notes when Teams uses the microphone"
                                       Toggled="AutoDetectMeetingsChanged" />
                     </local:SettingsRow>
                 </Border>
+            </StackPanel>
 
-                <TextBlock Text="Transcript cleanup" Margin="0,16,0,0"
-                           Style="{StaticResource BodyStrongTextBlockStyle}"
-                           AutomationProperties.HeadingLevel="Level3" />
-                <TextBlock Text="Sends completed meeting text, never audio, to the service you choose. Original wording is kept."
-                           Style="{StaticResource SettingsLedeStyle}" />
+            <StackPanel Spacing="{StaticResource SectionHeaderGap}">
+                <StackPanel Spacing="2">
+                    <TextBlock Text="Transcript cleanup" Style="{StaticResource SettingsSectionTitleStyle}" />
+                    <TextBlock Text="Sends completed meeting text, never audio, to the service you choose. The original wording is kept."
+                               Style="{StaticResource SettingsSectionDescriptionStyle}" />
+                </StackPanel>
                 <Border Style="{StaticResource SettingsCardStyle}">
                     <ContentControl x:Name="CleanupSettingsPanel" HorizontalContentAlignment="Stretch">
                         <StackPanel>
@@ -295,9 +264,9 @@
 
                             <local:SettingsRow x:Name="CleanupProviderRow" Title="Service"
                                                ShowDivider="False"
-                                               WideWidth="{StaticResource SettingsFieldWidth}">
+                                               ControlWidth="{StaticResource SettingsFieldWidth}">
                                 <ComboBox x:Name="CleanupProviderChoice" AutomationProperties.Name="Cleanup provider"
-                                          SelectionChanged="CleanupProviderChanged" HorizontalAlignment="Stretch">
+                                          SelectionChanged="CleanupProviderChanged">
                                     <x:String>Copilot CLI</x:String>
                                     <x:String>OpenAI API</x:String>
                                 </ComboBox>
@@ -305,14 +274,14 @@
 
                             <StackPanel x:Name="CopilotCleanupFields">
                                 <local:SettingsRow Title="Model" IsChild="True"
-                                                   WideWidth="{StaticResource SettingsFieldWidth}">
+                                                   ControlWidth="{StaticResource SettingsFieldWidth}">
                                     <TextBox x:Name="CopilotCleanupModelBox" MaxLength="128"
                                              AutomationProperties.Name="Copilot cleanup model"
                                              LostFocus="CleanupModelCommitted" KeyDown="CleanupModelKeyDown" />
                                 </local:SettingsRow>
                                 <local:SettingsRow Title="Reasoning effort" IsChild="True"
-                                                   WideWidth="{StaticResource SettingsFieldWidth}">
-                                    <ComboBox x:Name="CopilotCleanupEffortChoice" HorizontalAlignment="Stretch"
+                                                   ControlWidth="{StaticResource SettingsFieldWidth}">
+                                    <ComboBox x:Name="CopilotCleanupEffortChoice"
                                               AutomationProperties.Name="Copilot cleanup reasoning effort"
                                               SelectionChanged="CleanupEffortChanged" />
                                 </local:SettingsRow>
@@ -320,25 +289,24 @@
 
                             <StackPanel x:Name="OpenAICleanupFields">
                                 <local:SettingsRow Title="Model" IsChild="True"
-                                                   WideWidth="{StaticResource SettingsFieldWidth}">
+                                                   ControlWidth="{StaticResource SettingsFieldWidth}">
                                     <TextBox x:Name="OpenAICleanupModelBox" MaxLength="128"
                                              PlaceholderText="Model ID from your OpenAI account"
                                              AutomationProperties.Name="OpenAI cleanup model"
                                              LostFocus="CleanupModelCommitted" KeyDown="CleanupModelKeyDown" />
                                 </local:SettingsRow>
                                 <local:SettingsRow Title="Reasoning effort" IsChild="True"
-                                                   WideWidth="{StaticResource SettingsFieldWidth}">
-                                    <ComboBox x:Name="OpenAICleanupEffortChoice" HorizontalAlignment="Stretch"
+                                                   ControlWidth="{StaticResource SettingsFieldWidth}">
+                                    <ComboBox x:Name="OpenAICleanupEffortChoice"
                                               AutomationProperties.Name="OpenAI cleanup reasoning effort"
                                               SelectionChanged="CleanupEffortChanged" />
                                 </local:SettingsRow>
                                 <local:SettingsRow x:Name="OpenAIKeyRow" Title="API key" IsChild="True">
                                     <StackPanel Spacing="8">
-                                        <PasswordBox x:Name="OpenAIKeyBox" MaxLength="1024" Width="{StaticResource SettingsFieldWidth}"
-                                                     HorizontalAlignment="Right"
+                                        <PasswordBox x:Name="OpenAIKeyBox" MaxLength="1024"
                                                      PlaceholderText="Enter a key to save or replace it"
                                                      PasswordRevealMode="Hidden" AutomationProperties.Name="OpenAI API key" />
-                                        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
                                             <Button Content="Save API key" Click="SaveOpenAIKeyClicked" />
                                             <Button Content="Remove saved key" Click="RemoveOpenAIKeyClicked" />
                                         </StackPanel>
@@ -347,13 +315,11 @@
                             </StackPanel>
 
                             <local:SettingsRow Title="Clean up automatically"
-                                               Description="Off until you turn it on. Manual cleanup stays available on each meeting."
-                                               CompactAlignment="Left">
+                                               Description="Cleans up each new meeting transcript as soon as it is saved. You can always clean up a meeting manually.">
                                 <ToggleSwitch x:Name="AutomaticCleanupToggle"
                                               AutomationProperties.Name="Automatic transcript cleanup"
                                               Toggled="AutomaticCleanupToggled" />
                             </local:SettingsRow>
-
                         </StackPanel>
                     </ContentControl>
                 </Border>
@@ -364,8 +330,8 @@
                 <Border Style="{StaticResource SettingsCardStyle}">
                     <StackPanel>
                         <local:SettingsRow Title="Hide overlay and meeting windows from capture"
-                                           Description="Applies to supported Windows screenshots and screen sharing. The main window stays visible. Some recorders can still capture protected windows."
-                                           ShowDivider="False" CompactAlignment="Left">
+                                           Description="Keeps these windows out of screenshots and screen sharing that support it. The main window stays visible, and some recorders can still capture them."
+                                           ShowDivider="False">
                             <ToggleSwitch x:Name="HideFromCaptureToggle"
                                           AutomationProperties.AutomationId="HideFromCaptureChoice"
                                           AutomationProperties.Name="Hide overlay and meeting windows from capture"
@@ -373,8 +339,7 @@
                         </local:SettingsRow>
 
                         <local:SettingsRow x:Name="UsageRow" Title="Usage statistics"
-                                           Description="Records session counts only. Never audio or text."
-                                           CompactAlignment="Left">
+                                           Description="Saves session dates, model, word counts, and timing on this device. Never audio or text.">
                             <ToggleSwitch x:Name="UsageToggle"
                                           AutomationProperties.AutomationId="UsageToggle"
                                           AutomationProperties.Name="Usage statistics"
@@ -382,8 +347,7 @@
                         </local:SettingsRow>
 
                         <local:SettingsRow x:Name="DiagnosticsRow" Title="Local diagnostics"
-                                           Description="Operational metadata stays on this device. No audio or transcript text is recorded."
-                                           CompactAlignment="Left">
+                                           Description="Keeps a log of app events on this device for troubleshooting. No audio or transcript text is recorded.">
                             <ToggleSwitch x:Name="DiagnosticsToggle"
                                           AutomationProperties.AutomationId="DiagnosticsToggle"
                                           AutomationProperties.Name="Local diagnostics"

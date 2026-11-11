@@ -31,6 +31,7 @@ public sealed partial class DictationPage : Page
     private readonly Dictionary<string, string> _homeCatalogNames = new(StringComparer.OrdinalIgnoreCase);
     private UsageDocument? _homeUsage;
     private string? _homeUsageError;
+    private int? _homeDictations;
     private string _homeShortcutDisplay = "";
     private int _homeGreetingHour = -1;
     private bool _homeDataInitialized;
@@ -49,6 +50,7 @@ public sealed partial class DictationPage : Page
     {
         InitializeComponent();
         HomeViewport.PrimaryAction = new PageAction(CompactDictateButton, RecordClicked, CompactDictateLabel);
+        HomeViewport.PrimaryActionIcon = new FontIconSource { Glyph = "", FontSize = 16 };
         _session = session;
         _shortcut = shortcut;
         _shortcut.RecordResultChanged += RecordResultChanged;
@@ -200,25 +202,7 @@ public sealed partial class DictationPage : Page
         if (_homeShortcutDisplay != settings.Shortcut.DisplayText)
         {
             _homeShortcutDisplay = settings.Shortcut.DisplayText;
-            ShortcutKeys.Children.Clear();
-            var parts = _homeShortcutDisplay.Split(" + ", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-            for (var index = 0; index < parts.Length; index++)
-            {
-                if (index > 0)
-                    ShortcutKeys.Children.Add(new TextBlock { Text = "+", Style = AppStyle("CaptionSecondaryStyle"), VerticalAlignment = VerticalAlignment.Center });
-                var keycap = new Border { Style = AppStyle("KeycapStyle") };
-                keycap.Child = new TextBlock { Text = parts[index], Style = AppStyle("KeycapTextStyle") };
-                ShortcutKeys.Children.Add(keycap);
-            }
-        }
-        if (ShortcutTailText.Text != "anywhere, or") ShortcutTailText.Text = "anywhere, or";
-        var emptyHint = settings.PushToTalk
-            ? $"Hold {settings.Shortcut.DisplayText} in any app and speak. Your text appears here too."
-            : $"Press {settings.Shortcut.DisplayText} in any app, speak, then press it again. Your text appears here too.";
-        if (HistoryView.EmptyHint != emptyHint)
-        {
-            HistoryView.EmptyHint = emptyHint;
-            RenderHomeHistory(animate: false);
+            ShortcutKeycaps.Show(ShortcutKeys, _homeShortcutDisplay);
         }
         if (!_homeDataInitialized || _homeDataDate != DateTime.Today || !ReferenceEquals(_homeUsage, _state.Usage) || _homeUsageError != _state.UsageError)
         {
@@ -228,9 +212,12 @@ public sealed partial class DictationPage : Page
             _homeUsageError = _state.UsageError;
             var insights = HomeInsightsProjection.Create(_state.Usage, _state.UsageError,
                 HomeModelDisplayName, DateOnly.FromDateTime(DateTime.Today), TimeZoneInfo.Local);
+            // After a failed usage write a zero is not proof of no dictations, so History treats the count as unknown.
+            _homeDictations = insights.UsageWarning is null ? insights.Dictations : null;
             HomeInsightsColumn.Render(insights);
             PostStorageNotice(UsageNoticeKey, "Some usage statistics are missing", insights.UsageWarning);
         }
+        HistoryView.SetEmptyContext(_homeDictations, settings.PushToTalk, settings.Shortcut.DisplayText);
     }
 
     private void RenderHomeHistory(bool animate)
@@ -283,27 +270,23 @@ public sealed partial class DictationPage : Page
         RenderHomeHistory(animate: true);
     }
 
-    private Style AppStyle(string key)
-    {
-        var resource = Resources.ContainsKey(key) ? Resources[key] : Application.Current.Resources[key];
-        return (Style)resource;
-    }
-
     private void DictateControlSizeChanged(object sender, SizeChangedEventArgs args)
     {
         UpdateShortcutLayout();
     }
 
+    // Too narrow for one line, the buttons wrap under the hint and stay left-aligned so the sentence reads on.
     private void UpdateShortcutLayout()
     {
         var stackedHelper = HomeViewport.ContentWidth < (double)Application.Current.Resources["ShortcutStackThreshold"];
         Grid.SetRow(ShortcutButtons, stackedHelper ? 1 : 0);
         Grid.SetColumn(ShortcutButtons, stackedHelper ? 0 : 1);
         Grid.SetColumnSpan(ShortcutButtons, stackedHelper ? 2 : 1);
-        ShortcutButtons.HorizontalAlignment = stackedHelper ? HorizontalAlignment.Right : HorizontalAlignment.Left;
     }
+
     // Wide: history beside a fixed insights rail that sticks beside the history header. Narrow: the insights cards
-    // become a strip above history that scrolls away.
+    // become a strip above history that scrolls away. History takes the star row so its empty state can use the
+    // rest of the viewport.
     private void HomeColumnsSizeChanged(object sender, SizeChangedEventArgs args)
     {
         var stacked = args.NewSize.Width < (double)Application.Current.Resources["HomeRailStackThreshold"];
@@ -320,8 +303,8 @@ public sealed partial class DictationPage : Page
         HomeColumns.RowDefinitions.Clear();
         HomeColumns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         if (!stacked) HomeColumns.ColumnDefinitions.Add(new ColumnDefinition { Width = (GridLength)Application.Current.Resources["HomeRailColumnWidth"] });
-        HomeColumns.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         if (stacked) HomeColumns.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        HomeColumns.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         Grid.SetColumn(HomeInsightsColumn, stacked ? 0 : 1);
         Grid.SetRow(HomeInsightsColumn, 0);
         Grid.SetRow(HistoryView, stacked ? 1 : 0);

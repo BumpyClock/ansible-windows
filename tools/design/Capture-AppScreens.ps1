@@ -60,8 +60,8 @@ function Set-WindowSize {
     try {
         $scale = [DesignCapture]::GetDpiForWindow($Handle) / 96.0
         # Park the pointer on the title bar so no control renders its hover state.
-        [DesignCapture]::SetWindowPos($Handle, [IntPtr]::Zero, 60, 40, [int]($WidthDips * $scale), [int]($HeightDips * $scale), 0x0014) | Out-Null
-        [DesignCapture]::SetCursorPos(60 + [int](400 * $scale), 40 + [int](20 * $scale)) | Out-Null
+        [DesignCapture]::SetWindowPos($Handle, [IntPtr]::Zero, 0, 40, [int]($WidthDips * $scale), [int]($HeightDips * $scale), 0x0014) | Out-Null
+        [DesignCapture]::SetCursorPos([int](400 * $scale), 40 + [int](20 * $scale)) | Out-Null
     } finally { [DesignCapture]::SetThreadDpiAwarenessContext($context) | Out-Null }
     Start-Sleep -Milliseconds 700
 }
@@ -105,6 +105,20 @@ function Set-PageScroll {
     (Get-PageScroller $Handle).SetScrollPercent(-1, $Percent)
 }
 
+# Home says no model is loaded until the session finishes starting. Capturing earlier records a transient state.
+function Wait-SessionReady {
+    param([IntPtr]$Handle)
+    Start-Sleep -Seconds 4
+    $root = [System.Windows.Automation.AutomationElement]::FromHandle($Handle)
+    $starting = [System.Windows.Automation.PropertyCondition]::new(
+        [System.Windows.Automation.AutomationElement]::NameProperty, 'No speech model loaded')
+    $deadline = (Get-Date).AddSeconds(30)
+    while ($root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $starting) -and (Get-Date) -lt $deadline) {
+        Start-Sleep -Milliseconds 500
+    }
+    Start-Sleep -Seconds 2
+}
+
 if (-not $SkipBuild) {
     Stop-DevelopmentApp
     dotnet build (Join-Path $repo 'Ansible\Ansible.csproj') -c Debug -p:Platform=x64 -v q -nologo
@@ -127,7 +141,7 @@ foreach ($mode in $Theme) {
     } until ($app.MainWindowHandle -ne [IntPtr]::Zero -or (Get-Date) -gt $deadline)
     if ($app.MainWindowHandle -eq [IntPtr]::Zero) { throw "No main window after 40 seconds ($mode)." }
     $window = $app.MainWindowHandle
-    Start-Sleep -Seconds 3
+    Wait-SessionReady $window
 
     foreach ($size in $sizes.GetEnumerator()) {
         Set-WindowSize $window $size.Value[0] $size.Value[1]
@@ -154,14 +168,14 @@ foreach ($mode in $Theme) {
     Invoke-Ui @('invoke', 'ShortcutLessonButton', '-w', "$window", '-q') | Out-Null
     Start-Sleep -Milliseconds 1500
     Save-Window $window "welcome-$mode-wide-1"
-    Invoke-Ui @('focus', 'ShortcutLessonButton', '-w', "$window", '-q') -Optional | Out-Null
-    [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
+    # Close by pointer-style invoke. A key press would switch the app to keyboard focus visuals for later frames.
+    Invoke-Ui @('invoke', 'SkipButton', '-w', "$window", '-q') | Out-Null
     Start-Sleep -Milliseconds 800
 
     Invoke-Ui @('invoke', 'MeetingsNav', '-w', "$window", '-q') | Out-Null
     Start-Sleep -Milliseconds 900
     $rows = Invoke-Ui @('inspect', 'MeetingGroups', '-w', "$window", '-d', '2') -Optional | Out-String
-    if ($rows -match '(?m)^\s+(btn-[0-9a-f]+) Button') {
+    if ($rows -match '(?m)^\s+(btn-[0-9a-z-]+) Button') {
         Invoke-Ui @('invoke', $Matches[1], '-w', "$window", '-q') | Out-Null
         Start-Sleep -Seconds 2
         $handles = @((Invoke-Ui @('list-windows', '-a', "$appId") | Out-String) -split "`n" |
