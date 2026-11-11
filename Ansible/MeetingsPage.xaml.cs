@@ -11,6 +11,7 @@ namespace Ansible;
 public sealed partial class MeetingsPage : Page
 {
     private const string ErrorNoticeKey = "meetings-error";
+    private const string DeleteNoticeKey = "meetings-delete";
 
     private readonly AppNotices _notices;
     private readonly MeetingStore _store;
@@ -198,6 +199,7 @@ public sealed partial class MeetingsPage : Page
         {
             _deleteDialog = MeetingDeletion.Dialog(ids.Count, XamlRoot);
             if (await _deleteDialog.ShowAsync() != ContentDialogResult.Primary) return;
+            _notices.Set(DeleteNoticeKey, null);
             var token = _shutdown.Token;
             foreach (var id in ids)
             {
@@ -206,7 +208,11 @@ public sealed partial class MeetingsPage : Page
             }
         }
         catch (OperationCanceledException) when (_shutdown.IsCancellationRequested) { }
-        catch (Exception error) { ShowError(error); }
+        catch (Exception error)
+        {
+            _notices.Set(DeleteNoticeKey, new NoticeContent(NoticeSeverity.Error,
+                deleted ? "Some meetings were not deleted" : "Couldn't delete the meeting", error.Message), NoticeArea.Meetings);
+        }
         finally { _deleteDialog = null; }
         if (!deleted || _shutdown.IsCancellationRequested) return;
         if (_refreshTask is not null) await _refreshTask;

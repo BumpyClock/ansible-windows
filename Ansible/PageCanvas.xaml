@@ -1,6 +1,7 @@
 <UserControl x:Class="Ansible.PageCanvas"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="using:Ansible">
     <UserControl.Content>
         <ScrollViewer x:Name="Viewport" HorizontalScrollBarVisibility="Disabled" HorizontalScrollMode="Disabled"
                       HorizontalContentAlignment="Stretch" VerticalScrollBarVisibility="Auto"
@@ -14,27 +15,14 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
-                <Grid x:Name="HeaderLayout" Margin="{StaticResource PageSectionBottomMargin}"
-                      SizeChanged="HeaderSizeChanged">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                    <TextBlock x:Name="TitleText" Text="{x:Bind Title, Mode=OneWay}" Margin="0,2" VerticalAlignment="Top"
+                <local:PageHeaderPanel x:Name="HeaderLayout" Margin="{StaticResource PageSectionBottomMargin}"
+                                       ColumnGap="{StaticResource CardGap}" SizeChanged="HeaderSizeChanged">
+                    <TextBlock x:Name="TitleText" Text="{x:Bind Title, Mode=OneWay}" Margin="0,2"
                                Style="{StaticResource PageTitleStyle}" AutomationProperties.HeadingLevel="Level1" />
-                    <TextBlock x:Name="SubtitleText" Grid.Row="1" Grid.ColumnSpan="2" Margin="0,4,0,0"
+                    <TextBlock x:Name="SubtitleText" Margin="0,4,0,0"
                                Text="{x:Bind Subtitle, Mode=OneWay}" Style="{StaticResource PageSubtitleStyle}" />
-                    <StackPanel x:Name="HeaderActionsPanel" Grid.Column="1" Orientation="Horizontal"
-                                Spacing="8" VerticalAlignment="Center" SizeChanged="HeaderActionsSizeChanged" />
-                    <Canvas Width="0" Height="0" HorizontalAlignment="Left" VerticalAlignment="Top"
-                            IsHitTestVisible="False" Opacity="0" AutomationProperties.AccessibilityView="Raw">
-                        <TextBlock x:Name="TitleProbe" Text="{x:Bind Title, Mode=OneWay}" TextWrapping="NoWrap"
-                                   Style="{StaticResource PageTitleStyle}" AutomationProperties.AccessibilityView="Raw"
-                                   SizeChanged="HeaderActionsSizeChanged" />
-                    </Canvas>
-                </Grid>
+                    <StackPanel x:Name="HeaderActionsPanel" Orientation="Horizontal" Spacing="8" />
+                </local:PageHeaderPanel>
                 <ContentControl x:Name="BodyHost" Grid.Row="1" HorizontalContentAlignment="Stretch"
                                 VerticalContentAlignment="Stretch" IsTabStop="False" />
             </Grid>

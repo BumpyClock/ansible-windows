@@ -62,9 +62,7 @@ public sealed partial class PageCanvas : UserControl
         {
             if (_wide == value) return;
             _wide = value;
-            if (!IsLoaded) return;
-            UpdateLayoutBounds();
-            UpdateHeader();
+            if (IsLoaded) UpdateLayoutBounds();
         }
     }
 
@@ -137,7 +135,6 @@ public sealed partial class PageCanvas : UserControl
     private void ViewportSizeChanged(object sender, SizeChangedEventArgs args)
     {
         UpdateLayoutBounds();
-        UpdateHeader();
         UpdateHeaderScrolledOut();
     }
 
@@ -150,18 +147,7 @@ public sealed partial class PageCanvas : UserControl
         canvas.UpdateHeaderScrolledOut();
     }
 
-    private void HeaderSizeChanged(object sender, SizeChangedEventArgs args)
-    {
-        UpdateHeader();
-        UpdateHeaderScrolledOut();
-    }
-
-    private void HeaderActionsSizeChanged(object sender, SizeChangedEventArgs args)
-    {
-        if (args.PreviousSize.Width == args.NewSize.Width) return;
-        UpdateHeader();
-        UpdateHeaderScrolledOut();
-    }
+    private void HeaderSizeChanged(object sender, SizeChangedEventArgs args) => UpdateHeaderScrolledOut();
 
     private void UpdateHeaderScrolledOut()
     {
@@ -191,35 +177,6 @@ public sealed partial class PageCanvas : UserControl
         TitleText.Visibility = hasTitle ? Visibility.Visible : Visibility.Collapsed;
         SubtitleText.Visibility = hasSubtitle ? Visibility.Visible : Visibility.Collapsed;
         HeaderActionsPanel.Visibility = hasActions ? Visibility.Visible : Visibility.Collapsed;
-        foreach (var action in HeaderActions.OfType<FrameworkElement>())
-            action.MaxWidth = ContentWidth;
-        var resources = Application.Current.Resources;
-        var gap = (double)resources["CardGap"];
-        var fits = TitleProbe.ActualWidth + gap + ActionsWidth() <= ContentWidth;
-        var stacked = hasHeading && hasActions && !fits && ContentWidth < (double)resources["CompactPageThreshold"];
-        var beside = hasHeading && hasActions && !stacked;
-        HeaderLayout.ColumnSpacing = beside ? gap : 0;
-        Grid.SetColumnSpan(TitleText, beside ? 1 : 2);
-        Grid.SetRow(HeaderActionsPanel, stacked ? 2 : 0);
-        Grid.SetColumn(HeaderActionsPanel, beside ? 1 : 0);
-        Grid.SetColumnSpan(HeaderActionsPanel, beside ? 1 : 2);
-        HeaderActionsPanel.HorizontalAlignment = beside ? HorizontalAlignment.Right : HorizontalAlignment.Left;
-        HeaderActionsPanel.Margin = new Thickness(0, stacked ? 12 : 0, 0, 0);
-        HeaderActionsPanel.Orientation = stacked && ContentWidth < (double)resources["NarrowActionsThreshold"]
-            ? Orientation.Vertical : Orientation.Horizontal;
-    }
-
-    private double ActionsWidth()
-    {
-        var width = 0.0;
-        var shown = 0;
-        foreach (var action in HeaderActions)
-        {
-            if (action.Visibility != Visibility.Visible) continue;
-            width += action.DesiredSize.Width;
-            shown++;
-        }
-        return width + HeaderActionsPanel.Spacing * Math.Max(0, shown - 1);
     }
 
     private void ViewportLayoutUpdated(object? sender, object args) => UpdatePins();
@@ -248,6 +205,10 @@ public sealed partial class PageCanvas : UserControl
             ? "CompactPagePadding" : "PagePadding"];
         ContentColumn.MaxWidth = MaxContentWidth;
         ContentHost.MinHeight = Viewport.ActualHeight;
+        foreach (var action in HeaderActions.OfType<FrameworkElement>())
+            action.MaxWidth = ContentWidth;
+        HeaderActionsPanel.Orientation = ContentWidth < (double)resources["NarrowActionsThreshold"]
+            ? Orientation.Vertical : Orientation.Horizontal;
         var column = Column;
         if (column == _column) return;
         _column = column;
