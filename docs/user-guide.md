@@ -78,7 +78,7 @@ and use **Transcribe WAV file…** from the **More options** menu on **Speech mo
 With no saved rows, History shows an empty state under its header instead of a list, and
 the count badge beside the History title is hidden. It says **No dictations
 yet** only when usage shows no dictations. When usage counts dictations that
-History does not hold, it says **No saved transcripts**. The detail starts with
+History does not hold, it says **No saved dictations**. The detail starts with
 **New dictations appear here.** and adds that the earlier dictations are no
 longer saved, for example **12 earlier dictations are no longer saved.** or
 **Your earlier dictation is no longer saved.** When History storage has a

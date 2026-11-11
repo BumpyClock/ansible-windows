@@ -72,7 +72,7 @@ public sealed class HomeProjectionTests
         Assert.Equal("New dictations appear here. 2 earlier dictations are no longer saved.", several.Detail);
         Assert.Equal("New dictations appear here. Your earlier dictation is no longer saved.", one.Detail);
         Assert.Equal("New dictations appear here.", unknown.Detail);
-        Assert.All(new[] { several, one, unknown }, empty => Assert.Equal("No saved transcripts", empty.Title));
+        Assert.All(new[] { several, one, unknown }, empty => Assert.Equal("No saved dictations", empty.Title));
     }
 
     [Fact]

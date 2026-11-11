@@ -198,7 +198,7 @@
                         </local:SettingsRow>
 
                         <local:SettingsRow Title="Processor"
-                                           Description="Auto times the CPU and graphics card on a sample recording and uses the faster one for each model. Choosing CPU or graphics card skips the test."
+                                           Description="Auto measures the CPU and graphics card on a sample recording and uses the faster one for each model. Choosing CPU or graphics card skips the test."
                                            ControlWidth="{StaticResource SettingsFieldWidth}">
                             <!-- Items are labels only. The index maps to Auto, CPU, and Vulkan in MainPage.xaml.cs. -->
                             <ComboBox x:Name="BackendChoice"

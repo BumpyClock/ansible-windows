@@ -75,10 +75,10 @@ internal static class HomeHistoryProjection
     internal static HomeHistoryEmptyState? EmptyState(HomeHistoryViewModel model, string query, int? dictations) =>
         model.HasMatches ? null
         : model.HasHistory ? new(HomeHistoryEmptyKind.NoMatches, "No matches", $"No saved transcript contains \"{query}\".")
-        : model.StorageError is not null ? new(HomeHistoryEmptyKind.NothingSaved, "No saved transcripts",
+        : model.StorageError is not null ? new(HomeHistoryEmptyKind.NothingSaved, "No saved dictations",
             "History storage has a problem, so saved transcripts may be missing.")
         : dictations == 0 ? new(HomeHistoryEmptyKind.FirstRun, "No dictations yet", "Your transcripts appear here after you dictate.")
-        : new(HomeHistoryEmptyKind.NothingSaved, "No saved transcripts", "New dictations appear here." + dictations switch
+        : new(HomeHistoryEmptyKind.NothingSaved, "No saved dictations", "New dictations appear here." + dictations switch
         {
             1 => " Your earlier dictation is no longer saved.",
             { } count => $" {count:N0} earlier dictations are no longer saved.",
