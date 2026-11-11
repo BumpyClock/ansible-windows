@@ -32,10 +32,12 @@ public sealed record MeetingHistoryRow(MeetingSummary Summary)
     public bool IsFailed => Summary.Status == MeetingStatus.Failed;
     /// <summary>A failure that interrupted a meeting with saved text. Only this failure badge uses the critical colour.</summary>
     public bool IsCriticalFailure => IsFailed && HasSpeech;
-    /// <summary>A failure before any speech was transcribed. Its badge still says Failed, with a secondary icon.</summary>
-    public bool IsQuietFailure => IsFailed && !HasSpeech;
-    public string Status => MeetingText.Status(Summary.Status) ?? "";
-    public bool HasNeutralStatus => !IsFailed && MeetingText.Status(Summary.Status) is not null;
+    /// <summary>
+    /// The badge text. Empty for a finished meeting with no speech, whose detail line already names the state
+    /// (Failed or Interrupted), so a row never states it twice.
+    /// </summary>
+    public string Status => IsEmpty ? "" : MeetingText.Status(Summary.Status) ?? "";
+    public bool HasNeutralStatus => !IsFailed && Status.Length != 0;
     /// <summary>A meeting still being captured belongs to its session; only a finished one can be deleted from the list.</summary>
     public bool CanDelete => MeetingList.IsFinished(Summary.Status);
     public string AccessibleName => $"{Title}, {Details}{(Status.Length == 0 ? "" : $", {Status}")}";
@@ -131,9 +133,9 @@ internal static class MeetingText
     public static string? Outcome(MeetingStatus status, bool hasSpeech) => (status, hasSpeech) switch
     {
         (MeetingStatus.Completed, false) => "No speech transcribed",
-        (MeetingStatus.Failed, false) => "Stopped before any speech was transcribed",
+        (MeetingStatus.Failed, false) => "Failed before any speech was transcribed",
         (MeetingStatus.Failed, true) => "Text before the failure is saved",
-        (MeetingStatus.Interrupted, false) => "Ended before any speech was transcribed",
+        (MeetingStatus.Interrupted, false) => "Interrupted before any speech was transcribed",
         (MeetingStatus.Interrupted, true) => "Text before the interruption is saved",
         (_, false) => "No speech transcribed yet",
         _ => null
@@ -142,8 +144,8 @@ internal static class MeetingText
     /// <summary>The saved meeting window's explanation when it has no transcript to show.</summary>
     public static string EmptyExplanation(MeetingStatus status) => status switch
     {
-        MeetingStatus.Failed => "This meeting stopped before any speech was transcribed. The cause isn't saved with the meeting.",
-        MeetingStatus.Interrupted => "This meeting ended before any speech was transcribed.",
+        MeetingStatus.Failed => "This meeting failed before any speech was transcribed. The cause isn't saved with the meeting.",
+        MeetingStatus.Interrupted => "This meeting was interrupted before any speech was transcribed.",
         MeetingStatus.Completed => "Nothing was recognized in this meeting.",
         _ => "Speech appears here once it is transcribed."
     };

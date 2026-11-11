@@ -30,7 +30,6 @@ public sealed partial class HomeHistoryView : UserControl
     private bool _narrow;
     private HomeHistoryViewModel? _model;
     private int? _dictations;
-    private string? _shortcut;
     private PageCanvas? _pinCanvas;
     private StickyPin? _headerPin;
 
@@ -41,18 +40,13 @@ public sealed partial class HomeHistoryView : UserControl
     internal string Query => HistorySearchBox.Text.Trim();
 
     /// <summary>
-    /// What the empty state needs beyond saved rows: completed dictations from usage (null while unknown) and the
-    /// current shortcut. Changing either redraws only the empty state, so row animations are untouched.
+    /// What the empty state needs beyond saved rows: completed dictations from usage (null while unknown). Changing
+    /// it redraws only the empty state, so row animations are untouched. The page header owns the shortcut hint.
     /// </summary>
-    internal void SetEmptyContext(int? dictations, bool pushToTalk, string shortcut)
+    internal void SetEmptyContext(int? dictations)
     {
-        var lead = pushToTalk ? "Hold" : "Press";
-        if (_dictations == dictations && _shortcut == shortcut && EmptyShortcutLead.Text == lead) return;
+        if (_dictations == dictations) return;
         _dictations = dictations;
-        if (_shortcut != shortcut) ShortcutKeycaps.Show(EmptyShortcutKeys, shortcut);
-        _shortcut = shortcut;
-        EmptyShortcutLead.Text = lead;
-        EmptyShortcutTail.Text = pushToTalk ? "in any app and speak" : "in any app to start and stop";
         RenderEmptyState();
     }
 
@@ -126,6 +120,12 @@ public sealed partial class HomeHistoryView : UserControl
             : $"{count:N0} {(count == 1 ? "transcription" : "transcriptions")}";
         // With nothing saved the empty state says so; a zero count beside it would repeat it.
         HistoryCountPill.Visibility = model.HasHistory ? Visibility.Visible : Visibility.Collapsed;
+        // With nothing saved there is nothing to search. A search that matches nothing keeps the box so the query can change.
+        var searchVisibility = model.HasHistory ? Visibility.Visible : Visibility.Collapsed;
+        HistorySearchBox.Visibility = searchVisibility;
+        HistorySearchIcon.Visibility = searchVisibility;
+        HistorySearchShortcut.Visibility = searchVisibility;
+        if (HistoryHeaderGrid.RowDefinitions.Count > 1) { HistoryHeaderGrid.RowSpacing = model.HasHistory ? 8 : 0; }
         OversizedNotice.Text = $"A transcript over {HomeDictationHistory.MaximumCharacters:N0} characters stays in the current result and is not added to saved history.";
         OversizedNotice.Visibility = model.OversizedCurrentResult ? Visibility.Visible : Visibility.Collapsed;
         RenderEmptyState();
@@ -195,7 +195,6 @@ public sealed partial class HomeHistoryView : UserControl
         EmptyMessage.Glyph = noMatches ? SearchGlyph : MicrophoneGlyph;
         EmptyMessage.Title = empty.Title;
         EmptyMessage.Detail = empty.Detail;
-        EmptyMessage.Footer = noMatches ? null : EmptyShortcutHint;
     }
 
     /// <summary>Shows the copied state on a row after the page put its transcript on the clipboard.</summary>
@@ -436,6 +435,7 @@ public sealed partial class HomeHistoryView : UserControl
 
     private void FocusHistorySearchInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
+        if (HistorySearchBox.Visibility != Visibility.Visible) { return; }
         HistorySearchBox.Focus(FocusState.Keyboard);
         args.Handled = true;
     }
@@ -457,7 +457,7 @@ public sealed partial class HomeHistoryView : UserControl
             Grid.SetColumn(HistorySearchIcon, 0); Grid.SetColumnSpan(HistorySearchIcon, 2); Grid.SetRow(HistorySearchIcon, 1);
             Grid.SetColumn(HistorySearchShortcut, 0); Grid.SetColumnSpan(HistorySearchShortcut, 2); Grid.SetRow(HistorySearchShortcut, 1);
             HistorySearchBox.HorizontalAlignment = HorizontalAlignment.Stretch;
-            HistoryHeaderGrid.RowSpacing = 8;
+            HistoryHeaderGrid.RowSpacing = _model?.HasHistory == true ? 8 : 0;
         }
         else
         {

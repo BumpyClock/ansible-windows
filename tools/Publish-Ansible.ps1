@@ -78,7 +78,7 @@ function Build-VerifiedPackage {
             "Assets\AppIcon.ico", "Assets\StoreLogo.png",
             "Assets\ModelIcons\moonshine.png",
             "Assets\ModelIcons\qwen.png",
-            "Assets\ModelIcons\vibevoice.png",
+            "Assets\ModelIcons\vibevoice.png", "Assets\ModelIcons\vibevoice-dark.png",
             "Assets\ModelIcons\nvidia.png",
             "Assets\ModelIcons\NOTICE.txt", "Assets\ModelIcons\moonshine-LICENSE.txt",
             "Assets\ModelIcons\qwen-LICENSE.txt", "Assets\ModelIcons\vibevoice-LICENSE.txt"

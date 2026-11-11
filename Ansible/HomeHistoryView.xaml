@@ -112,19 +112,11 @@
                 </StackPanel.ChildrenTransitions>
             </StackPanel>
         </StackPanel>
-        <!-- No rows: the app's one empty state. Nothing saved invites a dictation with the real shortcut as keycaps;
-             a search miss names the query and drops the shortcut (RenderEmptyState). It is top-aligned and centred,
+        <!-- No rows: the app's one empty state, a glyph, title, and detail line; the page header already shows the
+             shortcut (RenderEmptyState). It is top-aligned and centred,
              with its backplate 64 DIP under the header: two 8 DIP row gaps, this 24 DIP margin, and the empty
              state's own 24 DIP padding. -->
         <local:EmptyState x:Name="EmptyMessage" Grid.Row="2" Glyph="&#xE720;" Visibility="Collapsed"
-                          VerticalAlignment="Top" Margin="0,24,0,0">
-            <local:EmptyState.Footer>
-                <StackPanel x:Name="EmptyShortcutHint" Orientation="Horizontal" Spacing="8">
-                    <TextBlock x:Name="EmptyShortcutLead" Style="{StaticResource SecondaryTextStyle}" VerticalAlignment="Center" />
-                    <StackPanel x:Name="EmptyShortcutKeys" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" />
-                    <TextBlock x:Name="EmptyShortcutTail" Style="{StaticResource SecondaryTextStyle}" VerticalAlignment="Center" />
-                </StackPanel>
-            </local:EmptyState.Footer>
-        </local:EmptyState>
+                          VerticalAlignment="Top" Margin="0,24,0,0" />
     </Grid>
 </UserControl>

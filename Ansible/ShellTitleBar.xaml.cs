@@ -11,8 +11,8 @@ using Microsoft.UI.Xaml.Media;
 namespace Ansible;
 
 /// <summary>
-/// The main window's title bar: the brand above the sidebar and, once the current page's heading scrolls out,
-/// the page name followed by a copy of the page's declared primary action.
+/// The main window's title bar: the brand above the sidebar, the page name once the current page's title scrolls
+/// out, and a copy of the page's declared primary action once the page's header actions scroll out.
 /// </summary>
 public sealed partial class ShellTitleBar : UserControl
 {
@@ -103,8 +103,8 @@ public sealed partial class ShellTitleBar : UserControl
     private void Render()
     {
         if (_closed) return;
-        var scrolled = _canvas is { IsHeaderScrolledOut: true } && PageTitle.Text.Length > 0;
-        var action = scrolled && _action is { IsVisible: true } ? _action : null;
+        var scrolled = _canvas is { IsTitleScrolledOut: true } && PageTitle.Text.Length > 0;
+        var action = scrolled && _canvas is { IsActionScrolledOut: true } && _action is { IsVisible: true } ? _action : null;
         if (action is not null)
         {
             var icon = _canvas?.PrimaryActionIcon;

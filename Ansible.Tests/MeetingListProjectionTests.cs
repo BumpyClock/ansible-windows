@@ -33,12 +33,12 @@ public sealed class MeetingListProjectionTests
         var items = MeetingList.Create(summaries, Today);
 
         Assert.Equal(7, items.Count);
-        Assert.Equal("TODAY", Assert.IsType<MeetingDayHeader>(items[0]).Label);
+        Assert.Equal("Today", Assert.IsType<MeetingDayHeader>(items[0]).Label);
         Assert.Equal("late", Assert.IsType<MeetingHistoryRow>(items[1]).Title);
         Assert.Equal("early", Assert.IsType<MeetingHistoryRow>(items[2]).Title);
-        Assert.Equal("YESTERDAY", Assert.IsType<MeetingDayHeader>(items[3]).Label);
+        Assert.Equal("Yesterday", Assert.IsType<MeetingDayHeader>(items[3]).Label);
         Assert.Equal("yesterday", Assert.IsType<MeetingHistoryRow>(items[4]).Title);
-        Assert.Equal(new DateOnly(2026, 10, 12).ToString("ddd, MMM d", CultureInfo.CurrentCulture).ToUpperInvariant(),
+        Assert.Equal(new DateOnly(2026, 10, 12).ToString("ddd, MMM d", CultureInfo.CurrentCulture),
             Assert.IsType<MeetingDayHeader>(items[5]).Label);
         Assert.Equal("last week", Assert.IsType<MeetingHistoryRow>(items[6]).Title);
     }
@@ -54,25 +54,24 @@ public sealed class MeetingListProjectionTests
     }
 
     [Theory]
-    [InlineData(MeetingStatus.Failed, true, true, false, false)]
-    [InlineData(MeetingStatus.Failed, false, false, true, true)]
-    [InlineData(MeetingStatus.Interrupted, true, false, false, false)]
-    [InlineData(MeetingStatus.Interrupted, false, false, false, true)]
-    [InlineData(MeetingStatus.Completed, true, false, false, false)]
-    [InlineData(MeetingStatus.Completed, false, false, false, true)]
-    [InlineData(MeetingStatus.Recording, false, false, false, false)]
+    [InlineData(MeetingStatus.Failed, true, true, false, "Failed")]
+    [InlineData(MeetingStatus.Failed, false, false, true, "")]
+    [InlineData(MeetingStatus.Interrupted, true, false, false, "Interrupted")]
+    [InlineData(MeetingStatus.Interrupted, false, false, true, "")]
+    [InlineData(MeetingStatus.Completed, true, false, false, "")]
+    [InlineData(MeetingStatus.Completed, false, false, true, "")]
+    [InlineData(MeetingStatus.Recording, false, false, false, "Recording")]
     public void OnlyAFailureWithSavedTextIsCriticalAndOnlyFinishedMeetingsWithoutSpeechRecede(
-        MeetingStatus status, bool hasSpeech, bool critical, bool quiet, bool empty)
+        MeetingStatus status, bool hasSpeech, bool critical, bool empty, string badge)
     {
         var row = new MeetingHistoryRow(Meeting(new DateTime(2026, 10, 20, 8, 0, 0), status: status,
             duration: hasSpeech ? TimeSpan.FromMinutes(3) : null, speakers: hasSpeech ? 1 : 0));
 
         Assert.Equal(critical, row.IsCriticalFailure);
-        Assert.Equal(quiet, row.IsQuietFailure);
         Assert.Equal(empty, row.IsEmpty);
         Assert.Equal(!empty, row.HasReadableTitle);
         Assert.Equal(empty, MeetingList.Empty([row.Summary]).Count == 1);
-        if (status == MeetingStatus.Failed) Assert.Equal("Failed", row.Status);
+        Assert.Equal(badge, row.Status);
     }
 
     [Fact]
@@ -82,8 +81,17 @@ public sealed class MeetingListProjectionTests
         foreach (var duration in new TimeSpan?[] { null, TimeSpan.FromMinutes(3) })
         {
             var row = new MeetingHistoryRow(Meeting(new DateTime(2026, 10, 20, 8, 0, 0), status: status, duration: duration));
-            Assert.True(new[] { row.IsCriticalFailure, row.IsQuietFailure, row.HasNeutralStatus }.Count(shown => shown) <= 1);
+            Assert.True(new[] { row.IsCriticalFailure, row.HasNeutralStatus }.Count(shown => shown) <= 1);
         }
+    }
+
+    [Fact]
+    public void AFailedMeetingWithNoSpeechStatesTheFailureOnceInItsAccessibleName()
+    {
+        var row = new MeetingHistoryRow(Meeting(new DateTime(2026, 10, 20, 8, 0, 0), "Planning", MeetingStatus.Failed));
+
+        Assert.Equal(1, row.AccessibleName.Split("Failed").Length - 1);
+        Assert.Contains("Failed before any speech was transcribed", row.AccessibleName);
     }
 
     [Fact]
@@ -91,16 +99,16 @@ public sealed class MeetingListProjectionTests
     {
         var items = MeetingList.Create([Meeting(new DateTime(2025, 12, 31, 12, 0, 0))], Today);
 
-        Assert.Equal(new DateOnly(2025, 12, 31).ToString("ddd, MMM d, yyyy", CultureInfo.CurrentCulture).ToUpperInvariant(),
+        Assert.Equal(new DateOnly(2025, 12, 31).ToString("ddd, MMM d, yyyy", CultureInfo.CurrentCulture),
             Assert.IsType<MeetingDayHeader>(items[0]).Label);
     }
 
     [Fact]
     public void DayLabelsAreSharedWithHomeHistory()
     {
-        Assert.Equal("TODAY", DayLabel.For(Today, Today));
-        Assert.Equal("YESTERDAY", DayLabel.For(Today.AddDays(-1), Today));
-        Assert.Equal("YESTERDAY", DayLabel.For(new DateOnly(2025, 12, 31), new DateOnly(2026, 1, 1)));
+        Assert.Equal("Today", DayLabel.For(Today, Today));
+        Assert.Equal("Yesterday", DayLabel.For(Today.AddDays(-1), Today));
+        Assert.Equal("Yesterday", DayLabel.For(new DateOnly(2025, 12, 31), new DateOnly(2026, 1, 1)));
     }
 
     [Fact]
@@ -122,15 +130,15 @@ public sealed class MeetingListProjectionTests
         var start = new DateTime(2026, 10, 20, 8, 0, 0);
         var failed = new MeetingHistoryRow(Meeting(start, "New meeting", MeetingStatus.Failed));
 
-        Assert.Equal("Stopped before any speech was transcribed", failed.Details);
-        Assert.Equal("Failed", failed.Status);
+        Assert.Equal("Failed before any speech was transcribed", failed.Details);
+        Assert.Equal("", failed.Status);
         Assert.True(failed.IsFailed);
         Assert.False(failed.HasNeutralStatus);
-        Assert.Equal("Ended before any speech was transcribed",
+        Assert.Equal("Interrupted before any speech was transcribed",
             new MeetingHistoryRow(Meeting(start, "New meeting", MeetingStatus.Interrupted)).Details);
         Assert.Equal("No speech transcribed", new MeetingHistoryRow(Meeting(start, "New meeting")).Details);
         Assert.Equal("No speech transcribed yet", new MeetingHistoryRow(Meeting(start, "New meeting", MeetingStatus.Recording)).Details);
-        Assert.Equal($"Stopped before any speech was transcribed · {Time(start)}",
+        Assert.Equal($"Failed before any speech was transcribed · {Time(start)}",
             new MeetingHistoryRow(Meeting(start, "Planning", MeetingStatus.Failed)).Details);
     }
 
@@ -173,7 +181,8 @@ public sealed class MeetingListProjectionTests
     public void OnlyMeetingsThatDidNotCompleteNormallyHaveAStatus()
     {
         var completed = new MeetingHistoryRow(Meeting(new DateTime(2026, 10, 20, 8, 0, 0)));
-        var interrupted = new MeetingHistoryRow(Meeting(new DateTime(2026, 10, 20, 8, 0, 0), status: MeetingStatus.Interrupted));
+        var interrupted = new MeetingHistoryRow(Meeting(new DateTime(2026, 10, 20, 8, 0, 0), status: MeetingStatus.Interrupted,
+            duration: TimeSpan.FromMinutes(3), speakers: 2));
 
         Assert.Equal("", completed.Status);
         Assert.False(completed.HasNeutralStatus);

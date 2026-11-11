@@ -28,6 +28,7 @@ public sealed partial class ModelCard : UserControl
     {
         InitializeComponent();
         Loaded += OnLoaded;
+        ActualThemeChanged += OnThemeChanged;
     }
 
     public string ModelId { get; private set; } = "";
@@ -211,37 +212,52 @@ public sealed partial class ModelCard : UserControl
             System.Diagnostics.Debug.WriteLine($"Ansible: high-contrast icon update for '{ModelId}' could not be dispatched.");
     }
 
-    // The glyph tile shows until a maker's mark opens, and stays when there is none or High Contrast is on. The mark
-    // always sits on the light tile, so it always uses the light-background artwork. The light tile stays in the tree
-    // at zero opacity while the image loads, because an image under a collapsed parent may never open.
+    // How each shipped mark is drawn. DarkVariant: a "{name}-dark.png" exists and loads in the dark theme.
+    // LightPlate: the artwork has ink that vanishes on a dark tile, so it sits on the light plate in both themes.
+    private readonly record struct MarkArt(bool DarkVariant, bool LightPlate);
+
+    private static MarkArt ArtFor(string assetName) => assetName switch
+    {
+        "nvidia" => new(DarkVariant: false, LightPlate: true),
+        "vibevoice" => new(DarkVariant: true, LightPlate: false),
+        _ => new(DarkVariant: false, LightPlate: false)
+    };
+
+    // The glyph shows until a maker's mark opens, and stays when there is none, High Contrast is on, or loading
+    // fails. The mark sits on the themed tile, or on the light plate when its artwork needs one.
     private void ApplyIcon()
     {
-        GlyphTile.Visibility = Visibility.Visible;
-        LogoTile.Opacity = 0;
+        TileGlyph.Visibility = Visibility.Visible;
+        LogoPlate.Visibility = Visibility.Collapsed;
         if (_assetName is null || IsHighContrast())
         {
             _iconUri = null;
             IconImage.Source = null;
-            LogoTile.Visibility = Visibility.Collapsed;
+            IconImage.Visibility = Visibility.Collapsed;
             return;
         }
-        _iconUri = new Uri($"ms-appx:///Assets/ModelIcons/{_assetName}.png");
+        var art = ArtFor(_assetName);
+        var file = art.DarkVariant && ActualTheme == ElementTheme.Dark ? $"{_assetName}-dark.png" : $"{_assetName}.png";
+        _iconUri = new Uri($"ms-appx:///Assets/ModelIcons/{file}");
         _iconFailureLogged = false;
-        LogoTile.Visibility = Visibility.Visible;
+        IconImage.Visibility = Visibility.Visible;
         IconImage.Source = new BitmapImage(_iconUri);
     }
 
+    private void OnThemeChanged(FrameworkElement sender, object args) => ApplyIcon();
+
     private void IconOpened(object sender, RoutedEventArgs e)
     {
-        LogoTile.Opacity = 1;
-        GlyphTile.Visibility = Visibility.Collapsed;
+        LogoPlate.Visibility = _assetName is { } name && ArtFor(name).LightPlate ? Visibility.Visible : Visibility.Collapsed;
+        TileGlyph.Visibility = Visibility.Collapsed;
     }
 
     private void IconFailed(object sender, ExceptionRoutedEventArgs e)
     {
-        LogoTile.Visibility = Visibility.Collapsed;
+        LogoPlate.Visibility = Visibility.Collapsed;
+        IconImage.Visibility = Visibility.Collapsed;
         IconImage.Source = null;
-        GlyphTile.Visibility = Visibility.Visible;
+        TileGlyph.Visibility = Visibility.Visible;
         if (!_iconFailureLogged)
         {
             _iconFailureLogged = true;

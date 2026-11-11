@@ -38,7 +38,7 @@ public sealed class HomeProjectionTests
 
         Assert.Equal(2, model.TodayCount);
         var group = Assert.Single(model.Groups);
-        Assert.Equal("YESTERDAY", group.Label);
+        Assert.Equal("Yesterday", group.Label);
         var entry = Assert.Single(group.Entries);
         Assert.Equal("older", entry.Text);
         Assert.Equal("Speech model", entry.Model?.Name);
@@ -138,7 +138,7 @@ public sealed class HomeProjectionTests
 
         var model = HomeHistoryProjection.Create([item], "", false, _ => null, today);
 
-        Assert.Equal(lastYear.ToString("ddd, MMM d, yyyy", CultureInfo.CurrentCulture).ToUpperInvariant(),
+        Assert.Equal(lastYear.ToString("ddd, MMM d, yyyy", CultureInfo.CurrentCulture),
             Assert.Single(model.Groups).Label);
     }
 

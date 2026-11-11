@@ -42,8 +42,8 @@
                             <TextBlock Text="{x:Bind Details}" Style="{StaticResource CaptionSecondaryStyle}"
                                        TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
                         </StackPanel>
-                        <!-- Failed always says Failed. The critical icon marks only a failure that interrupted a meeting
-                             with saved text; a failure before any speech uses the secondary colour. -->
+                        <!-- A badge appears only when the detail line does not already name the state: a failure that
+                             kept saved text (critical icon), or a live or interrupted meeting with speech. -->
                         <local:Badge Grid.Column="1" Text="{x:Bind Status}" VerticalAlignment="Center"
                                      Visibility="{x:Bind local:MeetingsPage.VisibleIf(IsCriticalFailure)}">
                             <local:Badge.Icon>
@@ -51,17 +51,11 @@
                             </local:Badge.Icon>
                         </local:Badge>
                         <local:Badge Grid.Column="1" Text="{x:Bind Status}" VerticalAlignment="Center"
-                                     Visibility="{x:Bind local:MeetingsPage.VisibleIf(IsQuietFailure)}">
-                            <local:Badge.Icon>
-                                <FontIcon Glyph="&#xE783;" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                            </local:Badge.Icon>
-                        </local:Badge>
-                        <local:Badge Grid.Column="1" Text="{x:Bind Status}" VerticalAlignment="Center"
                                      Visibility="{x:Bind local:MeetingsPage.VisibleIf(HasNeutralStatus)}"/>
                     </Grid>
                 </Button>
                 <Button Tag="{x:Bind Summary.Id}" Click="MeetingOptionsClicked" Style="{StaticResource IconButtonStyle}"
-                        HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0"
+                        HorizontalAlignment="Right" VerticalAlignment="Center"
                         ToolTipService.ToolTip="More options" AutomationProperties.Name="{x:Bind OptionsName}">
                     <FontIcon Glyph="&#xE712;" FontSize="16"/>
                 </Button>

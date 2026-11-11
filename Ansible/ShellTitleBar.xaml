@@ -6,8 +6,9 @@
              BorderBrush="{ThemeResource TextFillColorSecondaryBrush}" ActualThemeChanged="ShellThemeChanged">
     <!-- The title bar spans the window so the brand above the sidebar is a drag area. Caption buttons share its
          48 px height. The brand follows Windows title bar guidance: a 16 DIP icon and the app name in Caption type,
-         on the navigation icons' left edge. Once the page's whole header row scrolls away the bar shows the page name
-         and, 12 DIP after it, a compact copy of the page's primary action; the rest of the bar stays empty. The
+         on the navigation icons' left edge. Once the page title scrolls away the bar shows the page name; once the
+         page's header actions scroll away it adds, 12 DIP after the name, a compact copy of the page's primary action,
+         so the real button and its copy never show together. The rest of the bar stays empty. The
          TitleBar control keeps visible controls in its content clickable and the rest draggable. BorderBrush only
          resolves the theme's secondary text colour for the inactive caption buttons. -->
     <TitleBar x:Name="Bar" Height="{StaticResource TitleBarHeight}" Background="Transparent"

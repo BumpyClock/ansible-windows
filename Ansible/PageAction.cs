@@ -5,7 +5,7 @@ using Microsoft.UI.Xaml.Controls;
 namespace Ansible;
 
 /// <summary>
-/// A page's primary header action, declared through PageCanvas.PrimaryAction. Once the page heading scrolls out,
+/// A page's primary header action, declared through PageCanvas.PrimaryAction. Once the page's header actions scroll out,
 /// the window title bar shows a copy with the same label, enabled state and visibility, and the copy runs the same
 /// click handler. The label is the label TextBlock when given, otherwise the button's text content.
 /// </summary>

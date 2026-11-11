@@ -25,6 +25,7 @@ public sealed partial class MainPage : Page
     private bool _recordingShortcut;
     private ShortcutField? _captureField;
     private Task? _captureSizeTask;
+    private bool _capturesSaved;
     private Task? _captureDeleteTask;
     private bool _wasRecordTake;
     private bool _joining;
@@ -181,7 +182,7 @@ public sealed partial class MainPage : Page
             ChangeRecordPasteShortcutButton.IsEnabled = idle;
             ResetRecordPasteShortcutButton.IsEnabled = idle;
             ResetRecordPasteShortcutButton.Visibility = _state.Settings.RecordPasteShortcut != DictationShortcut.RecordPasteDefault ? Visibility.Visible : Visibility.Collapsed;
-            DeleteCapturesButton.IsEnabled = !_joining && idle && _captureSizeTask is not { IsCompleted: false } && _captureDeleteTask is not { IsCompleted: false };
+            DeleteCapturesButton.IsEnabled = _capturesSaved && !_joining && idle && _captureSizeTask is not { IsCompleted: false } && _captureDeleteTask is not { IsCompleted: false };
             if (!_joining && _wasRecordTake && !_state.IsRecordTake && _captureSizeTask is not { IsCompleted: false })
                 _captureSizeTask = RefreshCaptureSizeAsync();
             _wasRecordTake = _state.IsRecordTake;
@@ -600,10 +601,11 @@ public sealed partial class MainPage : Page
         {
             await WindowsRecordTakeFactory.RefreshClipboardProtectionAsync();
             var bytes = await _captures.GetSizeAsync();
+            _capturesSaved = bytes > 0;
             CaptureStorageRow.Description = $"{FormatCaptureSize(bytes)} Oldest takes are removed after seven days or above 2 GB.";
         }
         catch (Exception error) { ReportError(error, "Capture storage unavailable"); }
-        finally { DeleteCapturesButton.IsEnabled = !_joining && _state.IsIdle; }
+        finally { DeleteCapturesButton.IsEnabled = _capturesSaved && !_joining && _state.IsIdle; }
     }
 
     private async void DeleteCapturesClicked(object sender, RoutedEventArgs args)
@@ -628,7 +630,7 @@ public sealed partial class MainPage : Page
                     : null, NoticeArea.Settings);
         }
         catch (Exception error) { ReportError(error, "Captures could not be deleted"); }
-        finally { DeleteCapturesButton.IsEnabled = !_joining && _state.IsIdle; }
+        finally { DeleteCapturesButton.IsEnabled = _capturesSaved && !_joining && _state.IsIdle; }
     }
 
     internal async Task JoinAsync()

@@ -1,6 +1,8 @@
 <UserControl x:Class="Ansible.PageCanvas"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- No background, so the notice band under the viewport (BottomInset, set as the viewport's bottom margin) shows the
+         plain content layer. -->
     <UserControl.Content>
         <ScrollViewer x:Name="Viewport" HorizontalScrollBarVisibility="Disabled" HorizontalScrollMode="Disabled"
                       HorizontalContentAlignment="Stretch" VerticalScrollBarVisibility="Auto"

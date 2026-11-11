@@ -250,7 +250,7 @@
                                            AutomationProperties.Name="Microphone boost in decibels"
                                            AutomationProperties.HelpText="0 is off. Applies to the next microphone dictation."
                                            Minimum="0" Maximum="24" SmallChange="6" LargeChange="12"
-                                           SpinButtonPlacementMode="Inline" ValidationMode="InvalidInputOverwritten"
+                                           SpinButtonPlacementMode="Compact" ValidationMode="InvalidInputOverwritten"
                                            ValueChanged="MicrophoneBoostChanged" />
                             </local:SettingsRow>
 

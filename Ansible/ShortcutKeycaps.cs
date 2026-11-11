@@ -3,7 +3,7 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace Ansible;
 
-/// <summary>Draws a shortcut such as "Ctrl + Space" as keycaps, for the Home header and the empty History.</summary>
+/// <summary>Draws a shortcut such as "Ctrl + Space" as keycaps, for the Home header.</summary>
 internal static class ShortcutKeycaps
 {
     internal static void Show(Panel keys, string displayText)

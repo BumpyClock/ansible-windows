@@ -14,8 +14,8 @@ namespace Ansible;
 
 /// <summary>
 /// Renders the window's AppNotices that apply to the current page as floating NoticeBars, most severe first.
-/// Owns auto-dismiss timers. Reports the height it covers so each window can pad its own scroller and keep its last
-/// rows reachable.
+/// Owns auto-dismiss timers. Reports the height it covers so each window keeps its content clear of the notices; the
+/// main window shortens the page's scroll viewport, so notices sit in a band under the page's scroll viewport.
 /// </summary>
 public sealed partial class NoticeHost : UserControl
 {
@@ -41,7 +41,10 @@ public sealed partial class NoticeHost : UserControl
         SizeChanged += (_, _) => UpdateCoveredHeight();
     }
 
-    /// <summary>The height the notices cover at the bottom of the content; 0 while none show.</summary>
+    /// <summary>
+    /// The height of the notice band at the bottom of the content, including the host's bottom margin; 0 while none
+    /// show.
+    /// </summary>
     public double CoveredHeight => _coveredHeight;
 
     public event EventHandler? CoveredHeightChanged;

@@ -302,17 +302,17 @@ public sealed partial class MainWindow : Window
             _notices.Set(MicrophonePermissionNoticeKey, null);
             return;
         }
-        // One sentence each. The notice shows two buttons beside the text, so a longer body wraps past two lines.
+        // Short on purpose. The notice shows two buttons beside the text, and a longer body pushes them onto their own row.
         var message = status switch
         {
-            MicrophonePermissionStatus.DeniedByUser => "Allow microphone access for Ansible and desktop apps in Windows Settings.",
-            MicrophonePermissionStatus.DeniedBySystem => "Turn on microphone access in Windows Settings, or ask your administrator.",
+            MicrophonePermissionStatus.DeniedByUser => "Turn it on for Ansible and desktop apps.",
+            MicrophonePermissionStatus.DeniedBySystem => "Turn it on in Windows, or ask your administrator.",
             MicrophonePermissionStatus.NotDeclared => "Install an Ansible package that declares the microphone capability.",
             MicrophonePermissionStatus.PromptRequired => "Select Check again to request access.",
-            _ => "Ansible could not check microphone access, so review Windows privacy settings."
+            _ => "Ansible could not check it. Review Windows privacy settings."
         };
         _notices.Set(MicrophonePermissionNoticeKey, new NoticeContent(NoticeSeverity.Warning, "Microphone access required", message,
-            [new("Open settings", OpenMicrophoneSettings), new("Check again", CheckMicrophonePermission)]),
+            [new("Open Windows Settings", OpenMicrophoneSettings), new("Check again", CheckMicrophonePermission)]),
             dismissed: () =>
             {
                 // Dismissal holds for this status only; a different failure, or opening Settings, shows it again.
@@ -397,7 +397,7 @@ public sealed partial class MainWindow : Window
         if (ReferenceEquals(MainContent.Content, page.Page)) return;
         MainContent.Content = page.Page;
         foreach (var item in _pages.Sidebar) item.SetSelected(ReferenceEquals(item.Nav, page.Nav));
-        // Floating notices cover the bottom of the current page, so only that page reserves room for them.
+        // Notices sit in a band under the current page's scroll viewport, so only that page ends its viewport above them.
         if (_noticeCanvas is not null) _noticeCanvas.BottomInset = 0;
         _noticeCanvas = page.Canvas;
         Notices.ShowPage(page.Area);

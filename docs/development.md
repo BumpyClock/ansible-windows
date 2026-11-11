@@ -260,9 +260,12 @@ a 48 DIP round backplate, a Subtitle title, an optional detail line, and an
 optional footer. History, Meetings, Dictionary, the meeting window transcript,
 and the Home daily rhythm card when usage statistics are unavailable use it.
 `NoticeBarPanel` lays out a notice by its content, so the message and the action
-buttons stack when they do not fit on one line. `ShellTitleBar` shows the page
-name and the copy of the page's `PrimaryAction` directly after it, only once the
-whole header row has scrolled out. Its brand stays at 16 DIP with the app name in
+buttons stack when they do not fit on one line. `NoticeHost` reports the height
+of the notice band, and `MainWindow` sets it as the current page's
+`PageCanvas.BottomInset`, which ends the page's scroll viewport above the band.
+`ShellTitleBar` shows the page name once `PageCanvas.IsTitleScrolledOut` is true.
+It adds the copy of the page's `PrimaryAction` directly after the name only once
+`IsActionScrolledOut` is also true. Its brand stays at 16 DIP with the app name in
 Caption type in the 48 DIP compact layout too. The design check rejects page roots that
 bypass the shared canvas. `DeviceComparisonView` renders
 structured benchmark snapshots without parsing presentation text.
@@ -287,11 +290,24 @@ captures the fixed review matrix into `.runtime\ux\<name>`: five pages in light
 and dark at a wide and a narrow window, one frame per viewport of scroll, plus the
 welcome lesson and a saved meeting window. Settings is captured one section at a
 time, each from top to bottom. The script waits for the session to be ready
-before it captures. `-Only` limits the run to the named pages or to `extras` (the
+before it captures. It takes each frame with the app window in the foreground.
+When the window is not, it clicks once on the empty title bar, checks the
+foreground again after the screenshot, and retries up to four times. It warns if
+a frame was still captured with the window inactive. It waits up to 10 seconds
+for the meeting transcript window to open. `-Only` limits the run to the named pages or to `extras` (the
 welcome lesson and the meeting window) for a quick local probe. Review rounds use
 the full matrix. It needs the `winapp` CLI and replaces the running development
 instance. A page that fails to load fails the run, so it
 doubles as the runtime check for unresolved XAML resources.
+
+`tools\design\ux-review-rubric.md` is the fixed checklist for scoring a round of
+these frames. It has 7 dimensions of 5 criteria each. A reviewer scores each
+criterion from 0 to 1 by counting the instances visible in the frames. A
+dimension scores 10 times the mean of its criteria, and the overall score is the
+mean of the dimensions. The capture matrix and the rubric stay fixed between
+rounds so scores are comparable. A score comes from a reviewer, human or model,
+who reads every frame of the round. Two reviewers score each round, and their
+scores are averaged.
 
 Debug builds accept `--design-theme=light` and `--design-theme=dark` as launch
 arguments for screenshot qualification. This scopes appearance to the app
@@ -299,7 +315,8 @@ window and does not change Windows settings. Release builds follow Windows.
 
 Independent visual judges must invoke the `ux-designer` skill before reviewing
 actual screenshots. Check both themes and responsive, error, and empty states.
-Showing or dismissing transient notices must not change the page viewport bounds.
+Showing or dismissing a notice must not move the page viewport top or the scroll
+offset, and a notice must not cover page content.
 
 The app mark uses exact Pencil geometry. `Ansible/Assets/Brand` retains SVG
 artwork derived from that geometry and native-size PNGs exported through Pencil MCP. There is no design

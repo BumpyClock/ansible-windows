@@ -1,4 +1,4 @@
-using Ansible.Core;
+﻿using Ansible.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -218,7 +218,7 @@ public sealed partial class DictationPage : Page
             HomeInsightsColumn.Render(insights);
             PostStorageNotice(UsageNoticeKey, "Some usage statistics are missing", insights.UsageWarning);
         }
-        HistoryView.SetEmptyContext(_homeDictations, settings.PushToTalk, settings.Shortcut.DisplayText);
+        HistoryView.SetEmptyContext(_homeDictations);
     }
 
     private void RenderHomeHistory(bool animate)

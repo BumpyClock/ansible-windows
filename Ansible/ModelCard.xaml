@@ -29,21 +29,23 @@
             </Grid.RowDefinitions>
 
             <!-- A neutral glyph for what the model does, on a subtle fill that darkens a light card and lightens a dark
-                 one. When the app ships the maker's mark, the mark covers it on a light tile in both themes: brand
-                 artwork is drawn for a light background, and RequestedTheme="Light" resolves the stock light fill and
-                 card stroke inside that tile. The light tile stays transparent until the mark opens. -->
+                 one. When the app ships the maker's mark, it covers the glyph on this themed tile. Artwork drawn only
+                 for a light background sits on the light plate instead: RequestedTheme="Light" resolves the stock
+                 light fill and card stroke inside it. The plate has the tile's size, radius, and stroke, and stays
+                 collapsed until that mark opens. The image is a sibling so it loads under a visible parent. -->
             <Grid Width="40" Height="40" VerticalAlignment="Center" AutomationProperties.AccessibilityView="Raw">
                 <Border x:Name="GlyphTile" CornerRadius="{StaticResource ControlCornerRadius}"
-                        Background="{ThemeResource SubtleFillColorSecondaryBrush}">
+                        Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="{StaticResource CardBorderThickness}">
                     <FontIcon x:Name="TileGlyph" FontSize="20" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 </Border>
-                <Border x:Name="LogoTile" RequestedTheme="Light" CornerRadius="{StaticResource ControlCornerRadius}"
+                <Border x:Name="LogoPlate" RequestedTheme="Light" CornerRadius="{StaticResource ControlCornerRadius}"
                         Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                        BorderThickness="{StaticResource CardBorderThickness}" Opacity="0" Visibility="Collapsed">
-                    <Image x:Name="IconImage" Width="28" Height="28" Stretch="Uniform"
-                           ImageOpened="IconOpened" ImageFailed="IconFailed" />
-                </Border>
+                        BorderThickness="{StaticResource CardBorderThickness}" Visibility="Collapsed" />
+                <Image x:Name="IconImage" Width="28" Height="28" Stretch="Uniform" Visibility="Collapsed"
+                       ImageOpened="IconOpened" ImageFailed="IconFailed" />
             </Grid>
 
             <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">

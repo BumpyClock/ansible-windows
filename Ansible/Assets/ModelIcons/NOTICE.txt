@@ -18,21 +18,21 @@ License: Apache-2.0; see qwen-LICENSE.txt.
 Original PNG SHA-256:
 4aa54a2d6dccb5de7a8107575adb6061c6cb8240e131109f8b066b18ef34bdf9
 Modified: the emblem is cropped from the wordmark, padded, and resized to 96 pixels.
-The same color artwork is used in both themes, on a light tile.
+The same color artwork is used in both themes.
 
 VibeVoice
 Source: https://github.com/microsoft/VibeVoice/blob/1541f590c7099820f10ea012f48d2399282df69f/Figures/VibeVoice_logo_white.png
 License: MIT; see vibevoice-LICENSE.txt.
 Copyright (c) 2025 Microsoft.
 Modified: the emblem is cropped from the wordmark, padded, and resized to 96 pixels.
-The packaged artwork uses dark ink with the original alpha and geometry, on a light tile in both themes.
+The light-theme variant uses dark ink with the original alpha and geometry.
 
 Nemotron
 Source: https://avatars.githubusercontent.com/u/1728152?v=4
 Official NVIDIA organization: https://github.com/NVIDIA
 Original PNG SHA-256:
 308d323d3bc3ff8c667fe8a099baf151b1f9562b382b115e903233e318c96dc9
-The official organization emblem is unmodified.
+The official organization emblem is unmodified. It sits on a light tile in both themes.
 NVIDIA and the NVIDIA logo are registered trademarks of NVIDIA Corporation.
 The emblem identifies the provider of Nemotron; it does not imply endorsement.
 No MIT or Apache license grant is asserted for the NVIDIA trademark.

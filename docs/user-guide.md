@@ -79,9 +79,9 @@ yet** only when usage shows no dictations. When usage counts dictations that
 History does not hold, it says **No saved transcripts** and that they were
 removed or not saved. When History storage has a problem, it says that saved
 transcripts may be missing. When usage is unavailable, it says **New
-dictations appear here.** These states show your shortcut as keycaps under the
-text, with **Hold** or **Press** before them to match your activation mode. A
-search with no hits shows **No matches** and the search text, without keycaps.
+dictations appear here.** The search box and its Ctrl K hint are hidden while
+History holds no entries. A search with no hits shows **No matches** and the
+search text, and keeps the search box.
 
 Home has two insight cards. They show measured local counts, not estimates. The
 **Words dictated** card shows the all-time dictated word count on this device.
@@ -119,11 +119,11 @@ are at most 1000 DIP wide, so a page of one column of rows reads in a narrow
 measure. Home, with history beside its insights, may use up to 1440 DIP. Page
 content starts at the left page padding.
 
-When a page's whole header row, the heading and its actions, has scrolled out of
-view, the title bar shows the page name. On Home and Meetings it also shows a
-copy of the page's main action, the dictation button or **Start meeting**,
-right after the page name. The copy has the same label, state, and icon as the original. On a
-narrow Home, History comes before the insight cards.
+When the page title has scrolled out of view, the title bar shows the page name.
+On Home and Meetings, once the header actions have scrolled out too, the title
+bar also shows a copy of the page's main action, the dictation button or
+**Start meeting**, right after the page name. The copy has the same label, state, and icon as
+the original. On a narrow Home, History comes before the insight cards.
 
 Settings has five sections, chosen from a bar under the heading. They are
 **Dictation**, **Screen and ink**, **Recognition**, **Meetings**, and **Privacy
@@ -135,9 +135,9 @@ Row**.
 
 Ansible checks microphone permission at launch, before recording can start. If
 Windows requires consent, the app requests it then. Already granted access does
-not prompt again. If Windows blocks access, a compact overlay offers **Open
-settings** and **Check again** without changing page height. Dismiss it to reveal
-the content underneath. Open **Settings** in Ansible to show the guidance again.
+not prompt again. If Windows blocks access, a notice offers **Open Windows
+Settings** and **Check again**. Dismiss it to hide it. Open **Settings** in
+Ansible to show the guidance again.
 Enable the applicable microphone
 access settings, then return to Ansible. Policy restrictions may require your
 administrator. File transcription and model management remain available.
@@ -373,9 +373,10 @@ offset on the shared take clock.
 
 ### Text insertion
 
-Notices float over the bottom of the content layer and never move page
-content; the page gains bottom space so its last rows stay reachable. A notice
-sizes to its content. When the message and its buttons do not fit on one line,
+Notices sit in a band at the bottom of the content layer. The page's scroll
+area ends above that band, so a notice never covers page content, and content
+at the top of the page does not move when a notice appears. A notice sizes to
+its content. When the message and its buttons do not fit on one line,
 the buttons move under the message. Errors
 list first, then warnings, then information. At most three show at once, and
 **N more notices** opens the rest. Only warning and error session notices
@@ -781,9 +782,12 @@ can be retried. Failed wording cleanup keeps the completed original for retry.
 The Meetings list groups saved
 meetings by day, newest first. Each row shows a title and one detail line. The
 line gives the length and speaker count, then the start time when the title does
-not say it. A meeting with no transcribed speech gives the reason instead, such
-as **No speech transcribed**. A status badge appears only for a state that is
-not a normal completion, such as **Failed**. Select a row to reopen its saved
+not say it. A finished meeting with no transcribed speech states the outcome once
+in that line, as **Failed before any speech was transcribed**, **Interrupted
+before any speech was transcribed**, or **No speech transcribed**, and shows no
+badge. A status badge appears only for a meeting that holds saved text and did
+not complete normally, such as **Failed**, or for a meeting still being
+captured. Select a row to reopen its saved
 text. The row's **More options (...)** menu holds **Open** and **Delete...**.
 **Delete...** asks for one confirmation and deletes the meeting permanently.
 A meeting still being captured cannot be deleted from the list. A finished
@@ -853,7 +857,8 @@ the screen contents of one monitor. Automatic cleanup runs at launch and after
 each take, removing captures older than seven days, then oldest first above
 2 GiB. Active writers, the current media result, and files still referenced by
 the app's current clipboard publication are protected. **Settings > Screen and
-ink > Saved captures** shows total size and **Delete all captures**. Native clipboard picture-file references are
+ink > Saved captures** shows total size and **Delete all captures**, which is
+disabled while no captures are saved. Native clipboard picture-file references are
 protected after restarting Ansible too. If the clipboard is busy or changes
 during inspection, cleanup waits for a later attempt instead of risking those
 files. In-use takes are retained with a warning.
