@@ -86,7 +86,7 @@
                     <Border Style="{StaticResource LessonIconStyle}"><FontIcon Glyph="&#xE713;" Style="{StaticResource LessonGlyphStyle}" /></Border>
                     <StackPanel Grid.Column="1" Spacing="2">
                         <TextBlock Text="Your microphone is off until you start a dictation." Style="{StaticResource BodyStrongTextBlockStyle}" TextWrapping="Wrap" />
-                        <TextBlock Text="The keys above follow your keyboard. You can change the shortcut, or replay this lesson, in Settings > Shortcut."
+                        <TextBlock Text="The keys above follow your keyboard. You can change the shortcut, or replay this lesson, in Settings > Dictation."
                                    Style="{StaticResource SecondaryTextStyle}" TextWrapping="Wrap" />
                     </StackPanel>
                 </Grid>

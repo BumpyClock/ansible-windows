@@ -40,7 +40,7 @@ Recognition runs on the device. Successful dictation transcripts persist locally
 as text and metadata. Meeting transcripts save automatically on this device.
 The app never saves or uploads audio. Optional meeting transcript cleanup can
 send finalized text to GitHub Copilot CLI or the OpenAI API after you enable it
-in **Settings > Transcript cleanup** and a meeting ends successfully. Text you copy or insert is subject to the
+in **Settings > Meetings > Transcript cleanup** and a meeting ends successfully. Text you copy or insert is subject to the
 clipboard and destination app's storage policies. Model downloads require network access.
 
 Select Teams in the notetaker to import a verified call-window title and finish

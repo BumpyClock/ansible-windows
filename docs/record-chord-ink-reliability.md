@@ -105,7 +105,7 @@ surface publication, which happens before hooks are installed. Fixture timers
 also run inside the message loop, so fixture maxima are not production drawing
 benchmarks. No performance improvement is claimed from these checks.
 
-Counters stay in memory unless **Settings > Local diagnostics** is enabled.
+Counters stay in memory unless **Settings > Privacy and data > Local diagnostics** is enabled.
 One `Application / RecordCapture` entry then uses the existing bounded,
 source-generated JSON writer. Consent is snapshotted at take start; changing
 consent invalidates the old generation. Entries contain numeric counters and

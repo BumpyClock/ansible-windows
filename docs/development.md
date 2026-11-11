@@ -238,9 +238,9 @@ geometry.
   gap, spacing, and inset tokens sit on the 4 DIP grid, as do thickness tokens
   other than border and divider thickness. The values 0, 1, and 2 are allowed for
   hairlines and optical nudges.
-- Every `StaticResource` key a view names must be defined in the app's XAML or be
-  a known WinUI resource. XAML compiles an unknown key and then fails when the page
-  loads, so an undefined key fails the check.
+- Every `StaticResource` or `ResourceKey` a view names must be defined in the
+  app's XAML or be a known WinUI resource. XAML compiles an unknown key and then
+  fails when the page loads, so an undefined key fails the check.
 - A token that no XAML resource reference or quoted C# key uses is dead and fails
   the check. Remove it.
 
@@ -248,8 +248,22 @@ Every page renders into `PageCanvas`. This component owns the shared title,
 subtitle, responsive header actions, content width, padding, the page's only
 vertical scroller, and bottom space. Pages supply `Title`, `Subtitle`,
 `HeaderActions`, and body content; they do not implement their own header grids,
-heading breakpoints, or nested scrollers. Content that must stay visible while the
-page scrolls uses `PageCanvas.Pin`. The design check rejects page roots that
+heading breakpoints, or nested scrollers. The header and content share one column
+that starts at the page padding. The column is at most `PageReadingMaxWidth`
+(1000) wide. A page that sets `Wide="True"` gets `PageContentMaxWidth` (1440)
+instead. Only Home sets it, because its history and insights sit side by side.
+Content that must stay visible while the page scrolls uses `PageCanvas.Pin`.
+Settings pins its `SelectorBar` that way. The bar chooses one of five sections
+(Dictation, Screen and ink, Recognition, Meetings, Privacy and data), and only
+that section is visible. `EmptyState` is the one empty state. It shows a glyph on
+a 48 DIP round backplate, a Subtitle title, an optional detail line, and an
+optional footer. History, Meetings, Dictionary, the meeting window transcript,
+and the Home daily rhythm card when usage statistics are unavailable use it.
+`NoticeBarPanel` lays out a notice by its content, so the message and the action
+buttons stack when they do not fit on one line. `ShellTitleBar` shows the page
+name and the copy of the page's `PrimaryAction` directly after it, only once the
+whole header row has scrolled out. Its brand stays at 16 DIP with the app name in
+Caption type in the 48 DIP compact layout too. The design check rejects page roots that
 bypass the shared canvas. `DeviceComparisonView` renders
 structured benchmark snapshots without parsing presentation text.
 
@@ -271,8 +285,12 @@ and [system backdrops](https://learn.microsoft.com/windows/apps/develop/ui/syste
 `tools\design\Capture-AppScreens.ps1 -Round <name>` builds the Debug app and
 captures the fixed review matrix into `.runtime\ux\<name>`: five pages in light
 and dark at a wide and a narrow window, one frame per viewport of scroll, plus the
-welcome lesson and a saved meeting window. It needs the `winapp` CLI and replaces
-the running development instance. A page that fails to load fails the run, so it
+welcome lesson and a saved meeting window. Settings is captured one section at a
+time, each from top to bottom. The script waits for the session to be ready
+before it captures. `-Only` limits the run to the named pages or to `extras` (the
+welcome lesson and the meeting window) for a quick local probe. Review rounds use
+the full matrix. It needs the `winapp` CLI and replaces the running development
+instance. A page that fails to load fails the run, so it
 doubles as the runtime check for unresolved XAML resources.
 
 Debug builds accept `--design-theme=light` and `--design-theme=dark` as launch
