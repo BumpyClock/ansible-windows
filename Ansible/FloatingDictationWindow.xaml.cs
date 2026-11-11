@@ -316,9 +316,12 @@ public sealed partial class FloatingDictationWindow : Window
                 }
             }
             var foreground = ((SolidColorBrush)PreviewRoot.BorderBrush).Color;
+            // The tint over the blurred desktop is the solid fallback colour at the token's opacity.
+            var tint = ((SolidColorBrush)PillBorder.Background).Color;
+            tint.A = (byte)(255 * (double)Application.Current.Resources["PillBackdropTintOpacity"]);
             _pill.Configure(bounds.X + shape.Item1, bounds.Y + shape.Item2, pillWidth, pillHeight,
                 scale, foreground, ((SolidColorBrush)PreviewRoot.Background).Color,
-                ((SolidColorBrush)PillBorder.Background).Color,
+                tint,
                 ((SolidColorBrush)PillBorder.BorderBrush).Color, ((SolidColorBrush)WaveBars.Background).Color,
                 _accessibility.HighContrast,
                 _settings.AdvancedEffectsEnabled);

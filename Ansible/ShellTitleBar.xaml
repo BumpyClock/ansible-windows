@@ -3,13 +3,13 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="using:Ansible"
-             BorderBrush="{ThemeResource AppSecondaryTextBrush}" ActualThemeChanged="ShellThemeChanged">
+             BorderBrush="{ThemeResource TextFillColorSecondaryBrush}" ActualThemeChanged="ShellThemeChanged">
     <!-- The title bar spans the window so the brand above the sidebar is a drag area. Caption buttons share its
          48 px height. Once the page heading scrolls away it shows the page name and a compact copy of the page's
          primary action. The TitleBar control keeps visible controls in its content clickable and the rest draggable.
          BorderBrush only resolves the theme's secondary text colour for the inactive caption buttons. -->
     <TitleBar x:Name="Bar" Height="{StaticResource TitleBarHeight}" Background="Transparent"
-              Foreground="{ThemeResource AppTextBrush}">
+              Foreground="{ThemeResource TextFillColorPrimaryBrush}">
         <TitleBar.Resources>
             <x:Double x:Key="TitleBarCompactHeight">48</x:Double>
             <x:Double x:Key="TitleBarLeftHeaderPaddingWidth">0</x:Double>

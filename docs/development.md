@@ -206,16 +206,22 @@ direct installation.
 
 ## Design resources
 
-`Ansible/DesignTokens.xaml` owns app colors, typography, shared dimensions, and
-control styles. It is merged after the WinUI resource dictionary. Pages consume
-semantic resources rather than palette literals. Brand roles are separate from
-light/dark surface roles. A future color scheme can replace those brand roles
-without rewriting page layouts. High Contrast uses Windows system colors.
-The existing Windows font is retained.
+`Ansible/DesignTokens.xaml` owns the brand accent, typography, shared dimensions,
+and control styles. It is merged after the WinUI resource dictionary.
+
+Colour follows one rule. Neutral text, fills, strokes, and materials are WinUI's
+own theme resources, referenced by name (`TextFillColorSecondaryBrush`,
+`CardBackgroundFillColorDefaultBrush`, `DividerStrokeColorDefaultBrush`) and never
+redefined. The only colour the app owns is the citron accent: the
+`SystemAccentColor` ramp that WinUI derives its accent brushes from, the accent
+button, `AppAccentBrush` and `AppOnAccentBrush`, the activity ramp, and the app
+mark. Accent graphics on neutral surfaces use `AccentTextFillColorPrimaryBrush`.
+High Contrast is the platform's, except for the few app-owned brushes, which map
+to Windows system colours. `tools\Test-DesignTokens.ps1` rejects a redefined
+WinUI neutral and any raw colour outside the token dictionary. The existing
+Windows font is retained.
 `NavigationStyles.xaml` owns shared sidebar button and icon styles. Its selected
-button template keeps the current page visible during hover and press. Control
-interaction colors resolve through themed XAML resources, not copied brushes
-from the application's current theme.
+button template keeps the current page visible during hover and press.
 
 Every page renders into `PageCanvas`. This component owns the shared title,
 subtitle, responsive header actions, content width, padding, scroll bounds, and
@@ -225,16 +231,27 @@ lists use its bounded mode and let the list own scrolling. The design check
 rejects page roots that bypass the shared canvas. `DeviceComparisonView` renders
 structured benchmark snapshots without parsing presentation text.
 
-The shell and meeting window use one Mica backdrop per window with transparent
-chrome. Main pages use Microsoft's card pattern through the shared `CardStyle`;
-the transcript window uses a contiguous `PageSurfaceStyle`. Both use WinUI's
-translucent `LayerFillColorDefaultBrush` above Mica. Keep
-these platform resources and Acrylic flyout resources unmodified so their
-theme, High Contrast, inactive-window, transparency, and power fallbacks remain
-available. Acrylic belongs to transient flyouts and menus, not the main page.
-This follows Microsoft Learn's [Mica layering](https://learn.microsoft.com/windows/apps/design/style/mica#app-layering-with-mica),
-[layering and elevation](https://learn.microsoft.com/windows/apps/design/signature-experiences/layering),
-and [Acrylic guidance](https://learn.microsoft.com/windows/apps/design/style/acrylic).
+The shell and meeting window follow Microsoft's two-layer model. Mica is the base
+layer: one `MicaBackdrop` per window, with the title bar and sidebar directly on
+it. The page sits on one contiguous content layer, `ContentLayerStyle`, which is
+WinUI's `LayerFillColorDefaultBrush` with the card stroke. Cards segment content
+on that layer through the shared `CardStyle` (`CardBackgroundFillColorDefaultBrush`
+and `CardStrokeColorDefaultBrush`). Keep these platform resources unmodified so
+their theme, High Contrast, inactive-window, transparency, and power fallbacks
+remain available. Acrylic belongs to transient flyouts and menus, not the page.
+Content pinned over scrolling rows (the Home history header) repeats the two
+layers with a `SystemBackdropElement` hosting Mica under the layer fill, so it
+hides the rows without a visible band.
+This follows Microsoft Learn's [layering and elevation](https://learn.microsoft.com/windows/apps/design/signature-experiences/layering),
+[Mica layering](https://learn.microsoft.com/windows/apps/design/style/mica#app-layering-with-mica),
+and [system backdrops](https://learn.microsoft.com/windows/apps/develop/ui/system-backdrops).
+
+`tools\design\Capture-AppScreens.ps1 -Round <name>` builds the Debug app and
+captures the fixed review matrix into `.runtime\ux\<name>`: five pages in light
+and dark at a wide and a narrow window, one frame per viewport of scroll, plus the
+welcome lesson and a saved meeting window. It needs the `winapp` CLI and replaces
+the running development instance. A page that fails to load fails the run, so it
+doubles as the runtime check for unresolved XAML resources.
 
 Debug builds accept `--design-theme=light` and `--design-theme=dark` as launch
 arguments for screenshot qualification. This scopes appearance to the app

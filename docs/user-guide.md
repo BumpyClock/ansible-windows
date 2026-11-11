@@ -44,7 +44,7 @@ put the icon in the hidden-icons overflow.
 
 ## Home and appearance
 
-Every page scrolls as one document inside the content panel; lists and cards do
+Every page scrolls as one document inside the content layer; lists and cards do
 not scroll on their own.
 
 **Home** shows the latest successful dictations, newest first, grouped as Today,
@@ -328,7 +328,7 @@ offset on the shared take clock.
 
 ### Text insertion
 
-Notices float over the bottom of the content panel and never move page
+Notices float over the bottom of the content layer and never move page
 content; the page gains bottom space so its last rows stay reachable. Errors
 list first, then warnings, then information. At most three show at once, and
 **N more notices** opens the rest. Only warning and error session notices

@@ -3,9 +3,9 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="using:Ansible">
     <Window.SystemBackdrop><MicaBackdrop /></Window.SystemBackdrop>
-    <Grid x:Name="Root" Background="{ThemeResource AppWindowBrush}" RowSpacing="0" ActualThemeChanged="RootThemeChanged">
+    <Grid x:Name="Root" RowSpacing="0" ActualThemeChanged="RootThemeChanged">
         <Grid.RowDefinitions><RowDefinition Height="48"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-        <Border Grid.Row="1" Grid.RowSpan="4" Margin="8,0,8,8" Style="{StaticResource PageSurfaceStyle}" />
+        <Border Grid.Row="1" Grid.RowSpan="4" Margin="8,0,8,8" Style="{StaticResource ContentLayerStyle}" />
         <Grid x:Name="TitleBar" Margin="24,0,140,0"><TextBlock x:Name="TitleBarCaption" Text="Meeting transcript" VerticalAlignment="Center" Style="{StaticResource CaptionSecondaryStyle}"/></Grid>
         <StackPanel Grid.Row="1" Margin="32,20,32,20" Spacing="12">
             <TextBox x:Name="MeetingTitle" Text="New meeting" FontSize="{StaticResource PageTitleFontSize}" FontWeight="SemiBold" Background="Transparent" BorderThickness="0" Padding="0" MaxLength="200" LostFocus="TitleLostFocus" AutomationProperties.Name="Meeting title"/>

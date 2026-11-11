@@ -14,25 +14,25 @@
                 <Setter Property="TextWrapping" Value="NoWrap" />
             </Style>
             <Style x:Key="HistoryNotInsertedTagTextStyle" TargetType="TextBlock" BasedOn="{StaticResource HistoryTagTextStyle}">
-                <Setter Property="Foreground" Value="{ThemeResource AppTagBrush}" />
+                <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCautionBrush}" />
             </Style>
             <Style x:Key="HistoryTagIconStyle" TargetType="FontIcon">
                 <Setter Property="FontSize" Value="12" />
-                <Setter Property="Foreground" Value="{ThemeResource AppMutedTextBrush}" />
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
                 <Setter Property="VerticalAlignment" Value="Center" />
             </Style>
             <Style x:Key="HistoryInsertedTagIconStyle" TargetType="FontIcon" BasedOn="{StaticResource HistoryTagIconStyle}">
-                <Setter Property="Foreground" Value="{ThemeResource AccentForegroundBrush}" />
+                <Setter Property="Foreground" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
             </Style>
             <Style x:Key="HistoryNotInsertedTagIconStyle" TargetType="FontIcon" BasedOn="{StaticResource HistoryTagIconStyle}">
-                <Setter Property="Foreground" Value="{ThemeResource AppTagBrush}" />
+                <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCautionBrush}" />
             </Style>
             <Style x:Key="HistoryCopyIconStyle" TargetType="FontIcon">
                 <Setter Property="FontSize" Value="{StaticResource IconButtonGlyphSize}" />
             </Style>
             <!-- Text that never reached the app keeps an amber Copy so the recovery action stays obvious. -->
             <Style x:Key="HistoryNeedsCopyIconStyle" TargetType="FontIcon" BasedOn="{StaticResource HistoryCopyIconStyle}">
-                <Setter Property="Foreground" Value="{ThemeResource AppTagBrush}" />
+                <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCautionBrush}" />
             </Style>
             <!-- Rows sit on the page surface. The negative margin keeps row text aligned with the section header
                  while the hover fill extends past it. -->
@@ -49,12 +49,13 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <!-- Rows are built in code; this anchor supplies the hover fill resolved for this element's theme. -->
-        <Border x:Name="HoverFillAnchor" Visibility="Collapsed" Background="{ThemeResource AppCardBrush}" />
-        <!-- The header sticks to the top of the page scroller (PinHeader). Its opaque surface fill reaches past the
-             row hover fill on both sides and adds breathing room above and below while stuck; matching negative
-             margins keep the layout where it was. It draws above the rows that scroll under it. -->
+        <Border x:Name="HoverFillAnchor" Visibility="Collapsed" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+        <!-- The header sticks to the top of the page scroller (PinHeader) and draws above the rows that scroll under
+             it. Its fill repeats the window's two layers, Mica under the content layer fill, so it hides those rows
+             without a visible band. The fill reaches past the row hover fill on both sides and adds breathing room above and below
+             while stuck; matching negative margins keep the layout where it was. -->
         <Grid x:Name="HistoryHeaderGrid" Style="{StaticResource HomeSectionHeaderStyle}" Margin="-12,-12,-12,-10"
-              Padding="12,12,12,10" Background="{ThemeResource AppSurfaceBrush}" Canvas.ZIndex="1"
+              Padding="12,12,12,10" Background="Transparent" Canvas.ZIndex="1"
               SizeChanged="HistoryHeaderSizeChanged">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
@@ -62,6 +63,13 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="{StaticResource HistorySearchColumnWidth}" />
             </Grid.ColumnDefinitions>
+            <SystemBackdropElement Grid.ColumnSpan="4" Grid.RowSpan="2" Margin="-12,-12,-12,-10" IsHitTestVisible="False">
+                <SystemBackdropElement.SystemBackdrop>
+                    <MicaBackdrop />
+                </SystemBackdropElement.SystemBackdrop>
+            </SystemBackdropElement>
+            <Border Grid.ColumnSpan="4" Grid.RowSpan="2" Margin="-12,-12,-12,-10" IsHitTestVisible="False"
+                    Background="{ThemeResource LayerFillColorDefaultBrush}" />
             <TextBlock x:Name="HistoryTitle" Text="History" Style="{StaticResource HomeSectionTitleStyle}"
                        AutomationProperties.HeadingLevel="Level2" />
             <local:Badge x:Name="HistoryCountPill" Grid.Column="1" Text="0 transcriptions"
@@ -69,8 +77,7 @@
             <TextBox x:Name="HistorySearchBox" Grid.Column="3" Height="36" PlaceholderText="Search transcripts"
                      TextChanged="HistorySearchChanged" Padding="{StaticResource HistorySearchPadding}"
                      FontSize="{StaticResource HistorySearchFontSize}" VerticalContentAlignment="Center"
-                     Background="{ThemeResource AppCardBrush}"
-                     BorderBrush="{ThemeResource AppBorderBrush}" AutomationProperties.Name="Search transcripts">
+                     AutomationProperties.Name="Search transcripts">
                 <TextBox.KeyboardAccelerators>
                     <KeyboardAccelerator Key="K" Modifiers="Control" Invoked="FocusHistorySearchInvoked" />
                 </TextBox.KeyboardAccelerators>
@@ -100,7 +107,7 @@
                 </StackPanel.ChildrenTransitions>
             </StackPanel>
             <Grid x:Name="EmptyState" Margin="0,8,0,0" Visibility="Collapsed">
-                <Rectangle Stroke="{ThemeResource AppBorderBrush}" StrokeThickness="1" StrokeDashArray="4,3"
+                <Rectangle Stroke="{ThemeResource DividerStrokeColorDefaultBrush}" StrokeThickness="1" StrokeDashArray="4,3"
                            RadiusX="12" RadiusY="12" IsHitTestVisible="False" />
                 <StackPanel Padding="24,48" Spacing="{StaticResource HistoryEmptyGap}" HorizontalAlignment="Center">
                     <TextBlock x:Name="EmptyTitle" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center"

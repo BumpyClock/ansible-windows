@@ -6,7 +6,7 @@
              HorizontalAlignment="Stretch">
     <UserControl.Resources>
         <Style x:Key="DetailLabelStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
-            <Setter Property="Foreground" Value="{ThemeResource AppMutedTextBrush}" />
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
         </Style>
         <Style x:Key="DetailValueStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionSecondaryStyle}">
             <Setter Property="IsTextSelectionEnabled" Value="True" />
@@ -14,7 +14,7 @@
     </UserControl.Resources>
     <!-- One full-width row per model. The page's group heading carries the install state; the row carries
          facts, actions, and details that expand in place. -->
-    <Border x:Name="CardBorder" Background="{ThemeResource AppCardBrush}" BorderBrush="{ThemeResource AppCardStrokeBrush}"
+    <Border x:Name="CardBorder" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
             BorderThickness="1" CornerRadius="{StaticResource CardCornerRadius}" Padding="16">
         <!-- The in-use outline is a visual state with a ThemeResource setter, so it follows theme and High Contrast. -->
         <VisualStateManager.VisualStateGroups>
@@ -22,7 +22,7 @@
                 <VisualState x:Name="OutlineRest" />
                 <VisualState x:Name="OutlineActive">
                     <VisualState.Setters>
-                        <Setter Target="CardBorder.BorderBrush" Value="{ThemeResource AccentGraphicBrush}" />
+                        <Setter Target="CardBorder.BorderBrush" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
@@ -40,13 +40,13 @@
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <Border Width="40" Height="40" CornerRadius="10" Background="{ThemeResource AppControlBrush}"
+            <Border Width="40" Height="40" CornerRadius="10" Background="{ThemeResource ControlFillColorDefaultBrush}"
                     VerticalAlignment="Center" AutomationProperties.AccessibilityView="Raw">
                 <Grid>
                     <Image x:Name="IconImage" Width="28" Height="28" Stretch="Uniform"
                            Visibility="Collapsed" ImageOpened="IconOpened" ImageFailed="IconFailed" />
                     <TextBlock x:Name="Monogram" FontSize="16" FontWeight="Bold"
-                               Foreground="{ThemeResource AppTextBrush}"
+                               Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                HorizontalAlignment="Center" VerticalAlignment="Center" />
                 </Grid>
             </Border>
@@ -56,12 +56,12 @@
                 <local:ModelRowWrapPanel HorizontalSpacing="8" VerticalSpacing="4">
                     <TextBlock x:Name="NameText" Style="{StaticResource BodyStrongTextBlockStyle}" TextWrapping="Wrap" />
                     <local:Badge x:Name="RoleBadge" Background="{ThemeResource AccentSoftBrush}" Visibility="Collapsed" />
-                    <local:Badge x:Name="CustomWordsBadge" Text="Custom words" Background="{ThemeResource AppControlBrush}"
+                    <local:Badge x:Name="CustomWordsBadge" Text="Custom words"
                                  Visibility="Collapsed" />
                 </local:ModelRowWrapPanel>
                 <!-- One line of facts: an exceptional state, then behaviour, sizes, or transfer progress. -->
                 <TextBlock x:Name="FactsText" Style="{StaticResource CaptionSecondaryStyle}">
-                    <Run x:Name="StateRun" FontWeight="SemiBold" Foreground="{ThemeResource AppTextBrush}" /><Run x:Name="SeparatorRun" /><Run x:Name="CaptionRun" />
+                    <Run x:Name="StateRun" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}" /><Run x:Name="SeparatorRun" /><Run x:Name="CaptionRun" />
                 </TextBlock>
             </StackPanel>
 
@@ -96,7 +96,7 @@
 
             <!-- Details flow inside the page scroller; they never scroll on their own. -->
             <Border x:Name="DetailsPanel" Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,12,0,0"
-                    Padding="0,12,0,0" BorderThickness="0,1,0,0" BorderBrush="{ThemeResource AppBorderBrush}"
+                    Padding="0,12,0,0" BorderThickness="0,1,0,0" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
                     Visibility="Collapsed">
                 <StackPanel Spacing="8">
                     <Grid x:Name="AboutRow" ColumnSpacing="16">

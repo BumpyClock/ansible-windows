@@ -32,7 +32,6 @@
                     <Grid>
                         <TextBox x:Name="SearchBox" Height="36" VerticalContentAlignment="Center"
                                  Padding="{StaticResource HistorySearchPadding}" FontSize="{StaticResource HistorySearchFontSize}"
-                                 Background="{ThemeResource AppSearchBrush}" BorderBrush="{ThemeResource AppBorderBrush}"
                                  UseSystemFocusVisuals="True"
                                  AutomationProperties.AutomationId="SearchCustomWordsBox"
                                  AutomationProperties.Name="Find or add a word" PlaceholderText="Find or add a word"

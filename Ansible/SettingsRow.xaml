@@ -8,7 +8,7 @@
              mc:Ignorable="d">
     <UserControl.Content>
         <Grid x:Name="LayoutRoot"
-              BorderBrush="{ThemeResource AppBorderBrush}"
+              BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
               ColumnSpacing="{StaticResource SettingsRowColumnGap}"
               RowSpacing="{StaticResource SettingsRowRowSpacing}">
         <Grid.RowDefinitions>

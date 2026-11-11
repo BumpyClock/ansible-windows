@@ -402,12 +402,12 @@ public sealed partial class MainWindow : Window
         AppTitleBar.ShowPage(page.Title, page.Canvas);
     }
 
-    // The panel's border draws rounded corners but does not clip; clip the page so its scrollbar and content stay
-    // inside the corners.
+    // The content layer's border draws rounded corners but does not clip; clip the layer so the page scrollbar and
+    // content stay inside the corners.
     private void MainContentSizeChanged(object sender, SizeChangedEventArgs args)
     {
         var visual = ElementCompositionPreview.GetElementVisual(MainContent);
-        var radius = new Vector2((float)Math.Max(0, ContentPanel.CornerRadius.TopLeft - ContentPanel.BorderThickness.Left));
+        var radius = new Vector2((float)Math.Max(0, ContentLayer.CornerRadius.TopLeft - ContentLayer.BorderThickness.Left));
         visual.Clip = visual.Compositor.CreateRectangleClip(0, 0, (float)args.NewSize.Width, (float)args.NewSize.Height,
             radius, radius, radius, radius);
     }

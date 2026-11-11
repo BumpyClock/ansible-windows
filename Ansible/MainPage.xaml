@@ -84,13 +84,13 @@
                                         Click="ChangeShortcutClicked" />
                                 <!-- Shown only when the shortcut differs from the default. -->
                                 <HyperlinkButton x:Name="ResetShortcutButton" Content="Reset" VerticalAlignment="Center"
-                                                 Foreground="{ThemeResource AccentForegroundBrush}"
+                                                 Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
                                                  FontSize="{StaticResource SettingsLinkFontSize}" FontWeight="Medium"
                                                  AutomationProperties.AutomationId="ResetShortcutButton"
                                                  AutomationProperties.Name="Reset shortcut"
                                                  Visibility="Collapsed" Click="ResetShortcutClicked" />
                                 <HyperlinkButton x:Name="PracticeShortcutButton" Content="Practice" VerticalAlignment="Center"
-                                                 Foreground="{ThemeResource AccentForegroundBrush}"
+                                                 Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
                                                  FontSize="{StaticResource SettingsLinkFontSize}" FontWeight="Medium"
                                                  AutomationProperties.AutomationId="ShortcutLessonButton"
                                                  AutomationProperties.Name="Practice the shortcut"

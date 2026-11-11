@@ -65,7 +65,7 @@
                                FontSize="40" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                AutomationProperties.Name="All-time words dictated" />
                 </Viewbox>
-                <Border Margin="0,16,0,0" Padding="0,16,0,0" BorderThickness="0,1,0,0" BorderBrush="{ThemeResource AppBorderBrush}">
+                <Border Margin="0,16,0,0" Padding="0,16,0,0" BorderThickness="0,1,0,0" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
                     <Grid ColumnSpacing="12">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                         <StackPanel>
@@ -121,14 +121,14 @@
                              HorizontalAlignment="Center">
                         <Canvas x:Name="ActivityClock" Width="320" Height="320"
                                 AutomationProperties.Name="Dictations by local completion hour">
-                            <Path x:Name="ClockBackgroundDots" Fill="{ThemeResource AppTrackBrush}"
+                            <Path x:Name="ClockBackgroundDots" Fill="{ThemeResource ControlStrongFillColorDisabledBrush}"
                                   IsHitTestVisible="False" AutomationProperties.AccessibilityView="Raw" />
-                            <Path x:Name="ClockActiveDots" Fill="{ThemeResource AccentGraphicBrush}"
+                            <Path x:Name="ClockActiveDots" Fill="{ThemeResource AccentTextFillColorPrimaryBrush}"
                                   IsHitTestVisible="False" AutomationProperties.AccessibilityView="Raw" />
-                            <Path x:Name="ClockTicks" Stroke="{ThemeResource AppMutedTextBrush}" StrokeThickness="1"
+                            <Path x:Name="ClockTicks" Stroke="{ThemeResource TextFillColorSecondaryBrush}" StrokeThickness="1"
                                   IsHitTestVisible="False" AutomationProperties.AccessibilityView="Raw" />
                             <Ellipse Canvas.Left="92" Canvas.Top="92" Width="136" Height="136"
-                                     Stroke="{ThemeResource AppBorderBrush}" StrokeThickness="1"
+                                     Stroke="{ThemeResource DividerStrokeColorDefaultBrush}" StrokeThickness="1"
                                      IsHitTestVisible="False" AutomationProperties.AccessibilityView="Raw" />
                             <Grid Canvas.Left="94" Canvas.Top="94" Width="132" Height="132"
                                   IsHitTestVisible="False">

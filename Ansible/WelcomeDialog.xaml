@@ -12,7 +12,7 @@
         <Style x:Key="LessonSubtleButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderBrush" Value="Transparent" />
-            <Setter Property="Foreground" Value="{ThemeResource AppSecondaryTextBrush}" />
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
         </Style>
         <Style x:Key="LessonIconStyle" TargetType="Border">
             <Setter Property="Width" Value="32" />
@@ -23,14 +23,14 @@
         </Style>
         <Style x:Key="LessonGlyphStyle" TargetType="FontIcon">
             <Setter Property="FontSize" Value="16" />
-            <Setter Property="Foreground" Value="{ThemeResource AccentForegroundBrush}" />
+            <Setter Property="Foreground" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
         </Style>
         <Style x:Key="StepDotStyle" TargetType="Border">
             <Setter Property="CornerRadius" Value="3" />
-            <Setter Property="Background" Value="{ThemeResource AppTrackBrush}" />
+            <Setter Property="Background" Value="{ThemeResource ControlStrongFillColorDisabledBrush}" />
         </Style>
         <Style x:Key="CurrentStepDotStyle" TargetType="Border" BasedOn="{StaticResource StepDotStyle}">
-            <Setter Property="Background" Value="{ThemeResource AccentGraphicBrush}" />
+            <Setter Property="Background" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
             <Setter Property="Opacity" Value="0" />
         </Style>
     </ContentDialog.Resources>
@@ -54,7 +54,7 @@
             <StackPanel Spacing="6">
                 <TextBlock x:Name="Heading" Style="{StaticResource TitleTextBlockStyle}" TextWrapping="Wrap"
                            AutomationProperties.HeadingLevel="Level1" />
-                <TextBlock x:Name="Description" FontSize="16" Foreground="{ThemeResource AppSecondaryTextBrush}" TextWrapping="Wrap" />
+                <TextBlock x:Name="Description" FontSize="16" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
             </StackPanel>
             <StackPanel x:Name="IntroPanel" Spacing="16">
                 <Grid ColumnSpacing="14">
@@ -103,12 +103,12 @@
                     <!-- Pops in only when a real practice dictation lands in the field. -->
                     <Grid x:Name="Celebration" Width="28" Height="28" Margin="0,0,12,12" HorizontalAlignment="Right" VerticalAlignment="Bottom"
                           IsHitTestVisible="False" Visibility="Collapsed" AutomationProperties.AccessibilityView="Raw">
-                        <Ellipse x:Name="Burst" Stroke="{ThemeResource AccentGraphicBrush}" StrokeThickness="2" Opacity="0" RenderTransformOrigin="0.5,0.5">
+                        <Ellipse x:Name="Burst" Stroke="{ThemeResource AccentTextFillColorPrimaryBrush}" StrokeThickness="2" Opacity="0" RenderTransformOrigin="0.5,0.5">
                             <Ellipse.RenderTransform><ScaleTransform x:Name="BurstScale" /></Ellipse.RenderTransform>
                         </Ellipse>
-                        <Border CornerRadius="14" Background="{ThemeResource AccentGraphicBrush}" RenderTransformOrigin="0.5,0.5">
+                        <Border CornerRadius="14" Background="{ThemeResource AccentTextFillColorPrimaryBrush}" RenderTransformOrigin="0.5,0.5">
                             <Border.RenderTransform><ScaleTransform x:Name="CheckScale" /></Border.RenderTransform>
-                            <FontIcon Glyph="&#xE73E;" FontSize="14" Foreground="{ThemeResource AppSurfaceBrush}" />
+                            <FontIcon Glyph="&#xE73E;" FontSize="14" Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
                         </Border>
                     </Grid>
                 </Grid>

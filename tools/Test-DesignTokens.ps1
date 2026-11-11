@@ -62,10 +62,7 @@ Assert-Condition ($themeKeySets.ContainsKey('Dark')) 'Dark theme dictionary is m
 Assert-Condition ($themeKeySets.ContainsKey('HighContrast')) 'HighContrast theme dictionary is missing.'
 
 $lightDarkInvariantColors = @(
-    'BrandAccentColor', 'BrandOnAccentColor', 'BrandAccentStrongColor',
-    'BrandAccentSoftColor', 'BrandAccentForegroundLightColor',
-    'BrandAccentForegroundDarkColor', 'AppBrandVoiceDetailColor',
-    'AppBrandReplyDetailColor'
+    'SystemAccentColor', 'BrandAccentColor', 'BrandOnAccentColor', 'BrandAccentStrongColor', 'BrandAccentSoftColor'
 )
 foreach ($key in $lightDarkInvariantColors) {
     $light = $tokenDocument.SelectSingleNode("//*[local-name()='ResourceDictionary' and @x:Key='Light']/*[@x:Key='$key']", $namespaceManager)
@@ -143,7 +140,19 @@ foreach ($file in $xamlFiles) {
     }
 }
 
-$themeBrushKeys = @($tokenKeys | Where-Object { $_ -match 'Brush$' })
+# Neutral text, fills, strokes, and materials belong to WinUI. The only WinUI keys this dictionary may redefine
+# are the accent ramp and the accent button, and only in Light and Dark so the platform owns High Contrast.
+$allowedPlatformOverride = '^(?:SystemAccentColor(?:Light|Dark)?[1-3]?|AccentButton(?:Background|Foreground|BorderBrush)(?:PointerOver|Pressed)?)$'
+$platformKeyPattern = '^(?:Text|Control|Subtle|Card|Layer|Solid|Smoke|Surface|Divider|System|Acrylic|Accent(?:Fill|TextFill|Button)|Button|ListViewItem|ToggleSwitch|ComboBox)[A-Za-z0-9]*$'
+foreach ($themeName in @('Light', 'Dark', 'HighContrast')) {
+    foreach ($key in $themeKeySets[$themeName]) {
+        if ($key -notmatch $platformKeyPattern) { continue }
+        Assert-Condition ($themeName -ne 'HighContrast' -and $key -match $allowedPlatformOverride) `
+            "$themeName redefines the WinUI resource '$key'. Use the platform resource by name; only the accent ramp and accent button are ours."
+    }
+}
+
+$themeBrushKeys = @($tokenKeys | Where-Object { $_ -match 'Brush$' -and $_ -notmatch $allowedPlatformOverride })
 foreach ($themeName in @('Light', 'Dark', 'HighContrast')) {
     Assert-Condition $themeKeySets.ContainsKey($themeName) "$themeName theme dictionary is unavailable for semantic brush coverage."
 }
@@ -170,11 +179,8 @@ foreach ($themeName in @('Light', 'Dark')) {
 }
 
 $highContrastBrushAliases = @{
-    'AppTextBrush' = 'SystemColorWindowTextColor'
-    'AppSelectedTextBrush' = 'SystemColorHighlightTextColor'
-    'AppSelectedIconBrush' = 'SystemColorHighlightTextColor'
-    'ButtonBackgroundPointerOver' = 'SystemColorHighlightTextColor'
-    'ButtonBackgroundPressed' = 'SystemColorHighlightTextColor'
+    'AppAccentBrush' = 'SystemColorHighlightColor'
+    'AppOnAccentBrush' = 'SystemColorHighlightTextColor'
 }
 $highContrastNode = $tokenDocument.SelectSingleNode("//*[local-name()='ResourceDictionary' and @x:Key='HighContrast']", $namespaceManager)
 foreach ($alias in $highContrastBrushAliases.GetEnumerator()) {

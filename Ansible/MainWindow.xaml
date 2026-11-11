@@ -6,7 +6,7 @@
     <Window.SystemBackdrop>
         <MicaBackdrop />
     </Window.SystemBackdrop>
-    <Grid x:Name="ShellRoot" Background="{ThemeResource AppWindowBrush}" SizeChanged="ShellSizeChanged">
+    <Grid x:Name="ShellRoot" SizeChanged="ShellSizeChanged">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -54,18 +54,17 @@
                 </StackPanel>
             </Button>
         </Grid>
-        <!-- Pages sit on one inset surface panel; cards are the only container level inside it. The page's single
-             scroller and its scrollbar stay inside the panel, whose content is clipped to the rounded corners. Pages are
+        <!-- Pages sit on one inset content layer; cards are the only container level inside it. The page's single
+             scroller and its scrollbar stay inside the layer, whose content is clipped to the rounded corners. Pages are
              cached and swap instantly: sidebar navigation is frequent and flat, so an entrance would replay on every
              switch without explaining anything. -->
-        <Border x:Name="ContentPanel" Grid.Row="1" Grid.Column="1" Margin="{StaticResource ContentPanelMargin}"
-                Background="{ThemeResource AppSurfaceBrush}" BorderBrush="{ThemeResource AppBorderBrush}"
-                BorderThickness="{StaticResource CardBorderThickness}" CornerRadius="{StaticResource ContentPanelCornerRadius}">
+        <Border x:Name="ContentLayer" Grid.Row="1" Grid.Column="1" Margin="{StaticResource ContentLayerMargin}"
+                Style="{StaticResource ContentLayerStyle}">
             <ContentControl x:Name="MainContent" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
                             IsTabStop="False" SizeChanged="MainContentSizeChanged" />
         </Border>
-        <!-- Outside the clipped panel so notice shadows are not cut off, and outside MainContent so Exit stays
+        <!-- Outside the clipped layer so notice shadows are not cut off, and outside MainContent so Exit stays
              available while shutdown disables the pages. -->
-        <local:NoticeHost x:Name="Notices" Grid.Row="1" Grid.Column="1" Margin="{StaticResource ContentPanelMargin}" />
+        <local:NoticeHost x:Name="Notices" Grid.Row="1" Grid.Column="1" Margin="{StaticResource ContentLayerMargin}" />
     </Grid>
 </Window>

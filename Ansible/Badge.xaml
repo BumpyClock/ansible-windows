@@ -5,8 +5,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              HorizontalAlignment="Left" VerticalAlignment="Center"
              MaxWidth="{StaticResource SectionBadgeMaxWidth}"
-             Background="{ThemeResource AppCardBrush}">
-    <!-- Default fill is the card brush: AppControlBrush is nearly the light page background. -->
+             Background="{ThemeResource SubtleFillColorSecondaryBrush}">
     <Border Style="{StaticResource SectionBadgeStyle}" HorizontalAlignment="Stretch"
             Background="{x:Bind Background, Mode=OneWay}">
         <Grid x:Name="BadgeLayout">
