@@ -27,7 +27,7 @@ $layout = Join-Path $repo '.runtime\ux\layout'
 $out = Join-Path $repo ".runtime\ux\$Round"
 New-Item -ItemType Directory -Force $out | Out-Null
 
-Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Windows.Forms
+Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Windows.Forms, System.Drawing
 if (-not ('DesignCapture' -as [type])) {
     Add-Type @'
 using System;
@@ -74,31 +74,63 @@ function Set-WindowSize {
         # The title bar is empty between the page action and the caption buttons at every size.
         $script:parkX = [int](($WidthDips - 220) * $scale)
         $script:parkY = 40 + [int](20 * $scale)
+        $script:scale = $scale
         [DesignCapture]::SetCursorPos($script:parkX, $script:parkY) | Out-Null
     } finally { [DesignCapture]::SetThreadDpiAwarenessContext($context) | Out-Null }
     Start-Sleep -Milliseconds 700
 }
 
+# True when the app name in the title bar is drawn in the active colour. The title bar dims its content when the
+# window is inactive, and the foreground window alone does not prove what was drawn, so the frame itself is read.
+function Test-TitleBarActive {
+    param([string]$Path)
+    $bitmap = [System.Drawing.Bitmap]::new($Path)
+    try {
+        $scale = $script:scale
+        $low = 255; $high = 0
+        for ($y = [int](14 * $scale); $y -lt [int](34 * $scale); $y += 2) {
+            for ($x = [int](44 * $scale); $x -lt [int](100 * $scale); $x += 2) {
+                $pixel = $bitmap.GetPixel($x, $y)
+                $luma = [int](0.299 * $pixel.R + 0.587 * $pixel.G + 0.114 * $pixel.B)
+                if ($luma -lt $low) { $low = $luma }
+                if ($luma -gt $high) { $high = $luma }
+            }
+        }
+        # Active text contrasts with the bar by about 210 levels (150 under a dialog's smoke layer). Inactive text
+        # contrasts by about 90.
+        ($high - $low) -ge 120
+    } finally { $bitmap.Dispose() }
+}
+
 function Save-Window {
     param([IntPtr]$Handle, [string]$Name)
-    # An inactive window dims its title bar, so a frame counts only if the window held the foreground when it was
-    # taken. The main window is activated with one click on its empty title bar; a second click within the
-    # double-click time would maximize it. Another program can take the foreground at any moment, so retry.
+    # An inactive window dims its title bar, so a main-window frame counts only if the window held the foreground
+    # and the frame shows an active title bar. The window is activated with one click on its empty title bar; a
+    # second click within the double-click time would maximize it. Another program can take the foreground at any
+    # moment, so retry.
+    $path = Join-Path $out "$Name.png"
+    $click = $false
     for ($attempt = 1; $attempt -le 4; $attempt++) {
-        if ($Handle -eq $script:mainWindow -and [DesignCapture]::GetForegroundWindow() -ne $Handle) {
+        if ($Handle -eq $script:mainWindow -and ($click -or [DesignCapture]::GetForegroundWindow() -ne $Handle)) {
             $context = [DesignCapture]::SetThreadDpiAwarenessContext([IntPtr]::new(-4))
             try { [DesignCapture]::Click($script:parkX, $script:parkY) }
             finally { [DesignCapture]::SetThreadDpiAwarenessContext($context) | Out-Null }
             Start-Sleep -Milliseconds 800
         }
-        Invoke-Ui @('screenshot', '-w', "$Handle", '-o', (Join-Path $out "$Name.png"), '--json') | Out-Null
+        Invoke-Ui @('screenshot', '-w', "$Handle", '-o', $path, '--json') | Out-Null
         $foreground = [DesignCapture]::GetForegroundWindow()
-        if ($foreground -eq $Handle) { break }
+        $drawnActive = $Handle -ne $script:mainWindow -or (Test-TitleBarActive $path)
+        if ($foreground -eq $Handle -and $drawnActive) { break }
         [uint32]$owner = 0
         [DesignCapture]::GetWindowThreadProcessId($foreground, [ref]$owner) | Out-Null
-        $thief = (Get-Process -Id $owner -ErrorAction SilentlyContinue).ProcessName
-        if ($attempt -eq 4) { Write-Warning "$Name was captured with the window inactive (foreground: $thief)." }
-        else { Start-Sleep -Milliseconds 600 }
+        $holder = (Get-Process -Id $owner -ErrorAction SilentlyContinue).ProcessName
+        if ($attempt -eq 4) {
+            Write-Warning "$Name was captured with the window inactive (foreground: $holder, title bar drawn active: $drawnActive)."
+        } else {
+            Write-Verbose "$Name attempt $attempt inactive (foreground: $holder, title bar drawn active: $drawnActive)."
+            $click = $true
+            Start-Sleep -Milliseconds 600
+        }
     }
     Write-Output "Captured $Name"
 }
