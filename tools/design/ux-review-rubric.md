@@ -39,9 +39,8 @@ These are decisions, not defects. Never count them as instances.
 ## Screenshot set
 
 Files are named `<page>-<theme>-<size>-<stop>.png`. `wide` is a 1440x960 window. `narrow` is 860x760. `<stop>`
-counts scroll positions from the top of the page, about one viewport apart. Settings shows one section at a time,
-and its stops run through the sections in tab order. `welcome-*` is the modal shortcut lesson. `meeting-window-*`
-is the separate transcript window for a saved meeting.
+counts scroll positions from the top of the page, about one viewport apart. `welcome-*` is the modal shortcut
+lesson. `meeting-window-*` is the separate transcript window for a saved meeting.
 
 Read every PNG in the round folder before scoring. Do not sample.
 

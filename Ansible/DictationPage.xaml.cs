@@ -41,6 +41,8 @@ public sealed partial class DictationPage : Page
     private Guid? _removedTranscriptOperationId;
     // While the page scrolls, the wide insights rail stays on screen. HistoryView pins its own header while it has rows.
     private StickyPin? _railPin;
+    // Whether History holds any saved entry. Only then is Home wide with the two-column layout (UpdateHomeWidth).
+    private bool _homeHasHistory;
 
     private readonly AppNotices _notices;
 
@@ -73,6 +75,8 @@ public sealed partial class DictationPage : Page
         HistoryView.CopyRequested += CopyHistoryItem;
         HistoryView.RemoveRequested += RemoveHistoryItem;
         HistoryView.PinHeader(HomeViewport);
+        // Set the width before the page loads, so a page with saved history does not open at the reading width.
+        UpdateHomeWidth(_history.Snapshot().Count > 0);
         HistoryChanged();
         _observer = new UiSessionObserver(session, DispatcherQueue, state =>
         {
@@ -226,6 +230,7 @@ public sealed partial class DictationPage : Page
         var model = HomeHistoryProjection.Create(_history.Snapshot(), HistoryView.Query,
             _history.OversizedCurrentResult, HomeModelNameFor, DateTime.Today, _history.StorageError);
         HistoryView.Render(model, animate);
+        UpdateHomeWidth(model.HasHistory);
         PostStorageNotice(HistoryNoticeKey, "History needs attention", model.StorageError);
     }
 
@@ -288,13 +293,27 @@ public sealed partial class DictationPage : Page
         Grid.SetColumnSpan(ShortcutButtons, stackedHelper ? 2 : 1);
     }
 
-    // Wide: history beside a fixed insights rail that sticks at the history header's content top. History takes the
-    // star row, so it is at least as tall as the rail and the rail can travel within it. Narrow: history comes first,
-    // so its header, search, and empty state are in the first viewport, and the insights cards follow it in a strip
-    // after the normal grid gap.
-    private void HomeColumnsSizeChanged(object sender, SizeChangedEventArgs args)
+    // Home is two columns only when History has a saved entry to fill one: an empty History beside the rail is a
+    // near-empty column. Without entries (a search that matches nothing still has entries) the page keeps the reading
+    // width and stacks, so the two insights cards do not stretch across a wide window. Runs on every history render,
+    // so the first saved entry and the last removal switch the layout live.
+    private void UpdateHomeWidth(bool hasHistory)
     {
-        var stacked = args.NewSize.Width < (double)Application.Current.Resources["HomeRailStackThreshold"];
+        if (_homeHasHistory == hasHistory && HomeViewport.Wide == hasHistory) return;
+        _homeHasHistory = hasHistory;
+        HomeViewport.Wide = hasHistory;
+        UpdateHomeColumns(HomeColumns.ActualWidth);
+    }
+
+    private void HomeColumnsSizeChanged(object sender, SizeChangedEventArgs args) => UpdateHomeColumns(args.NewSize.Width);
+
+    // Wide: history beside a fixed insights rail that sticks at the history header's content top. History takes the
+    // star row, so it is at least as tall as the rail and the rail can travel within it. Stacked (narrow, or no saved
+    // history): history comes first, so its header, search, and empty state are in the first viewport, and the
+    // insights cards follow it in a strip after the normal grid gap. Only the two-column rail is pinned.
+    private void UpdateHomeColumns(double width)
+    {
+        var stacked = !_homeHasHistory || width < (double)Application.Current.Resources["HomeRailStackThreshold"];
         if (stacked) { _railPin?.Dispose(); _railPin = null; }
         else if (!_disposed)
         {

@@ -117,11 +117,13 @@ public sealed class MeetingTranscriptRow : INotifyPropertyChanged
 
     private void Notify([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     private static string FormatTime(double seconds) => TimeSpan.FromSeconds(Math.Max(0, seconds)).ToString(seconds >= 3600 ? @"h\:mm\:ss" : @"m\:ss");
-    // A block shows its start only when every part of it has a time; chunk times are approximate.
+    // A block shows its start only when every part of it has a time; chunk times are approximate, except zero:
+    // the start of the meeting is exact, so it never reads "About 0:00".
     private static string? FormatTurnTime(IReadOnlyList<MeetingTurn> turns)
     {
         if (turns.Any(turn => turn.TimingQuality == MeetingTimingQuality.Unknown)) return null;
-        var time = FormatTime(turns[0].StartSeconds);
-        return turns.All(turn => turn.TimingQuality == MeetingTimingQuality.Aligned) ? time : $"About {time}";
+        var start = turns[0].StartSeconds;
+        var time = FormatTime(start);
+        return start == 0 || turns.All(turn => turn.TimingQuality == MeetingTimingQuality.Aligned) ? time : $"About {time}";
     }
 }

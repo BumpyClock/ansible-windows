@@ -88,14 +88,8 @@ internal static class MeetingText
 
     public static string Time(DateTime local) => local.ToString("t", CultureInfo.CurrentCulture);
 
-    /// <summary>Weekday and abbreviated date in the culture's month and day order, with the year only outside this year.</summary>
-    public static string Date(DateTime local, DateOnly today)
-    {
-        var culture = CultureInfo.CurrentCulture;
-        if (local.Year != today.Year) return local.ToString("d", culture);
-        var monthDay = culture.DateTimeFormat.MonthDayPattern.Replace("MMMM", "MMM", StringComparison.Ordinal);
-        return $"{local.ToString("ddd", culture)}, {local.ToString(monthDay, culture)}";
-    }
+    /// <summary>The meeting's local date, written as the day headings write it.</summary>
+    public static string Date(DateTime local, DateOnly today) => DayLabel.Date(DateOnly.FromDateTime(local), today);
 
     public static string Duration(TimeSpan duration)
     {

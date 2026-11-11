@@ -63,8 +63,7 @@
             <ContentControl x:Name="MainContent" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
                             IsTabStop="False" SizeChanged="MainContentSizeChanged" />
         </Border>
-        <!-- Outside the clipped layer so notice shadows are not cut off, and outside MainContent so Exit stays
-             available while shutdown disables the pages. -->
+        <!-- Outside MainContent so Exit stays available while shutdown disables the pages. -->
         <local:NoticeHost x:Name="Notices" Grid.Row="1" Grid.Column="1" Margin="{StaticResource ContentLayerMargin}" />
     </Grid>
 </Window>

@@ -228,16 +228,24 @@ public sealed class MeetingTranscriptProjectionTests
     [Fact]
     public void BlockDoesNotClaimAlignedTimingWhenAnyConstituentTurnIsUnaligned()
     {
-        var first = Turn("Speaker 1", 0, "First.") with { TimingQuality = MeetingTimingQuality.Aligned };
-        var second = Turn("Speaker 1", 2, "Second.") with { TimingQuality = MeetingTimingQuality.Chunk };
+        var first = Turn("Speaker 1", 5, "First.") with { TimingQuality = MeetingTimingQuality.Aligned };
+        var second = Turn("Speaker 1", 7, "Second.") with { TimingQuality = MeetingTimingQuality.Chunk };
         var projection = new MeetingTranscriptProjection();
         projection.Reconcile(new() { Turns = [first, second] });
         var row = Assert.Single(projection.Rows);
-        Assert.Equal("About 0:00", row.TimingText);
+        Assert.Equal("About 0:05", row.TimingText);
         projection.Reconcile(new() { Turns = [first, second with { TimingQuality = MeetingTimingQuality.Unknown }] });
         Assert.Equal("", row.TimingText);
         projection.Reconcile(new() { Turns = [first, second with { TimingQuality = MeetingTimingQuality.Unknown, IsProvisional = true }] });
         Assert.Equal("Updating", row.TimingText);
+    }
+
+    [Fact]
+    public void ApproximateTimingAtTheStartOfTheMeetingIsExact()
+    {
+        var projection = new MeetingTranscriptProjection();
+        projection.Reconcile(new() { Turns = [Turn("Speaker 1", 0, "First.") with { TimingQuality = MeetingTimingQuality.Chunk }] });
+        Assert.Equal("0:00", Assert.Single(projection.Rows).TimingText);
     }
 
     [Fact]

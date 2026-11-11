@@ -32,7 +32,20 @@ public sealed partial class HomeInsightsView : UserControl
     internal bool Strip
     {
         get => RailCards.MinColumnWidth < double.PositiveInfinity;
-        set => RailCards.MinColumnWidth = value ? StripCardMinWidth : double.PositiveInfinity;
+        set
+        {
+            RailCards.MinColumnWidth = value ? StripCardMinWidth : double.PositiveInfinity;
+            UpdateCardHeights();
+        }
+    }
+
+    // In a strip the cards fill their row so both end on one line. In the rail each keeps its natural height, except
+    // the rhythm card without statistics, which fills its row to centre its message.
+    private void UpdateCardHeights()
+    {
+        WordsCard.VerticalAlignment = Strip ? VerticalAlignment.Stretch : VerticalAlignment.Top;
+        var fill = Strip || ActivityEmptyState.Visibility == Visibility.Visible;
+        RhythmCard.VerticalAlignment = fill ? VerticalAlignment.Stretch : VerticalAlignment.Top;
     }
 
     internal void Render(HomeInsightsViewModel model)
@@ -79,7 +92,7 @@ public sealed partial class HomeInsightsView : UserControl
         ActivityPeriodText.Text = activity.PeriodText;
         ActivityEmptyState.Visibility = Visibility.Collapsed;
         ActivityChartPanel.Visibility = Visibility.Visible;
-        RhythmCard.VerticalAlignment = VerticalAlignment.Top;
+        UpdateCardHeights();
         ActivityTotalText.Text = activity.TotalValueText;
         ActivityUnitText.Text = activity.UnitText;
         AutomationProperties.SetName(ActivityTotalText, activity.TotalText);
@@ -137,7 +150,7 @@ public sealed partial class HomeInsightsView : UserControl
         ActivityEmptyState.Detail = detail ?? "";
         ActivityEmptyState.Visibility = Visibility.Visible;
         ActivityChartPanel.Visibility = Visibility.Collapsed;
-        RhythmCard.VerticalAlignment = VerticalAlignment.Stretch;
+        UpdateCardHeights();
     }
 
     private static Point ClockPoint(double angle, double radius) =>

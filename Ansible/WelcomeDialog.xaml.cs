@@ -3,7 +3,6 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Animation;
 using Windows.UI.ViewManagement;
@@ -79,8 +78,8 @@ public sealed partial class WelcomeDialog : ContentDialog
     /// <summary>Closes the lesson without completing it, for shutdown.</summary>
     internal void Dismiss() => Leave(WelcomeExit.Interrupted);
 
-    // Escape skips, or cancels a running practice dictation. Enter takes the step's next action unless a button
-    // or the practice field already used it.
+    // Escape skips, or cancels a running practice dictation. Enter is the dialog's own: DefaultButton is Primary,
+    // so the stock dialog takes the step's next action unless a button or the practice field already used it.
     private void KeyPressed(object sender, KeyRoutedEventArgs args)
     {
         Scene.KeyChanged(args.Key, down: true);
@@ -88,12 +87,6 @@ public sealed partial class WelcomeDialog : ContentDialog
         {
             args.Handled = true;
             Skip();
-        }
-        else if (args.Key == Windows.System.VirtualKey.Enter && !args.Handled && NextButton.IsEnabled
-            && FocusManager.GetFocusedElement(XamlRoot) is not (ButtonBase or TextBox))
-        {
-            args.Handled = true;
-            Next();
         }
     }
 
@@ -116,11 +109,17 @@ public sealed partial class WelcomeDialog : ContentDialog
         _open = true;
         _observer = new UiSessionObserver(_session, DispatcherQueue, _ => Render(), Scene.ShowLevel);
         _readinessTimer.Start();
+        // The stock buttons are template parts. Name them so UI Automation clients find them by a stable id.
+        foreach (var (part, id) in new[] { ("PrimaryButton", "NextButton"), ("SecondaryButton", "BackButton"), ("CloseButton", "SkipButton") })
+            if (GetTemplateChild(part) is Button button) AutomationProperties.SetAutomationId(button, id);
         RenderSteps(_step, animate: false);
-        NextButton.Focus(FocusState.Programmatic);
+        FocusPrimary();
     }
 
-    // Every close goes through Leave. Its callers refuse while a practice dictation runs; only shutdown forces it.
+    private void FocusPrimary() => (GetTemplateChild("PrimaryButton") as Button)?.Focus(FocusState.Programmatic);
+
+    // Every close sets _forceClose first: Done, Skip for now, Escape, and shutdown. Skip and Escape refuse while a
+    // practice dictation runs; only shutdown forces it.
     private void LessonClosing(ContentDialog sender, ContentDialogClosingEventArgs args)
     {
         if (!_forceClose) args.Cancel = true;
@@ -152,10 +151,11 @@ public sealed partial class WelcomeDialog : ContentDialog
         IntroPanel.Visibility = _step == 0 ? Visibility.Visible : Visibility.Collapsed;
         ShortcutPanel.Visibility = _step == 1 ? Visibility.Visible : Visibility.Collapsed;
         PracticePanel.Visibility = _step == PracticeStep ? Visibility.Visible : Visibility.Collapsed;
-        NextButton.Content = _step == PracticeStep ? "Done" : "Next";
-        // Done already finishes the lesson, so the last step offers no second way out.
-        SkipButton.Visibility = _step == PracticeStep ? Visibility.Collapsed : Visibility.Visible;
-        BackButton.Visibility = _step > 0 ? Visibility.Visible : Visibility.Collapsed;
+        // The stock footer: an empty button text hides that button. Done already finishes the lesson, so the last
+        // step offers no second way out, and Back has nowhere to go on the first step.
+        PrimaryButtonText = _step == PracticeStep ? "Done" : "Next";
+        SecondaryButtonText = _step > 0 ? "Back" : "";
+        CloseButtonText = _step == PracticeStep ? "" : "Skip for now";
         RenderNavigationReadiness();
         ModelsButton.Visibility = !state.CanStart && state.IsIdle ? Visibility.Visible : Visibility.Collapsed;
         CancelPracticeButton.Visibility = state.CanCancel ? Visibility.Visible : Visibility.Collapsed;
@@ -184,18 +184,29 @@ public sealed partial class WelcomeDialog : ContentDialog
 
     private void RenderNavigationReadiness()
     {
-        NextButton.IsEnabled = BackButton.IsEnabled = SkipButton.IsEnabled = ModelsButton.IsEnabled = IsIdle;
+        // The stock close button cannot be disabled; Skip while a practice dictation runs cancels it instead.
+        IsPrimaryButtonEnabled = IsSecondaryButtonEnabled = ModelsButton.IsEnabled = IsIdle;
     }
 
-    private void NextClicked(object sender, RoutedEventArgs args) => Next();
-    private void BackClicked(object sender, RoutedEventArgs args) { if (IsIdle && _step > 0) GoTo(_step - 1); }
-    private void SkipClicked(object sender, RoutedEventArgs args) => Skip();
-
-    private void Next()
+    // Stepping keeps the dialog open (args.Cancel); only Done and Skip for now let the stock close proceed.
+    private void NextClicked(ContentDialog sender, ContentDialogButtonClickEventArgs args)
     {
-        if (!IsIdle) return;
-        if (_step == PracticeStep) Leave(WelcomeExit.Finished);
-        else GoTo(_step + 1);
+        if (IsIdle && _step == PracticeStep) { Finish(WelcomeExit.Finished); return; }
+        args.Cancel = true;
+        if (IsIdle) GoTo(_step + 1);
+    }
+
+    private void BackClicked(ContentDialog sender, ContentDialogButtonClickEventArgs args)
+    {
+        args.Cancel = true;
+        if (IsIdle && _step > 0) GoTo(_step - 1);
+    }
+
+    private void SkipClicked(ContentDialog sender, ContentDialogButtonClickEventArgs args)
+    {
+        if (IsIdle) { Finish(WelcomeExit.Finished); return; }
+        args.Cancel = true;
+        if (_session.State.CanCancel) CancelPractice();
     }
 
     private void Skip()
@@ -211,7 +222,7 @@ public sealed partial class WelcomeDialog : ContentDialog
         RenderSteps(previous, _uiSettings.AnimationsEnabled);
         // Back and Skip can collapse under the pointer; keep focus inside the lesson.
         if (_step == PracticeStep) PracticeBox.Focus(FocusState.Programmatic);
-        else NextButton.Focus(FocusState.Programmatic);
+        else FocusPrimary();
     }
 
     // Base values always hold the end state, so stopping a motion early, or reduced motion, still lands there.
@@ -274,11 +285,19 @@ public sealed partial class WelcomeDialog : ContentDialog
         story.Begin();
     }
 
-    private void Leave(WelcomeExit exit)
+    // Records the exit and lets the close already under way (a stock button) proceed.
+    private void Finish(WelcomeExit exit)
     {
         if (!_showing || _forceClose) return;
         _exit = exit;
         _forceClose = true;
+    }
+
+    // Closes from outside a button click: Escape, the models button, and shutdown.
+    private void Leave(WelcomeExit exit)
+    {
+        if (!_showing || _forceClose) return;
+        Finish(exit);
         Hide();
     }
 

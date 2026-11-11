@@ -5,24 +5,26 @@
       xmlns:local="using:Ansible">
     <local:PageCanvas Title="Speech models" Subtitle="Recognition runs on this device. One model handles dictation at a time.">
         <local:PageCanvas.HeaderActions>
-            <!-- Header buttons are the stock 32 DIP button with a 16 DIP icon 8 DIP before the label. -->
-            <Button x:Name="TranscribeFileButton" MinHeight="32" Click="TranscribeFileClicked"
-                    AutomationProperties.AutomationId="TranscribeModelWavButton"
-                    AutomationProperties.Name="Transcribe a WAV file">
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <FontIcon Glyph="&#xE8E5;" FontSize="16" />
-                    <TextBlock Text="Transcribe WAV file…" />
-                </StackPanel>
-            </Button>
-            <Button x:Name="FolderMenuButton" MinHeight="32"
-                    AutomationProperties.AutomationId="ModelFolderButton"
-                    AutomationProperties.Name="Model folder and verification">
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <FontIcon Glyph="&#xE8B7;" FontSize="16" />
-                    <TextBlock Text="Model folder" />
-                </StackPanel>
-                <Button.Flyout>
-                    <Flyout>
+            <!-- The page's task is choosing and downloading models, so the header holds only the overflow, as on
+                 Meetings. Its menu holds the two utilities. Model folder opens the folder flyout attached to this
+                 button, which keeps the path, Choose folder, Verify installed files, and the backend line. -->
+            <Button x:Name="MoreOptionsButton" Style="{StaticResource IconButtonStyle}" VerticalAlignment="Center"
+                    ToolTipService.ToolTip="More options" AutomationProperties.Name="More options">
+                <FontIcon Glyph="&#xE712;" FontSize="16"/>
+                <Button.Flyout><MenuFlyout Placement="BottomEdgeAlignedRight">
+                    <MenuFlyoutItem x:Name="TranscribeFileMenuItem" Text="Transcribe WAV file…" Click="TranscribeFileClicked"
+                                    AutomationProperties.AutomationId="TranscribeModelWavButton"
+                                    AutomationProperties.Name="Transcribe a WAV file">
+                        <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE8E5;"/></MenuFlyoutItem.Icon>
+                    </MenuFlyoutItem>
+                    <MenuFlyoutItem x:Name="ModelFolderMenuItem" Text="Model folder…" Click="ModelFolderClicked"
+                                    AutomationProperties.AutomationId="ModelFolderButton"
+                                    AutomationProperties.Name="Model folder and verification">
+                        <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE8B7;"/></MenuFlyoutItem.Icon>
+                    </MenuFlyoutItem>
+                </MenuFlyout></Button.Flyout>
+                <FlyoutBase.AttachedFlyout>
+                    <Flyout x:Name="ModelFolderFlyout" Placement="BottomEdgeAlignedRight">
                         <StackPanel Spacing="12" MaxWidth="380">
                             <TextBlock x:Name="FolderText" TextWrapping="Wrap" IsTextSelectionEnabled="True"
                                        Style="{StaticResource SecondaryTextStyle}" />
@@ -36,7 +38,7 @@
                             <TextBlock x:Name="BackendText" Style="{StaticResource CaptionSecondaryStyle}" />
                         </StackPanel>
                     </Flyout>
-                </Button.Flyout>
+                </FlyoutBase.AttachedFlyout>
             </Button>
         </local:PageCanvas.HeaderActions>
         <!-- Install state is the group: In use, Installed, Available. Render moves each row into its group and

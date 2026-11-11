@@ -386,6 +386,16 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private void NoticeColumnChanged(object? sender, EventArgs args) => AlignNotices();
+
+    // The notice band shares the current page's column, so a notice starts and ends where the page content does.
+    private void AlignNotices()
+    {
+        if (_noticeCanvas is null) return;
+        var (left, right, maxWidth) = _noticeCanvas.Column;
+        Notices.AlignWith(left, right, maxWidth);
+    }
+
     private void Navigate(ShellPage page)
     {
         if (page == _pages.Settings && _permissionCheckComplete && _microphonePermission.Status != MicrophonePermissionStatus.Allowed)
@@ -398,8 +408,14 @@ public sealed partial class MainWindow : Window
         MainContent.Content = page.Page;
         foreach (var item in _pages.Sidebar) item.SetSelected(ReferenceEquals(item.Nav, page.Nav));
         // Notices sit in a band under the current page's scroll viewport, so only that page ends its viewport above them.
-        if (_noticeCanvas is not null) _noticeCanvas.BottomInset = 0;
+        if (_noticeCanvas is not null)
+        {
+            _noticeCanvas.BottomInset = 0;
+            _noticeCanvas.ColumnChanged -= NoticeColumnChanged;
+        }
         _noticeCanvas = page.Canvas;
+        _noticeCanvas.ColumnChanged += NoticeColumnChanged;
+        AlignNotices();
         Notices.ShowPage(page.Area);
         _noticeCanvas.BottomInset = Notices.CoveredHeight;
         AppTitleBar.ShowPage(page.Title, page.Canvas);

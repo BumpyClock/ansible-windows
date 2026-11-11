@@ -13,7 +13,8 @@
             <Setter Property="MinHeight" Value="{StaticResource BenchmarkBarHeight}" />
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Minimum" Value="0" />
-            <Setter Property="Background" Value="{ThemeResource ControlFillColorDefaultBrush}" />
+            <!-- The track must read against the panel fill in both themes and stay lighter than the slower bar. -->
+            <Setter Property="Background" Value="{ThemeResource ControlAltFillColorQuarternaryBrush}" />
             <Setter Property="Foreground" Value="{ThemeResource ControlStrongFillColorDisabledBrush}" />
         </Style>
         <Style x:Key="BenchmarkDeviceStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionSecondaryStyle}">
@@ -70,9 +71,9 @@
 
             <StackPanel x:Name="ComparisonMetrics" Spacing="{StaticResource BenchmarkRowGap}" VerticalAlignment="Center">
                 <StackPanel Spacing="2">
-                    <TextBlock x:Name="ComparisonTitleText" Text="Last device comparison" FontWeight="SemiBold"
+                    <TextBlock x:Name="ComparisonTitleText" Text="Last speed test" FontWeight="SemiBold"
                                Style="{StaticResource CaptionSecondaryStyle}" />
-                    <TextBlock Text="Lower elapsed time is better." Style="{StaticResource BenchmarkFootnoteStyle}" />
+                    <TextBlock Text="Time to recognize the sample recording. Shorter is better." Style="{StaticResource BenchmarkFootnoteStyle}" />
                 </StackPanel>
                 <Grid ColumnSpacing="{StaticResource BenchmarkBarGap}" RowSpacing="{StaticResource BenchmarkRowGap}">
                     <Grid.RowDefinitions>
@@ -86,11 +87,11 @@
                     </Grid.ColumnDefinitions>
                     <TextBlock x:Name="CpuLabel" Text="CPU" Style="{StaticResource BenchmarkDeviceStyle}" />
                     <ProgressBar x:Name="CpuComparisonBar" Grid.Column="1" Style="{StaticResource BenchmarkBarStyle}"
-                                 AutomationProperties.Name="CPU elapsed time" />
+                                 AutomationProperties.Name="CPU time" />
                     <TextBlock x:Name="CpuComparisonValue" Grid.Column="2" Style="{StaticResource BenchmarkValueStyle}" />
-                    <TextBlock x:Name="GpuLabel" Grid.Row="1" Text="Vulkan" Style="{StaticResource BenchmarkDeviceStyle}" />
+                    <TextBlock x:Name="GpuLabel" Grid.Row="1" Text="Graphics card" Style="{StaticResource BenchmarkDeviceStyle}" />
                     <ProgressBar x:Name="GpuComparisonBar" Grid.Row="1" Grid.Column="1" Style="{StaticResource BenchmarkBarStyle}"
-                                 AutomationProperties.Name="Vulkan elapsed time" />
+                                 AutomationProperties.Name="Graphics card time" />
                     <TextBlock x:Name="GpuComparisonValue" Grid.Row="1" Grid.Column="2" Style="{StaticResource BenchmarkValueStyle}" />
                 </Grid>
             </StackPanel>

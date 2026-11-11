@@ -38,7 +38,7 @@ public sealed class MeetingListProjectionTests
         Assert.Equal("early", Assert.IsType<MeetingHistoryRow>(items[2]).Title);
         Assert.Equal("Yesterday", Assert.IsType<MeetingDayHeader>(items[3]).Label);
         Assert.Equal("yesterday", Assert.IsType<MeetingHistoryRow>(items[4]).Title);
-        Assert.Equal(new DateOnly(2026, 10, 12).ToString("ddd, MMM d", CultureInfo.CurrentCulture),
+        Assert.Equal(new DateOnly(2026, 10, 12).ToString("ddd d MMM", CultureInfo.CurrentCulture),
             Assert.IsType<MeetingDayHeader>(items[5]).Label);
         Assert.Equal("last week", Assert.IsType<MeetingHistoryRow>(items[6]).Title);
     }
@@ -99,7 +99,7 @@ public sealed class MeetingListProjectionTests
     {
         var items = MeetingList.Create([Meeting(new DateTime(2025, 12, 31, 12, 0, 0))], Today);
 
-        Assert.Equal(new DateOnly(2025, 12, 31).ToString("ddd, MMM d, yyyy", CultureInfo.CurrentCulture),
+        Assert.Equal(new DateOnly(2025, 12, 31).ToString("ddd d MMM yyyy", CultureInfo.CurrentCulture),
             Assert.IsType<MeetingDayHeader>(items[0]).Label);
     }
 
@@ -205,7 +205,7 @@ public sealed class MeetingListProjectionTests
         Assert.Equal(MeetingText.Date(local, Today), MeetingText.SavedDetails(untitled, Today));
         Assert.Equal($"{MeetingText.Date(local, Today)}, {Time(local)} · Failed",
             MeetingText.SavedDetails(untitled with { Title = "Planning", Status = MeetingStatus.Failed }, Today));
-        Assert.Contains(local.ToString("d", CultureInfo.CurrentCulture), MeetingText.SavedDetails(untitled, new DateOnly(2027, 1, 2)));
+        Assert.Contains(local.ToString("ddd d MMM yyyy", CultureInfo.CurrentCulture), MeetingText.SavedDetails(untitled, new DateOnly(2027, 1, 2)));
     }
 
     [Theory]

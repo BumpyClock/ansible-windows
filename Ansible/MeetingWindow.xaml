@@ -7,8 +7,13 @@
     <Grid x:Name="Root" ActualThemeChanged="RootThemeChanged">
         <Grid.RowDefinitions><RowDefinition Height="48"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
         <Border Grid.Row="1" Grid.RowSpan="3" Margin="8,0,8,8" Style="{StaticResource ContentLayerStyle}" />
-        <Grid x:Name="TitleBar" Margin="24,0,140,0">
-            <TextBlock x:Name="TitleBarCaption" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+        <!-- The drag region: the app mark and the meeting title, with the main window brand's left inset and gap.
+             The right margin and the brand margin's own right inset keep the title clear of the caption buttons. -->
+        <Grid x:Name="TitleBar" Margin="0,0,128,0" Padding="{StaticResource SidebarBrandMargin}"
+              ColumnSpacing="{StaticResource NavLabelGap}">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+            <local:AppMark Width="16" Height="16" VerticalAlignment="Center"/>
+            <TextBlock x:Name="TitleBarCaption" Grid.Column="1" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
                        Style="{StaticResource CaptionSecondaryStyle}"/>
         </Grid>
 

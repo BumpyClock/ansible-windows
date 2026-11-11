@@ -67,9 +67,10 @@ internal static class HomeHistoryProjection
 {
     /// <summary>
     /// Null while rows match. Usage counts survive removed and unsaved history rows, so "No dictations yet" needs
-    /// usage that is known and holds no dictation. When usage counts dictations that History does not hold, the
-    /// empty state says why beside those lifetime stats: they were removed or never saved. A storage failure may
-    /// hide rows that are still on disk, so it gets the wording that is true either way, as does unknown usage.
+    /// usage that is known and holds no dictation. Otherwise the empty state first says what happens next, new
+    /// dictations appear here, and when usage counts dictations that History does not hold, adds that those are no
+    /// longer saved, so the lifetime stats beside it do not read as missing rows. A storage failure may hide rows
+    /// that are still on disk, so it gets the wording that is true either way.
     /// </summary>
     internal static HomeHistoryEmptyState? EmptyState(HomeHistoryViewModel model, string query, int? dictations) =>
         model.HasMatches ? null
@@ -77,10 +78,12 @@ internal static class HomeHistoryProjection
         : model.StorageError is not null ? new(HomeHistoryEmptyKind.NothingSaved, "No saved transcripts",
             "History storage has a problem, so saved transcripts may be missing.")
         : dictations == 0 ? new(HomeHistoryEmptyKind.FirstRun, "No dictations yet", "Your transcripts appear here after you dictate.")
-        : dictations is { } count ? new(HomeHistoryEmptyKind.NothingSaved, "No saved transcripts", count == 1
-            ? "Your earlier dictation was removed or not saved."
-            : $"{count:N0} earlier dictations were removed or not saved.")
-        : new(HomeHistoryEmptyKind.NothingSaved, "No saved transcripts", "New dictations appear here.");
+        : new(HomeHistoryEmptyKind.NothingSaved, "No saved transcripts", "New dictations appear here." + dictations switch
+        {
+            1 => " Your earlier dictation is no longer saved.",
+            { } count => $" {count:N0} earlier dictations are no longer saved.",
+            null => ""
+        });
 
     internal static HomeHistoryViewModel Create(
         IReadOnlyList<HomeHistoryItem> all,

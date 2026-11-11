@@ -4,13 +4,14 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="using:Ansible"
              HorizontalAlignment="Stretch">
-    <!-- One control for every notification. NoticeHost floats it over the content layer, so its fill is opaque; a page may place it
+    <!-- One control for every notification, drawn as a docked bar like the stock InfoBar: flat, with the card
+         stroke and the control corner radius. NoticeHost docks it in the band under the page; a page may place it
          inline only for a condition that explains that page. -->
     <Border x:Name="Surface"
             Background="{ThemeResource SolidBackgroundFillColorQuarternaryBrush}"
-            BorderBrush="{ThemeResource SurfaceStrokeColorFlyoutBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
             BorderThickness="1"
-            CornerRadius="{StaticResource OverlayCornerRadius}"
+            CornerRadius="{StaticResource ControlCornerRadius}"
             Padding="16,8,8,8">
         <!-- The panel takes its four children in this order: icon, message, actions, close. The message may run to
              two lines beside the actions; a longer one gets the full width and the actions move under it. -->

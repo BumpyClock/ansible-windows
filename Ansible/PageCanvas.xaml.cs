@@ -17,6 +17,8 @@ public sealed partial class PageCanvas : UserControl
 
     private readonly List<StickyPin> _pins = [];
     private CompositionPropertySet? _scrollProperties;
+    private (double Left, double Right, double MaxWidth) _column;
+    private bool _wide;
 
     public PageCanvas()
     {
@@ -34,7 +36,8 @@ public sealed partial class PageCanvas : UserControl
     }
 
     /// <summary>
-    /// True while the page title has scrolled fully above the viewport. The window title bar then shows the page name.
+    /// True once the page title can no longer be read: less than a third of its height, the descenders, is left
+    /// in the viewport. The window title bar then shows the page name.
     /// </summary>
     public bool IsTitleScrolledOut { get; private set; }
 
@@ -68,9 +71,30 @@ public sealed partial class PageCanvas : UserControl
     /// The page's width cap. A page that is one column of rows reads best in a narrower measure, so by default the
     /// header and content together are at most PageReadingMaxWidth wide. A page with side-by-side columns sets
     /// Wide and gets PageContentMaxWidth. Either way the page starts at the page padding and the header actions end
-    /// at the content's right edge. Pages set this in XAML, before they load.
+    /// at the content's right edge. A page may change it while it shows.
     /// </summary>
-    public bool Wide { get; set; }
+    public bool Wide
+    {
+        get => _wide;
+        set
+        {
+            if (_wide == value) return;
+            _wide = value;
+            if (!IsLoaded) return;
+            UpdateLayoutBounds();
+            UpdateHeader();
+        }
+    }
+
+    /// <summary>
+    /// The page column: its left and right insets inside the page and its width cap. The window lines its notice
+    /// band up with it.
+    /// </summary>
+    public (double Left, double Right, double MaxWidth) Column =>
+        (ContentHost.Padding.Left, ContentHost.Padding.Right, MaxContentWidth);
+
+    /// <summary>Raised when <see cref="Column"/> changes.</summary>
+    public event EventHandler? ColumnChanged;
 
     public string Title { get => (string)GetValue(TitleProperty); set => SetValue(TitleProperty, value); }
     public string Subtitle { get => (string)GetValue(SubtitleProperty); set => SetValue(SubtitleProperty, value); }
@@ -157,7 +181,7 @@ public sealed partial class PageCanvas : UserControl
     private void UpdateHeaderScrolledOut()
     {
         var header = IsAbove(HeaderLayout);
-        var title = IsShown(TitleText) ? IsAbove(TitleText) : header;
+        var title = IsShown(TitleText) ? IsAbove(TitleText, TitleText.ActualHeight / 3) : header;
         var action = IsShown(HeaderActionsPanel) ? IsAbove(HeaderActionsPanel) : header;
         if (title == IsTitleScrolledOut && action == IsActionScrolledOut) return;
         IsTitleScrolledOut = title;
@@ -168,10 +192,10 @@ public sealed partial class PageCanvas : UserControl
     private static bool IsShown(FrameworkElement element) =>
         element.Visibility == Visibility.Visible && element.ActualHeight > 0;
 
-    // True when the element's bottom edge is at or above the viewport top.
-    private bool IsAbove(FrameworkElement element) =>
+    // True when the element's bottom edge is at or above the viewport top, or within `remaining` DIPs below it.
+    private bool IsAbove(FrameworkElement element, double remaining = 0) =>
         IsLoaded && IsShown(HeaderLayout) && IsShown(element)
-        && element.TransformToVisual(Viewport).TransformPoint(new Point(0, element.ActualHeight)).Y <= 0;
+        && element.TransformToVisual(Viewport).TransformPoint(new Point(0, element.ActualHeight)).Y <= remaining;
 
     private void UpdateHeader()
     {
@@ -230,5 +254,9 @@ public sealed partial class PageCanvas : UserControl
         ContentColumn.MaxWidth = MaxContentWidth;
         // The page flows in one scroller; content fills at least the viewport so footers sit at the bottom.
         ContentHost.MinHeight = Viewport.ActualHeight;
+        var column = Column;
+        if (column == _column) return;
+        _column = column;
+        ColumnChanged?.Invoke(this, EventArgs.Empty);
     }
 }

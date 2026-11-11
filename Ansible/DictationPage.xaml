@@ -9,9 +9,10 @@
         <StaticResource x:Key="ProgressBarTrackCornerRadius" ResourceKey="ControlCornerRadius" />
         <StaticResource x:Key="ProgressBarCornerRadius" ResourceKey="ControlCornerRadius" />
     </Page.Resources>
-    <!-- Home is two columns, history beside the insights rail, so it keeps the full page width. -->
+    <!-- With saved history Home is two columns, history beside the insights rail, so it takes the full page width.
+         Without any, it stacks at the reading width. Code sets Wide from the history (UpdateHomeWidth). -->
     <local:PageCanvas x:Name="HomeViewport"
-                      Title="Good afternoon" Wide="True"
+                      Title="Good afternoon"
                       SizeChanged="HomeViewportSizeChanged">
         <local:PageCanvas.HeaderActions>
             <StackPanel x:Name="DictateControl" Spacing="8" VerticalAlignment="Center"
@@ -84,7 +85,7 @@
                 </Grid.ColumnDefinitions>
 
                 <local:HomeHistoryView x:Name="HistoryView" Grid.Column="0" />
-                <!-- As a rail it sticks beside the history header while the page scrolls (HomeColumnsSizeChanged). -->
+                <!-- As a rail it sticks beside the history header while the page scrolls (UpdateHomeColumns). -->
                 <local:HomeInsightsView x:Name="HomeInsightsColumn" Grid.Column="1" VerticalAlignment="Top" Canvas.ZIndex="1" />
             </Grid>
             <!-- A result that is not in saved history (WAV, oversized) sits above history so a long list cannot bury it. -->

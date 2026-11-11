@@ -8,7 +8,8 @@
         <Setter Property="Padding" Value="4,0" />
         <Setter Property="ColumnSpacing" Value="12" />
     </Style>
-    <Style x:Key="HomeSectionTitleStyle" TargetType="TextBlock" BasedOn="{StaticResource SubtitleTextBlockStyle}">
+    <!-- Section headings use the same BodyStrong heading as "In use" on Speech models and the Settings card titles. -->
+    <Style x:Key="HomeSectionTitleStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
         <Setter Property="TextWrapping" Value="NoWrap" />
         <Setter Property="TextTrimming" Value="CharacterEllipsis" />
         <Setter Property="VerticalAlignment" Value="Center" />

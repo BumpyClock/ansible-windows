@@ -47,9 +47,6 @@ public sealed partial class MainPage : Page
         ("high", "High"), ("xhigh", "Extra high"), ("max", "Maximum")
     ];
 
-    // Each section bar item shows one section. Null until InitializeComponent has created both.
-    private readonly (SelectorBarItem Item, FrameworkElement Section)[] _sections;
-
     // Catalog entries by ID and by full display name, so model names here match the Speech models page.
     private readonly Dictionary<string, NativeModelEntry> _catalogEntries = new(StringComparer.Ordinal);
 
@@ -73,14 +70,6 @@ public sealed partial class MainPage : Page
         _captureShortcut = captureShortcut;
         _diagnostics = diagnostics;
         _state = session.State;
-        _sections =
-        [
-            (DictationSectionItem, DictationSection), (ScreenSectionItem, ScreenSection),
-            (RecognitionSectionItem, RecognitionSection), (MeetingsSectionItem, MeetingsSection),
-            (PrivacySectionItem, PrivacySection)
-        ];
-        SettingsCanvas.Pin(SectionBarHost, SettingsBody, indicator: SectionBarDivider);
-        SectionsHost.BringIntoViewRequested += SectionsBringIntoViewRequested;
         foreach (var effort in ReasoningEfforts)
         {
             CopilotCleanupEffortChoice.Items.Add(effort.Label);
@@ -88,7 +77,8 @@ public sealed partial class MainPage : Page
         }
         var copilotDefault = new MeetingCleanupSettings().CopilotModel;
         CopilotCleanupModelBox.PlaceholderText = copilotDefault;
-        CopilotModelRow.Description = $"The model ID Copilot CLI runs. The default is {copilotDefault}.";
+        // The model cannot be empty; validation rejects it, so the description names the default instead.
+        CopilotModelRow.Description = $"The GitHub Copilot model to use. The default is {copilotDefault}.";
         // A read-only file load that owns no resources, so shutdown does not join it.
         _ = LoadCatalogNamesAsync(paths.ModelCatalog);
         const string typingHelp = "Click to record a new shortcut. Esc cancels. The completed transcript is inserted once after recognition succeeds. Held Ctrl, Alt, Shift or Win keys delay insertion until released. Some editors cannot distinguish fields within the same window. Hold to talk finishes when you release the shortcut; otherwise press it again to finish. Cancelling recognition inserts no text. Check the destination before dictating.";
@@ -209,28 +199,29 @@ public sealed partial class MainPage : Page
         var model = _state.SelectedModel;
         var fullName = model is null ? null : model.DisplayName ?? model.Id;
         var plainName = fullName is null ? null : PlainModelName(fullName);
+        // Plain words for the user: the graphics card is the Vulkan backend, and the test uses the packaged sample.
         var status = running
-            ? _state.Phase == DictationPhase.Cancelling ? "Cancelling the benchmark."
+            ? _state.Phase == DictationPhase.Cancelling ? "Stopping the speed test."
                 : _state.BenchmarkingBackend switch
                 {
-                    NativeBackend.Cpu => "Measuring CPU with the bundled public sample.",
-                    NativeBackend.Vulkan => "Measuring Vulkan with the bundled public sample.",
-                    _ => "Preparing the benchmark."
+                    NativeBackend.Cpu => "Testing the CPU with the sample recording included with Ansible.",
+                    NativeBackend.Vulkan => "Testing the graphics card with the sample recording included with Ansible.",
+                    _ => "Preparing the speed test."
                 }
-            : model is null ? "Install a dictation model to benchmark CPU and Vulkan."
-            : _state.CanStart ? $"Measure CPU and Vulkan again for {plainName}."
-            : "Benchmarking is available when no other work is running.";
+            : model is null ? "Install a dictation model to compare the CPU and graphics card."
+            : _state.CanStart ? $"Tests how fast the CPU and graphics card run {plainName}."
+            : "You can run a speed test when Ansible is not busy.";
         BenchmarkRow.Description = status;
         BenchmarkProgress.IsActive = running;
         BenchmarkProgress.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
-        BenchmarkButtonText.Text = running ? "Cancel" : "Run benchmark";
+        BenchmarkButtonText.Text = running ? "Cancel" : "Run speed test";
         BenchmarkButton.IsEnabled = running ? _state.IsBenchmarking : _state.CanStart;
-        AutomationProperties.SetName(BenchmarkButton, running ? "Cancel device benchmark" : "Run device benchmark");
+        AutomationProperties.SetName(BenchmarkButton, running ? "Cancel speed test" : "Run speed test");
         // The row names the model plainly; the full catalog name, precision included, is one hover away.
         ToolTipService.SetToolTip(BenchmarkButton, plainName == fullName ? null : fullName);
         var comparison = _state.DeviceComparison;
         DeviceComparison.Show(comparison, _state.DeviceSelectionSummary,
-            comparison is null ? "" : PlainModelName(comparison.ModelName));
+            comparison is null ? "" : PlainModelName(comparison.ModelName), _state.Settings.Backend);
     }
 
     // Installed models and device comparisons carry the full catalog name (or the ID when it has none). Until the
@@ -251,24 +242,6 @@ public sealed partial class MainPage : Page
         RenderBenchmark();
     }
 
-    private void SectionChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
-    {
-        // Selection can change while InitializeComponent builds the bar, before the sections are listed.
-        if (_sections is null || sender.SelectedItem is not { } selected) return;
-        foreach (var (item, section) in _sections)
-            section.Visibility = ReferenceEquals(item, selected) ? Visibility.Visible : Visibility.Collapsed;
-        SettingsCanvas.Scroller.ChangeView(null, 0, null, true);
-    }
-
-    // A control revealed by keyboard focus must land below the stuck section bar, not under it.
-    private void SectionsBringIntoViewRequested(UIElement sender, BringIntoViewRequestedEventArgs args)
-    {
-        var rect = args.TargetRect;
-        if (rect.IsEmpty) return;
-        var bar = SectionBarHost.ActualHeight;
-        args.TargetRect = new Windows.Foundation.Rect(rect.X, rect.Y - bar, rect.Width, rect.Height + bar);
-    }
-
     private async void BenchmarkClicked(object sender, RoutedEventArgs args)
     {
         try
@@ -280,7 +253,7 @@ public sealed partial class MainPage : Page
         }
         catch (Exception error)
         {
-            _notices.Set(BenchmarkNoticeKey, new NoticeContent(NoticeSeverity.Error, "Device benchmark failed", error.Message),
+            _notices.Set(BenchmarkNoticeKey, new NoticeContent(NoticeSeverity.Error, "Speed test failed", error.Message),
                 NoticeArea.Settings);
         }
     }
@@ -318,14 +291,24 @@ public sealed partial class MainPage : Page
 
     private void CleanupProviderChanged(object sender, SelectionChangedEventArgs args)
     {
-        if (CopilotCleanupFields is null) return;
+        // OpenAIEffortRow is the last element RenderCleanupProvider touches, so it exists once the page is built.
+        if (OpenAIEffortRow is null) return;
         RenderCleanupProvider();
         if (_rendering) return;
         // Consent names one provider, so a new provider turns automatic cleanup off until the user confirms it.
         var wasAutomatic = _session.State.Settings.MeetingCleanup.Automatic;
         if (!SaveCleanupSettings(automatic: false) || !wasAutomatic) return;
         AutomaticCleanupToggle.IsOn = false;
-        _notices.Confirm("Automatic cleanup is off. Turn it on again to send meetings to the new provider.");
+        _notices.Confirm("Automatic cleanup is off. Turn it on again to send meetings to the new service.");
+    }
+
+    private void CleanupAdvancedClicked(object sender, RoutedEventArgs args)
+    {
+        var open = CleanupAdvancedFields.Visibility != Visibility.Visible;
+        CleanupAdvancedFields.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+        CleanupAdvancedButton.Content = open ? "Hide" : "Show";
+        AutomationProperties.SetName(CleanupAdvancedButton,
+            open ? "Hide advanced cleanup settings" : "Show advanced cleanup settings");
     }
 
     private void CleanupEffortChanged(object sender, SelectionChangedEventArgs args)
@@ -347,12 +330,20 @@ public sealed partial class MainPage : Page
 
     private void RenderCleanupProvider()
     {
+        // GitHub Copilot has a default model, so its model and effort both sit under Advanced. OpenAI needs a model,
+        // which stays in view with the key; only its effort is advanced.
         var copilot = CleanupProviderChoice.SelectedIndex == 0;
-        CopilotCleanupFields.Visibility = copilot ? Visibility.Visible : Visibility.Collapsed;
-        OpenAICleanupFields.Visibility = copilot ? Visibility.Collapsed : Visibility.Visible;
+        var copilotVisibility = copilot ? Visibility.Visible : Visibility.Collapsed;
+        var openAIVisibility = copilot ? Visibility.Collapsed : Visibility.Visible;
+        CopilotModelRow.Visibility = copilotVisibility;
+        CopilotEffortRow.Visibility = copilotVisibility;
+        OpenAICleanupFields.Visibility = openAIVisibility;
+        OpenAIEffortRow.Visibility = openAIVisibility;
+        CleanupAdvancedRow.Description = copilot ? "Model and thinking effort." : "Thinking effort.";
+        // Copilot cleanup runs the GitHub Copilot command-line tool, which needs a signed-in GitHub account.
         CleanupProviderRow.Description = copilot
-            ? "Uses the Copilot CLI installed on this PC and its signed-in account. Run copilot login if needed. Never falls back to another service or account."
-            : "Sends text to the OpenAI Responses API. Needs a model that supports structured outputs and API billing separate from ChatGPT. Copilot model names are not mapped. Never falls back to another service or account.";
+            ? "Uses the GitHub Copilot command-line tool installed on this PC. Sign in to it with your GitHub account first. Never switches to another service or account."
+            : "Sends text to OpenAI with your API key, billed separately from ChatGPT. The model must support structured outputs. Never switches to another service or account.";
     }
 
     private void RenderKeyStatus()
@@ -426,13 +417,13 @@ public sealed partial class MainPage : Page
             return;
         }
         // Enabling sends meeting text without another prompt, so the opt-in is saved only after this confirmation.
-        var service = CleanupProviderChoice.SelectedIndex == 0 ? "Copilot CLI" : "OpenAI API";
+        var service = CleanupProviderChoice.SelectedIndex == 0 ? "GitHub Copilot" : "OpenAI";
         var dialog = new ContentDialog
         {
             Title = $"Send each new completed meeting transcript to {service} without asking again?",
             Content = new TextBlock
             {
-                Text = "Enabling this authorizes sending each new completed meeting transcript to the selected provider without another confirmation. Applies to meetings started after saving. Saved meetings are not uploaded automatically.",
+                Text = "Enabling this authorizes sending each new completed meeting transcript to the selected service without another confirmation. Applies to meetings started after saving. Saved meetings are not uploaded automatically.",
                 TextWrapping = TextWrapping.Wrap,
             },
             PrimaryButtonText = "Turn on",

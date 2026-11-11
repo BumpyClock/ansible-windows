@@ -8,7 +8,8 @@
          48 px height. The brand follows Windows title bar guidance: a 16 DIP icon and the app name in Caption type,
          on the navigation icons' left edge. Once the page title scrolls away the bar shows the page name; once the
          page's header actions scroll away it adds, 12 DIP after the name, a compact copy of the page's primary action,
-         so the real button and its copy never show together. The rest of the bar stays empty. The
+         so the real button and its copy never show together. The copy is a standard button, not an accent one: the
+         title bar is window chrome, and the accent stays with the page. The rest of the bar stays empty. The
          TitleBar control keeps visible controls in its content clickable and the rest draggable. BorderBrush only
          resolves the theme's secondary text colour for the inactive caption buttons. -->
     <TitleBar x:Name="Bar" Height="{StaticResource TitleBarHeight}" Background="Transparent"
@@ -34,8 +35,7 @@
                        Style="{StaticResource BodyStrongTextBlockStyle}" VerticalAlignment="Center"
                        TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" Visibility="Collapsed"
                        AutomationProperties.AccessibilityView="Raw" />
-            <Button x:Name="PrimaryActionCopy" Grid.Column="2" Style="{StaticResource AppPrimaryButtonStyle}"
-                    Height="32" Padding="12,0" VerticalAlignment="Center" Visibility="Collapsed"
+            <Button x:Name="PrimaryActionCopy" Grid.Column="2" Height="32" Padding="12,0" VerticalAlignment="Center" Visibility="Collapsed"
                     Click="PrimaryActionCopyClicked" AutomationProperties.AutomationId="TitleBarPrimaryAction">
                 <!-- The icon is the one the page declares for its primary action; it takes the button's foreground. -->
                 <StackPanel Orientation="Horizontal" Spacing="8">

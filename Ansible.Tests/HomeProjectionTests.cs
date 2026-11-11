@@ -69,9 +69,10 @@ public sealed class HomeProjectionTests
         var one = HomeHistoryProjection.EmptyState(model, "", 1)!;
         var unknown = HomeHistoryProjection.EmptyState(model, "", null)!;
 
-        Assert.Contains("2 earlier dictations were removed or not saved", several.Detail);
-        Assert.Contains("earlier dictation was removed or not saved", one.Detail);
-        Assert.DoesNotContain("removed", unknown.Detail);
+        Assert.Equal("New dictations appear here. 2 earlier dictations are no longer saved.", several.Detail);
+        Assert.Equal("New dictations appear here. Your earlier dictation is no longer saved.", one.Detail);
+        Assert.Equal("New dictations appear here.", unknown.Detail);
+        Assert.All(new[] { several, one, unknown }, empty => Assert.Equal("No saved transcripts", empty.Title));
     }
 
     [Fact]
@@ -82,7 +83,7 @@ public sealed class HomeProjectionTests
         var empty = HomeHistoryProjection.EmptyState(model, "", 2)!;
 
         Assert.Equal(HomeHistoryEmptyKind.NothingSaved, empty.Kind);
-        Assert.DoesNotContain("removed", empty.Detail);
+        Assert.DoesNotContain("no longer saved", empty.Detail);
         Assert.Contains("may be missing", empty.Detail);
     }
 
@@ -138,7 +139,7 @@ public sealed class HomeProjectionTests
 
         var model = HomeHistoryProjection.Create([item], "", false, _ => null, today);
 
-        Assert.Equal(lastYear.ToString("ddd, MMM d, yyyy", CultureInfo.CurrentCulture),
+        Assert.Equal(lastYear.ToString("ddd d MMM yyyy", CultureInfo.CurrentCulture),
             Assert.Single(model.Groups).Label);
     }
 

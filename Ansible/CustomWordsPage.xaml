@@ -6,13 +6,19 @@
     <local:PageCanvas Title="Dictionary"
                       Subtitle="Words you add here help Ansible recognize them when you speak. They are stored on this device.">
         <local:PageCanvas.HeaderActions>
-            <Button x:Name="ImportWordsButton" MinHeight="32" AutomationProperties.AutomationId="ImportCustomWordsButton"
-                    AutomationProperties.Name="Import words"
-                    ToolTipService.ToolTip="Import a pasted list of words" Click="ImportWordsClicked">
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <FontIcon Glyph="&#xE8E5;" FontSize="16" />
-                    <TextBlock Text="Import…" />
-                </StackPanel>
+            <!-- The page's task is the field and Add below, so the header holds only the overflow. Import is a
+                 rare bulk command in its menu, as on Meetings. -->
+            <Button x:Name="MoreOptionsButton" Style="{StaticResource IconButtonStyle}" VerticalAlignment="Center"
+                    ToolTipService.ToolTip="More options" AutomationProperties.Name="More options">
+                <FontIcon Glyph="&#xE712;" FontSize="16"/>
+                <Button.Flyout><MenuFlyout Placement="BottomEdgeAlignedRight">
+                    <MenuFlyoutItem x:Name="ImportWordsMenuItem" Text="Import…" Click="ImportWordsClicked"
+                                    AutomationProperties.AutomationId="ImportCustomWordsButton"
+                                    AutomationProperties.Name="Import words"
+                                    ToolTipService.ToolTip="Import a pasted list of words">
+                        <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE8E5;"/></MenuFlyoutItem.Icon>
+                    </MenuFlyoutItem>
+                </MenuFlyout></Button.Flyout>
             </Button>
         </local:PageCanvas.HeaderActions>
         <StackPanel>

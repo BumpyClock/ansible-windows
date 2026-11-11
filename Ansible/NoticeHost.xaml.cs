@@ -19,7 +19,6 @@ namespace Ansible;
 /// </summary>
 public sealed partial class NoticeHost : UserControl
 {
-    private static readonly Vector3 NoticeElevation = new(0, 0, 32);
     private readonly Dictionary<string, Grid> _bars = [];
     private const string ConfirmationKey = "(confirmation)";
     private NoticeConfirmation? _timed;
@@ -36,8 +35,6 @@ public sealed partial class NoticeHost : UserControl
     public NoticeHost()
     {
         InitializeComponent();
-        MoreButton.Shadow = new ThemeShadow();
-        MoreButton.Translation = new Vector3(0, 0, 16);
         SizeChanged += (_, _) => UpdateCoveredHeight();
     }
 
@@ -48,6 +45,17 @@ public sealed partial class NoticeHost : UserControl
     public double CoveredHeight => _coveredHeight;
 
     public event EventHandler? CoveredHeightChanged;
+
+    /// <summary>
+    /// Lines the bars up with a page's column: the same left and right insets and the same width cap, so a notice
+    /// reads as part of the page it is docked under.
+    /// </summary>
+    public void AlignWith(double left, double right, double maxWidth)
+    {
+        var margin = (Thickness)Application.Current.Resources["NoticeHostMargin"];
+        Layout.Margin = new Thickness(left, margin.Top, right, margin.Bottom);
+        BarColumn.MaxWidth = maxWidth;
+    }
 
     public void Attach(AppNotices notices)
     {
@@ -105,9 +113,9 @@ public sealed partial class NoticeHost : UserControl
 
     private Grid CreateBar(string key)
     {
-        var bar = new NoticeBar { Shadow = new ThemeShadow(), Translation = NoticeElevation };
+        var bar = new NoticeBar();
         bar.CloseRequested += (_, _) => Close(key);
-        // The wrapper carries the exit motion so it does not compete with the bar's elevation translation.
+        // The wrapper carries the exit motion and the Escape handler.
         var wrapper = new Grid();
         wrapper.Children.Add(bar);
         wrapper.KeyDown += (_, args) =>

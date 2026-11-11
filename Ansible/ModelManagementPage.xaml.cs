@@ -129,11 +129,10 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         var idle = state.IsIdle && managerIdle;
         var managerBusy = _manager?.IsBusy == true;
         FolderText.Text = _manager?.DirectoryPath ?? state.ModelsDirectory;
-        ToolTipService.SetToolTip(FolderMenuButton, FolderText.Text);
         FolderButton.IsEnabled = idle;
         RefreshButton.IsEnabled = _initialization is not { IsCompleted: false } && !managerBusy && !_dialogActive;
-        FolderMenuButton.IsEnabled = !_dialogActive;
-        TranscribeFileButton.IsEnabled = idle && state.SelectedModel is not null && !_dialogActive && !_transcribingFile;
+        MoreOptionsButton.IsEnabled = !_dialogActive;
+        TranscribeFileMenuItem.IsEnabled = idle && state.SelectedModel is not null && !_dialogActive && !_transcribingFile;
         BackendText.Text = $"audio.cpp {state.BackendVersion} \u00B7 selected: {(state.Settings.Backend == NativeBackend.Vulkan ? "GPU (Vulkan)" : "CPU")}";
         BackendText.Visibility = string.IsNullOrEmpty(state.BackendVersion) ? Visibility.Collapsed : Visibility.Visible;
 
@@ -141,7 +140,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         // while the catalog is still loading.
         var catalogMissing = _manager is null && _initialization?.IsCompleted == true;
         _notices.Set(CatalogNoticeKey, catalogMissing ? new NoticeContent(NoticeSeverity.Error, "Model catalog unavailable",
-            "Open Model folder, then Verify installed files to retry opening the catalog.", IsClosable: false) : null,
+            "Open More options, then Model folder, then Verify installed files to retry opening the catalog.", IsClosable: false) : null,
             NoticeArea.Models);
 
         if (_manager is null) { return; }
@@ -188,7 +187,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         if (index < 0)
         {
             _notices.Set(OperationNoticeKey, new NoticeContent(NoticeSeverity.Warning, "Model not loaded",
-                "Open Model folder, then Verify installed files to load this model."), NoticeArea.Models);
+                "Open More options, then Model folder, then Verify installed files to load this model."), NoticeArea.Models);
         }
         else
         {
@@ -325,6 +324,14 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         catch (Exception error) { ShowError(error); }
         finally { _dialogActive = false; Render(); }
     }
+
+    // The menu closes on click; the folder flyout then opens on the same More options button, one dispatch later so
+    // the closing menu does not dismiss it.
+    private void ModelFolderClicked(object sender, RoutedEventArgs args) =>
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (!_closed) Microsoft.UI.Xaml.Controls.Primitives.FlyoutBase.ShowAttachedFlyout(MoreOptionsButton);
+        });
 
     private async void TranscribeFileClicked(object sender, RoutedEventArgs args)
     {

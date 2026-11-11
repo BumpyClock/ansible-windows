@@ -4,6 +4,8 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:Ansible"
     Style="{StaticResource DefaultContentDialogStyle}"
+    PrimaryButtonText="Next" CloseButtonText="Skip for now" DefaultButton="Primary"
+    PrimaryButtonClick="NextClicked" SecondaryButtonClick="BackClicked" CloseButtonClick="SkipClicked"
     Opened="LessonOpened" Closing="LessonClosing" Closed="LessonClosed">
     <ContentDialog.Resources>
         <x:Double x:Key="ContentDialogMaxWidth">720</x:Double>
@@ -31,8 +33,9 @@
          Every step has the same parts at the same heights: a heading, one line of description, and a block of two
          icon rows (a statement over two lines of detail) or the practice field with its status. The footer then sits
          24 DIP under the content on every step. A step whose text wraps shorter is centred in the space it leaves, so
-         the gap is shared above and below it instead of opening above the footer. The lesson draws its own footer;
-         the stock button row would show three equal buttons. -->
+         the gap is shared above and below it instead of opening above the footer. The footer is the stock
+         ContentDialog button row, set from code per step: Next (Done on the last step) as the accent default, Back
+         from step 2, and Skip for now until the last step. The step pager sits in the content above it. -->
     <Grid x:Name="LessonRoot" Width="640" RowSpacing="24">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -123,20 +126,10 @@
                            Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap" />
             </StackPanel>
         </Grid>
-        <!-- One cell, so the pips centre on the dialog whatever the buttons' widths. Skip leaves the lesson from the
-             quiet side; Back and the step's one filled action sit together on the right. -->
-        <Grid Grid.Row="2">
-            <Button x:Name="SkipButton" Content="Skip for now" HorizontalAlignment="Left" Click="SkipClicked"
-                    Style="{StaticResource SubtleButtonStyle}" />
-            <StackPanel x:Name="StepDots" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" VerticalAlignment="Center">
-                <Grid Width="6" Height="6"><Border Style="{StaticResource StepDotStyle}" /><Border Style="{StaticResource CurrentStepDotStyle}" /></Grid>
-                <Grid Width="6" Height="6"><Border Style="{StaticResource StepDotStyle}" /><Border Style="{StaticResource CurrentStepDotStyle}" /></Grid>
-                <Grid Width="6" Height="6"><Border Style="{StaticResource StepDotStyle}" /><Border Style="{StaticResource CurrentStepDotStyle}" /></Grid>
-            </StackPanel>
-            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                <Button x:Name="BackButton" Content="Back" Click="BackClicked" Visibility="Collapsed" />
-                <Button x:Name="NextButton" MinWidth="96" Click="NextClicked" Style="{StaticResource AppPrimaryButtonStyle}" />
-            </StackPanel>
-        </Grid>
+        <StackPanel x:Name="StepDots" Grid.Row="2" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+            <Grid Width="6" Height="6"><Border Style="{StaticResource StepDotStyle}" /><Border Style="{StaticResource CurrentStepDotStyle}" /></Grid>
+            <Grid Width="6" Height="6"><Border Style="{StaticResource StepDotStyle}" /><Border Style="{StaticResource CurrentStepDotStyle}" /></Grid>
+            <Grid Width="6" Height="6"><Border Style="{StaticResource StepDotStyle}" /><Border Style="{StaticResource CurrentStepDotStyle}" /></Grid>
+        </StackPanel>
     </Grid>
 </ContentDialog>

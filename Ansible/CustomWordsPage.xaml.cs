@@ -53,7 +53,7 @@ public sealed partial class CustomWordsPage : Page
         }
         RenderCompatibility(dictionary);
         BusyText.Visibility = _state.IsIdle ? Visibility.Collapsed : Visibility.Visible;
-        ImportWordsButton.IsEnabled = _state.IsIdle;
+        ImportWordsMenuItem.IsEnabled = _state.IsIdle;
         WordsList.IsEnabled = _state.IsIdle;
         UpdateAddButton();
         ValidateEditor();
@@ -287,7 +287,8 @@ public sealed partial class CustomWordsPage : Page
         finally
         {
             _editorOpen = false;
-            ImportWordsButton.Focus(FocusState.Programmatic);
+            // The menu item is gone once the menu closes, so focus returns to the button that opened it.
+            MoreOptionsButton.Focus(FocusState.Programmatic);
         }
     }
 
