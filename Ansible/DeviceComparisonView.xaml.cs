@@ -7,26 +7,31 @@ namespace Ansible;
 
 public sealed partial class DeviceComparisonView : UserControl
 {
+    // The bars stay readable down to this width; with the divider, gaps, and result column the wide arrangement needs
+    // their sum, so a narrower panel stacks the result under the bars instead.
+    private const double MinimumMetricsWidth = 360;
+
     private DeviceComparisonSnapshot? _comparison;
     private string _summary = "";
+    private string _modelName = "";
     private bool _compact;
     private bool _hasMeasurements;
-
-    public DeviceComparisonSnapshot? Comparison
-    {
-        get => _comparison;
-        set { _comparison = value; Render(); }
-    }
-
-    public string Summary
-    {
-        get => _summary;
-        set { _summary = value ?? ""; Render(); }
-    }
 
     public DeviceComparisonView()
     {
         InitializeComponent();
+        Render();
+    }
+
+    /// <summary>
+    /// Shows the last comparison, or <paramref name="summary"/> when it has no measurements. <paramref name="modelName"/>
+    /// is the plain name the page shows; the comparison's full catalog name becomes its tooltip.
+    /// </summary>
+    internal void Show(DeviceComparisonSnapshot? comparison, string summary, string modelName)
+    {
+        _comparison = comparison;
+        _summary = summary ?? "";
+        _modelName = modelName;
         Render();
     }
 
@@ -76,7 +81,9 @@ public sealed partial class DeviceComparisonView : UserControl
             DeviceComparisonKind.WholeRecording => "whole recording",
             _ => "streaming"
         };
-        ComparisonTitleText.Text = $"Last device comparison: {comparison.ModelName}, {kind}";
+        var name = string.IsNullOrWhiteSpace(_modelName) ? comparison.ModelName : _modelName;
+        ComparisonTitleText.Text = $"Last device comparison: {name}, {kind}";
+        ToolTipService.SetToolTip(ComparisonTitleText, name == comparison.ModelName ? null : comparison.ModelName);
         RecommendationBadge.Text = $"Auto chose {(recommended == NativeBackend.Cpu ? "CPU" : "Vulkan")}";
         ComparisonDetailsText.Text = $"Measured {FormatLocalTime(comparison.MeasuredAt)} on the bundled public sample, " +
             "excluding model loading and warmup. Each model and use is compared separately.";
@@ -94,7 +101,10 @@ public sealed partial class DeviceComparisonView : UserControl
 
     private void ComparisonLayoutSizeChanged(object sender, SizeChangedEventArgs args)
     {
-        var compact = args.NewSize.Width < (double)Application.Current.Resources["CompactPageThreshold"];
+        var resources = Application.Current.Resources;
+        var wide = MinimumMetricsWidth + 2 * (double)resources["BenchmarkColumnGap"] + ComparisonDivider.Width +
+            (double)resources["BenchmarkResultWidth"];
+        var compact = args.NewSize.Width < wide;
         if (compact == _compact) return;
         _compact = compact;
         ApplyLayout();

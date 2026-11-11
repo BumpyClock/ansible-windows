@@ -80,18 +80,60 @@ public sealed class MeetingListProjectionTests
         Assert.Equal($"Meeting at {Time(start)}", untitled.Title);
         Assert.Equal("8 min · 2 speakers", untitled.Details);
         Assert.Equal("Planning", titled.Title);
-        Assert.Equal($"{Time(start)} · 8 min · 2 speakers", titled.Details);
+        Assert.Equal($"8 min · 2 speakers · {Time(start)}", titled.Details);
     }
 
     [Fact]
-    public void RowsWithoutSpeechStillHaveADetailLine()
+    public void RowsWithoutSpeechSayWhatIsKnownAboutHowTheMeetingEnded()
     {
-        var row = new MeetingHistoryRow(Meeting(new DateTime(2026, 10, 20, 8, 0, 0), "New meeting", MeetingStatus.Failed));
+        var start = new DateTime(2026, 10, 20, 8, 0, 0);
+        var failed = new MeetingHistoryRow(Meeting(start, "New meeting", MeetingStatus.Failed));
 
-        Assert.Equal("No speech transcribed", row.Details);
-        Assert.Equal("Failed", row.Status);
-        Assert.True(row.IsFailed);
-        Assert.False(row.HasNeutralStatus);
+        Assert.Equal("Stopped before any speech was transcribed", failed.Details);
+        Assert.Equal("Failed", failed.Status);
+        Assert.True(failed.IsFailed);
+        Assert.False(failed.HasNeutralStatus);
+        Assert.Equal("Ended before any speech was transcribed",
+            new MeetingHistoryRow(Meeting(start, "New meeting", MeetingStatus.Interrupted)).Details);
+        Assert.Equal("No speech transcribed", new MeetingHistoryRow(Meeting(start, "New meeting")).Details);
+        Assert.Equal("No speech transcribed yet", new MeetingHistoryRow(Meeting(start, "New meeting", MeetingStatus.Recording)).Details);
+        Assert.Equal($"Stopped before any speech was transcribed · {Time(start)}",
+            new MeetingHistoryRow(Meeting(start, "Planning", MeetingStatus.Failed)).Details);
+    }
+
+    [Fact]
+    public void MeetingsThatStoppedEarlySayTheirEarlierTextIsKept()
+    {
+        var start = new DateTime(2026, 10, 20, 8, 0, 0);
+        var failed = new MeetingHistoryRow(Meeting(start, "New meeting", MeetingStatus.Failed, TimeSpan.FromMinutes(3), 1));
+        var interrupted = new MeetingHistoryRow(Meeting(start, "New meeting", MeetingStatus.Interrupted, TimeSpan.FromMinutes(3), 1));
+        var recording = new MeetingHistoryRow(Meeting(start, "New meeting", MeetingStatus.Recording, TimeSpan.FromMinutes(3), 1));
+
+        Assert.Equal("3 min · 1 speaker · Text before the failure is saved", failed.Details);
+        Assert.Equal("3 min · 1 speaker · Text before the interruption is saved", interrupted.Details);
+        Assert.Equal("3 min · 1 speaker", recording.Details);
+    }
+
+    [Fact]
+    public void OnlyFinishedMeetingsWithoutSpeechAreDeletedTogether()
+    {
+        var start = new DateTime(2026, 10, 20, 8, 0, 0);
+        MeetingSummary[] summaries =
+        [
+            Meeting(start, status: MeetingStatus.Failed),
+            Meeting(start, status: MeetingStatus.Interrupted),
+            Meeting(start),
+            Meeting(start, status: MeetingStatus.Failed, duration: TimeSpan.FromMinutes(2), speakers: 1),
+            Meeting(start, duration: TimeSpan.FromMinutes(2)),
+            Meeting(start, status: MeetingStatus.Recording),
+            Meeting(start, status: MeetingStatus.Starting)
+        ];
+
+        Assert.Equal(summaries.Take(3).Select(summary => summary.Id), MeetingList.Empty(summaries));
+        Assert.All(summaries.Take(5), summary => Assert.True(new MeetingHistoryRow(summary).CanDelete));
+        Assert.All(summaries.Skip(5), summary => Assert.False(new MeetingHistoryRow(summary).CanDelete));
+        Assert.Equal("Delete this meeting?", MeetingText.DeleteConfirmation(1).Title);
+        Assert.Equal("Delete 3 empty meetings?", MeetingText.DeleteConfirmation(3).Title);
     }
 
     [Fact]
@@ -109,18 +151,19 @@ public sealed class MeetingListProjectionTests
     }
 
     [Fact]
-    public void WindowTitleNamesTheDateAndTimeOnlyForUntitledMeetings()
+    public void TheWindowUsesTheListTitleAndPutsTheDateOnItsDetailLine()
     {
         var local = new DateTime(2026, 10, 19, 22, 9, 0);
         var created = new DateTimeOffset(local, TimeZoneInfo.Local.GetUtcOffset(local));
+        var untitled = new MeetingDocument { CreatedAt = created, UpdatedAt = created, Status = MeetingStatus.Completed };
 
-        var title = MeetingText.Title("New meeting", created, Today);
-
-        Assert.StartsWith("Meeting on ", title);
-        Assert.EndsWith($", {Time(local)}", title);
-        Assert.Contains(local.ToString("ddd", CultureInfo.CurrentCulture), title);
-        Assert.Equal("Planning", MeetingText.Title("Planning", created, Today));
-        Assert.Contains(local.ToString("d", CultureInfo.CurrentCulture), MeetingText.Title("New meeting", created, new DateOnly(2027, 1, 2)));
+        Assert.Equal(new MeetingHistoryRow(MeetingSummary.From(untitled)).Title, MeetingText.Title(untitled.Title, created));
+        Assert.Equal($"Meeting at {Time(local)}", MeetingText.Title("New meeting", created));
+        Assert.Equal("Planning", MeetingText.Title("Planning", created));
+        Assert.Equal(MeetingText.Date(local, Today), MeetingText.SavedDetails(untitled, Today));
+        Assert.Equal($"{MeetingText.Date(local, Today)}, {Time(local)} · Failed",
+            MeetingText.SavedDetails(untitled with { Title = "Planning", Status = MeetingStatus.Failed }, Today));
+        Assert.Contains(local.ToString("d", CultureInfo.CurrentCulture), MeetingText.SavedDetails(untitled, new DateOnly(2027, 1, 2)));
     }
 
     [Theory]
@@ -135,8 +178,12 @@ public sealed class MeetingListProjectionTests
     [Fact]
     public void SummaryCountsAttributedSpeakersAndEndsAtTheLastSpeech()
     {
+        var local = new DateTime(2026, 10, 19, 22, 9, 0);
+        var created = new DateTimeOffset(local, TimeZoneInfo.Local.GetUtcOffset(local));
         var document = new MeetingDocument
         {
+            CreatedAt = created,
+            UpdatedAt = created,
             Turns =
             [
                 new MeetingTurn("Speaker 1", 0, 30, "a"),
@@ -151,6 +198,7 @@ public sealed class MeetingListProjectionTests
         Assert.Equal(2, summary.SpeakerCount);
         Assert.Equal(TimeSpan.FromSeconds(474), summary.Duration);
         Assert.Null(MeetingSummary.From(new MeetingDocument()).Duration);
-        Assert.Equal("8 min · 2 speakers", MeetingText.SavedDetails(document with { Status = MeetingStatus.Completed }, Today));
+        Assert.Equal($"{MeetingText.Date(local, Today)} · 8 min · 2 speakers",
+            MeetingText.SavedDetails(document with { Status = MeetingStatus.Completed }, Today));
     }
 }

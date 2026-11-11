@@ -39,6 +39,19 @@ public sealed partial class MainPage : Page
     private const string BenchmarkNoticeKey = "device-benchmark";
     private readonly AppNotices _notices;
 
+    // Stored values are the providers' identifiers; the list shows sentence-case labels in the same order.
+    private static readonly (string Value, string Label)[] ReasoningEfforts =
+    [
+        ("none", "None"), ("minimal", "Minimal"), ("low", "Low"), ("medium", "Medium"),
+        ("high", "High"), ("xhigh", "Extra high"), ("max", "Maximum")
+    ];
+
+    // Each section bar item shows one section. Null until InitializeComponent has created both.
+    private readonly (SelectorBarItem Item, FrameworkElement Section)[] _sections;
+
+    // Catalog entries by ID and by full display name, so model names here match the Speech models page.
+    private readonly Dictionary<string, NativeModelEntry> _catalogEntries = new(StringComparer.Ordinal);
+
     internal event Action? ShortcutLessonRequested;
 
     internal MainPage(DictationSession session, AppPaths paths, Func<nint> windowHandle,
@@ -59,11 +72,24 @@ public sealed partial class MainPage : Page
         _captureShortcut = captureShortcut;
         _diagnostics = diagnostics;
         _state = session.State;
-        foreach (var effort in new[] { "none", "minimal", "low", "medium", "high", "xhigh", "max" })
+        _sections =
+        [
+            (DictationSectionItem, DictationSection), (ScreenSectionItem, ScreenSection),
+            (RecognitionSectionItem, RecognitionSection), (MeetingsSectionItem, MeetingsSection),
+            (PrivacySectionItem, PrivacySection)
+        ];
+        SettingsCanvas.Pin(SectionBarHost, SettingsBody, indicator: SectionBarDivider);
+        SectionsHost.BringIntoViewRequested += SectionsBringIntoViewRequested;
+        foreach (var effort in ReasoningEfforts)
         {
-            CopilotCleanupEffortChoice.Items.Add(effort);
-            OpenAICleanupEffortChoice.Items.Add(effort);
+            CopilotCleanupEffortChoice.Items.Add(effort.Label);
+            OpenAICleanupEffortChoice.Items.Add(effort.Label);
         }
+        var copilotDefault = new MeetingCleanupSettings().CopilotModel;
+        CopilotCleanupModelBox.PlaceholderText = copilotDefault;
+        CopilotModelRow.Description = $"The model ID Copilot CLI runs. The default is {copilotDefault}.";
+        // A read-only file load that owns no resources, so shutdown does not join it.
+        _ = LoadCatalogNamesAsync(paths.ModelCatalog);
         const string typingHelp = "Click to record a new shortcut. Esc cancels. The completed transcript is inserted once after recognition succeeds. Held Ctrl, Alt, Shift or Win keys delay insertion until released. Some editors cannot distinguish fields within the same window. Hold to talk finishes when you release the shortcut; otherwise press it again to finish. Cancelling recognition inserts no text. Check the destination before dictating.";
         ToolTipService.SetToolTip(HotkeyField.CaptureBox, typingHelp);
         AutomationProperties.SetHelpText(HotkeyField.CaptureBox, typingHelp);
@@ -123,10 +149,6 @@ public sealed partial class MainPage : Page
                 NativeBackend.Vulkan => 2,
                 _ => throw new InvalidDataException("The recognition processor setting is invalid.")
             };
-            // The description and the device result do not depend on the choice, so changing it does not reflow the page.
-            // The result describes the last model load and changes only when recognition prepares again.
-            DeviceComparison.Comparison = _state.DeviceComparison;
-            DeviceComparison.Summary = _state.DeviceSelectionSummary;
             RenderBenchmark();
             if (LanguageBox.FocusState == FocusState.Unfocused) { LanguageBox.Text = _state.Language; }
             UsageToggle.IsOn = _state.Settings.CollectUsage;
@@ -176,12 +198,16 @@ public sealed partial class MainPage : Page
         finally { _rendering = false; }
     }
 
+    // The device result describes the last model load and changes only when recognition prepares again, so the
+    // processor choice never reflows it.
     private void RenderBenchmark()
     {
         // Activity stays set after the terminal snapshot; only these phases mean the benchmark still owns the session.
         var running = _state.Activity == SessionActivity.DeviceBenchmark &&
             _state.Phase is DictationPhase.Benchmarking or DictationPhase.Cancelling;
         var model = _state.SelectedModel;
+        var fullName = model is null ? null : model.DisplayName ?? model.Id;
+        var plainName = fullName is null ? null : PlainModelName(fullName);
         var status = running
             ? _state.Phase == DictationPhase.Cancelling ? "Cancelling the benchmark."
                 : _state.BenchmarkingBackend switch
@@ -191,13 +217,55 @@ public sealed partial class MainPage : Page
                     _ => "Preparing the benchmark."
                 }
             : model is null ? "Install a dictation model to benchmark CPU and Vulkan."
-            : _state.CanStart ? $"Measure CPU and Vulkan again for {model.DisplayName ?? model.Id}."
+            : _state.CanStart ? $"Measure CPU and Vulkan again for {plainName}."
             : "Benchmarking is available when no other work is running.";
         BenchmarkRow.Description = status;
         BenchmarkProgress.IsActive = running;
-        BenchmarkButton.Content = running ? "Cancel" : "Run benchmark";
+        BenchmarkProgress.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
+        BenchmarkButtonText.Text = running ? "Cancel" : "Run benchmark";
         BenchmarkButton.IsEnabled = running ? _state.IsBenchmarking : _state.CanStart;
         AutomationProperties.SetName(BenchmarkButton, running ? "Cancel device benchmark" : "Run device benchmark");
+        // The row names the model plainly; the full catalog name, precision included, is one hover away.
+        ToolTipService.SetToolTip(BenchmarkButton, plainName == fullName ? null : fullName);
+        var comparison = _state.DeviceComparison;
+        DeviceComparison.Show(comparison, _state.DeviceSelectionSummary,
+            comparison is null ? "" : PlainModelName(comparison.ModelName));
+    }
+
+    // Installed models and device comparisons carry the full catalog name (or the ID when it has none). Until the
+    // catalog loads, or if it cannot, that name is shown as is.
+    private string PlainModelName(string nameOrId) =>
+        _catalogEntries.TryGetValue(nameOrId, out var entry) ? ModelCardText.PlainName(entry) : nameOrId;
+
+    private async Task LoadCatalogNamesAsync(string catalogPath)
+    {
+        IReadOnlyList<NativeModelEntry> entries;
+        try { entries = await NativeModelCatalog.LoadAsync(catalogPath); }
+        catch (Exception) { return; } // The Speech models page reports an unreadable catalog; full names stay here.
+        foreach (var entry in entries)
+        {
+            _catalogEntries.TryAdd(entry.Id, entry);
+            if (!string.IsNullOrWhiteSpace(entry.DisplayName)) _catalogEntries.TryAdd(entry.DisplayName, entry);
+        }
+        RenderBenchmark();
+    }
+
+    private void SectionChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
+    {
+        // Selection can change while InitializeComponent builds the bar, before the sections are listed.
+        if (_sections is null || sender.SelectedItem is not { } selected) return;
+        foreach (var (item, section) in _sections)
+            section.Visibility = ReferenceEquals(item, selected) ? Visibility.Visible : Visibility.Collapsed;
+        SettingsCanvas.Scroller.ChangeView(null, 0, null, true);
+    }
+
+    // A control revealed by keyboard focus must land below the stuck section bar, not under it.
+    private void SectionsBringIntoViewRequested(UIElement sender, BringIntoViewRequestedEventArgs args)
+    {
+        var rect = args.TargetRect;
+        if (rect.IsEmpty) return;
+        var bar = SectionBarHost.ActualHeight;
+        args.TargetRect = new Windows.Foundation.Rect(rect.X, rect.Y - bar, rect.Width, rect.Height + bar);
     }
 
     private async void BenchmarkClicked(object sender, RoutedEventArgs args)
@@ -239,9 +307,9 @@ public sealed partial class MainPage : Page
         _renderedCleanupSettings = settings;
         CleanupProviderChoice.SelectedIndex = (int)settings.Provider;
         CopilotCleanupModelBox.Text = settings.CopilotModel;
-        CopilotCleanupEffortChoice.SelectedItem = settings.CopilotReasoningEffort;
+        CopilotCleanupEffortChoice.SelectedIndex = Array.FindIndex(ReasoningEfforts, effort => effort.Value == settings.CopilotReasoningEffort);
         OpenAICleanupModelBox.Text = settings.OpenAIModel;
-        OpenAICleanupEffortChoice.SelectedItem = settings.OpenAIReasoningEffort;
+        OpenAICleanupEffortChoice.SelectedIndex = Array.FindIndex(ReasoningEfforts, effort => effort.Value == settings.OpenAIReasoningEffort);
         AutomaticCleanupToggle.IsOn = settings.Automatic;
         RenderCleanupProvider();
         RenderKeyStatus();
@@ -322,9 +390,9 @@ public sealed partial class MainPage : Page
                 Provider = (MeetingCleanupProvider)CleanupProviderChoice.SelectedIndex,
                 Automatic = automatic ?? saved.Automatic,
                 CopilotModel = CopilotCleanupModelBox.Text.Trim(),
-                CopilotReasoningEffort = (string)CopilotCleanupEffortChoice.SelectedItem,
+                CopilotReasoningEffort = SelectedEffort(CopilotCleanupEffortChoice),
                 OpenAIModel = OpenAICleanupModelBox.Text.Trim(),
-                OpenAIReasoningEffort = (string)OpenAICleanupEffortChoice.SelectedItem
+                OpenAIReasoningEffort = SelectedEffort(OpenAICleanupEffortChoice)
             };
             if (settings == saved) return true;
             settings.Validate();
@@ -343,6 +411,10 @@ public sealed partial class MainPage : Page
             return false;
         }
     }
+
+    // No selection maps to an empty value, which validation rejects with its own message.
+    private static string SelectedEffort(ComboBox choice) =>
+        choice.SelectedIndex >= 0 && choice.SelectedIndex < ReasoningEfforts.Length ? ReasoningEfforts[choice.SelectedIndex].Value : "";
 
     private async void AutomaticCleanupToggled(object sender, RoutedEventArgs args)
     {

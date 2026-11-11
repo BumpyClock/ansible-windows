@@ -55,6 +55,14 @@ public sealed partial class PageCanvas : UserControl
         }
     }
 
+    /// <summary>
+    /// The page's width cap. A page that is one column of rows reads best in a narrower measure, so by default the
+    /// header and content together are at most PageReadingMaxWidth wide. A page with side-by-side columns sets
+    /// Wide and gets PageContentMaxWidth. Either way the page starts at the page padding and the header actions end
+    /// at the content's right edge. Pages set this in XAML, before they load.
+    /// </summary>
+    public bool Wide { get; set; }
+
     public string Title { get => (string)GetValue(TitleProperty); set => SetValue(TitleProperty, value); }
     public string Subtitle { get => (string)GetValue(SubtitleProperty); set => SetValue(SubtitleProperty, value); }
     public UIElementCollection HeaderActions => HeaderActionsPanel.Children;
@@ -93,7 +101,12 @@ public sealed partial class PageCanvas : UserControl
         if (_pins.Count == 0) Viewport.LayoutUpdated -= ViewportLayoutUpdated;
     }
 
-    public double ContentWidth =>Math.Max(0, ContentHost.ActualWidth - ContentHost.Padding.Left - ContentHost.Padding.Right);
+    /// <summary>The width the header and content have: the space inside the page padding, up to the page's cap.</summary>
+    public double ContentWidth => Math.Min(MaxContentWidth,
+        Math.Max(0, ContentHost.ActualWidth - ContentHost.Padding.Left - ContentHost.Padding.Right));
+
+    private double MaxContentWidth =>
+        (double)Application.Current.Resources[Wide ? "PageContentMaxWidth" : "PageReadingMaxWidth"];
 
     /// <summary>
     /// The header action the window title bar repeats once the header scrolls out. Pages with one declare it
@@ -150,21 +163,22 @@ public sealed partial class PageCanvas : UserControl
         var hasHeading = hasTitle || hasSubtitle;
         var hasActions = HeaderActions.Count > 0;
         HeaderLayout.Visibility = hasHeading || hasActions ? Visibility.Visible : Visibility.Collapsed;
-        HeadingPanel.Visibility = hasHeading ? Visibility.Visible : Visibility.Collapsed;
         TitleText.Visibility = hasTitle ? Visibility.Visible : Visibility.Collapsed;
         SubtitleText.Visibility = hasSubtitle ? Visibility.Visible : Visibility.Collapsed;
         HeaderActionsPanel.Visibility = hasActions ? Visibility.Visible : Visibility.Collapsed;
         foreach (var action in HeaderActions.OfType<FrameworkElement>())
             action.MaxWidth = ContentWidth;
+        // Side by side, the actions sit at the right of the title's row and centre on the title. A narrow page
+        // stacks them under the subtitle, left-aligned. Without a heading they lead the row.
         var stacked = hasHeading && hasActions && ContentWidth < (double)Application.Current.Resources["CompactPageThreshold"];
-        HeaderLayout.RowDefinitions[1].Height = stacked ? GridLength.Auto : new GridLength(0);
-        HeaderLayout.RowSpacing = stacked ? 12 : 0;
-        HeaderLayout.ColumnSpacing = hasActions && !stacked ? (double)Application.Current.Resources["CardGap"] : 0;
-        Grid.SetColumnSpan(HeadingPanel, stacked ? 2 : 1);
-        Grid.SetRow(HeaderActionsPanel, stacked ? 1 : 0);
-        Grid.SetColumn(HeaderActionsPanel, stacked || !hasHeading ? 0 : 1);
-        Grid.SetColumnSpan(HeaderActionsPanel, stacked ? 2 : 1);
-        HeaderActionsPanel.HorizontalAlignment = stacked || !hasHeading ? HorizontalAlignment.Left : HorizontalAlignment.Right;
+        var beside = hasHeading && hasActions && !stacked;
+        HeaderLayout.ColumnSpacing = beside ? (double)Application.Current.Resources["CardGap"] : 0;
+        Grid.SetColumnSpan(TitleText, beside ? 1 : 2);
+        Grid.SetRow(HeaderActionsPanel, stacked ? 2 : 0);
+        Grid.SetColumn(HeaderActionsPanel, beside ? 1 : 0);
+        Grid.SetColumnSpan(HeaderActionsPanel, beside ? 1 : 2);
+        HeaderActionsPanel.HorizontalAlignment = beside ? HorizontalAlignment.Right : HorizontalAlignment.Left;
+        HeaderActionsPanel.Margin = new Thickness(0, stacked ? 12 : 0, 0, 0);
         HeaderActionsPanel.Orientation = ContentWidth < (double)Application.Current.Resources["NarrowActionsThreshold"]
             ? Orientation.Vertical : Orientation.Horizontal;
     }
@@ -194,11 +208,12 @@ public sealed partial class PageCanvas : UserControl
     private void UpdateLayoutBounds()
     {
         var resources = Application.Current.Resources;
-        var width = Math.Min(Viewport.ActualWidth, (double)resources["PageContentMaxWidth"]);
-        var padding = (Thickness)resources[width < (double)resources["CompactPageThreshold"]
+        var padding = (Thickness)resources[Viewport.ActualWidth < (double)resources["CompactPageThreshold"]
             ? "CompactPagePadding" : "PagePadding"];
         padding.Bottom += _bottomInset;
         ContentHost.Padding = padding;
+        // The cap is on the column inside the padding, so the page starts at the padding and never centres.
+        ContentColumn.MaxWidth = MaxContentWidth;
         // The page flows in one scroller; content fills at least the viewport so footers sit at the bottom.
         ContentHost.MinHeight = Viewport.ActualHeight;
     }

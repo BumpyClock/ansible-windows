@@ -4,9 +4,9 @@
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:local="using:Ansible">
     <local:PageCanvas Title="Dictionary"
-                      Subtitle="Words that guide recognition. Stored on this device. Not replacement rules.">
+                      Subtitle="Words you add here help Ansible recognize them when you speak. They are stored on this device.">
         <local:PageCanvas.HeaderActions>
-            <Button x:Name="ImportWordsButton" AutomationProperties.AutomationId="ImportCustomWordsButton"
+            <Button x:Name="ImportWordsButton" MinHeight="32" AutomationProperties.AutomationId="ImportCustomWordsButton"
                     AutomationProperties.Name="Import words"
                     ToolTipService.ToolTip="Import a pasted list of words" Click="ImportWordsClicked">
                 <StackPanel Orientation="Horizontal" Spacing="8">
@@ -23,46 +23,45 @@
             <TextBlock x:Name="BusyText" Text="Finish the current operation to change your dictionary."
                        Margin="0,0,0,12" Visibility="Collapsed" Style="{StaticResource CaptionSecondaryStyle}" />
 
-            <!-- One field finds and adds. The field and Add are one unit at the stock 32 control height; the count
-                 sits at the right. -->
-            <Grid ColumnSpacing="16">
+            <!-- One field finds and adds. The field and Add are one unit at the stock 32 control height. The line
+                 under the field is its helper text: how many words the dictionary holds, or why a word was rejected.
+                 Both share the one line, so a validation message never moves the list. -->
+            <Grid ColumnSpacing="8" RowSpacing="4">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" MaxWidth="420" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <Grid ColumnSpacing="8">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" MaxWidth="420" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <Grid>
-                        <TextBox x:Name="SearchBox" Padding="36,4,12,4"
-                                 AutomationProperties.AutomationId="SearchCustomWordsBox"
-                                 AutomationProperties.Name="Find or add a word" PlaceholderText="Find or add a word"
-                                 TextChanged="SearchChanged" KeyDown="SearchKeyDown" />
-                        <FontIcon Glyph="&#xE721;" FontSize="16" HorizontalAlignment="Left" VerticalAlignment="Center"
-                                  Margin="12,0,0,0" IsHitTestVisible="False"
-                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                    </Grid>
-                    <Button x:Name="AddWordButton" Grid.Column="1" MaxWidth="260" VerticalAlignment="Stretch"
-                            Style="{StaticResource AppPrimaryButtonStyle}" Click="AddWordClicked"
-                            AutomationProperties.AutomationId="AddCustomWordsButton" AutomationProperties.Name="Add word">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon Glyph="&#xE710;" FontSize="12" VerticalAlignment="Center" />
-                            <TextBlock x:Name="AddWordLabel" Text="Add" TextTrimming="CharacterEllipsis" />
-                        </StackPanel>
-                    </Button>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Grid>
+                    <TextBox x:Name="SearchBox" Padding="36,4,12,4"
+                             AutomationProperties.AutomationId="SearchCustomWordsBox"
+                             AutomationProperties.Name="Find or add a word" PlaceholderText="Find or add a word"
+                             TextChanged="SearchChanged" KeyDown="SearchKeyDown" />
+                    <FontIcon Glyph="&#xE721;" FontSize="16" HorizontalAlignment="Left" VerticalAlignment="Center"
+                              Margin="12,0,0,0" IsHitTestVisible="False"
+                              Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 </Grid>
-                <TextBlock x:Name="CountText" Grid.Column="1" VerticalAlignment="Center"
+                <Button x:Name="AddWordButton" Grid.Column="1" MaxWidth="260" VerticalAlignment="Stretch"
+                        Style="{StaticResource AppPrimaryButtonStyle}" Click="AddWordClicked"
+                        AutomationProperties.AutomationId="AddCustomWordsButton" AutomationProperties.Name="Add word">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE710;" FontSize="12" VerticalAlignment="Center" />
+                        <TextBlock x:Name="AddWordLabel" Text="Add" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                </Button>
+                <TextBlock x:Name="CountText" Grid.Row="1" Grid.ColumnSpan="2"
                            Style="{StaticResource CaptionSecondaryStyle}"
                            AutomationProperties.AutomationId="CustomWordsCount"
                            AutomationProperties.LiveSetting="Polite" />
+                <TextBlock x:Name="FieldValidationText" Grid.Row="1" Grid.ColumnSpan="2" Visibility="Collapsed"
+                           TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}"
+                           AutomationProperties.AutomationId="CustomWordFieldValidation"
+                           AutomationProperties.LiveSetting="Polite"
+                           Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
             </Grid>
-            <TextBlock x:Name="FieldValidationText" Visibility="Collapsed" TextWrapping="Wrap" Margin="0,4,0,0"
-                       Style="{StaticResource CaptionTextBlockStyle}"
-                       AutomationProperties.AutomationId="CustomWordFieldValidation"
-                       AutomationProperties.LiveSetting="Polite"
-                       Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
 
             <ItemsControl x:Name="WordsList" Margin="0,12,0,0" IsTabStop="False"
                           AutomationProperties.AutomationId="CustomWordsList"
@@ -74,16 +73,9 @@
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
-            <!-- The empty state Home uses: a centred icon, a Body Strong heading, and one caption line. A search with
-                 no match keeps only the line. -->
-            <StackPanel x:Name="EmptyState" HorizontalAlignment="Center" Padding="24,48"
-                        Spacing="{StaticResource HistoryEmptyGap}" Visibility="Collapsed">
-                <FontIcon x:Name="EmptyIcon" Glyph="&#xE82D;" FontSize="32" Margin="0,0,0,8"
-                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                          AutomationProperties.AccessibilityView="Raw" />
-                <TextBlock x:Name="EmptyTitle" Text="No words yet" Style="{StaticResource HistoryEmptyTitleStyle}" />
-                <TextBlock x:Name="EmptyHelp" Style="{StaticResource HistoryEmptyDetailStyle}" MaxWidth="360" />
-            </StackPanel>
+            <!-- The shared empty state. RenderWords fills it for an empty dictionary and for a search with no match. -->
+            <local:EmptyState x:Name="EmptyWords" Margin="0,24,0,0" Visibility="Collapsed"
+                              AutomationProperties.AutomationId="CustomWordsEmptyState" />
 
             <ContentDialog x:Name="EntryDialog" Title="Import words" PrimaryButtonText="Import words"
                            CloseButtonText="Cancel" DefaultButton="None"

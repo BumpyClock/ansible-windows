@@ -38,8 +38,10 @@
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <!-- The maker's mark when the app ships one; otherwise a neutral glyph for what the model does. -->
-            <Border Width="40" Height="40" CornerRadius="{StaticResource ControlCornerRadius}" Background="{ThemeResource ControlFillColorDefaultBrush}"
+            <!-- The maker's mark when the app ships one; otherwise a neutral glyph for what the model does. The subtle
+                 fill darkens a light card and lightens a dark one, so the tile shows in both themes; the control
+                 fill is the card's own white in light theme. -->
+            <Border Width="40" Height="40" CornerRadius="{StaticResource ControlCornerRadius}" Background="{ThemeResource SubtleFillColorSecondaryBrush}"
                     VerticalAlignment="Center" AutomationProperties.AccessibilityView="Raw">
                 <Grid>
                     <FontIcon x:Name="TileGlyph" FontSize="20" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />

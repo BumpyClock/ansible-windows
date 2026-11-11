@@ -10,21 +10,29 @@ public sealed record MeetingHistoryRow(MeetingSummary Summary)
 {
     private DateTime Local => Summary.CreatedAt.LocalDateTime;
     private bool Untitled => MeetingText.IsUntitled(Summary.Title);
+    private bool HasSpeech => Summary.Duration is not null;
 
-    public string Title => Untitled ? $"Meeting at {MeetingText.Time(Local)}" : Summary.Title;
+    public string Title => MeetingText.Title(Summary.Title, Summary.CreatedAt);
 
-    /// <summary>Time (unless the title already says it), length, and speakers. Never empty, so every row has two lines.</summary>
+    /// <summary>
+    /// Length and speakers first, so rows differ at a glance; then what is known about how the meeting ended; then the
+    /// start time when the title does not already say it. Never empty, so every row has two lines.
+    /// </summary>
     public string Details => string.Join(" · ", new[]
     {
-        Untitled ? null : MeetingText.Time(Local),
-        Summary.Duration is { } duration ? MeetingText.Duration(duration) : "No speech transcribed",
-        MeetingText.Speakers(Summary.SpeakerCount)
+        HasSpeech ? MeetingText.Duration(Summary.Duration!.Value) : null,
+        HasSpeech ? MeetingText.Speakers(Summary.SpeakerCount) : null,
+        MeetingText.Outcome(Summary.Status, HasSpeech),
+        Untitled ? null : MeetingText.Time(Local)
     }.OfType<string>());
 
     public bool IsFailed => Summary.Status == MeetingStatus.Failed;
     public string Status => MeetingText.Status(Summary.Status) ?? "";
     public bool HasNeutralStatus => !IsFailed && MeetingText.Status(Summary.Status) is not null;
+    /// <summary>A meeting still being captured belongs to its session; only a finished one can be deleted from the list.</summary>
+    public bool CanDelete => MeetingList.IsFinished(Summary.Status);
     public string AccessibleName => $"{Title}, {Details}{(Status.Length == 0 ? "" : $", {Status}")}";
+    public string OptionsName => $"More options for {Title}";
 }
 
 internal static class MeetingList
@@ -43,6 +51,16 @@ internal static class MeetingList
         }
         return items;
     }
+
+    public static bool IsFinished(MeetingStatus status) =>
+        status is MeetingStatus.Completed or MeetingStatus.Failed or MeetingStatus.Interrupted;
+
+    /// <summary>
+    /// Finished meetings with no transcribed speech: what one confirmation may delete together. A meeting that holds
+    /// any transcript text is never in this set, whatever its status.
+    /// </summary>
+    public static IReadOnlyList<Guid> Empty(IEnumerable<MeetingSummary> summaries) =>
+        summaries.Where(summary => summary.Duration is null && IsFinished(summary.Status)).Select(summary => summary.Id).ToArray();
 }
 
 /// <summary>Plain-language meeting text shared by the Meetings list and the meeting window.</summary>
@@ -53,9 +71,9 @@ internal static class MeetingText
 
     public static bool IsUntitled(string title) => string.Equals(title.Trim(), PlaceholderTitle, StringComparison.Ordinal);
 
-    /// <summary>The user's or Teams' title, or the meeting's local start date and time.</summary>
-    public static string Title(string title, DateTimeOffset createdAt, DateOnly today) =>
-        IsUntitled(title) ? $"Meeting on {Date(createdAt.LocalDateTime, today)}, {Time(createdAt.LocalDateTime)}" : title;
+    /// <summary>The user's or Teams' title unchanged, or the meeting's local start time. The list row and the window use this one name.</summary>
+    public static string Title(string title, DateTimeOffset createdAt) =>
+        IsUntitled(title) ? $"Meeting at {Time(createdAt.LocalDateTime)}" : title;
 
     public static string Time(DateTime local) => local.ToString("t", CultureInfo.CurrentCulture);
 
@@ -96,16 +114,49 @@ internal static class MeetingText
         _ => throw new ArgumentOutOfRangeException(nameof(status), status, null)
     };
 
-    /// <summary>The saved meeting window's one detail line: date unless the title says it, length, speakers, and state.</summary>
+    /// <summary>
+    /// What is known about how a meeting ended. A saved meeting records only its status, never a cause: Failed covers a
+    /// recognition, capture, or storage error and a start that was cancelled; Interrupted covers discarded pending
+    /// speech and a meeting the app closed during. Null when the length and speakers say enough.
+    /// </summary>
+    public static string? Outcome(MeetingStatus status, bool hasSpeech) => (status, hasSpeech) switch
+    {
+        (MeetingStatus.Completed, false) => "No speech transcribed",
+        (MeetingStatus.Failed, false) => "Stopped before any speech was transcribed",
+        (MeetingStatus.Failed, true) => "Text before the failure is saved",
+        (MeetingStatus.Interrupted, false) => "Ended before any speech was transcribed",
+        (MeetingStatus.Interrupted, true) => "Text before the interruption is saved",
+        (_, false) => "No speech transcribed yet",
+        _ => null
+    };
+
+    /// <summary>The saved meeting window's explanation when it has no transcript to show.</summary>
+    public static string EmptyExplanation(MeetingStatus status) => status switch
+    {
+        MeetingStatus.Failed => "This meeting stopped before any speech was transcribed. The cause isn't saved with the meeting.",
+        MeetingStatus.Interrupted => "This meeting ended before any speech was transcribed.",
+        MeetingStatus.Completed => "Nothing was recognized in this meeting.",
+        _ => "Speech appears here once it is transcribed."
+    };
+
+    /// <summary>The saved meeting window's one detail line: date (and time, unless the title says it), length, speakers, and state.</summary>
     public static string SavedDetails(MeetingDocument document, DateOnly today)
     {
         var local = document.CreatedAt.LocalDateTime;
         return string.Join(" · ", new[]
         {
-            IsUntitled(document.Title) ? null : $"{Date(local, today)}, {Time(local)}",
+            IsUntitled(document.Title) ? Date(local, today) : $"{Date(local, today)}, {Time(local)}",
             MeetingSummary.SpeechDuration(document) is { } duration ? Duration(duration) : null,
             Speakers(MeetingSummary.SpeakerCountOf(document)),
             Status(document.Status)
         }.OfType<string>());
     }
+
+    /// <summary>
+    /// The one confirmation before saved meetings are permanently deleted. One meeting is any meeting the user chose;
+    /// several are always the <see cref="MeetingList.Empty"/> set.
+    /// </summary>
+    public static (string Title, string Content) DeleteConfirmation(int count) => count == 1
+        ? ("Delete this meeting?", "The saved transcript will be permanently deleted.")
+        : ($"Delete {count} empty meetings?", "None of them has any transcribed speech. They will be permanently deleted.");
 }

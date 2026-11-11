@@ -1,7 +1,9 @@
 using Ansible.Core;
 using System.Diagnostics;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Windows.Storage.Pickers;
 
 namespace Ansible;
@@ -19,6 +21,8 @@ public sealed partial class MeetingsPage : Page
     private Task? _exportTask;
     private Task? _refreshTask;
     private Task? _openTask;
+    private Task? _deleteTask;
+    private ContentDialog? _deleteDialog;
     private IReadOnlyList<MeetingSummary> _displayedSummaries = [];
     private IReadOnlyList<MeetingReadFailure> _displayedFailures = [];
     private readonly List<Button> _exportButtons = [];
@@ -29,7 +33,9 @@ public sealed partial class MeetingsPage : Page
         Func<nint> windowHandle, LocalDiagnosticLog diagnostics, AppNotices notices)
     {
         InitializeComponent();
-        ((PageCanvas)Content).PrimaryAction = new PageAction(NewMeetingButton, NewMeetingClicked);
+        var canvas = (PageCanvas)Content;
+        canvas.PrimaryAction = new PageAction(NewMeetingButton, NewMeetingClicked, NewMeetingLabel);
+        canvas.PrimaryActionIcon = new FontIconSource { Glyph = "", FontSize = 16 };
         _notices = notices;
         _store = store;
         _diagnostics = diagnostics;
@@ -74,7 +80,7 @@ public sealed partial class MeetingsPage : Page
                 row.Children.Add(new TextBlock { Text = failure.Message, TextWrapping = TextWrapping.Wrap });
                 row.Children.Add(new TextBlock { Text = "Save the original transcript file somewhere safe, then remove it from Ansible. New meetings remain available.", TextWrapping = TextWrapping.Wrap });
                 var export = new Button { Content = "Export and remove", Tag = failure.Id };
-                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(export, $"Export and remove transcript {failure.Id:N}");
+                AutomationProperties.SetName(export, $"Export and remove transcript {failure.Id:N}");
                 export.Click += ExportUnreadableClicked;
                 row.Children.Add(export);
                 _exportButtons.Add(export);
@@ -84,8 +90,12 @@ public sealed partial class MeetingsPage : Page
                 });
             }
             UnreadableMeetings.Visibility = result.Failures.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
-            EmptyState.Visibility = summaries.Count == 0 && result.Failures.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            NoMeetings.Visibility = summaries.Count == 0 && result.Failures.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
             MeetingGroups.Visibility = summaries.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+            // One empty meeting is deleted from its row; several get one action so they never crowd the list.
+            var empty = MeetingList.Empty(summaries).Count;
+            DeleteEmptyButton.Visibility = empty >= 2 ? Visibility.Visible : Visibility.Collapsed;
+            AutomationProperties.SetName(DeleteEmptyButton, $"Delete {empty} empty meetings");
         }
         catch (OperationCanceledException) when (_shutdown.IsCancellationRequested) { }
         catch (Exception error) { ShowError(error); }
@@ -93,7 +103,8 @@ public sealed partial class MeetingsPage : Page
 
     private async void ExportUnreadableClicked(object sender, RoutedEventArgs args)
     {
-        if (_shutdown.IsCancellationRequested || _exportTask is { IsCompleted: false } || sender is not Button { Tag: Guid id }) return;
+        if (_shutdown.IsCancellationRequested || _exportTask is { IsCompleted: false } || _deleteTask is { IsCompleted: false } ||
+            sender is not Button { Tag: Guid id }) return;
         _exportTask = ExportUnreadableAsync(id);
         await _exportTask;
     }
@@ -123,6 +134,8 @@ public sealed partial class MeetingsPage : Page
     internal async Task BeginShutdownAsync()
     {
         _shutdown.Cancel();
+        _deleteDialog?.Hide();
+        if (_deleteTask is not null) await _deleteTask;
         if (_exportTask is not null) await _exportTask;
         if (_refreshTask is not null) await _refreshTask;
         if (_openTask is not null) await _openTask;
@@ -141,12 +154,68 @@ public sealed partial class MeetingsPage : Page
         await _openTask;
     }
 
-    private async void MeetingClicked(object sender, RoutedEventArgs args)
+    private void MeetingClicked(object sender, RoutedEventArgs args)
     {
-        if (_shutdown.IsCancellationRequested || _openTask is { IsCompleted: false } ||
-            sender is not Button { Tag: Guid id }) return;
+        if (sender is Button { Tag: Guid id }) Open(id);
+    }
+
+    private async void Open(Guid id)
+    {
+        if (_shutdown.IsCancellationRequested || _openTask is { IsCompleted: false }) return;
         _openTask = OpenAsync(id);
         await _openTask;
+    }
+
+    // Built from the row's id when opened, so the menu never depends on a binding reaching flyout items.
+    private void MeetingOptionsClicked(object sender, RoutedEventArgs args)
+    {
+        if (sender is not Button { Tag: Guid id } button ||
+            _displayedSummaries.FirstOrDefault(candidate => candidate.Id == id) is not { } summary) return;
+        var open = new MenuFlyoutItem { Text = "Open", Icon = new FontIcon { Glyph = "" } };
+        open.Click += (_, _) => Open(id);
+        var delete = new MenuFlyoutItem
+        {
+            Text = "Delete…", Icon = new FontIcon { Glyph = "" }, IsEnabled = new MeetingHistoryRow(summary).CanDelete
+        };
+        delete.Click += (_, _) => Delete([id]);
+        var menu = new MenuFlyout { Placement = FlyoutPlacementMode.BottomEdgeAlignedRight };
+        menu.Items.Add(open);
+        menu.Items.Add(delete);
+        menu.ShowAt(button);
+    }
+
+    private void DeleteEmptyClicked(object sender, RoutedEventArgs args) => Delete(MeetingList.Empty(_displayedSummaries));
+
+    private async void Delete(IReadOnlyList<Guid> ids)
+    {
+        if (_shutdown.IsCancellationRequested || ids.Count == 0 || _deleteTask is { IsCompleted: false } ||
+            _exportTask is { IsCompleted: false }) return;
+        _deleteTask = DeleteAsync(ids);
+        await _deleteTask;
+    }
+
+    private async Task DeleteAsync(IReadOnlyList<Guid> ids)
+    {
+        var deleted = false;
+        try
+        {
+            _deleteDialog = MeetingDeletion.Dialog(ids.Count, XamlRoot);
+            if (await _deleteDialog.ShowAsync() != ContentDialogResult.Primary) return;
+            var token = _shutdown.Token;
+            foreach (var id in ids)
+            {
+                await _store.DeleteAsync(id, token);
+                deleted = true;
+            }
+        }
+        catch (OperationCanceledException) when (_shutdown.IsCancellationRequested) { }
+        catch (Exception error) { ShowError(error); }
+        finally { _deleteDialog = null; }
+        if (!deleted || _shutdown.IsCancellationRequested) return;
+        // A listing started before the delete may still be running; wait for it, then list again.
+        if (_refreshTask is not null) await _refreshTask;
+        await (_refreshTask = RefreshCoreAsync());
+        NewMeetingButton.Focus(FocusState.Programmatic);
     }
 
     private async Task OpenAsync(Guid? id)

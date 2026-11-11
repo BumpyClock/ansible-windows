@@ -137,7 +137,8 @@ public sealed partial class MeetingWindow : Window
         }
     }
 
-    private const string SavedText = "Saved on this device. Audio is not stored.";
+    // One line in the footer beside its button at the window's narrowest width. The capture setup states that audio is never stored.
+    private const string SavedText = "Saved on this device";
 
     /// <summary>The heading, title bar caption, and taskbar name: the meeting's name, or when it started.</summary>
     private void RenderTitle()
@@ -145,10 +146,17 @@ public sealed partial class MeetingWindow : Window
         // A name given before Start shows until the session saves it, so it never flickers to the generated name.
         var title = _document is null || (_pendingTitle is not null && MeetingText.IsUntitled(_document.Title))
             ? _pendingTitle ?? "New meeting"
-            : MeetingText.Title(_document.Title, _document.CreatedAt, DateOnly.FromDateTime(DateTime.Today));
+            : MeetingText.Title(_document.Title, _document.CreatedAt);
         MeetingTitle.Text = TitleBarCaption.Text = Title = title;
         AutomationProperties.SetName(TitleButton, $"Rename meeting {title}");
+        UpdateTitleToolTip();
     }
+
+    private void MeetingTitleTrimmedChanged(TextBlock sender, IsTextTrimmedChangedEventArgs args) => UpdateTitleToolTip();
+
+    // A trimmed heading shows its full name on hover; a heading that fits says what selecting it does.
+    private void UpdateTitleToolTip() =>
+        ToolTipService.SetToolTip(TitleButton, MeetingTitle.IsTextTrimmed ? MeetingTitle.Text : "Rename meeting");
 
     private void RootThemeChanged(FrameworkElement sender, object args) => RefreshTitleBarColors();
     private void ContrastThemeChanged(ThemeSettings sender, object args) => RefreshTitleBarColors();
@@ -227,17 +235,17 @@ public sealed partial class MeetingWindow : Window
             DiagnosticsErrorText.Visibility = health.DiagnosticsError is null ? Visibility.Collapsed : Visibility.Visible;
         }
         SaveText.Text = canStart ? "" : state.Phase is MeetingSessionPhase.Completed or MeetingSessionPhase.Failed
-            ? SavedText : "Text is saved as you go. Audio is not stored.";
-        (EmptyTitle.Text, EmptyDescription.Text) = state.Phase switch
+            ? SavedText : "Saving as you go";
+        (TranscriptEmpty.Glyph, TranscriptEmpty.Title, TranscriptEmpty.Detail) = state.Phase switch
         {
-            MeetingSessionPhase.Starting => ("Getting ready", "Transcription starts as soon as the speech model is loaded."),
-            MeetingSessionPhase.Paused => ("Meeting paused", "Resume to keep transcribing this meeting."),
-            MeetingSessionPhase.Recording => ("Listening", "Text appears a few seconds after someone speaks. Speaker names may update."),
-            MeetingSessionPhase.Finishing or MeetingSessionPhase.Refining => ("Finishing your meeting", "The last few seconds of speech are being transcribed on this device."),
-            MeetingSessionPhase.Failed when retryStart => ("Meeting couldn't start", "Check the message below and your microphone and speakers, then try again."),
-            MeetingSessionPhase.Failed => ("Meeting stopped", "Check the message below. Text transcribed before the stop is saved."),
-            MeetingSessionPhase.Completed => ("No speech transcribed", "Nothing was recognized in this meeting."),
-            _ => ("Ready when you are", "Start the meeting to see what each person says here.")
+            MeetingSessionPhase.Starting => (MicrophoneGlyph, "Getting ready", "Transcription starts as soon as the speech model is loaded."),
+            MeetingSessionPhase.Paused => (PauseGlyph, "Meeting paused", "Resume to keep transcribing this meeting."),
+            MeetingSessionPhase.Recording => (MicrophoneGlyph, "Listening", "Text appears a few seconds after someone speaks. Speaker names may update."),
+            MeetingSessionPhase.Finishing or MeetingSessionPhase.Refining => (MicrophoneGlyph, "Finishing your meeting", "The last few seconds of speech are being transcribed on this device."),
+            MeetingSessionPhase.Failed when retryStart => (ErrorGlyph, "Meeting couldn't start", "Check the message below and your microphone and speakers, then try again."),
+            MeetingSessionPhase.Failed => (ErrorGlyph, "Meeting stopped", "Check the message below. Text transcribed before the stop is saved."),
+            MeetingSessionPhase.Completed => (MicrophoneGlyph, "No speech transcribed", MeetingText.EmptyExplanation(MeetingStatus.Completed)),
+            _ => (MicrophoneGlyph, "Ready when you are", "Start the meeting to see what each person says here.")
         };
         // The notice lives for the whole meeting; open it once per text so a dismissal sticks.
         if (state.SelectionNotice != _shownNotice)
@@ -289,12 +297,15 @@ public sealed partial class MeetingWindow : Window
         RefreshCleanupControls();
         if (_document is null) return;
         RenderTitle();
-        EmptyState.Visibility = _document.Turns.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        TranscriptEmpty.Visibility = _document.Turns.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         if (_savedMeeting)
         {
             ShowDetails(MeetingText.SavedDetails(_document, DateOnly.FromDateTime(DateTime.Today)), recording: false);
-            EmptyTitle.Text = "No speech transcribed";
-            EmptyDescription.Text = "Nothing was recognized in this meeting.";
+            TranscriptEmpty.Glyph = _document.Status == MeetingStatus.Failed ? ErrorGlyph : MicrophoneGlyph;
+            TranscriptEmpty.Title = "No speech transcribed";
+            TranscriptEmpty.Detail = MeetingText.EmptyExplanation(_document.Status);
+            // A saved meeting with nothing to read offers its one useful next step.
+            TranscriptEmpty.Footer ??= CreateEmptyDeleteButton();
         }
         if (ReferenceEquals(_renderedTurns, _document.Turns) && ReferenceEquals(_renderedNames, _document.SpeakerNames) && ReferenceEquals(_renderedAutoNames, _document.AutoSpeakerNames)) return;
         var nearBottom = _transcriptScroll is null || _transcriptScroll.ScrollableHeight - _transcriptScroll.VerticalOffset < 60;
@@ -310,6 +321,17 @@ public sealed partial class MeetingWindow : Window
         MeetingDetails.Text = details;
         DetailsRow.Visibility = details.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
         RecordingDot.Visibility = recording ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private const string MicrophoneGlyph = "";
+    private const string PauseGlyph = "";
+    private const string ErrorGlyph = "";
+
+    private Button CreateEmptyDeleteButton()
+    {
+        var button = new Button { Content = "Delete meeting" };
+        button.Click += DeleteClicked;
+        return button;
     }
 
     public static Visibility ToVisibility(bool value) => value ? Visibility.Visible : Visibility.Collapsed;
@@ -427,7 +449,8 @@ public sealed partial class MeetingWindow : Window
         // An untitled meeting opens an empty field; its generated name is only a hint and is never saved.
         var current = _document is null ? _pendingTitle ?? "" : MeetingText.IsUntitled(_document.Title) ? "" : _document.Title;
         var input = new TextBox { Text = current, PlaceholderText = MeetingTitle.Text, MaxLength = 200, Header = "Meeting name" };
-        var dialog = new ContentDialog { Title = "Rename meeting", Content = input, PrimaryButtonText = "Save", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Primary, XamlRoot = Root.XamlRoot };
+        var dialog = new ContentDialog { Title = "Rename meeting", Content = input, PrimaryButtonText = "Save", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Primary };
+        dialog.FollowWindowTheme(Root.XamlRoot);
         try
         {
             if (await dialog.ShowAsync() != ContentDialogResult.Primary || _closing || _closed || _shutdownPending) return;
@@ -461,7 +484,8 @@ public sealed partial class MeetingWindow : Window
     {
         if (_document is null || _busy || _closing || _shutdownPending) return;
         var input = new TextBox { Text = _document.GetSpeakerName(speakerId), MaxLength = 100, Header = "Speaker name" };
-        var dialog = new ContentDialog { Title = "Rename speaker", Content = input, PrimaryButtonText = "Save", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Primary, XamlRoot = Root.XamlRoot };
+        var dialog = new ContentDialog { Title = "Rename speaker", Content = input, PrimaryButtonText = "Save", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Primary };
+        dialog.FollowWindowTheme(Root.XamlRoot);
         try
         {
             if (await dialog.ShowAsync() != ContentDialogResult.Primary || _closing || _closed || _shutdownPending) return;
@@ -505,7 +529,7 @@ public sealed partial class MeetingWindow : Window
     private async void DeleteClicked(object sender, RoutedEventArgs args)
     {
         if (_document is null || _busy || _closing || _shutdownPending || (!_savedMeeting && _session.IsActive) || _cleanupTask is { IsCompleted: false }) return;
-        var dialog = new ContentDialog { Title = "Delete this meeting?", Content = "The saved transcript will be permanently deleted.", PrimaryButtonText = "Delete", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close, XamlRoot = Root.XamlRoot };
+        var dialog = MeetingDeletion.Dialog(1, Root.XamlRoot);
         try
         {
             if (await dialog.ShowAsync() != ContentDialogResult.Primary || _closing || _closed || _shutdownPending) return;
@@ -568,8 +592,9 @@ public sealed partial class MeetingWindow : Window
             Title = "End this meeting before closing?",
             Content = "Finish captured speech and save the transcript, or discard speech still awaiting transcription. Saved text is kept.",
             PrimaryButtonText = "Finish and close", SecondaryButtonText = "Discard pending speech", CloseButtonText = "Keep open",
-            DefaultButton = ContentDialogButton.Primary, XamlRoot = Root.XamlRoot
+            DefaultButton = ContentDialogButton.Primary
         };
+        dialog.FollowWindowTheme(Root.XamlRoot);
         try
         {
             var result = await dialog.ShowAsync();
@@ -627,8 +652,9 @@ public sealed partial class MeetingWindow : Window
         {
             Title = "Clean up transcript wording", Content = content,
             PrimaryButtonText = "Send text and clean up", CloseButtonText = "Cancel",
-            DefaultButton = ContentDialogButton.Close, XamlRoot = Root.XamlRoot
+            DefaultButton = ContentDialogButton.Close
         };
+        dialog.FollowWindowTheme(Root.XamlRoot);
         try
         {
             _cleanupDialog = dialog;
@@ -797,4 +823,20 @@ public sealed partial class MeetingWindow : Window
     private void HideNotice() => _notices.Set(NoticeKey, null);
     private static string FormatTime(double seconds) => TimeSpan.FromSeconds(Math.Max(0, seconds)).ToString(seconds >= 3600 ? @"h\:mm\:ss" : @"m\:ss");
     private sealed record MeetingProcessChoice(int Id, string DisplayName, bool IsTeams, DateTime StartedUtc);
+}
+
+/// <summary>The one confirmation before saved meetings are permanently deleted, shared by the meeting window and the Meetings list.</summary>
+internal static class MeetingDeletion
+{
+    public static ContentDialog Dialog(int count, XamlRoot root)
+    {
+        var (title, content) = MeetingText.DeleteConfirmation(count);
+        var dialog = new ContentDialog
+        {
+            Title = title, Content = content, PrimaryButtonText = "Delete", CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close
+        };
+        dialog.FollowWindowTheme(root);
+        return dialog;
+    }
 }

@@ -8,6 +8,9 @@ namespace Ansible;
 
 public sealed partial class CustomWordsPage : Page
 {
+    // Segoe Fluent Icons: Dictionary for an empty dictionary, Search for a search with no match.
+    private const string DictionaryGlyph = "";
+    private const string SearchGlyph = "";
     private readonly DictationSession _session;
     private readonly Action _openModels;
     private readonly AppNotices _notices;
@@ -100,13 +103,20 @@ public sealed partial class CustomWordsPage : Page
             if (existing is null) _rows.Insert(index, new DictionaryWordRowModel(filtered[index]));
             else _rows.Move(_rows.IndexOf(existing), index);
         }
-        CountText.Text = $"{entries.Length} of {CustomVocabulary.MaximumEntries}";
-        var empty = filtered.Length == 0;
-        EmptyState.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
-        EmptyIcon.Visibility = EmptyTitle.Visibility = entries.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
-        EmptyHelp.Text = entries.Length == 0
-            ? "Add names, product terms, and acronyms the model gets wrong."
-            : $"No match. Press Enter to add \"{query}\".";
+        CountText.Text = $"{entries.Length} of {CustomVocabulary.MaximumEntries} words";
+        EmptyWords.Visibility = filtered.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (entries.Length == 0)
+        {
+            EmptyWords.Glyph = DictionaryGlyph;
+            EmptyWords.Title = "No words yet";
+            EmptyWords.Detail = "Add names, product terms, and acronyms the model gets wrong.";
+        }
+        else if (filtered.Length == 0)
+        {
+            EmptyWords.Glyph = SearchGlyph;
+            EmptyWords.Title = "No matching words";
+            EmptyWords.Detail = $"Press Enter to add \"{query}\".";
+        }
     }
 
     private void BeginEdit(DictionaryWordRow row)
@@ -183,10 +193,12 @@ public sealed partial class CustomWordsPage : Page
         AddWordLabel.Text = addable ? $"Add \"{text}\"" : "Add";
     }
 
+    // The error takes the helper line under the field; the word count returns when it clears.
     private void ShowFieldError(string error)
     {
         FieldValidationText.Text = error;
         FieldValidationText.Visibility = error.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+        CountText.Visibility = error.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void SearchChanged(object sender, TextChangedEventArgs args)

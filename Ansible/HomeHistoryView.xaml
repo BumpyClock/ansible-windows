@@ -44,7 +44,7 @@
         </ResourceDictionary>
     </UserControl.Resources>
     <!-- The page stretches History to the bottom of the viewport. The empty state takes that space, capped so it
-         stays in the upper part of a tall column instead of sinking below the fold. -->
+         stays in the upper part of a tall column instead of sinking below the fold or under a floating notice. -->
     <Grid x:Name="HistorySection" RowSpacing="{StaticResource SectionHeaderGap}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -109,32 +109,17 @@
                     </TransitionCollection>
                 </StackPanel.ChildrenTransitions>
             </StackPanel>
-            <!-- A search miss answers where the results would be, just under the search box. -->
-            <StackPanel x:Name="NoMatchesState" Padding="24,48" Spacing="{StaticResource HistoryEmptyGap}"
-                        HorizontalAlignment="Center" Visibility="Collapsed">
-                <TextBlock x:Name="NoMatchesTitle" TextWrapping="WrapWholeWords" HorizontalAlignment="Center"
-                           Style="{StaticResource HistoryEmptyTitleStyle}" />
-                <TextBlock x:Name="NoMatchesDetail" TextWrapping="WrapWholeWords" HorizontalAlignment="Center"
-                           Style="{StaticResource HistoryEmptyDetailStyle}" />
-            </StackPanel>
         </StackPanel>
-        <!-- Nothing saved: one centred invitation to dictate, with the real shortcut as keycaps. -->
-        <StackPanel x:Name="EmptyState" Grid.Row="2" Padding="24,48" Spacing="8" MaxWidth="440"
-                    HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed">
-            <Border Width="64" Height="64" CornerRadius="32" Margin="0,0,0,8" HorizontalAlignment="Center"
-                    Background="{ThemeResource SubtleFillColorSecondaryBrush}">
-                <FontIcon Glyph="&#xE720;" FontSize="32" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                          AutomationProperties.AccessibilityView="Raw" />
-            </Border>
-            <TextBlock x:Name="EmptyTitle" Style="{StaticResource SubtitleTextBlockStyle}" TextWrapping="WrapWholeWords"
-                       HorizontalAlignment="Center" TextAlignment="Center" AutomationProperties.HeadingLevel="Level3" />
-            <TextBlock x:Name="EmptyDetail" Style="{StaticResource SecondaryTextStyle}" TextWrapping="WrapWholeWords"
-                       HorizontalAlignment="Center" TextAlignment="Center" />
-            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0" HorizontalAlignment="Center">
-                <TextBlock x:Name="EmptyShortcutLead" Style="{StaticResource SecondaryTextStyle}" VerticalAlignment="Center" />
-                <StackPanel x:Name="EmptyShortcutKeys" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" />
-                <TextBlock x:Name="EmptyShortcutTail" Style="{StaticResource SecondaryTextStyle}" VerticalAlignment="Center" />
-            </StackPanel>
-        </StackPanel>
+        <!-- No rows: the app's one empty state. Nothing saved invites a dictation with the real shortcut as keycaps;
+             a search miss names the query and drops the shortcut (RenderEmptyState). -->
+        <local:EmptyState x:Name="EmptyMessage" Grid.Row="2" Glyph="&#xE720;" Visibility="Collapsed">
+            <local:EmptyState.Footer>
+                <StackPanel x:Name="EmptyShortcutHint" Orientation="Horizontal" Spacing="8">
+                    <TextBlock x:Name="EmptyShortcutLead" Style="{StaticResource SecondaryTextStyle}" VerticalAlignment="Center" />
+                    <StackPanel x:Name="EmptyShortcutKeys" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" />
+                    <TextBlock x:Name="EmptyShortcutTail" Style="{StaticResource SecondaryTextStyle}" VerticalAlignment="Center" />
+                </StackPanel>
+            </local:EmptyState.Footer>
+        </local:EmptyState>
     </Grid>
 </UserControl>

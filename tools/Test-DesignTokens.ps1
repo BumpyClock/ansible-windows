@@ -175,7 +175,6 @@ foreach ($themeName in @('Light', 'Dark')) {
 }
 
 $highContrastBrushAliases = @{
-    'AppAccentBrush' = 'SystemColorHighlightColor'
     'AppOnAccentBrush' = 'SystemColorHighlightTextColor'
 }
 $highContrastNode = $tokenDocument.SelectSingleNode("//*[local-name()='ResourceDictionary' and @x:Key='HighContrast']", $namespaceManager)

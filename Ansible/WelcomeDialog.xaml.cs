@@ -163,8 +163,8 @@ public sealed partial class WelcomeDialog : ContentDialog
         ShortcutDetail.Text = settings.PushToTalk
             ? $"Hold {shortcut.DisplayText} until listening starts, then speak. Release to finish. Your words arrive after recognition completes."
             : shortcut.IsModifierOnly
-                ? $"Briefly hold {shortcut.DisplayText} to start. Repeat to finish. Your words arrive after recognition completes."
-                : $"Press {shortcut.DisplayText} to start. Press it again to finish. Your words arrive after recognition completes.";
+                ? $"Briefly hold {shortcut.DisplayText} to start, then speak. Repeat to finish. Your words arrive after recognition completes."
+                : $"Press {shortcut.DisplayText} to start, then speak. Press it again to finish. Your words arrive after recognition completes.";
         PracticeStatus.Text = state.IsLiveOperation
             ? state.CanFinish ? "Listening. Speak naturally, then finish with your shortcut." : "Finishing your words..."
             : _practiced ? "That's your voice, in writing. You're ready."

@@ -3,7 +3,7 @@
 Builds the Debug app, launches it per theme, and captures the fixed UX review matrix.
 
 .DESCRIPTION
-The matrix is 5 pages x light/dark x wide/narrow, each long page at one stop per viewport, plus the welcome
+The matrix is 5 pages x light/dark x wide/narrow, each long page (or page section) at one stop per viewport, plus the welcome
 lesson and a saved meeting transcript window. Captures land in .runtime\ux\<Round>. The matrix must stay
 the same between review rounds so scores stay comparable. A page that fails to load fails the run, so this
 is also the runtime check for unresolved XAML resources.
@@ -128,6 +128,7 @@ if (-not $SkipBuild) {
 
 $pages = [ordered]@{ home = 'DictationNav'; meetings = 'MeetingsNav'; models = 'ModelsNav'; dictionary = 'CustomWordsNav'; settings = 'SettingsNav' }
 $sizes = [ordered]@{ wide = @(1440, 960); narrow = @(860, 760) }
+$sections = @{ settings = @('SettingsSectionDictation', 'SettingsSectionScreen', 'SettingsSectionRecognition', 'SettingsSectionMeetings', 'SettingsSectionPrivacy') }
 
 foreach ($mode in $Theme) {
     Stop-DevelopmentApp
@@ -152,11 +153,18 @@ foreach ($mode in $Theme) {
             Start-Sleep -Milliseconds 900
             $name = "$($page.Key)-$mode-$($size.Key)"
             $stop = 1
-            foreach ($percent in Get-ScrollStops $window) {
-                if ($percent -ge 0) { Set-PageScroll $window $percent }
-                Start-Sleep -Milliseconds 500
-                Save-Window $window "$name-$stop"
-                $stop++
+            # A page with sections shows one at a time. Each section is captured top to bottom, numbered in order.
+            foreach ($section in @($sections[$page.Key] ?? @($null))) {
+                if ($section) {
+                    Invoke-Ui @('invoke', $section, '-w', "$window", '-q') | Out-Null
+                    Start-Sleep -Milliseconds 700
+                }
+                foreach ($percent in Get-ScrollStops $window) {
+                    if ($percent -ge 0) { Set-PageScroll $window $percent }
+                    Start-Sleep -Milliseconds 500
+                    Save-Window $window "$name-$stop"
+                    $stop++
+                }
             }
         }
     }
@@ -166,6 +174,8 @@ foreach ($mode in $Theme) {
     Set-WindowSize $window $sizes.wide[0] $sizes.wide[1]
     Invoke-Ui @('invoke', 'SettingsNav', '-w', "$window", '-q') | Out-Null
     Start-Sleep -Milliseconds 900
+    Invoke-Ui @('invoke', $sections.settings[0], '-w', "$window", '-q') | Out-Null
+    Start-Sleep -Milliseconds 700
     Invoke-Ui @('invoke', 'ShortcutLessonButton', '-w', "$window", '-q') | Out-Null
     Start-Sleep -Milliseconds 1500
     Save-Window $window "welcome-$mode-wide-1"

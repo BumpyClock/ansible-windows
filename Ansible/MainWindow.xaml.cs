@@ -302,13 +302,14 @@ public sealed partial class MainWindow : Window
             _notices.Set(MicrophonePermissionNoticeKey, null);
             return;
         }
+        // One sentence each. The notice shows two buttons beside the text, so a longer body wraps past two lines.
         var message = status switch
         {
-            MicrophonePermissionStatus.DeniedByUser => "Enable microphone access for Ansible and desktop apps in Windows Settings, then check again.",
-            MicrophonePermissionStatus.DeniedBySystem => "Windows is blocking microphone access. Check Windows Settings or contact your administrator.",
-            MicrophonePermissionStatus.NotDeclared => "This package does not declare microphone access. Install an Ansible package with microphone capability.",
-            MicrophonePermissionStatus.PromptRequired => "Microphone access is required. Check again to request access.",
-            _ => "Microphone access could not be checked. Review Windows privacy settings, then check again."
+            MicrophonePermissionStatus.DeniedByUser => "Allow microphone access for Ansible and desktop apps in Windows Settings.",
+            MicrophonePermissionStatus.DeniedBySystem => "Turn on microphone access in Windows Settings, or ask your administrator.",
+            MicrophonePermissionStatus.NotDeclared => "Install an Ansible package that declares the microphone capability.",
+            MicrophonePermissionStatus.PromptRequired => "Select Check again to request access.",
+            _ => "Ansible could not check microphone access, so review Windows privacy settings."
         };
         _notices.Set(MicrophonePermissionNoticeKey, new NoticeContent(NoticeSeverity.Warning, "Microphone access required", message,
             [new("Open settings", OpenMicrophoneSettings), new("Check again", CheckMicrophonePermission)]),
@@ -371,7 +372,7 @@ public sealed partial class MainWindow : Window
         AppTitleBar.SetCompact(compact);
         foreach (var button in _pages.Sidebar.Select(page => page.Nav))
         {
-            // A local value outlasts Navigate's style swaps, so the icon stays centred in the 72 px column.
+            // A local value outlasts Navigate's style swaps, so the icon stays centred in the compact rail.
             button.HorizontalContentAlignment = compact ? HorizontalAlignment.Center : HorizontalAlignment.Left;
             if (button.Content is StackPanel content)
             {
@@ -379,7 +380,9 @@ public sealed partial class MainWindow : Window
                 foreach (var label in content.Children.OfType<TextBlock>())
                     label.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
             }
+            // The rail has no labels, so each entry names itself on hover and keyboard focus, beside the rail.
             ToolTipService.SetToolTip(button, compact ? AutomationProperties.GetName(button) : null);
+            ToolTipService.SetPlacement(button, Microsoft.UI.Xaml.Controls.Primitives.PlacementMode.Right);
         }
     }
 

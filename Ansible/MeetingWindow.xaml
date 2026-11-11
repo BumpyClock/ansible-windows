@@ -12,24 +12,29 @@
                        Style="{StaticResource CaptionSecondaryStyle}"/>
         </Grid>
 
-        <Grid Grid.Row="1" Margin="8,0" Padding="16,12,12,16" ColumnSpacing="8"
+        <!-- The title line holds the heading, its rename pencil, and More options on one vertical centre. A long
+             title trims to one line and shows in full in the heading's tooltip. -->
+        <Grid Grid.Row="1" Margin="8,0" Padding="16,12,12,16" ColumnSpacing="8" RowSpacing="4"
               BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" BorderThickness="0,0,0,1">
             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-            <StackPanel Spacing="4">
-                <!-- The heading is the rename control, the same pattern as the speaker labels below. -->
-                <Button x:Name="TitleButton" Style="{StaticResource SubtleButtonStyle}" Padding="8,4"
-                        Click="RenameTitleClicked" ToolTipService.ToolTip="Rename meeting">
-                    <Grid ColumnSpacing="8">
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                        <TextBlock x:Name="MeetingTitle" Text="New meeting" Style="{StaticResource SubtitleTextBlockStyle}"
-                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                                   TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"
-                                   AutomationProperties.HeadingLevel="Level1"/>
-                        <FontIcon Grid.Column="1" Glyph="&#xE70F;" FontSize="16" VerticalAlignment="Center"
-                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                  AutomationProperties.AccessibilityView="Raw"/>
-                    </Grid>
-                </Button>
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+            <!-- The heading is the rename control, the same pattern as the speaker labels below. -->
+            <Button x:Name="TitleButton" Style="{StaticResource SubtleButtonStyle}" Padding="8,4"
+                    HorizontalAlignment="Left" VerticalAlignment="Center"
+                    Click="RenameTitleClicked" ToolTipService.ToolTip="Rename meeting">
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <TextBlock x:Name="MeetingTitle" Text="New meeting" Style="{StaticResource SubtitleTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                               TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                               IsTextTrimmedChanged="MeetingTitleTrimmedChanged"
+                               AutomationProperties.HeadingLevel="Level1"/>
+                    <FontIcon Grid.Column="1" Glyph="&#xE70F;" FontSize="16" VerticalAlignment="Center"
+                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                              AutomationProperties.AccessibilityView="Raw"/>
+                </Grid>
+            </Button>
+            <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Spacing="4">
                 <StackPanel x:Name="DetailsRow" Orientation="Horizontal" Spacing="8" Margin="8,0,0,0" Visibility="Collapsed">
                     <Ellipse x:Name="RecordingDot" Width="8" Height="8" VerticalAlignment="Center" Visibility="Collapsed"
                              Fill="{ThemeResource SystemFillColorCriticalBrush}"/>
@@ -46,7 +51,7 @@
                 <TextBlock x:Name="CleanupStatusText" Visibility="Collapsed" Margin="8,0,0,0" Style="{StaticResource CaptionSecondaryStyle}"
                            TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite"/>
             </StackPanel>
-            <Button Grid.Column="1" Style="{StaticResource IconButtonStyle}" VerticalAlignment="Top" Margin="0,4,0,0"
+            <Button Grid.Column="1" Style="{StaticResource IconButtonStyle}" VerticalAlignment="Center"
                     ToolTipService.ToolTip="More options" AutomationProperties.Name="More options">
                 <FontIcon Glyph="&#xE712;" FontSize="16"/>
                 <Button.Flyout><MenuFlyout Placement="BottomEdgeAlignedRight">
@@ -122,11 +127,8 @@
                     </DataTemplate>
                 </ListView.ItemTemplate>
             </ListView>
-            <StackPanel x:Name="EmptyState" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8" MaxWidth="360" Padding="24,0">
-                <TextBlock x:Name="EmptyTitle" Text="Ready when you are" Style="{StaticResource BodyStrongTextBlockStyle}" TextAlignment="Center"/>
-                <TextBlock x:Name="EmptyDescription" Text="Start the meeting to see what each person says here."
-                           Style="{StaticResource SecondaryTextStyle}" TextAlignment="Center" TextWrapping="Wrap"/>
-            </StackPanel>
+            <local:EmptyState x:Name="TranscriptEmpty" Glyph="&#xE720;" Title="Ready when you are"
+                              Detail="Start the meeting to see what each person says here."/>
         </Grid>
         <!-- Floats over the bottom of the transcript area and never moves content; the footer controls stay reachable. -->
         <local:NoticeHost x:Name="Notices" Grid.Row="2"/>

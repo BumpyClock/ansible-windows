@@ -17,8 +17,8 @@ internal sealed partial class HomeModelTemplateSelector : DataTemplateSelector
 
 public sealed partial class HomeInsightsView : UserControl
 {
-    // A strip card is never narrower than this: the 256 DIP activity clock plus card padding and border. The strip
-    // drops a column and wraps to a new row first.
+    // A strip card is never narrower than this: the 260 DIP activity clock plus card padding and border. The strip
+    // after history drops a column and wraps to a new row first.
     private const double StripCardMinWidth = 300;
 
     private HomeInsightsViewModel? _model;
@@ -28,7 +28,7 @@ public sealed partial class HomeInsightsView : UserControl
         InitializeComponent();
     }
 
-    /// <summary>False stacks the cards as a side rail. True flows them into columns as a strip above history.</summary>
+    /// <summary>False stacks the cards as a side rail. True flows them into columns as a strip after history.</summary>
     internal bool Strip
     {
         get => RailCards.MinColumnWidth < double.PositiveInfinity;
@@ -70,19 +70,14 @@ public sealed partial class HomeInsightsView : UserControl
         ActivityPeriodSelector.IsEnabled = _model.HourlyActivity is not null;
         if (_model.HourlyActivity is null)
         {
-            ShowActivityMessage(_model.AvailabilityMessage ?? "Activity statistics are not available yet.");
+            ShowActivityMessage("No activity to show", _model.AvailabilityMessage ?? "Activity statistics are not available yet.");
             return;
         }
 
         var activity = HomeInsightsProjection.CreateActivity(_model.HourlyActivity, _model.Today,
-            ActivityPeriodSelector.SelectedItem != WeekPeriodItem);
+            month: ActivityPeriodSelector.SelectedItem != WeekPeriodItem);
         ActivityPeriodText.Text = activity.PeriodText;
-        if (activity.IsEmpty)
-        {
-            ShowActivityMessage("No dictations in this period.");
-            return;
-        }
-        ActivityEmptyPanel.Visibility = Visibility.Collapsed;
+        ActivityEmptyState.Visibility = Visibility.Collapsed;
         ActivityChartPanel.Visibility = Visibility.Visible;
         RhythmCard.VerticalAlignment = VerticalAlignment.Top;
         ActivityTotalText.Text = activity.TotalValueText;
@@ -90,7 +85,10 @@ public sealed partial class HomeInsightsView : UserControl
         AutomationProperties.SetName(ActivityTotalText, activity.TotalText);
         AutomationProperties.SetHelpText(ActivityTotalText,
             $"{activity.PeriodText}. {string.Join(". ", activity.Hours.Select(hour => hour.Description))}");
-        ActivityScaleText.Text = $"Busiest hour · {activity.ScaleText}";
+        // An empty period keeps the ring and says when the last dictation was, when usage knows it.
+        ActivityScaleText.Text = activity.IsEmpty
+            ? _model.LastDictationText ?? "No dictations in this period"
+            : $"Busiest hour · {activity.ScaleText}";
         ActivityStartText.Text = activity.StartText;
         ActivityEndText.Text = activity.EndText;
         AutomationProperties.SetName(ActivityClock,
@@ -108,8 +106,11 @@ public sealed partial class HomeInsightsView : UserControl
         foreach (var hour in activity.Hours)
         {
             var angle = hour.Hour * Math.Tau / 24 - Math.PI / 2;
-            // Every tick is short: the hour labels sit just outside the ring at their own size, not on long ticks.
-            ticks.Children.Add(new LineGeometry { StartPoint = ClockPoint(angle, 129), EndPoint = ClockPoint(angle, 133) });
+            ticks.Children.Add(new LineGeometry
+            {
+                StartPoint = ClockPoint(angle, 129),
+                EndPoint = ClockPoint(angle, hour.Hour % 6 == 0 ? 138 : 133)
+            });
             var end = angle + Math.Tau / 24;
             var sector = new PathFigure { StartPoint = ClockPoint(angle, 70), IsClosed = true, IsFilled = true };
             sector.Segments.Add(new LineSegment { Point = ClockPoint(angle, 127) });
@@ -129,12 +130,12 @@ public sealed partial class HomeInsightsView : UserControl
         ClockTicks.Data = ticks;
     }
 
-    // One calm message replaces the chart, its scale, dates, and footnote. In a strip the card then fills its row
-    // beside the usage card and centres the message, instead of leaving a short card beside a tall one.
-    private void ShowActivityMessage(string message)
+    // Shown only when usage statistics are unavailable. A period with no dictations still draws the graph.
+    private void ShowActivityMessage(string title, string? detail)
     {
-        HomeActivityAvailabilityText.Text = message;
-        ActivityEmptyPanel.Visibility = Visibility.Visible;
+        ActivityEmptyState.Title = title;
+        ActivityEmptyState.Detail = detail ?? "";
+        ActivityEmptyState.Visibility = Visibility.Visible;
         ActivityChartPanel.Visibility = Visibility.Collapsed;
         RhythmCard.VerticalAlignment = VerticalAlignment.Stretch;
     }

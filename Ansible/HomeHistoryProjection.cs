@@ -15,7 +15,7 @@ internal sealed record HomeHistoryTag(string Label, string Glyph, HomeHistoryTag
     public bool NeedsCopy => Tone == HomeHistoryTagTone.NotInserted;
 }
 
-internal sealed record HomeHistoryEntry(HomeHistoryItem Item, string? ModelName)
+internal sealed record HomeHistoryEntry(HomeHistoryItem Item, HomeModelName? Model)
 {
     // Only real insertion outcomes get a tag. In-app dictations, deferred, and pending deliveries have none.
     public HomeHistoryTag? Tag => Item.Delivery switch
@@ -41,7 +41,7 @@ internal sealed record HomeHistoryEntry(HomeHistoryItem Item, string? ModelName)
                 wordCount = $"{words:N0} {unit}";
             }
             var metadata = $"{wordCount} · {Item.Elapsed:mm\\:ss}";
-            if (ModelName is { Length: > 0 }) metadata += $" · {ModelName}";
+            if (Model?.Name is { Length: > 0 } name) metadata += $" · {name}";
             return metadata;
         }
     }
@@ -67,19 +67,26 @@ internal static class HomeHistoryProjection
 {
     /// <summary>
     /// Null while rows match. Usage counts survive removed and unsaved history rows, so "No dictations yet" needs
-    /// usage that is known and holds no dictation; unknown usage gets the wording that is true either way.
+    /// usage that is known and holds no dictation. When usage counts dictations that History does not hold, the
+    /// empty state says why beside those lifetime stats: they were removed or never saved. A storage failure may
+    /// hide rows that are still on disk, so it gets the wording that is true either way, as does unknown usage.
     /// </summary>
     internal static HomeHistoryEmptyState? EmptyState(HomeHistoryViewModel model, string query, int? dictations) =>
         model.HasMatches ? null
         : model.HasHistory ? new(HomeHistoryEmptyKind.NoMatches, "No matches", $"No saved transcript contains \"{query}\".")
+        : model.StorageError is not null ? new(HomeHistoryEmptyKind.NothingSaved, "No saved transcripts",
+            "History storage has a problem, so saved transcripts may be missing.")
         : dictations == 0 ? new(HomeHistoryEmptyKind.FirstRun, "No dictations yet", "Your transcripts appear here after you dictate.")
+        : dictations is { } count ? new(HomeHistoryEmptyKind.NothingSaved, "No saved transcripts", count == 1
+            ? "Your earlier dictation was removed or not saved, so History does not list it."
+            : $"Your {count:N0} earlier dictations were removed or not saved, so History does not list them.")
         : new(HomeHistoryEmptyKind.NothingSaved, "No saved transcripts", "New dictations appear here.");
 
     internal static HomeHistoryViewModel Create(
         IReadOnlyList<HomeHistoryItem> all,
         string query,
         bool oversizedCurrentResult,
-        Func<string, string?> modelName,
+        Func<string, HomeModelName?> modelName,
         DateTime today,
         string? storageError = null)
     {

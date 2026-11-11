@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- The one empty state: a glyph on a round backplate, a title, an optional line of help, and an optional slot
+     under it (a shortcut hint, a button). Every page and card that has nothing to show uses this, at this scale. -->
+<UserControl x:Class="Ansible.EmptyState"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             HorizontalAlignment="Center" VerticalAlignment="Center" IsTabStop="False">
+    <StackPanel Padding="24" Spacing="4" MaxWidth="440" HorizontalAlignment="Center">
+        <Border Width="48" Height="48" CornerRadius="24" Margin="0,0,0,12" HorizontalAlignment="Center"
+                Background="{ThemeResource SubtleFillColorSecondaryBrush}">
+            <FontIcon x:Name="Icon" FontSize="20" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                      AutomationProperties.AccessibilityView="Raw" />
+        </Border>
+        <TextBlock x:Name="TitleText" Style="{StaticResource SubtitleTextBlockStyle}" TextWrapping="WrapWholeWords"
+                   HorizontalAlignment="Center" TextAlignment="Center" AutomationProperties.HeadingLevel="Level3" />
+        <TextBlock x:Name="DetailText" Style="{StaticResource SecondaryTextStyle}" TextWrapping="WrapWholeWords"
+                   HorizontalAlignment="Center" TextAlignment="Center" Visibility="Collapsed" />
+        <ContentPresenter x:Name="FooterPresenter" Margin="0,12,0,0" HorizontalAlignment="Center" Visibility="Collapsed" />
+    </StackPanel>
+</UserControl>

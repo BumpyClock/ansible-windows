@@ -7,9 +7,9 @@
     <!-- The title bar spans the window so the brand above the sidebar is a drag area. Caption buttons share its
          48 px height. The brand follows Windows title bar guidance: a 16 DIP icon and the app name in Caption type,
          on the navigation icons' left edge. Once the page's whole header row scrolls away the bar shows the page name
-         and a compact copy of the page's primary action. The TitleBar control keeps visible controls in its content
-         clickable and the rest draggable. BorderBrush only resolves the theme's secondary text colour for the
-         inactive caption buttons. -->
+         and, 12 DIP after it, a compact copy of the page's primary action; the rest of the bar stays empty. The
+         TitleBar control keeps visible controls in its content clickable and the rest draggable. BorderBrush only
+         resolves the theme's secondary text colour for the inactive caption buttons. -->
     <TitleBar x:Name="Bar" Height="{StaticResource TitleBarHeight}" Background="Transparent"
               Foreground="{ThemeResource TextFillColorPrimaryBrush}">
         <TitleBar.Resources>
@@ -20,13 +20,14 @@
         <Grid x:Name="TitleBarContent" Height="{StaticResource TitleBarHeight}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition x:Name="BrandColumn" Width="{StaticResource SidebarColumnWidth}" />
-                <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <StackPanel x:Name="Brand" Orientation="Horizontal" Spacing="{StaticResource NavLabelGap}" Margin="{StaticResource SidebarBrandMargin}"
-                        VerticalAlignment="Center">
-                <local:AppMark Width="16" Height="16" VerticalAlignment="Center" TitleBar.IsDragRegion="True" />
-                <TextBlock x:Name="AppWordmark" Text="Ansible" Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" />
+                        HorizontalAlignment="Left" VerticalAlignment="Center">
+                <local:AppMark x:Name="BrandMark" Width="16" Height="16" VerticalAlignment="Center" TitleBar.IsDragRegion="True" />
+                <TextBlock Text="Ansible" Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" />
             </StackPanel>
             <TextBlock x:Name="PageTitle" Grid.Column="1" Margin="{StaticResource TitleBarPageTitleMargin}"
                        Style="{StaticResource BodyStrongTextBlockStyle}" VerticalAlignment="Center"

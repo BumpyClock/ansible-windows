@@ -28,7 +28,7 @@ public sealed partial class DictationPage : Page
     private SessionSnapshot _state;
     private UiSessionObserver? _observer;
     private bool _picking;
-    private readonly Dictionary<string, string> _homeCatalogNames = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, HomeModelName> _homeCatalogNames = new(StringComparer.OrdinalIgnoreCase);
     private UsageDocument? _homeUsage;
     private string? _homeUsageError;
     private int? _homeDictations;
@@ -160,7 +160,7 @@ public sealed partial class DictationPage : Page
             var entries = await NativeModelCatalog.LoadAsync(_paths.ModelCatalog).ConfigureAwait(false);
             var names = entries
                 .Where(entry => !string.IsNullOrWhiteSpace(entry.DisplayName))
-                .ToDictionary(entry => entry.Id, entry => entry.DisplayName!, StringComparer.OrdinalIgnoreCase);
+                .ToDictionary(entry => entry.Id, HomeModelName.From, StringComparer.OrdinalIgnoreCase);
             dispatcher.TryEnqueue(() =>
             {
                 if (_disposed) { return; }
@@ -177,10 +177,12 @@ public sealed partial class DictationPage : Page
         }
     }
 
-    private string? HomeModelDisplayName(string modelId)
+    // The catalog entry gives the plain name Speech models shows. An installed snapshot has no precision to drop,
+    // so before the catalog loads, or without it, the snapshot's full name is the only name there is.
+    private HomeModelName? HomeModelNameFor(string modelId)
     {
         if (_homeCatalogNames.TryGetValue(modelId, out var catalogName)) { return catalogName; }
-        return _state.Models.FirstOrDefault(model => model.Id == modelId)?.DisplayName;
+        return _state.Models.FirstOrDefault(model => model.Id == modelId)?.DisplayName is { } name ? new HomeModelName(name, name) : null;
     }
 
     private void RenderHomeData()
@@ -211,7 +213,7 @@ public sealed partial class DictationPage : Page
             _homeUsage = _state.Usage;
             _homeUsageError = _state.UsageError;
             var insights = HomeInsightsProjection.Create(_state.Usage, _state.UsageError,
-                HomeModelDisplayName, DateOnly.FromDateTime(DateTime.Today), TimeZoneInfo.Local);
+                HomeModelNameFor, DateOnly.FromDateTime(DateTime.Today), TimeZoneInfo.Local);
             // After a failed usage write a zero is not proof of no dictations, so History treats the count as unknown.
             _homeDictations = insights.UsageWarning is null ? insights.Dictations : null;
             HomeInsightsColumn.Render(insights);
@@ -223,7 +225,7 @@ public sealed partial class DictationPage : Page
     private void RenderHomeHistory(bool animate)
     {
         var model = HomeHistoryProjection.Create(_history.Snapshot(), HistoryView.Query,
-            _history.OversizedCurrentResult, HomeModelDisplayName, DateTime.Today, _history.StorageError);
+            _history.OversizedCurrentResult, HomeModelNameFor, DateTime.Today, _history.StorageError);
         HistoryView.Render(model, animate);
         PostStorageNotice(HistoryNoticeKey, "History needs attention", model.StorageError);
     }
@@ -275,18 +277,21 @@ public sealed partial class DictationPage : Page
         UpdateShortcutLayout();
     }
 
-    // Too narrow for one line, the buttons wrap under the hint and stay left-aligned so the sentence reads on.
+    // Too narrow for one line, the buttons wrap under the hint and stay left-aligned so the sentence reads on. The
+    // row gap exists only while they wrap: an empty second row must not add height under the button, or the header
+    // centres the button above the title's line.
     private void UpdateShortcutLayout()
     {
         var stackedHelper = HomeViewport.ContentWidth < (double)Application.Current.Resources["ShortcutStackThreshold"];
+        ShortcutControlGrid.RowSpacing = stackedHelper ? 8 : 0;
         Grid.SetRow(ShortcutButtons, stackedHelper ? 1 : 0);
         Grid.SetColumn(ShortcutButtons, stackedHelper ? 0 : 1);
         Grid.SetColumnSpan(ShortcutButtons, stackedHelper ? 2 : 1);
     }
 
-    // Wide: history beside a fixed insights rail that sticks beside the history header. Narrow: the insights cards
-    // become a strip above history that scrolls away. History takes the star row so its empty state can use the
-    // rest of the viewport.
+    // Wide: history beside a fixed insights rail that sticks beside the history header. Narrow: history comes first,
+    // so its header, search, and empty state are in the first viewport, and the insights cards flow into a strip
+    // after it. History takes the star row so its empty state can use the rest of the viewport.
     private void HomeColumnsSizeChanged(object sender, SizeChangedEventArgs args)
     {
         var stacked = args.NewSize.Width < (double)Application.Current.Resources["HomeRailStackThreshold"];
@@ -303,11 +308,10 @@ public sealed partial class DictationPage : Page
         HomeColumns.RowDefinitions.Clear();
         HomeColumns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         if (!stacked) HomeColumns.ColumnDefinitions.Add(new ColumnDefinition { Width = (GridLength)Application.Current.Resources["HomeRailColumnWidth"] });
-        if (stacked) HomeColumns.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         HomeColumns.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        if (stacked) HomeColumns.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         Grid.SetColumn(HomeInsightsColumn, stacked ? 0 : 1);
-        Grid.SetRow(HomeInsightsColumn, 0);
-        Grid.SetRow(HistoryView, stacked ? 1 : 0);
+        Grid.SetRow(HomeInsightsColumn, stacked ? 1 : 0);
     }
 
     private void HomeViewportSizeChanged(object sender, SizeChangedEventArgs args) => UpdateShortcutLayout();

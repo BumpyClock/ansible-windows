@@ -9,13 +9,14 @@
         <StaticResource x:Key="ProgressBarTrackCornerRadius" ResourceKey="ControlCornerRadius" />
         <StaticResource x:Key="ProgressBarCornerRadius" ResourceKey="ControlCornerRadius" />
     </Page.Resources>
+    <!-- Home is two columns, history beside the insights rail, so it keeps the full page width. -->
     <local:PageCanvas x:Name="HomeViewport"
-                      Title="Good afternoon"
+                      Title="Good afternoon" Wide="True"
                       SizeChanged="HomeViewportSizeChanged">
         <local:PageCanvas.HeaderActions>
             <StackPanel x:Name="DictateControl" Spacing="8" VerticalAlignment="Center"
                         SizeChanged="DictateControlSizeChanged">
-                    <Grid x:Name="ShortcutControlGrid" ColumnSpacing="12" RowSpacing="8" VerticalAlignment="Center">
+                    <Grid x:Name="ShortcutControlGrid" ColumnSpacing="12" VerticalAlignment="Center">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />

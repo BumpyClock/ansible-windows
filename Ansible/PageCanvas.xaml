@@ -6,22 +6,32 @@
                       HorizontalContentAlignment="Stretch" VerticalScrollBarVisibility="Auto"
                       AutomationProperties.AutomationId="PageViewport" SizeChanged="ViewportSizeChanged"
                       ViewChanged="ViewportViewChanged">
-            <Grid x:Name="ContentHost" MaxWidth="{StaticResource PageContentMaxWidth}"
-                  Padding="{StaticResource PagePadding}">
+            <!-- One column holds the header and the content. Its MaxWidth is the page's width cap (Wide), so both
+                 share a right edge and start at the page padding; the space past the cap stays empty. -->
+            <Grid x:Name="ContentHost" Padding="{StaticResource PagePadding}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition x:Name="ContentColumn" Width="*" />
+                </Grid.ColumnDefinitions>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
+                <!-- The title and the actions share the first row. The title's line box plus its margin is 40 DIP, the
+                     tallest header button, so the title sits at the same height on every page and the actions centre
+                     on it; taller actions grow downward and leave the title in place. The subtitle has its own row
+                     under both. In the stacked narrow layout the actions move to the last row. -->
                 <Grid x:Name="HeaderLayout" Margin="{StaticResource PageSectionBottomMargin}"
                       SizeChanged="HeaderSizeChanged">
-                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="0" /></Grid.RowDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                    <StackPanel x:Name="HeadingPanel" Spacing="8" VerticalAlignment="Center">
-                        <TextBlock x:Name="TitleText" Text="{x:Bind Title, Mode=OneWay}" Margin="0"
-                                   Style="{StaticResource PageTitleStyle}" AutomationProperties.HeadingLevel="Level1" />
-                        <TextBlock x:Name="SubtitleText" Text="{x:Bind Subtitle, Mode=OneWay}"
-                                   Style="{StaticResource PageSubtitleStyle}" />
-                    </StackPanel>
+                    <TextBlock x:Name="TitleText" Text="{x:Bind Title, Mode=OneWay}" Margin="0,2" VerticalAlignment="Top"
+                               Style="{StaticResource PageTitleStyle}" AutomationProperties.HeadingLevel="Level1" />
+                    <TextBlock x:Name="SubtitleText" Grid.Row="1" Grid.ColumnSpan="2" Margin="0,4,0,0"
+                               Text="{x:Bind Subtitle, Mode=OneWay}" Style="{StaticResource PageSubtitleStyle}" />
                     <StackPanel x:Name="HeaderActionsPanel" Grid.Column="1" Orientation="Horizontal"
                                 Spacing="8" VerticalAlignment="Center" />
                 </Grid>

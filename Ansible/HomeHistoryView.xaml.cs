@@ -13,6 +13,8 @@ public sealed partial class HomeHistoryView : UserControl
     private static readonly TimeSpan CopiedDuration = TimeSpan.FromSeconds(2);
     private const string CopyGlyph = "\uE8C8";
     private const string CopiedGlyph = "\uE73E";
+    private const string MicrophoneGlyph = "\uE720";
+    private const string SearchGlyph = "\uE721";
     private const double ActionsRestOpacity = 0.65;
     private const double NarrowRowWidth = 420;
 
@@ -152,12 +154,13 @@ public sealed partial class HomeHistoryView : UserControl
     {
         if (_model is null) return;
         var empty = HomeHistoryProjection.EmptyState(_model, Query, _dictations);
-        var noMatches = empty?.Kind == HomeHistoryEmptyKind.NoMatches;
-        NoMatchesState.Visibility = noMatches ? Visibility.Visible : Visibility.Collapsed;
-        EmptyState.Visibility = empty is not null && !noMatches ? Visibility.Visible : Visibility.Collapsed;
+        EmptyMessage.Visibility = empty is null ? Visibility.Collapsed : Visibility.Visible;
         if (empty is null) return;
-        (noMatches ? NoMatchesTitle : EmptyTitle).Text = empty.Title;
-        (noMatches ? NoMatchesDetail : EmptyDetail).Text = empty.Detail;
+        var noMatches = empty.Kind == HomeHistoryEmptyKind.NoMatches;
+        EmptyMessage.Glyph = noMatches ? SearchGlyph : MicrophoneGlyph;
+        EmptyMessage.Title = empty.Title;
+        EmptyMessage.Detail = empty.Detail;
+        EmptyMessage.Footer = noMatches ? null : EmptyShortcutHint;
     }
 
     /// <summary>Shows the copied state on a row after the page put its transcript on the clipboard.</summary>
@@ -474,6 +477,9 @@ public sealed partial class HomeHistoryView : UserControl
                 AutomationProperties.SetName(More, $"More actions for transcript from {entry.TimeText}");
             }
             if (Meta.Text != entry.MetadataText) { Meta.Text = entry.MetadataText; }
+            // The row shows the plain model name; the tooltip keeps the full catalog name.
+            var modelTip = entry.Model?.FullName;
+            if (!Equals(ToolTipService.GetToolTip(Meta), modelTip)) { ToolTipService.SetToolTip(Meta, modelTip); }
             if (deliveryChanged) { view.UpdateTag(this, entry.Tag); }
             _rendered = true;
         }
