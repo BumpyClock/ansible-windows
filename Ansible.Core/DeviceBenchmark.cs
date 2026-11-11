@@ -19,6 +19,7 @@ internal sealed record DeviceBenchmarkResult(NativeBackend Backend, double? Mill
 internal sealed record DeviceBenchmarkSelection(string Key, DeviceBenchmarkResult Cpu, DeviceBenchmarkResult Gpu,
     NativeBackend Backend, DateTimeOffset MeasuredAt)
 {
+    public double? PaceLimitMilliseconds { get; init; }
     [JsonIgnore] public DeviceChoiceReason Reason { get; init; }
 
     public string Summary => $"Auto selected {Backend}. CPU: {Describe(Cpu)}; Vulkan: {Describe(Gpu)}. " +
@@ -77,7 +78,7 @@ internal static class DeviceBenchmark
     {
         if (!prior.Cpu.Working) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(error);
         return Select(prior.Key, prior.Cpu,
-            new(NativeBackend.Vulkan, null, $"real recognition failed after qualification: {error.Message}"))
+            new(NativeBackend.Vulkan, null, $"real recognition failed after qualification: {error.Message}"), prior.PaceLimitMilliseconds)
             with { MeasuredAt = prior.MeasuredAt };
     }
 
@@ -102,6 +103,8 @@ internal static class DeviceBenchmark
     {
         if (cpu.Backend != NativeBackend.Cpu || gpu.Backend != NativeBackend.Vulkan)
             throw new InvalidDataException("Benchmark device identity does not match the requested backend.");
+        if (paceLimitMilliseconds is { } limit && (!double.IsFinite(limit) || limit <= 0))
+            throw new InvalidDataException("The meeting pace limit must be a positive finite duration.");
         if (cpu.Fatal || gpu.Fatal)
             throw new InvalidDataException($"Device qualification stopped: CPU: {cpu.Error}; Vulkan: {gpu.Error}");
         if (!cpu.Working && !gpu.Working)
@@ -110,7 +113,8 @@ internal static class DeviceBenchmark
             !cpu.Working ? (NativeBackend.Vulkan, DeviceChoiceReason.CpuUnavailable)
             : !gpu.Working ? (NativeBackend.Cpu, DeviceChoiceReason.GpuUnavailable)
             : Compare(cpu.Milliseconds!.Value, gpu.Milliseconds!.Value, paceLimitMilliseconds);
-        return new(key, cpu, gpu, backend, DateTimeOffset.UtcNow) { Reason = reason };
+        return new(key, cpu, gpu, backend, DateTimeOffset.UtcNow)
+            { Reason = reason, PaceLimitMilliseconds = paceLimitMilliseconds };
     }
 
     private static (NativeBackend, DeviceChoiceReason) Compare(double cpu, double gpu, double? paceLimitMilliseconds)
@@ -173,7 +177,7 @@ internal static class DeviceBenchmark
             foreach (var entry in entries)
             {
                 if (entry is null || string.IsNullOrWhiteSpace(entry.Key) || entry.Cpu is null || entry.Gpu is null) return [];
-                var derived = Select(entry.Key, entry.Cpu, entry.Gpu);
+                var derived = Select(entry.Key, entry.Cpu, entry.Gpu, entry.PaceLimitMilliseconds);
                 if (derived.Backend != entry.Backend) return [];
                 selections.Add(entry with { Reason = derived.Reason });
             }

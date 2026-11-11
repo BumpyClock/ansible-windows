@@ -262,6 +262,26 @@ public sealed class DeviceBenchmarkTests
     }
 
     [Fact]
+    public void MeetingPaceSelectionSurvivesCacheRoundTrip()
+    {
+        var directory = Path.Combine(Directory.GetCurrentDirectory(), ".benchmark-tests-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var path = Path.Combine(directory, "cache.json");
+            var selection = DeviceBenchmark.Select("meeting", new(NativeBackend.Cpu, 4900, null),
+                new(NativeBackend.Vulkan, 5100, null), 5000);
+            DeviceBenchmark.WriteCache(path, [selection]);
+            var restored = Assert.Single(DeviceBenchmark.ReadCache(path));
+            Assert.Equal(NativeBackend.Cpu, restored.Backend);
+            Assert.Equal(DeviceChoiceReason.KeepsMeetingPace, restored.Reason);
+            Assert.Equal(5000, restored.PaceLimitMilliseconds);
+            Assert.Equal(selection, restored);
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
+    [Fact]
     public void CacheIdentityChangesWithModeHistoryModelNativeSampleAndDeviceSettings()
     {
         var directory = Path.Combine(Directory.GetCurrentDirectory(), ".benchmark-tests-" + Guid.NewGuid().ToString("N"));

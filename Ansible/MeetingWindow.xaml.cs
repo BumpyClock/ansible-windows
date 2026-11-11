@@ -15,6 +15,7 @@ namespace Ansible;
 
 public sealed partial class MeetingWindow : Window
 {
+    internal bool DeleteOnClose { get; private set; }
     private readonly MeetingSession _session;
     private readonly MeetingStore _store;
     private readonly string? _diagnosticsDirectory;
@@ -525,9 +526,7 @@ public sealed partial class MeetingWindow : Window
             if (await dialog.ShowAsync() != ContentDialogResult.Primary || _closing || _closed || _shutdownPending) return;
             await RunActionAsync(async () =>
             {
-                await _session.EndAsync();
-                await _store.DeleteAsync(_document.Id);
-                await CloseAfterSavingAsync();
+                await CloseAfterSavingAsync(delete: true);
             });
         }
         catch (Exception error) { ShowError(error.Message); }
@@ -600,13 +599,15 @@ public sealed partial class MeetingWindow : Window
         finally { _closing = false; }
     }
 
-    private async Task CloseAfterSavingAsync()
+    private async Task CloseAfterSavingAsync(bool delete = false)
     {
         await StopFollowingTeamsAsync();
         await _titleSaveTask;
         await _session.DisposeAsync();
+        DeleteOnClose = delete;
         _allowClose = true;
-        Close();
+        try { Close(); }
+        catch { DeleteOnClose = false; throw; }
     }
 
     private bool CanCleanup => !_shutdownPending && _document is { Status: MeetingStatus.Completed, Turns.Count: > 0 } document &&

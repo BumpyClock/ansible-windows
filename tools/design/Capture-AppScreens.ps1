@@ -7,6 +7,7 @@ The matrix is 5 pages x light/dark x wide/narrow, each long page at one stop per
 lesson and a saved meeting transcript window. Captures land in .runtime\ux\<Round>. The matrix must stay
 the same between review rounds so scores stay comparable. A page that fails to load fails the run, so this
 is also the runtime check for unresolved XAML resources.
+Use a fresh Round name for every invocation, including partial captures. Existing PNGs are never overwritten.
 
 Requires the winapp CLI and Windows Developer Mode. Replaces the running development instance.
 #>
@@ -23,6 +24,11 @@ $repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $buildOutput = Join-Path $repo 'Ansible\bin\x64\Debug\net10.0-windows10.0.26100.0\win-x64'
 $layout = Join-Path $repo '.runtime\ux\layout'
 $out = Join-Path $repo ".runtime\ux\$Round"
+if (Test-Path -LiteralPath $out) {
+    if (Get-ChildItem -LiteralPath $out -File -Filter *.png) {
+        throw "Round '$Round' already contains PNGs. Choose a fresh round name so captures cannot mix."
+    }
+}
 New-Item -ItemType Directory -Force $out | Out-Null
 
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Windows.Forms, System.Drawing
@@ -50,7 +56,7 @@ public static class DesignCapture {
 
 function Stop-DevelopmentApp {
     Get-Process Ansible -ErrorAction SilentlyContinue |
-        Where-Object { $_.Path -and $_.Path.StartsWith($repo, [StringComparison]::OrdinalIgnoreCase) } |
+        Where-Object { $_.Path -and $_.Path.StartsWith("$repo\", [StringComparison]::OrdinalIgnoreCase) } |
         Stop-Process -Force -Confirm:$false
     Start-Sleep -Milliseconds 1500
 }
@@ -148,7 +154,7 @@ function Get-ScrollStops {
     $step = 90.0 * $view / (1 - $view)
     $stops = @(0)
     for ($percent = $step; $percent -lt 100; $percent += $step) { $stops += $percent }
-    $stops + 100 | Select-Object -First 8
+    @($stops | Select-Object -First 7) + 100
 }
 
 function Set-PageScroll {
@@ -193,6 +199,8 @@ foreach ($mode in $Theme) {
     $window = $app.MainWindowHandle
     $script:mainWindow = $window
     Wait-SessionReady $window
+    Invoke-Ui @('invoke', 'SkipButton', '-w', "$window", '-q') -Optional | Out-Null
+    Start-Sleep -Milliseconds 800
 
     foreach ($size in $sizes.GetEnumerator()) {
         Set-WindowSize $window $size.Value[0] $size.Value[1]

@@ -68,7 +68,7 @@ arrived. The app never retries that uncertain input automatically. In-app
 dictations have no tag. History reloads after restart. It keeps at most 100
 successful dictations within a 500,000-character text budget. Large entries can
 make fewer than 100 fit. An entry larger than that budget stays in the
-current-result area only. Search covers every retained entry. While you scroll Home with saved rows, the History header and search box stay at the top, and on wide windows the insights cards stay beside the list. WAV results stay
+current-result area only. Search covers every retained entry. While you scroll Home with saved rows, the History header and search box stay at the top, even when a search has no matches. On wide windows the insights cards stay beside the list. WAV results stay
 outside dictation history and remain in the separate transcript area. Audio is
 never saved. Prior session-only transcripts from earlier app versions cannot be
 recovered.
@@ -809,7 +809,8 @@ not complete normally, such as **Failed**, or for a meeting still being
 captured. Select a row to reopen its saved
 text. The row's **More options (...)** menu holds **Open** and **Delete...**.
 **Delete...** asks for one confirmation and deletes the meeting permanently.
-A meeting still being captured cannot be deleted from the list. A finished
+A meeting still being captured cannot be deleted from the list. Close an open
+meeting window before deleting its transcript from the list. A finished
 meeting with no transcribed speech shows its title in secondary text, so
 meetings you can read stand out. When two or more finished meetings have no
 transcribed speech, a **More options (...)** button appears after **Start

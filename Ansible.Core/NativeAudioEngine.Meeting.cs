@@ -165,9 +165,15 @@ public sealed partial class NativeAudioEngine
     {
         long frames = 0; double seconds = 0;
         NativeOperation.Step(token, () => NativeAudioApi.Check(NativeAudioApi.StreamPolicy(session, 0, 0, out frames, out seconds), "read the streaming cadence"));
+        return StreamingPacketFrames(frames, seconds);
+    }
+
+    internal static int StreamingPacketFrames(long frames, double seconds)
+    {
+        if (!double.IsFinite(seconds) || seconds < 0 || frames < 0 || seconds > 30 || frames > 16000 * 30)
+            throw new InvalidDataException("The model requests an unsupported streaming chunk size.");
         var preferred = seconds > 0 ? checked((int)Math.Round(seconds * 16000)) : checked((int)frames);
-        if (preferred <= 0 || preferred > 16000 * 30) throw new InvalidDataException("The model requests an unsupported streaming chunk size.");
-        return preferred;
+        return preferred > 0 ? preferred : 1600;
     }
 
     private static TranscriptUpdate TagPlayback(TranscriptUpdate update) => update.SpeakerTurns is null ? update : update with
@@ -179,7 +185,7 @@ public sealed partial class NativeAudioEngine
     private static TranscriptUpdate ToPlaybackUpdate(RecognitionResult result, MeetingTranscript transcript, bool final) =>
         ToPlaybackUpdate(new(result.DisplayText, final, result.SpeechText) { ProcessedSamples = result.ProcessedSamples }, transcript);
 
-    private static TranscriptUpdate ToPlaybackUpdate(TranscriptUpdate update, MeetingTranscript transcript)
+    internal static TranscriptUpdate ToPlaybackUpdate(TranscriptUpdate update, MeetingTranscript transcript)
     {
         var turns = string.IsNullOrWhiteSpace(update.SpeechText) ? [] : transcript.Update(update.Text,
             (update.ProcessedSamples ?? 0) / 16000d, update.IsFinal).Select(turn => turn with
@@ -188,9 +194,13 @@ public sealed partial class NativeAudioEngine
         return update with { SpeakerTurns = turns };
     }
 
-    private static TranscriptUpdate ToMicrophoneUpdate(TranscriptUpdate update, CumulativeMeetingChunks fallback)
+    internal static TranscriptUpdate ToMicrophoneUpdate(TranscriptUpdate update, CumulativeMeetingChunks fallback)
     {
-        if (string.IsNullOrWhiteSpace(update.SpeechText)) return update with { SpeakerTurns = [] };
+        if (string.IsNullOrWhiteSpace(update.SpeechText))
+        {
+            ValidateFinalSpeech(update, []);
+            return update with { SpeakerTurns = [] };
+        }
         var turns = update.WordTimings is { Words.Count: > 0 }
             ? BuildMicrophoneTurns(update.SpeechText, update.WordTimings.Words, update.IsFinal)
             : fallback.Update(update.SpeechText, update.ProcessedSamples ?? 0, update.IsFinal);
@@ -231,7 +241,9 @@ public sealed partial class NativeAudioEngine
 
     private static void ValidateFinalSpeech(TranscriptUpdate update, IReadOnlyList<MeetingTurn> turns)
     {
-        if (!update.IsFinal || string.IsNullOrWhiteSpace(update.SpeechText)) return;
+        if (!update.IsFinal) return;
+        if (update.SpeechText is null)
+            throw new InvalidDataException("The ASR model returned no authoritative meeting speech.");
         if (!string.Equals(NormalizeSpeech(MergeSpeech(turns)), NormalizeSpeech(update.SpeechText), StringComparison.Ordinal))
             throw new InvalidDataException("Meeting source turns disagree with authoritative recognized speech.");
     }

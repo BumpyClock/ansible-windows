@@ -111,7 +111,10 @@ public sealed partial class CustomWordsPage : Page
         {
             EmptyWords.Glyph = SearchGlyph;
             EmptyWords.Title = "No matching words";
-            EmptyWords.Detail = $"Press Enter to add \"{query}\".";
+            var (updated, error) = CustomVocabulary.TryApply(_state.Settings.CustomDictionary,
+                new CustomVocabulary.Edit.Add(query, SingleEntry: true), _state.SelectedModel);
+            EmptyWords.Detail = updated is not null && updated != _state.Settings.CustomDictionary
+                ? $"Press Enter to add \"{query}\"." : error ?? "That word is already in your dictionary.";
         }
     }
 

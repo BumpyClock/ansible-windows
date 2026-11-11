@@ -6,6 +6,51 @@ namespace Ansible.Tests;
 
 public sealed class NativeMeetingSourceTests
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void UnknownFinalSourceSpeechFailsInsteadOfPublishingEmptySpeech(bool playback)
+    {
+        var result = NativeTranscript.Normalize("vibevoice_asr_streaming", "Unparseable annotated result", [], []);
+        Assert.Null(result.SpeechText);
+        var update = new TranscriptUpdate(result.DisplayText, true, result.SpeechText);
+        Assert.Throws<InvalidDataException>(() => playback
+            ? NativeAudioEngine.ToPlaybackUpdate(update, new MeetingTranscript())
+            : NativeAudioEngine.ToMicrophoneUpdate(update, new CumulativeMeetingChunks()));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void KnownEmptyFinalSourceSpeechRemainsEmpty(bool playback)
+    {
+        var update = new TranscriptUpdate("", true, "");
+        var converted = playback
+            ? NativeAudioEngine.ToPlaybackUpdate(update, new MeetingTranscript())
+            : NativeAudioEngine.ToMicrophoneUpdate(update, new CumulativeMeetingChunks());
+        Assert.Equal("", converted.SpeechText);
+        Assert.Empty(converted.SpeakerTurns!);
+    }
+
+    [Theory]
+    [InlineData(0, 0, 1600)]
+    [InlineData(0, 0.000001, 1600)]
+    [InlineData(3200, 0, 3200)]
+    [InlineData(3200, 0.5, 8000)]
+    [InlineData(480000, 30, 480000)]
+    public void StreamingCadenceUsesNativePreferenceOrDefault(long frames, double seconds, int expected)
+        => Assert.Equal(expected, NativeAudioEngine.StreamingPacketFrames(frames, seconds));
+
+    [Theory]
+    [InlineData(-1, 0)]
+    [InlineData(0, -1)]
+    [InlineData(480001, 0)]
+    [InlineData(0, 30.01)]
+    [InlineData(0, double.NaN)]
+    [InlineData(0, double.PositiveInfinity)]
+    public void InvalidStreamingCadenceFailsBeforeConversion(long frames, double seconds)
+        => Assert.Throws<InvalidDataException>(() => NativeAudioEngine.StreamingPacketFrames(frames, seconds));
+
     [SpeakerModelFact("kroko-en-64l-q8"), Trait("Category", "NativeIntegration")]
     public Task MicrophoneSpeechIsLocalAndSilentPlaybackDoesNotBlockLiveText() => VerifySourcesAsync(false);
 

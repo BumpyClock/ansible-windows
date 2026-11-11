@@ -96,7 +96,8 @@ public sealed partial class MainWindow : Window
         _meetingStore = new MeetingStore(Path.Combine(Path.GetDirectoryName(paths.Settings)!, "meetings"));
         _meetingDiagnostics = diagnostics;
         _meetingCleanup = new(diagnostics);
-        _meetings = new MeetingsPage(_meetingStore, OpenMeetingAsync, () => WinRT.Interop.WindowNative.GetWindowHandle(this), diagnostics, _notices);
+        _meetings = new MeetingsPage(_meetingStore, OpenMeetingAsync, DeleteMeetingAsync,
+            () => WinRT.Interop.WindowNative.GetWindowHandle(this), diagnostics, _notices);
         _history = new HomeDictationHistory(session, Path.Combine(Path.GetDirectoryName(paths.Settings)!, "dictation-history.json"), diagnostics);
         _shortcut = new ShortcutDictation(session,
             new WelcomeShortcutTargetInspector(DispatcherQueue, CurrentWelcome,
@@ -519,8 +520,16 @@ public sealed partial class MainWindow : Window
             try
             {
                 await meeting.DisposeAsync();
-                _meetingWindows.RemoveAll(item => ReferenceEquals(item.window, window));
-                if (ReferenceEquals(MainContent.Content, _meetings)) await _meetings.RefreshAsync();
+                try
+                {
+                    if (window.DeleteOnClose && (document?.Id ?? meeting.Document?.Id) is { } id)
+                        await _meetingStore.DeleteAsync(id);
+                }
+                finally
+                {
+                    _meetingWindows.RemoveAll(item => ReferenceEquals(item.window, window));
+                    if (ReferenceEquals(MainContent.Content, _meetings)) await _meetings.RefreshAsync();
+                }
             }
             catch (Exception error) { _notices.SetError(MeetingWindowNoticeKey, error, NoticeArea.Meetings); }
         };
@@ -530,6 +539,13 @@ public sealed partial class MainWindow : Window
     private bool MeetingSuggestionsBlocked => !_launchReady || !_meetingRecoveryComplete || !_session.State.IsIdle ||
         _shortcut.IsBusy ||
         _meetingWindows.Any(meeting => meeting.session.IsActive);
+
+    private Task DeleteMeetingAsync(Guid id, CancellationToken token)
+    {
+        if (_meetingWindows.Any(item => item.savedId == id || item.session.Document?.Id == id))
+            throw new InvalidOperationException("Close this meeting's window before deleting it.");
+        return _meetingStore.DeleteAsync(id, token);
+    }
 
     private void RenderMeetingSuggestion()
     {

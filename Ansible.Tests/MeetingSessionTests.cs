@@ -1101,6 +1101,25 @@ public sealed class MeetingSessionTests : IDisposable
         Assert.False(session.IsActive);
     }
 
+    [Fact]
+    public async Task DeletingAfterDisposalIsNotRecreatedByRepeatedWindowTeardown()
+    {
+        var store = new MeetingStore(_directory);
+        var engine = new Engine();
+        await using var session = new MeetingSession(() => engine, new CaptureFactory(), store, () => new());
+        await session.StartAsync(Request);
+        engine.Report("Speaker 0: Saved speech");
+        await session.EndAsync();
+        var id = session.Document!.Id;
+        Assert.Single((await store.LoadAsync(id)).Turns);
+
+        await session.DisposeAsync();
+        await store.DeleteAsync(id);
+        await session.DisposeAsync();
+
+        Assert.Empty((await store.ListAsync()).Summaries);
+    }
+
     private static async Task WaitUntilAsync(Func<bool> condition)
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));

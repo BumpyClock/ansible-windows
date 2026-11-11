@@ -218,17 +218,7 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
         double seconds = 0;
         NativeOperation.Step(token, () => NativeAudioApi.Check(
             NativeAudioApi.StreamPolicy(session, 0, 0, out frames, out seconds), "read the streaming cadence"));
-        if (!double.IsFinite(seconds) || seconds < 0 || frames < 0 || seconds > 30 || frames > 16000 * 30)
-            throw new InvalidDataException("The model requests an unsupported streaming chunk size.");
-        var preferred = seconds > 0 ? checked((int)Math.Round(seconds * 16000)) : checked((int)frames);
-        if (preferred <= 0)
-        {
-            preferred = 1600;
-        }
-        if (preferred > 16000 * 30)
-        {
-            throw new InvalidDataException("The model requests an unsupported streaming chunk size.");
-        }
+        var preferred = StreamingPacketFrames(frames, seconds);
         var buffer = new byte[preferred * 2];
         var used = 0;
         long offset = 0;

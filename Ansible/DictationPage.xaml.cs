@@ -67,6 +67,7 @@ public sealed partial class DictationPage : Page
         HistoryView.QueryChanged += HistoryQueryChanged;
         HistoryView.CopyRequested += CopyHistoryItem;
         HistoryView.RemoveRequested += RemoveHistoryItem;
+        HistoryView.EmptyHistoryFocusRequested += FocusDictate;
         HistoryView.PinHeader(HomeViewport);
         UpdateHomeWidth(_history.Snapshot().Count > 0);
         HistoryChanged();
@@ -99,6 +100,7 @@ public sealed partial class DictationPage : Page
         HistoryView.QueryChanged -= HistoryQueryChanged;
         HistoryView.CopyRequested -= CopyHistoryItem;
         HistoryView.RemoveRequested -= RemoveHistoryItem;
+        HistoryView.EmptyHistoryFocusRequested -= FocusDictate;
         HistoryView.UnpinHeader();
         _railPin?.Dispose();
         _railPin = null;
@@ -218,6 +220,12 @@ public sealed partial class DictationPage : Page
     }
 
     private void HistoryQueryChanged() => RenderHomeHistory(animate: false);
+
+    private void FocusDictate()
+    {
+        if (Microsoft.UI.Xaml.Input.FocusManager.FindFirstFocusableElement(HomeViewport) is Control control)
+            control.Focus(FocusState.Keyboard);
+    }
 
     private void CopyHistoryItem(HomeHistoryItem item)
     {

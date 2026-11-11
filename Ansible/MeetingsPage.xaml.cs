@@ -21,6 +21,7 @@ public sealed partial class MeetingsPage : Page
     private readonly MeetingStore _store;
     private readonly LocalDiagnosticLog _diagnostics;
     private readonly Func<MeetingDocument?, Task> _openMeeting;
+    private readonly Func<Guid, CancellationToken, Task> _deleteMeeting;
     private readonly Func<nint> _windowHandle;
     private CancellationTokenSource _shutdown = new();
     private Task? _exportTask;
@@ -35,7 +36,7 @@ public sealed partial class MeetingsPage : Page
     private DateOnly _displayedDate;
 
     internal MeetingsPage(MeetingStore store, Func<MeetingDocument?, Task> openMeeting,
-        Func<nint> windowHandle, LocalDiagnosticLog diagnostics, AppNotices notices)
+        Func<Guid, CancellationToken, Task> deleteMeeting, Func<nint> windowHandle, LocalDiagnosticLog diagnostics, AppNotices notices)
     {
         InitializeComponent();
         s_emptyRowTitleStyle = (Style)Resources["EmptyRowTitleStyle"];
@@ -46,6 +47,7 @@ public sealed partial class MeetingsPage : Page
         _store = store;
         _diagnostics = diagnostics;
         _openMeeting = openMeeting;
+        _deleteMeeting = deleteMeeting;
         _windowHandle = windowHandle;
         Loaded += async (_, _) => await RefreshAsync();
     }
@@ -153,7 +155,7 @@ public sealed partial class MeetingsPage : Page
 
     private async void NewMeetingClicked(object sender, RoutedEventArgs args)
     {
-        if (_shutdown.IsCancellationRequested || _openTask is { IsCompleted: false }) return;
+        if (_shutdown.IsCancellationRequested || _openTask is { IsCompleted: false } || _deleteTask is { IsCompleted: false }) return;
         _openTask = OpenAsync(null);
         await _openTask;
     }
@@ -165,7 +167,7 @@ public sealed partial class MeetingsPage : Page
 
     private async void Open(Guid id)
     {
-        if (_shutdown.IsCancellationRequested || _openTask is { IsCompleted: false }) return;
+        if (_shutdown.IsCancellationRequested || _openTask is { IsCompleted: false } || _deleteTask is { IsCompleted: false }) return;
         _openTask = OpenAsync(id);
         await _openTask;
     }
@@ -204,11 +206,12 @@ public sealed partial class MeetingsPage : Page
         {
             _deleteDialog = MeetingDeletion.Dialog(ids.Count, XamlRoot);
             if (await _deleteDialog.ShowAsync() != ContentDialogResult.Primary) return;
+            if (_openTask is not null) await _openTask;
             _notices.Set(DeleteNoticeKey, null);
             var token = _shutdown.Token;
             foreach (var id in ids)
             {
-                await _store.DeleteAsync(id, token);
+                await _deleteMeeting(id, token);
                 deleted = true;
             }
         }

@@ -145,8 +145,9 @@ toolchains, commands, and precompiled runtime storage.
   synchronized streams. Microphone speech is labeled **You**; playback retains
   the remote model's speaker labels until Teams names can be matched.
   Muting Teams does not mute Ansible's independent microphone capture.
-  A selected Teams process is used only for speaker
-  naming. Other app audio on those outputs can be included. Pause/Resume keeps
+  A selected Teams process supplies speaker naming, the call title, and automatic
+  stop when the call ends. It does not route audio.
+  Other app audio on those outputs can be included. Pause/Resume keeps
   one recognition stream; End meeting finishes pending speech. Audio stays in
   bounded memory.
   The capture limit is two hours; long-session speaker accuracy and the 5–10

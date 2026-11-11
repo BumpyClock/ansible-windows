@@ -315,6 +315,9 @@ microphone/video acoustic synchronization or physical multi-monitor behavior.
 - VibeVoice streaming can return speaker annotations without speech metadata.
   The app parses its speaker-attributed text for shortcut insertion. Unexpected
   output remains unknown and is not inserted; its speech-word count stays unknown.
+  Meeting finalization rejects unknown speech from either source instead of
+  replacing live turns with a successful empty transcript. Known empty speech
+  remains a valid final result.
 - Offline VibeVoice 7B microphone dictation buffers at most five minutes of PCM16
   in memory, then uses offline recognition after Finish. This does not enable
   native streaming or live previews for that model.

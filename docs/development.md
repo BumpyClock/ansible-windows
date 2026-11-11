@@ -301,6 +301,10 @@ captures the fixed review matrix into `.runtime\ux\<name>`: five pages in light
 and dark at a wide and a narrow window, one frame per viewport of scroll, plus the
 welcome lesson and a saved meeting window. Settings is one page and is captured
 like any other. The script waits for the session to be ready before it captures.
+Every invocation, including `-Only` probes, needs a fresh round name. The script
+rejects round folders that already contain PNGs, preserving previous captures.
+It dismisses a first-launch welcome lesson before navigating pages. Scroll stops
+are capped at eight frames per page and always include the bottom of a scrollable page.
 It takes each frame with the app window in the foreground and the title bar drawn
 active. After each screenshot it checks the foreground window and reads the saved
 frame to see whether the title bar was drawn active. When either check fails, it
@@ -758,6 +762,9 @@ starts a worker. Preparation, offline recognition and streaming share
 `NativeAutoRecovery`; a GPU failure updates only its qualified-device ticket's
 cache entry. Consumed live audio is never replayed. Qualifier contract tests use
 temporary cache files and a fake worker without loading speech models.
+Cached selections retain their meeting pace limit so reload validates the same
+decision that qualification made, including a CPU choice over a near-tie GPU
+that misses the meeting limit.
 
 `ModelStore` owns one directory's app-side file protocol. `ModelDownloadManager`
 serializes its operations and joins transfer or verification before disposing

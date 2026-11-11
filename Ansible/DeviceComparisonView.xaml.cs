@@ -46,7 +46,7 @@ public sealed partial class DeviceComparisonView : UserControl
         ComparisonDetails.Visibility = _hasMeasurements ? Visibility.Visible : Visibility.Collapsed;
         SummaryOnlyText.Visibility = _hasMeasurements ? Visibility.Collapsed : Visibility.Visible;
         SummaryOnlyText.Text = _choice == NativeBackend.Auto
-            ? "No speed test result yet."
+            ? string.IsNullOrWhiteSpace(_summary) ? "No speed test result yet." : _summary
             : $"Auto is off, so Ansible uses the {DeviceName(_choice)} you chose and skips the speed test.";
         ToolTipService.SetToolTip(SummaryOnlyText, string.IsNullOrWhiteSpace(_summary) ? null : _summary);
         ApplyLayout();
@@ -95,6 +95,8 @@ public sealed partial class DeviceComparisonView : UserControl
         DeviceChoiceReason.SameTime => "Both took the same time, and Auto prefers the graphics card.",
         DeviceChoiceReason.GpuPreferredWhenClose =>
             "The CPU was only slightly faster, and Auto prefers the graphics card when they are this close.",
+        DeviceChoiceReason.KeepsMeetingPace =>
+            "The CPU keeps up with meetings. The graphics card missed the meeting speed limit despite being close to the CPU.",
         _ => "It was faster for this model."
     };
 

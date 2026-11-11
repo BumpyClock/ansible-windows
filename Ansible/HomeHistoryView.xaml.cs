@@ -36,6 +36,7 @@ public sealed partial class HomeHistoryView : UserControl
     internal event Action? QueryChanged;
     internal event Action<HomeHistoryItem>? CopyRequested;
     internal event Action<HomeHistoryItem>? RemoveRequested;
+    internal event Action? EmptyHistoryFocusRequested;
 
     internal string Query => HistorySearchBox.Text.Trim();
 
@@ -70,7 +71,7 @@ public sealed partial class HomeHistoryView : UserControl
 
     private void UpdateHeaderPin()
     {
-        var pinned = _pinCanvas is not null && _model?.HasMatches == true;
+        var pinned = _pinCanvas is not null && _model?.HasHistory == true;
         if (pinned == (_headerPin is not null)) return;
         if (pinned)
         {
@@ -384,7 +385,8 @@ public sealed partial class HomeHistoryView : UserControl
         DispatcherQueue.TryEnqueue(() =>
         {
             if (next is not null) { next.More.Focus(FocusState.Keyboard); }
-            else { HistorySearchBox.Focus(FocusState.Keyboard); }
+            else if (HistorySearchBox.Visibility == Visibility.Visible) { HistorySearchBox.Focus(FocusState.Keyboard); }
+            else { EmptyHistoryFocusRequested?.Invoke(); }
         });
     }
 

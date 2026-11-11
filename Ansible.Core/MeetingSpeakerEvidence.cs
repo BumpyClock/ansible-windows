@@ -120,12 +120,20 @@ internal sealed class MeetingSpeakerEvidence : IAsyncDisposable
     /// <summary>Refines only remote playback chunks. Microphone timing never consumes the playback audio ring.</summary>
     public void RefinePlaybackChunkTurns(MeetingTurn[] turns, IReadOnlyList<MeetingTurn> previous, long processedSamples)
     {
+        var priorPlayback = previous.Where(turn => turn.Source == MeetingAudioSource.Playback)
+            .ToLookup(turn => (turn.SpeakerId, turn.Text));
+        var currentPlayback = turns.Where(turn => turn.Source == MeetingAudioSource.Playback)
+            .ToLookup(turn => (turn.SpeakerId, turn.Text));
         for (var index = 0; index < turns.Length; index++)
         {
             if (turns[index].Source != MeetingAudioSource.Playback || turns[index].TimingQuality != MeetingTimingQuality.Chunk) continue;
-            var old = index < previous.Count ? previous[index] : null;
-            if (old?.Source == MeetingAudioSource.Playback && old.SpeakerId == turns[index].SpeakerId && old.Text == turns[index].Text)
+            var key = (turns[index].SpeakerId, turns[index].Text);
+            var matches = priorPlayback[key];
+            if (matches.Count() == 1 && currentPlayback[key].Count() == 1)
+            {
+                var old = matches.First();
                 turns[index] = old with { IsProvisional = turns[index].IsProvisional };
+            }
         }
         AlignTiming(turns, processedSamples, MeetingAudioSource.Playback, chunksOnly: true);
     }
@@ -139,7 +147,8 @@ internal sealed class MeetingSpeakerEvidence : IAsyncDisposable
         if (clip is null) return;
         var origin = clip.Value.StartSample / 16000.0;
         var indices = Enumerable.Range(0, turns.Length).Where(index =>
-            (source is null || turns[index].Source == source) && (!chunksOnly || turns[index].TimingQuality == MeetingTimingQuality.Chunk) &&
+            (source is null || turns[index].Source == source) &&
+            (!chunksOnly || turns[index].TimingQuality is MeetingTimingQuality.Chunk or MeetingTimingQuality.Aligned) &&
             !turns[index].IsProvisional && (turns[index].TimingQuality == MeetingTimingQuality.Aligned
                 ? turns[index].EndSeconds > origin : turns[index].StartSeconds >= origin)).ToArray();
         if (!indices.Any(index => turns[index].TimingQuality != MeetingTimingQuality.Aligned)) return;
