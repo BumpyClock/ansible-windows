@@ -176,6 +176,7 @@ public sealed partial class MeetingWindow : Window
 
     private void Render(MeetingSessionSnapshot state)
     {
+        if (state.Phase == MeetingSessionPhase.Completed) _notices.Set("teams-context", null);
         _version = state.Version;
         _document = state.Document;
         if (state.Phase is not (MeetingSessionPhase.Starting or MeetingSessionPhase.Recording or MeetingSessionPhase.Paused))
