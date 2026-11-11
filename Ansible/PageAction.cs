@@ -5,7 +5,7 @@ using Microsoft.UI.Xaml.Controls;
 namespace Ansible;
 
 /// <summary>
-/// A page's primary header action, declared through PageCanvas.PrimaryAction. Once the page heading scrolls out,
+/// A page's primary header action, declared through PageCanvas.PrimaryAction. Once the page's header actions scroll out,
 /// the window title bar shows a copy with the same label, enabled state and visibility, and the copy runs the same
 /// click handler. The label is the label TextBlock when given, otherwise the button's text content.
 /// </summary>
@@ -15,11 +15,12 @@ public sealed class PageAction
     private readonly RoutedEventHandler _click;
     private readonly TextBlock? _label;
 
-    public PageAction(Button button, RoutedEventHandler click, TextBlock? label = null)
+    public PageAction(Button button, RoutedEventHandler click, TextBlock? label = null, IconSource? icon = null)
     {
         _button = button;
         _click = click;
         _label = label;
+        Icon = icon;
         button.IsEnabledChanged += (_, _) => Changed?.Invoke();
         Watch(button, UIElement.VisibilityProperty);
         Watch(button, AutomationProperties.NameProperty);
@@ -29,6 +30,9 @@ public sealed class PageAction
 
     /// <summary>Raised when the label, accessible name, enabled state or visibility changes.</summary>
     public event Action? Changed;
+
+    /// <summary>The icon the button shows, for the title bar's copy. Null for a text-only action.</summary>
+    public IconSource? Icon { get; }
 
     public string Label => _label?.Text ?? _button.Content as string ?? "";
 

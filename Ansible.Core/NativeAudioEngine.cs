@@ -218,17 +218,7 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
         double seconds = 0;
         NativeOperation.Step(token, () => NativeAudioApi.Check(
             NativeAudioApi.StreamPolicy(session, 0, 0, out frames, out seconds), "read the streaming cadence"));
-        if (!double.IsFinite(seconds) || seconds < 0 || frames < 0 || seconds > 30 || frames > 16000 * 30)
-            throw new InvalidDataException("The model requests an unsupported streaming chunk size.");
-        var preferred = seconds > 0 ? checked((int)Math.Round(seconds * 16000)) : checked((int)frames);
-        if (preferred <= 0)
-        {
-            preferred = 1600;
-        }
-        if (preferred > 16000 * 30)
-        {
-            throw new InvalidDataException("The model requests an unsupported streaming chunk size.");
-        }
+        var preferred = StreamingPacketFrames(frames, seconds);
         var buffer = new byte[preferred * 2];
         var used = 0;
         long offset = 0;
@@ -289,7 +279,7 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
 
     private static unsafe void Push(
         nint session, ReadOnlySpan<byte> bytes, long offset, string family, StreamingTranscript transcript,
-        IProgress<TranscriptUpdate>? progress, CancellationToken token, NativeDiarizationSession? diarization = null)
+        IProgress<TranscriptUpdate>? progress, CancellationToken token, NativeDiarizationSession? diarization = null, bool meeting = false)
     {
         token.ThrowIfCancellationRequested();
         var frames = bytes.Length / 2;
@@ -305,7 +295,7 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
                 diarization?.Push(pointer, frames, offset, token);
                 NativeAudioApi.Check(NativeAudioApi.StreamPush(session, pointer, (nuint)frames, 16000, 1, offset, out var streamEvent),
                     "process a dictation audio chunk");
-                AppendEvent(streamEvent, family, transcript, progress, token, offset + frames, diarization);
+                AppendEvent(streamEvent, family, transcript, progress, token, offset + frames, diarization, meeting);
             }
             token.ThrowIfCancellationRequested();
             while (true)
@@ -316,7 +306,7 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
                 {
                     break;
                 }
-                AppendEvent(streamEvent, family, transcript, progress, token, offset + frames, diarization);
+                AppendEvent(streamEvent, family, transcript, progress, token, offset + frames, diarization, meeting);
             }
             diarization?.PublishPending(progress, token);
         }
@@ -327,7 +317,8 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
     }
 
     private static void AppendEvent(nint pointer, string family, StreamingTranscript transcript,
-        IProgress<TranscriptUpdate>? progress, CancellationToken token, long processedSamples, NativeDiarizationSession? diarization = null)
+        IProgress<TranscriptUpdate>? progress, CancellationToken token, long processedSamples, NativeDiarizationSession? diarization = null,
+        bool meeting = false)
     {
         if (pointer == 0)
         {
@@ -350,19 +341,21 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
             progress?.Report(update with
             {
                 ProcessedSamples = processedSamples,
-                WordTimings = ReadSpeechWordTimings(resultPointer, family, update.SpeechText, processedSamples, token)
+                WordTimings = ReadSpeechWordTimings(resultPointer, family, update.SpeechText, processedSamples, token, meeting)
             });
         }
     }
 
     private static unsafe SpeechWordTimings? ReadSpeechWordTimings(nint result, string family, string? speech,
-        long processedSamples, CancellationToken token)
+        long processedSamples, CancellationToken token, bool meeting = false)
     {
         if (speech is null || family is not ("nemotron_asr" or "kroko_asr")) return null;
         var count = NativeAudioApi.WordCount(result);
-        if (count > 8192) return null;
+        var maximumTokens = meeting ? 100000 : 8192;
+        var maximumTextCharacters = meeting ? 1_000_000 : 65536;
+        if (count > (nuint)maximumTokens) return null;
         var tokens = new MeetingTimedToken[(int)count];
-        var remaining = 65536;
+        var remaining = maximumTextCharacters;
         for (nuint index = 0; index < count; index++)
         {
             token.ThrowIfCancellationRequested();
@@ -380,8 +373,10 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
             if (remaining < 0) return null;
             tokens[(int)index] = new(piece, start, end);
         }
-        return MeetingWordAlignment.MapSpeechWords(speech, tokens, processedSamples,
-            family == "nemotron_asr" ? SpeechWordTimingSource.NativeTokenEmission : SpeechWordTimingSource.NativeWordSpan, token);
+        var source = family == "nemotron_asr" ? SpeechWordTimingSource.NativeTokenEmission : SpeechWordTimingSource.NativeWordSpan;
+        return meeting
+            ? MeetingWordAlignment.MapMeetingSpeechWords(speech, tokens, processedSamples, source, token)
+            : MeetingWordAlignment.MapSpeechWords(speech, tokens, processedSamples, source, token);
     }
 
     private static string? ReadText(nint result, bool optional)
@@ -693,48 +688,6 @@ public sealed partial class NativeAudioEngine : IRecognitionEngine, IMeetingReco
             _gate.Release();
         }
     }
-
-    public async Task StreamMeetingAsync(AudioModel model, ChannelReader<byte[]> audio, RecognitionOptions options,
-        IProgress<TranscriptUpdate> progress, CancellationToken cancellationToken, Action? onReady = null)
-    {
-        RequireMeetingModel(model);
-        options = ValidateOptions(model, options);
-        var outcome = await RunExclusiveAsync(() => RunAutoStream(model, audio, options, progress, cancellationToken, onReady, 4096), cancellationToken);
-        // The final is published after the exclusive operation reset or released its native sessions.
-        progress.Report(ModelSelectionPolicy.RequiresCompanion(model)
-            ? outcome.MeetingFinal ?? throw new InvalidOperationException("Paired recognition finished without a speaker-attributed final.")
-            : new TranscriptUpdate(outcome.Result.DisplayText, true, outcome.Result.SpeechText));
-    }
-
-    private static void RequireMeetingModel(AudioModel model)
-    {
-        if (!ModelSelectionPolicy.SupportsMeeting(model))
-            throw new NotSupportedException("Meetings require streaming Nemotron or Kroko ASR with its diarization companion, or VibeVoice streaming.");
-    }
-
-    private void EnsurePairedSession(AudioModel model, RecognitionOptions options, CancellationToken token)
-    {
-        if (_registry is null || _inventory is null)
-            throw new InvalidOperationException("Connect the native backend and choose an installed model first.");
-        if (!_inventory.Models.Contains(model) || model.ModelPath is null)
-            throw new InvalidDataException("Meeting recognition requires an unchanged model selection from the connected catalog.");
-        var companion = FindDiarizationModel();
-        var key = new SessionKey(model.Id, "streaming", options.Backend, options.DeviceIndex, 4096);
-        if (_sessionKey != key || _diarization is null || _diarization.Backend != options.Backend ||
-            _diarization.DeviceIndex != options.DeviceIndex)
-        {
-            ReleaseModel();
-            NativeMemory.CheckBudget(checked(_inventory.Entries[model.Id].Bytes + _inventory.Entries[companion.Id].Bytes),
-                NativeMemory.MaximumStreamFrames * sizeof(float), _headroom);
-        }
-        EnsureSession(model, "streaming", NativeMemory.MaximumStreamFrames * sizeof(float), options, token, 4096);
-        _diarization ??= new NativeDiarizationSession(_registry.DangerousGetHandle(), companion,
-            _inventory.Entries[companion.Id], _integrity, options, _threads, _headroom, model.Family!, token);
-    }
-
-    private AudioModel FindDiarizationModel() =>
-        (_inventory is null ? null : ModelSelectionPolicy.FindCompanion(_inventory.Models))
-            ?? throw new InvalidOperationException("Install Nemotron 3 Diarization Q8 before starting a Nemotron or Kroko meeting.");
 
     private sealed record SessionKey(string ModelId, string Mode, NativeBackend Backend, int DeviceIndex, int HistorySteps = 0);
 }

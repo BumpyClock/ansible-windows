@@ -8,6 +8,7 @@ namespace Ansible;
 
 public sealed partial class CustomWordsPage : Page
 {
+    private const string SearchGlyph = "";
     private readonly DictationSession _session;
     private readonly Action _openModels;
     private readonly AppNotices _notices;
@@ -50,13 +51,12 @@ public sealed partial class CustomWordsPage : Page
         }
         RenderCompatibility(dictionary);
         BusyText.Visibility = _state.IsIdle ? Visibility.Collapsed : Visibility.Visible;
-        ImportWordsButton.IsEnabled = _state.IsIdle;
+        ImportWordsMenuItem.IsEnabled = _state.IsIdle;
         WordsList.IsEnabled = _state.IsIdle;
         UpdateAddButton();
         ValidateEditor();
     }
 
-    // The warning explains why the words do nothing, so it names the real model and any installed model that uses them.
     private void RenderCompatibility(string dictionary)
     {
         var model = _state.SelectedModel;
@@ -92,7 +92,6 @@ public sealed partial class CustomWordsPage : Page
             if (_editingRow?.Word == _rows[index].Word) _editingRow = null;
             _rows.RemoveAt(index);
         }
-        // Preserve unchanged rows so dictionary updates do not discard their focused controls.
         for (var index = 0; index < filtered.Length; index++)
         {
             if (index < _rows.Count && _rows[index].Word == filtered[index]) continue;
@@ -100,13 +99,23 @@ public sealed partial class CustomWordsPage : Page
             if (existing is null) _rows.Insert(index, new DictionaryWordRowModel(filtered[index]));
             else _rows.Move(_rows.IndexOf(existing), index);
         }
-        CountText.Text = $"{entries.Length} of {CustomVocabulary.MaximumEntries}";
-        var empty = filtered.Length == 0;
-        EmptyState.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
-        EmptyTitle.Visibility = entries.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
-        EmptyHelp.Text = entries.Length == 0
-            ? "Add names, product terms, and acronyms the model gets wrong."
-            : $"No match. Press Enter to add \"{query}\".";
+        CountText.Text = $"{entries.Length} of {CustomVocabulary.MaximumEntries} words";
+        EmptyWords.Visibility = filtered.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (entries.Length == 0)
+        {
+            EmptyWords.Glyph = "";
+            EmptyWords.Title = "No words yet";
+            EmptyWords.Detail = "Add names, acronyms, and terms the model gets wrong.";
+        }
+        else if (filtered.Length == 0)
+        {
+            EmptyWords.Glyph = SearchGlyph;
+            EmptyWords.Title = "No matching words";
+            var (updated, error) = CustomVocabulary.TryApply(_state.Settings.CustomDictionary,
+                new CustomVocabulary.Edit.Add(query, SingleEntry: true), _state.SelectedModel);
+            EmptyWords.Detail = updated is not null && updated != _state.Settings.CustomDictionary
+                ? $"Press Enter to add \"{query}\"." : error ?? "That word is already in your dictionary.";
+        }
     }
 
     private void BeginEdit(DictionaryWordRow row)
@@ -135,7 +144,6 @@ public sealed partial class CustomWordsPage : Page
             return;
         }
         if (_editingRow == row) { EndEdit(row); return; }
-        // A rename replaces the row, which takes the focused editor with it. Keep focus on the renamed word.
         ShowFieldError("");
         FocusRow(_rows.IndexOf(_rows.FirstOrDefault(model => model.Word == renamed)!));
     }
@@ -151,7 +159,6 @@ public sealed partial class CustomWordsPage : Page
 
     private void AddFromField()
     {
-        // Enter submits even when Add is disabled, so a rejected word explains itself instead of doing nothing.
         if (!_state.IsIdle || string.IsNullOrWhiteSpace(SearchBox.Text)) return;
         var before = _session.State.Settings.CustomDictionary;
         if (!ApplyEdit(new CustomVocabulary.Edit.Add(SearchBox.Text, SingleEntry: true), _state.SelectedModel, out var error))
@@ -159,7 +166,6 @@ public sealed partial class CustomWordsPage : Page
             ShowFieldError(error);
             return;
         }
-        // A duplicate changes nothing; its existing row already shows in the filtered list.
         if (_session.State.Settings.CustomDictionary == before) return;
         var entry = CustomVocabulary.Normalize(SearchBox.Text);
         ShowFieldError("");
@@ -187,6 +193,7 @@ public sealed partial class CustomWordsPage : Page
     {
         FieldValidationText.Text = error;
         FieldValidationText.Visibility = error.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+        CountText.Visibility = error.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void SearchChanged(object sender, TextChangedEventArgs args)
@@ -207,7 +214,6 @@ public sealed partial class CustomWordsPage : Page
         FocusRow(Math.Min(Math.Max(index, 0), _rows.Count - 1));
     }
 
-    // Focuses the row at index, or the search field when there is no such row.
     private void FocusRow(int index)
     {
         if (index < 0 || index >= _rows.Count) { SearchBox.Focus(FocusState.Programmatic); return; }
@@ -217,7 +223,6 @@ public sealed partial class CustomWordsPage : Page
         else SearchBox.Focus(FocusState.Programmatic);
     }
 
-    // Undo keeps newer words and restores saved vocabulary even if the current model cannot use it.
     private void RestoreWord(string word) => ApplyEdit(new CustomVocabulary.Edit.Add(word), null, out _);
 
     private bool ApplyEdit(CustomVocabulary.Edit edit, AudioModel? model, out string error)
@@ -266,7 +271,7 @@ public sealed partial class CustomWordsPage : Page
         _editorOpen = true;
         try
         {
-            EntryDialog.XamlRoot = XamlRoot;
+            EntryDialog.FollowWindowTheme(XamlRoot);
             EntryBox.Text = "";
             ValidateEditor();
             await EntryDialog.ShowAsync();
@@ -275,7 +280,7 @@ public sealed partial class CustomWordsPage : Page
         finally
         {
             _editorOpen = false;
-            ImportWordsButton.Focus(FocusState.Programmatic);
+            MoreOptionsButton.Focus(FocusState.Programmatic);
         }
     }
 

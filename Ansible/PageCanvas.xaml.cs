@@ -15,10 +15,10 @@ public sealed partial class PageCanvas : UserControl
     public static readonly DependencyProperty SubtitleProperty = DependencyProperty.Register(
         nameof(Subtitle), typeof(string), typeof(PageCanvas), new PropertyMetadata("", HeaderChanged));
 
-    private double _bottomInset;
-
     private readonly List<StickyPin> _pins = [];
     private CompositionPropertySet? _scrollProperties;
+    private (double Left, double Right, double MaxWidth) _column;
+    private bool _wide;
 
     public PageCanvas()
     {
@@ -27,30 +27,54 @@ public sealed partial class PageCanvas : UserControl
         {
             UpdateLayoutBounds();
             UpdateHeader();
-            UpdateHeadingScrolledOut();
-            // Cached pages leave and rejoin the window; restart the pins rather than trust animations across that.
+            UpdateHeaderScrolledOut();
             foreach (var pin in _pins) pin.Stop();
             UpdatePins();
         };
         ContentHost.BringIntoViewRequested += ContentBringIntoViewRequested;
     }
 
-    /// <summary>True while the page title has scrolled above the viewport. The window title bar then shows the page.</summary>
-    public bool IsHeadingScrolledOut { get; private set; }
+    /// <summary>
+    /// True once the page title can no longer be read: less than a third of its height, the descenders, is left
+    /// in the viewport. The window title bar then shows the page name.
+    /// </summary>
+    public bool IsTitleScrolledOut { get; private set; }
 
-    public event EventHandler? HeadingScrolledOutChanged;
+    public bool IsActionScrolledOut { get; private set; }
 
-    /// <summary>Extra bottom padding for floating window content, such as notices, so the last rows can scroll above it.</summary>
+    /// <summary>Raised when <see cref="IsTitleScrolledOut"/> or <see cref="IsActionScrolledOut"/> changes.</summary>
+    public event EventHandler? HeaderScrolledOutChanged;
+
     public double BottomInset
     {
-        get => _bottomInset;
+        get => Viewport.Margin.Bottom;
         set
         {
-            if (_bottomInset == value) return;
-            _bottomInset = value;
-            UpdateLayoutBounds();
+            if (Viewport.Margin.Bottom == value) return;
+            Viewport.Margin = new Thickness(0, 0, 0, value);
         }
     }
+
+    public bool Wide
+    {
+        get => _wide;
+        set
+        {
+            if (_wide == value) return;
+            _wide = value;
+            if (IsLoaded) UpdateLayoutBounds();
+        }
+    }
+
+    /// <summary>
+    /// The page column: its left and right insets inside the page and its width cap. The window lines its notice
+    /// band up with it.
+    /// </summary>
+    public (double Left, double Right, double MaxWidth) Column =>
+        (ContentHost.Padding.Left, ContentHost.Padding.Right, MaxContentWidth);
+
+    /// <summary>Raised when <see cref="Column"/> changes.</summary>
+    public event EventHandler? ColumnChanged;
 
     public string Title { get => (string)GetValue(TitleProperty); set => SetValue(TitleProperty, value); }
     public string Subtitle { get => (string)GetValue(SubtitleProperty); set => SetValue(SubtitleProperty, value); }
@@ -77,7 +101,6 @@ public sealed partial class PageCanvas : UserControl
     {
         var pin = new StickyPin(this, element, bounds, top, bottom, indicator);
         _pins.Add(pin);
-        // Sizes and positions anywhere above the pin move it, so every layout pass rechecks the pins.
         if (_pins.Count == 1) Viewport.LayoutUpdated += ViewportLayoutUpdated;
         UpdatePins();
         return pin;
@@ -90,48 +113,53 @@ public sealed partial class PageCanvas : UserControl
         if (_pins.Count == 0) Viewport.LayoutUpdated -= ViewportLayoutUpdated;
     }
 
-    public double ContentWidth =>Math.Max(0, ContentHost.ActualWidth - ContentHost.Padding.Left - ContentHost.Padding.Right);
+    /// <summary>The width the header and content have: the space inside the page padding, up to the page's cap.</summary>
+    public double ContentWidth => Math.Min(MaxContentWidth,
+        Math.Max(0, ContentHost.ActualWidth - ContentHost.Padding.Left - ContentHost.Padding.Right));
+
+    private double MaxContentWidth =>
+        (double)Application.Current.Resources[Wide ? "PageContentMaxWidth" : "PageReadingMaxWidth"];
 
     /// <summary>
-    /// The header action the window title bar repeats once the heading scrolls out. Pages with one declare it
-    /// while they are constructed, before navigation shows them.
+    /// The header action the window title bar repeats once the header actions scroll out. Its button belongs in
+    /// <see cref="HeaderActions"/>. Pages with one declare it while they are constructed, before navigation shows them.
     /// </summary>
     public PageAction? PrimaryAction { get; set; }
 
     private void ViewportSizeChanged(object sender, SizeChangedEventArgs args)
     {
         UpdateLayoutBounds();
-        UpdateHeader();
-        UpdateHeadingScrolledOut();
+        UpdateHeaderScrolledOut();
     }
 
-    private void ViewportViewChanged(object? sender, ScrollViewerViewChangedEventArgs args) => UpdateHeadingScrolledOut();
+    private void ViewportViewChanged(object? sender, ScrollViewerViewChangedEventArgs args) => UpdateHeaderScrolledOut();
 
     private static void HeaderChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
     {
         var canvas = (PageCanvas)sender;
         canvas.UpdateHeader();
-        canvas.UpdateHeadingScrolledOut();
+        canvas.UpdateHeaderScrolledOut();
     }
 
-    private void HeaderSizeChanged(object sender, SizeChangedEventArgs args)
+    private void HeaderSizeChanged(object sender, SizeChangedEventArgs args) => UpdateHeaderScrolledOut();
+
+    private void UpdateHeaderScrolledOut()
     {
-        UpdateHeader();
-        UpdateHeadingScrolledOut();
+        var header = IsAbove(HeaderLayout);
+        var title = IsShown(TitleText) ? IsAbove(TitleText, TitleText.ActualHeight / 3) : header;
+        var action = IsShown(HeaderActionsPanel) ? IsAbove(HeaderActionsPanel) : header;
+        if (title == IsTitleScrolledOut && action == IsActionScrolledOut) return;
+        IsTitleScrolledOut = title;
+        IsActionScrolledOut = action;
+        HeaderScrolledOutChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    private void UpdateHeadingScrolledOut()
-    {
-        var scrolledOut = false;
-        if (IsLoaded && TitleText.Visibility == Visibility.Visible && TitleText.ActualHeight > 0)
-        {
-            var bottom = TitleText.TransformToVisual(Viewport).TransformPoint(new Point(0, TitleText.ActualHeight)).Y;
-            scrolledOut = bottom <= 0;
-        }
-        if (scrolledOut == IsHeadingScrolledOut) return;
-        IsHeadingScrolledOut = scrolledOut;
-        HeadingScrolledOutChanged?.Invoke(this, EventArgs.Empty);
-    }
+    private static bool IsShown(FrameworkElement element) =>
+        element.Visibility == Visibility.Visible && element.ActualHeight > 0;
+
+    private bool IsAbove(FrameworkElement element, double remaining = 0) =>
+        IsLoaded && IsShown(HeaderLayout) && IsShown(element)
+        && element.TransformToVisual(Viewport).TransformPoint(new Point(0, element.ActualHeight)).Y <= remaining;
 
     private void UpdateHeader()
     {
@@ -140,23 +168,9 @@ public sealed partial class PageCanvas : UserControl
         var hasHeading = hasTitle || hasSubtitle;
         var hasActions = HeaderActions.Count > 0;
         HeaderLayout.Visibility = hasHeading || hasActions ? Visibility.Visible : Visibility.Collapsed;
-        HeadingPanel.Visibility = hasHeading ? Visibility.Visible : Visibility.Collapsed;
         TitleText.Visibility = hasTitle ? Visibility.Visible : Visibility.Collapsed;
         SubtitleText.Visibility = hasSubtitle ? Visibility.Visible : Visibility.Collapsed;
         HeaderActionsPanel.Visibility = hasActions ? Visibility.Visible : Visibility.Collapsed;
-        foreach (var action in HeaderActions.OfType<FrameworkElement>())
-            action.MaxWidth = ContentWidth;
-        var stacked = hasHeading && hasActions && ContentWidth < (double)Application.Current.Resources["CompactPageThreshold"];
-        HeaderLayout.RowDefinitions[1].Height = stacked ? GridLength.Auto : new GridLength(0);
-        HeaderLayout.RowSpacing = stacked ? 12 : 0;
-        HeaderLayout.ColumnSpacing = hasActions && !stacked ? (double)Application.Current.Resources["CardGap"] : 0;
-        Grid.SetColumnSpan(HeadingPanel, stacked ? 2 : 1);
-        Grid.SetRow(HeaderActionsPanel, stacked ? 1 : 0);
-        Grid.SetColumn(HeaderActionsPanel, stacked || !hasHeading ? 0 : 1);
-        Grid.SetColumnSpan(HeaderActionsPanel, stacked ? 2 : 1);
-        HeaderActionsPanel.HorizontalAlignment = stacked || !hasHeading ? HorizontalAlignment.Left : HorizontalAlignment.Right;
-        HeaderActionsPanel.Orientation = ContentWidth < (double)Application.Current.Resources["NarrowActionsThreshold"]
-            ? Orientation.Vertical : Orientation.Horizontal;
     }
 
     private void ViewportLayoutUpdated(object? sender, object args) => UpdatePins();
@@ -165,31 +179,33 @@ public sealed partial class PageCanvas : UserControl
     {
         if (!IsLoaded || _pins.Count == 0) return;
         _scrollProperties ??= ElementCompositionPreview.GetScrollViewerManipulationPropertySet(Viewport);
-        // Floating notices cover the bottom inset, so a tall pinned element stops above them.
-        var visibleHeight = Viewport.ActualHeight - _bottomInset;
-        foreach (var pin in _pins) pin.Update(_scrollProperties, ContentHost, visibleHeight);
+        foreach (var pin in _pins) pin.Update(_scrollProperties, ContentHost, Viewport.ActualHeight);
     }
 
-    // Focus inside a stuck element asks the scroller to reveal its layout position, which has scrolled away; the
-    // scroller would jump back to it. Where the element is drawn fully visible, nothing needs to scroll.
+    // Focus inside a stuck element asks the scroller to reveal its layout position, which has scrolled away.
     private void ContentBringIntoViewRequested(UIElement sender, BringIntoViewRequestedEventArgs args)
     {
         if (args.Handled || args.TargetElement is not { } target) return;
         var pin = _pins.FirstOrDefault(candidate => candidate.Contains(target));
         if (pin is null || !pin.IsStuck(Viewport.VerticalOffset)) return;
         var drawn = target.TransformToVisual(Viewport).TransformBounds(args.TargetRect);
-        if (drawn.Top >= 0 && drawn.Bottom <= Viewport.ActualHeight - _bottomInset) args.Handled = true;
+        if (drawn.Top >= 0 && drawn.Bottom <= Viewport.ActualHeight) args.Handled = true;
     }
 
     private void UpdateLayoutBounds()
     {
         var resources = Application.Current.Resources;
-        var width = Math.Min(Viewport.ActualWidth, (double)resources["PageContentMaxWidth"]);
-        var padding = (Thickness)resources[width < (double)resources["CompactPageThreshold"]
+        ContentHost.Padding = (Thickness)resources[Viewport.ActualWidth < (double)resources["CompactPageThreshold"]
             ? "CompactPagePadding" : "PagePadding"];
-        padding.Bottom += _bottomInset;
-        ContentHost.Padding = padding;
-        // The page flows in one scroller; content fills at least the viewport so footers sit at the bottom.
+        ContentColumn.MaxWidth = MaxContentWidth;
         ContentHost.MinHeight = Viewport.ActualHeight;
+        foreach (var action in HeaderActions.OfType<FrameworkElement>())
+            action.MaxWidth = ContentWidth;
+        HeaderActionsPanel.Orientation = ContentWidth < (double)resources["NarrowActionsThreshold"]
+            ? Orientation.Vertical : Orientation.Horizontal;
+        var column = Column;
+        if (column == _column) return;
+        _column = column;
+        ColumnChanged?.Invoke(this, EventArgs.Empty);
     }
 }

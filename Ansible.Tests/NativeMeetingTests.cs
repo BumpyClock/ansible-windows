@@ -44,7 +44,7 @@ public sealed class NativeMeetingTests(ITestOutputHelper output)
             Path.Combine(root, "tools", "audio-models.json"), directory, threads: 4);
         var models = await engine.ConnectAsync(timeout.Token);
         var model = Assert.Single(models, candidate => candidate.Id == "vibevoice-streaming-1.5b-q4");
-        var audio = Channel.CreateBounded<byte[]>(4);
+        var audio = Channel.CreateBounded<MeetingAudioPacket>(4);
         var firstSpeech = new TaskCompletionSource<TranscriptUpdate>(TaskCreationOptions.RunContinuationsAsynchronously);
         TranscriptUpdate? final = null;
         var timer = Stopwatch.StartNew();
@@ -59,7 +59,7 @@ public sealed class NativeMeetingTests(ITestOutputHelper output)
         {
             var pcm = await new AudioInputReader().ReadReplayAsync(
                 Path.Combine(root, ".runtime", "validation", "sample_16k.wav"), timeout.Token);
-            await audio.Writer.WriteAsync(pcm, timeout.Token);
+            await audio.Writer.WriteAsync(new(new byte[pcm.Length], pcm), timeout.Token);
             if (await Task.WhenAny(firstSpeech.Task, recognition).WaitAsync(timeout.Token) == recognition)
             {
                 await recognition;

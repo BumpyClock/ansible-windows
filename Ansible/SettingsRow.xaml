@@ -5,10 +5,11 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:local="using:Ansible"
              mc:Ignorable="d">
     <UserControl.Content>
         <Grid x:Name="LayoutRoot"
-              BorderBrush="{ThemeResource AppBorderBrush}"
+              BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
               ColumnSpacing="{StaticResource SettingsRowColumnGap}"
               RowSpacing="{StaticResource SettingsRowRowSpacing}">
         <Grid.RowDefinitions>
@@ -23,29 +24,23 @@
         <StackPanel x:Name="DescriptionPanel"
                     Spacing="{StaticResource SettingsRowDescriptionSpacing}"
                     MaxWidth="{StaticResource SettingsRowDescriptionMaxWidth}"
-                    HorizontalAlignment="Left">
+                    HorizontalAlignment="Left" VerticalAlignment="Center">
             <TextBlock Text="{x:Bind Title, Mode=OneWay}"
-                       FontSize="{StaticResource SettingsLabelFontSize}"
-                       LineHeight="{StaticResource SettingsLabelLineHeight}"
-                       FontWeight="Medium"
-                       Style="{StaticResource BodyTextBlockStyle}" />
+                       Style="{StaticResource RowTitleStyle}" />
             <TextBlock x:Name="DescriptionText"
-                       Text="{x:Bind Description, Mode=OneWay}"
-                       TextWrapping="Wrap"
-                       FontSize="{StaticResource SettingsDescriptionFontSize}"
-                       LineHeight="{StaticResource SettingsDescriptionLineHeight}"
+                       Text="{x:Bind local:TextFlow.NoWidow(Description), Mode=OneWay}"
                        Style="{StaticResource CaptionSecondaryStyle}" />
         </StackPanel>
 
-        <!-- A toggle's On/Off label sits before the switch, as in Windows Settings, so every control ends at the right edge. -->
-        <Grid x:Name="ControlPresenter" Grid.Row="1" VerticalAlignment="Center" ColumnSpacing="12">
+        <Grid x:Name="ControlPresenter" Grid.Row="1" VerticalAlignment="Center">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <TextBlock x:Name="ToggleStateText" Visibility="Collapsed" VerticalAlignment="Center"
+                       Style="{StaticResource BodyTextBlockStyle}"
                        AutomationProperties.AccessibilityView="Raw" />
-            <ContentPresenter Grid.Column="1" Content="{x:Bind ControlContent, Mode=OneWay}" />
+            <ContentPresenter Grid.Column="1" VerticalAlignment="Center" Content="{x:Bind ControlContent, Mode=OneWay}" />
         </Grid>
         </Grid>
     </UserControl.Content>

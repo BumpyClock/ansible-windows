@@ -18,6 +18,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
     private readonly List<ModelCard> _cardList = [];
     private const string OperationNoticeKey = "models-operation";
     private const string CatalogNoticeKey = "models-catalog";
+    private const string VerifyPath = "Open More options, then Model folder, then Verify installed files";
     private ModelDownloadManager? _manager;
     private ThemeSettings? _themeSettings;
     private UiSessionObserver? _observer;
@@ -89,8 +90,6 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
             }
             finally
             {
-                // A failure during card setup must leave no half-built page or leaked manager so a
-                // later Verify installed files retry can rebuild the catalog from a clean state.
                 if (_manager is null)
                 {
                     foreach (var card in _cardList) { card.DetachThemeEvents(); }
@@ -129,28 +128,23 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         var idle = state.IsIdle && managerIdle;
         var managerBusy = _manager?.IsBusy == true;
         FolderText.Text = _manager?.DirectoryPath ?? state.ModelsDirectory;
-        ToolTipService.SetToolTip(FolderMenuButton, FolderText.Text);
         FolderButton.IsEnabled = idle;
         RefreshButton.IsEnabled = _initialization is not { IsCompleted: false } && !managerBusy && !_dialogActive;
-        FolderMenuButton.IsEnabled = !_dialogActive;
-        TranscribeFileButton.IsEnabled = idle && state.SelectedModel is not null && !_dialogActive && !_transcribingFile;
+        MoreOptionsButton.IsEnabled = !_dialogActive;
+        TranscribeFileMenuItem.IsEnabled = idle && state.SelectedModel is not null && !_dialogActive && !_transcribingFile;
         BackendText.Text = $"audio.cpp {state.BackendVersion} \u00B7 selected: {(state.Settings.Backend == NativeBackend.Vulkan ? "GPU (Vulkan)" : "CPU")}";
         BackendText.Visibility = string.IsNullOrEmpty(state.BackendVersion) ? Visibility.Collapsed : Visibility.Visible;
 
-        // A missing catalog counts only after initialization finishes, so the page does not flash the notice
-        // while the catalog is still loading.
         var catalogMissing = _manager is null && _initialization?.IsCompleted == true;
         _notices.Set(CatalogNoticeKey, catalogMissing ? new NoticeContent(NoticeSeverity.Error, "Model catalog unavailable",
-            "Open Model folder, then Verify installed files to retry opening the catalog.", IsClosable: false) : null,
+            $"{VerifyPath} to retry opening the catalog.", IsClosable: false) : null,
             NoticeArea.Models);
 
         if (_manager is null) { return; }
-        // Selecting an installed model does not depend on the download manager.
         var canSelect = state.Phase == DictationPhase.Ready;
         var activeId = state.SelectedModel?.Id;
         var snapshots = new Dictionary<ModelCard, ModelDownloadSnapshot>();
         foreach (var card in _cardList) { snapshots[card] = _manager.Get(card.ModelId); }
-        // A card that waits is never the one transferring, so any verifying card is another card.
         var busyReason = snapshots.Values.Any(snapshot => snapshot.State == ModelInstallState.Verifying)
             ? "Wait for the current verification to finish." : "Wait for the current model operation to finish.";
         foreach (var card in _cardList)
@@ -167,8 +161,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         var placed = ModelGrouping.Place(_cardList.Select(card => new ModelPlacement(card.ModelId,
             ModelSelectionPolicy.IsDiarizationTask(snapshots[card].Model.Task), snapshots[card].HasModelFile)), activeId);
 
-        // Render runs on every download tick, so only groups whose rows changed are rebuilt. Every changed group
-        // is emptied before any is filled because a row can belong to one parent only.
+        // Every changed group is emptied before any is filled because a row can belong to one parent only.
         var changed = Groups.Where(group => !Panels(group).Rows.Children.SequenceEqual(placed[group].Select(id => cards[id]))).ToArray();
         foreach (var group in changed) { Panels(group).Rows.Children.Clear(); }
         foreach (var group in changed)
@@ -188,7 +181,7 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         if (index < 0)
         {
             _notices.Set(OperationNoticeKey, new NoticeContent(NoticeSeverity.Warning, "Model not loaded",
-                "Open Model folder, then Verify installed files to load this model."), NoticeArea.Models);
+                $"{VerifyPath} to load this model."), NoticeArea.Models);
         }
         else
         {
@@ -226,7 +219,6 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         finally { Render(); }
     }
 
-    // Confirms only a file the manager reports as installed after the maintenance step completes.
     private async Task InstallAsync(string id)
     {
         if (_manager is null) { return; }
@@ -255,13 +247,12 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         Render();
         try
         {
-            // RemoveAsync deletes only the model file; DiscardPartialAsync deletes only the partial weights.
             var freed = partial ? selected.DownloadedBytes
                 : File.Exists(selected.Path) ? new FileInfo(selected.Path).Length : selected.Model.Bytes;
             var content = new StackPanel { Spacing = 8 };
             content.Children.Add(new TextBlock
             {
-                Text = freed > 0 ? $"Frees {ModelCard.FormatBytes(freed)} on this device." : "Deletes the saved resume data.",
+                Text = freed > 0 ? $"Frees {ModelCardText.Size(freed)} on this device." : "Deletes the saved resume data.",
                 Style = (Style)Application.Current.Resources["BodyTextBlockStyle"]
             });
             content.Children.Add(new TextBlock
@@ -272,14 +263,14 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
             });
             var dialog = new ContentDialog
             {
-                XamlRoot = XamlRoot,
                 Style = (Style)Application.Current.Resources["DefaultContentDialogStyle"],
-                Title = partial ? "Discard partial download?" : $"Remove {selected.Model.DisplayName ?? selected.Model.Id}?",
+                Title = partial ? "Discard partial download?" : $"Remove {DisplayName(id)}?",
                 Content = content,
                 PrimaryButtonText = partial ? "Discard" : "Remove",
                 CloseButtonText = "Cancel",
                 DefaultButton = ContentDialogButton.Close
             };
+            dialog.FollowWindowTheme(XamlRoot);
             if (await dialog.ShowAsync() == ContentDialogResult.Primary)
                 await MaintainAsync(token => partial ? _manager.DiscardPartialAsync(id, token) :
                     _manager.RemoveAsync(id, token));
@@ -326,6 +317,14 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         finally { _dialogActive = false; Render(); }
     }
 
+    // The menu closes on click; the folder flyout then opens on the same More options button, one dispatch later so
+    // the closing menu does not dismiss it.
+    private void ModelFolderClicked(object sender, RoutedEventArgs args) =>
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (!_closed) Microsoft.UI.Xaml.Controls.Primitives.FlyoutBase.ShowAttachedFlyout(MoreOptionsButton);
+        });
+
     private async void TranscribeFileClicked(object sender, RoutedEventArgs args)
     {
         if (_closed || _transcribingFile || !_session.State.IsIdle || _session.State.SelectedModel is null) return;
@@ -365,7 +364,6 @@ public sealed partial class ModelManagementPage : Page, IAsyncDisposable
         finally { Render(); }
     }
 
-    // A new failure replaces the previous operation notice. Each operation clears it when it starts.
     private void ShowError(Exception error, string title = "Model operation failed")
     {
         if (_closed) { return; }

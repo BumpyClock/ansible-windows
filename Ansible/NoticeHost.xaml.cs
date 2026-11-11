@@ -12,14 +12,8 @@ using Windows.UI.ViewManagement;
 
 namespace Ansible;
 
-/// <summary>
-/// Renders the window's AppNotices that apply to the current page as floating NoticeBars, most severe first.
-/// Owns auto-dismiss timers. Reports the height it covers so each window can pad its own scroller and keep its last
-/// rows reachable.
-/// </summary>
 public sealed partial class NoticeHost : UserControl
 {
-    private static readonly Vector3 NoticeElevation = new(0, 0, 32);
     private readonly Dictionary<string, Grid> _bars = [];
     private const string ConfirmationKey = "(confirmation)";
     private NoticeConfirmation? _timed;
@@ -36,15 +30,23 @@ public sealed partial class NoticeHost : UserControl
     public NoticeHost()
     {
         InitializeComponent();
-        MoreButton.Shadow = new ThemeShadow();
-        MoreButton.Translation = new Vector3(0, 0, 16);
         SizeChanged += (_, _) => UpdateCoveredHeight();
     }
 
-    /// <summary>The height the notices cover at the bottom of the content; 0 while none show.</summary>
+    /// <summary>
+    /// The height of the notice band at the bottom of the content, including the host's bottom margin; 0 while none
+    /// show.
+    /// </summary>
     public double CoveredHeight => _coveredHeight;
 
     public event EventHandler? CoveredHeightChanged;
+
+    public void AlignWith(double left, double right, double maxWidth)
+    {
+        var margin = (Thickness)Application.Current.Resources["NoticeHostMargin"];
+        Layout.Margin = new Thickness(left, margin.Top, right, margin.Bottom);
+        BarColumn.MaxWidth = maxWidth;
+    }
 
     public void Attach(AppNotices notices)
     {
@@ -86,7 +88,6 @@ public sealed partial class NoticeHost : UserControl
                 _bars[key] = wrapper = CreateBar(key);
                 Bars.Children.Insert(index, wrapper);
             }
-            // A notice that changes rank moves in place, keeping its element, focus, and announcement state.
             else if (Bars.Children.IndexOf(wrapper) is var current && current != index)
                 Bars.Children.Move((uint)current, (uint)index);
             var bar = (NoticeBar)wrapper.Children[0];
@@ -102,9 +103,8 @@ public sealed partial class NoticeHost : UserControl
 
     private Grid CreateBar(string key)
     {
-        var bar = new NoticeBar { Shadow = new ThemeShadow(), Translation = NoticeElevation };
+        var bar = new NoticeBar();
         bar.CloseRequested += (_, _) => Close(key);
-        // The wrapper carries the exit motion so it does not compete with the bar's elevation translation.
         var wrapper = new Grid();
         wrapper.Children.Add(bar);
         wrapper.KeyDown += (_, args) =>
@@ -128,7 +128,6 @@ public sealed partial class NoticeHost : UserControl
         else if (_notices.Confirmation is { } confirmation) _notices.EndConfirmation(confirmation);
     }
 
-    // Removal plays a short fade and drop. Skipped when Windows animations are off.
     private static void AddHideAnimation(UIElement element)
     {
         var resources = Application.Current.Resources;
@@ -163,7 +162,6 @@ public sealed partial class NoticeHost : UserControl
         Render();
     }
 
-    // The confirmation timer pauses while the reader is pointing at or focused inside the notices.
     private void SyncTimer(NoticeConfirmation? confirmation)
     {
         if (ReferenceEquals(_timed, confirmation)) return;

@@ -44,6 +44,27 @@ public sealed class MeetingCaptureWorkerTests
     }
 
     [Fact]
+    public async Task MicrophoneAndPlaybackRemainSeparateInCapturedPackets()
+    {
+        var devices = new FakeDevices();
+        devices.AddOutput("speakers");
+        var capture = await StartAsync(devices);
+        var probe = new CaptureProbe(capture);
+
+        await AdvanceAsync(devices, capture, probe, TimeSpan.FromSeconds(1));
+        await capture.StopAsync().WaitAsync(WaitLimit);
+
+        var packets = await ReadPacketsAsync(capture);
+        Assert.NotEmpty(packets);
+        Assert.All(packets, packet =>
+        {
+            Assert.Equal(packet.Microphone.Length, packet.Playback.Length);
+            Assert.All(ReadPcm16(packet.Microphone), sample => Assert.Equal(MicrophoneValue, sample));
+            Assert.All(ReadPcm16(packet.Playback), sample => Assert.Equal(OutputValue, sample));
+        });
+    }
+
+    [Fact]
     public async Task StartupScansOutputsBeforeTheMicrophoneAndTeardownReleasesInOwnerOrder()
     {
         var devices = new FakeDevices();
@@ -596,11 +617,30 @@ public sealed class MeetingCaptureWorkerTests
     /// <summary>Drains <see cref="IMeetingCapture.Audio"/>; its completion fault surfaces only after queued audio is read.</summary>
     private static Task<short[]> ReadAllAsync(IMeetingCapture capture) => DrainAsync(capture).WaitAsync(WaitLimit);
 
+    private static async Task<IReadOnlyList<MeetingAudioPacket>> ReadPacketsAsync(IMeetingCapture capture)
+    {
+        var packets = new List<MeetingAudioPacket>();
+        await foreach (var packet in capture.Audio.ReadAllAsync()) packets.Add(packet);
+        await capture.Audio.Completion;
+        return packets;
+    }
+
+    private static IEnumerable<short> ReadPcm16(byte[] pcm)
+    {
+        for (var index = 0; index < pcm.Length; index += 2)
+            yield return (short)(pcm[index] | pcm[index + 1] << 8);
+    }
+
     private static async Task<short[]> DrainAsync(IMeetingCapture capture)
     {
         var samples = new List<short>();
         await foreach (var packet in capture.Audio.ReadAllAsync())
-            for (var index = 0; index < packet.Length; index += 2) samples.Add((short)(packet[index] | packet[index + 1] << 8));
+            for (var index = 0; index < packet.Playback.Length; index += 2)
+            {
+                var microphone = (short)(packet.Microphone[index] | packet.Microphone[index + 1] << 8);
+                var playback = (short)(packet.Playback[index] | packet.Playback[index + 1] << 8);
+                samples.Add((short)Math.Clamp(microphone + playback, short.MinValue, short.MaxValue));
+            }
         await capture.Audio.Completion;
         return [.. samples];
     }

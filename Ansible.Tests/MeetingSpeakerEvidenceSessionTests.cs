@@ -9,6 +9,50 @@ public sealed class MeetingSpeakerEvidenceSessionTests : IDisposable
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "Ansible-meeting-evidence-session-" + Guid.NewGuid().ToString("N"));
 
     [Fact]
+    public async Task TeamsTitleImportPreservesUserTitleAndDoesNotRenameFinishedMeetings()
+    {
+        await using var session = Create(new Engine(), CreateCaptures());
+        await session.StartAsync(new());
+        await session.AdoptTeamsTitleAsync("Design review");
+        Assert.Equal("Design review", session.Document!.Title);
+        await session.RenameAsync("My notes");
+        await session.AdoptTeamsTitleAsync("Another Teams title");
+        Assert.Equal("My notes", session.Document.Title);
+        await session.RenameAsync("New meeting");
+        await session.EndAsync();
+        await session.AdoptTeamsTitleAsync("Late observation");
+        Assert.Equal("New meeting", session.Document.Title);
+    }
+
+    [Fact]
+    public async Task ConfirmedTeamsCallEndDrainsSpeechAndCompletesTheNormalMeetingLifecycle()
+    {
+        var engine = new Engine();
+        var captures = CreateCaptures();
+        await using var session = Create(engine, captures);
+        await session.StartAsync(new());
+        await SendAsync(captures.Captures[0], engine, 2, 2);
+        engine.ReportTimed([Turn(0, 2, "Last spoken words")]);
+        var ends = 0;
+        await MeetingContextMonitor.FollowAsync(new EndedCall(), new(42, DateTime.UtcNow),
+            new(MeetingCallPresence.Active, "Design review"), session.AdoptTeamsTitleAsync,
+            async () => { ends++; await session.EndAsync(); }, _ => { }, default).WaitAsync(TimeSpan.FromSeconds(12));
+        Assert.Equal(1, ends);
+        Assert.Equal(MeetingSessionPhase.Completed, session.State.Phase);
+        Assert.Equal(MeetingStatus.Completed, session.Document!.Status);
+        Assert.Equal("Design review", session.Document.Title);
+        Assert.Equal("Last spoken words", Assert.Single(session.Document.Turns).Text);
+        Assert.True(captures.Captures[0].IsReleased);
+        Assert.False(session.IsActive);
+    }
+
+    private sealed class EndedCall : IMeetingContextReader
+    {
+        public Task<MeetingContextObservation> ReadAsync(MeetingDetectionCandidate identity, CancellationToken cancellationToken)
+            => Task.FromResult(new MeetingContextObservation(MeetingCallPresence.Absent));
+    }
+
+    [Fact]
     public async Task TimingRefinementUsesStreamCoordinatesAfterAudioRingRollsOver()
     {
         var engine = new Engine();
@@ -42,6 +86,38 @@ public sealed class MeetingSpeakerEvidenceSessionTests : IDisposable
         Assert.Equal(23, refined.EndSeconds);
         Assert.Equal(MeetingTimingQuality.Aligned, refined.TimingQuality);
         Assert.Equal(1, session.Document.Turns[0].StartSeconds);
+        await session.EndAsync();
+    }
+
+    [Fact]
+    public async Task TimedPlaybackChunksRefineWithoutUsingPlaybackAudioForMicrophoneTurns()
+    {
+        var engine = new Engine();
+        var captures = CreateCaptures();
+        var aligner = new FakeWordAligner
+        {
+            Align = turns => turns.Select(turn => turn with
+            {
+                StartSeconds = 1.25,
+                EndSeconds = 1.75,
+                TimingQuality = MeetingTimingQuality.Aligned
+            }).ToArray()
+        };
+        await using var session = Create(engine, captures, aligner: aligner);
+        await session.StartAsync(new());
+        await SendAsync(captures.Captures[0], engine, 2, 2);
+
+        engine.ReportTimedSources([
+            new("Speaker 1", 0, 2, "Remote speech") { TimingQuality = MeetingTimingQuality.Chunk, Source = MeetingAudioSource.Playback },
+            new("You", 0, 2, "Local speech") { TimingQuality = MeetingTimingQuality.Chunk, Source = MeetingAudioSource.Microphone }
+        ]);
+
+        Assert.Equal(["Remote speech"], Assert.Single(aligner.Inputs).Select(turn => turn.Text));
+        var turns = session.Document!.Turns;
+        Assert.Equal(MeetingTimingQuality.Chunk, turns[0].TimingQuality);
+        Assert.Equal(MeetingAudioSource.Microphone, turns[0].Source);
+        Assert.Equal(MeetingTimingQuality.Aligned, turns[1].TimingQuality);
+        Assert.Equal(MeetingAudioSource.Playback, turns[1].Source);
         await session.EndAsync();
     }
 
@@ -247,16 +323,20 @@ public sealed class MeetingSpeakerEvidenceSessionTests : IDisposable
         public Task<IReadOnlyList<AudioModel>> ConnectAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<AudioModel>>([new() { Id = "vibevoice", Family = "vibevoice_asr_streaming", Mode = "streaming" }]);
         public Task PrepareMeetingAsync(AudioModel model, RecognitionOptions options, CancellationToken token) => Task.CompletedTask;
-        public async Task StreamMeetingAsync(AudioModel model, ChannelReader<byte[]> audio, RecognitionOptions options,
+        public async Task StreamMeetingAsync(AudioModel model, ChannelReader<MeetingAudioPacket> audio, RecognitionOptions options,
             IProgress<TranscriptUpdate> progress, CancellationToken token, Action? onReady = null)
         {
             _progress = progress;
             onReady?.Invoke();
-            await foreach (var packet in audio.ReadAllAsync(token)) Interlocked.Add(ref _samples, packet.Length / 2);
+            await foreach (var packet in audio.ReadAllAsync(token)) Interlocked.Add(ref _samples, packet.Samples);
             progress.Report(_last with { IsFinal = true });
         }
         public void Report(string text) => Publish(new(text, false));
-        public void ReportTimed(IReadOnlyList<MeetingTurn> turns) => Publish(new("", false) { SpeakerTurns = turns });
+        public void ReportTimed(IReadOnlyList<MeetingTurn> turns) => Publish(new("", false)
+        {
+            SpeakerTurns = turns.Select(turn => turn with { Source = MeetingAudioSource.Playback }).ToArray()
+        });
+        public void ReportTimedSources(IReadOnlyList<MeetingTurn> turns) => Publish(new("", false) { SpeakerTurns = turns });
         private void Publish(TranscriptUpdate update) { _last = update; _progress!.Report(update); }
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }

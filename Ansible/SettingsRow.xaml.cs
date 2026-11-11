@@ -16,11 +16,8 @@ public sealed partial class SettingsRow : UserControl
     public static readonly DependencyProperty ControlContentProperty =
         DependencyProperty.Register(nameof(ControlContent), typeof(UIElement), typeof(SettingsRow), new PropertyMetadata(null, OnLayoutPropertyChanged));
 
-    public static readonly DependencyProperty WideWidthProperty =
-        DependencyProperty.Register(nameof(WideWidth), typeof(double), typeof(SettingsRow), new PropertyMetadata(double.NaN, OnLayoutPropertyChanged));
-
-    public static readonly DependencyProperty CompactAlignmentProperty =
-        DependencyProperty.Register(nameof(CompactAlignment), typeof(HorizontalAlignment), typeof(SettingsRow), new PropertyMetadata(HorizontalAlignment.Stretch, OnLayoutPropertyChanged));
+    public static readonly DependencyProperty ControlWidthProperty =
+        DependencyProperty.Register(nameof(ControlWidth), typeof(double), typeof(SettingsRow), new PropertyMetadata(double.NaN, OnLayoutPropertyChanged));
 
     public static readonly DependencyProperty ShowDividerProperty =
         DependencyProperty.Register(nameof(ShowDivider), typeof(bool), typeof(SettingsRow), new PropertyMetadata(true, OnLayoutPropertyChanged));
@@ -58,18 +55,11 @@ public sealed partial class SettingsRow : UserControl
         set => SetValue(ControlContentProperty, value);
     }
 
-    /// <summary>Width applied to the control in the two-column layout. NaN keeps its natural width.</summary>
-    public double WideWidth
+    /// <summary>Width of the control in every layout. NaN keeps its natural width, so buttons and keycaps never stretch.</summary>
+    public double ControlWidth
     {
-        get => (double)GetValue(WideWidthProperty);
-        set => SetValue(WideWidthProperty, value);
-    }
-
-    /// <summary>Alignment used by the control when the row stacks at the compact breakpoint.</summary>
-    public HorizontalAlignment CompactAlignment
-    {
-        get => (HorizontalAlignment)GetValue(CompactAlignmentProperty);
-        set => SetValue(CompactAlignmentProperty, value);
+        get => (double)GetValue(ControlWidthProperty);
+        set => SetValue(ControlWidthProperty, value);
     }
 
     /// <summary>Draws a hairline above the row. The first row in a group turns it off. Collapsing a row removes its divider.</summary>
@@ -99,11 +89,11 @@ public sealed partial class SettingsRow : UserControl
 
     private void LayoutSizeChanged(object sender, SizeChangedEventArgs args) => ApplyLayout(args.NewSize.Width);
 
-    // The stock ToggleSwitch draws its On/Off text after the switch. The row draws it before the switch instead,
-    // and the empty template column after the switch is pulled back so the switch ends at the right edge.
+    // The stock ToggleSwitch draws its On/Off text after the switch.
     private void AttachToggle(ToggleSwitch? toggle)
     {
         ToggleStateText.Visibility = toggle is null ? Visibility.Collapsed : Visibility.Visible;
+        ControlPresenter.ColumnSpacing = toggle is null ? 0 : 12;
         if (toggle is null) return;
         toggle.OnContent = null;
         toggle.OffContent = null;
@@ -120,7 +110,6 @@ public sealed partial class SettingsRow : UserControl
         ToggleStateText.Opacity = toggle.IsEnabled ? 1 : 0.5;
     }
 
-    // Divider and padding follow ShowDivider and IsChild. Code is their only source so the two cannot disagree.
     private void ApplyChrome()
     {
         var resources = Application.Current.Resources;
@@ -130,28 +119,23 @@ public sealed partial class SettingsRow : UserControl
 
     private void ApplyLayout(double width)
     {
-        var control = ControlContent as FrameworkElement;
-        if (control is null || LayoutRoot is null)
+        if (ControlContent is not FrameworkElement control || LayoutRoot is null)
         {
             return;
         }
 
-        var wide = width >= SettingsWideMinWidth;
-        // The row keeps one shared visual tree, but only the active axis may contribute
-        // geometry. Collapsing the inactive track and its spacing prevents a hidden
-        // column or row from changing compact widths or wide row heights.
-        LayoutRoot.ColumnDefinitions[1].Width = wide ? GridLength.Auto : new GridLength(0);
-        LayoutRoot.RowDefinitions[1].Height = wide ? new GridLength(0) : GridLength.Auto;
-        LayoutRoot.ColumnSpacing = wide ? SettingsColumnGap : 0;
-        LayoutRoot.RowSpacing = wide ? 0 : SettingsRowSpacing;
-        Grid.SetColumn(DescriptionPanel, 0);
-        Grid.SetRow(DescriptionPanel, 0);
-        Grid.SetColumn(ControlPresenter, wide ? 1 : 0);
-        Grid.SetRow(ControlPresenter, wide ? 0 : 1);
-        ControlPresenter.HorizontalAlignment = wide ? HorizontalAlignment.Right : HorizontalAlignment.Stretch;
+        var beside = width >= SettingsWideMinWidth || control is ToggleSwitch;
+        LayoutRoot.ColumnDefinitions[1].Width = beside ? GridLength.Auto : new GridLength(0);
+        LayoutRoot.RowDefinitions[1].Height = beside ? new GridLength(0) : GridLength.Auto;
+        LayoutRoot.ColumnSpacing = beside ? SettingsColumnGap : 0;
+        LayoutRoot.RowSpacing = beside ? 0 : SettingsRowSpacing;
+        Grid.SetColumn(ControlPresenter, beside ? 1 : 0);
+        Grid.SetRow(ControlPresenter, beside ? 0 : 1);
 
-        control.HorizontalAlignment = wide ? HorizontalAlignment.Right : CompactAlignment;
-        control.Width = wide && !double.IsNaN(WideWidth) ? WideWidth : double.NaN;
+        var alignment = beside ? HorizontalAlignment.Right : HorizontalAlignment.Left;
+        ControlPresenter.HorizontalAlignment = alignment;
+        control.HorizontalAlignment = alignment;
+        control.Width = ControlWidth;
     }
 
     private void UpdateDescription()

@@ -108,6 +108,47 @@ public sealed class TeamsSpeakerObserverTests(ITestOutputHelper output)
         Assert.Equal(MeetingSpeakerReadStatus.Readable, observation.Status);
         Assert.Equal(new[] { "Morgan" }, observation.SpeakingNames);
     }
+    [Fact]
+    public void ExplicitMarkerSiblingUsesOnlyUniqueParticipantTile()
+    {
+        var observation = TeamsSpeakerClassifier.Classify([
+            new("Participant surface", ControlType: 50032),
+            new("Morgan, Video on", Parent: 0),
+            new("Active speaker", Parent: 0, ControlType: 50020)], 50);
+        Assert.Equal(MeetingSpeakerReadStatus.Readable, observation.Status);
+        Assert.Equal(new[] { "Morgan" }, observation.SpeakingNames);
+    }
+    [Fact]
+    public void OffscreenMarkerUnderVisibleParticipantTileRemainsEvidence()
+    {
+        var observation = TeamsSpeakerClassifier.Classify([
+            new("Participant surface", ControlType: 50032),
+            new("Morgan, Video on", Parent: 0),
+            new("Active speaker", Parent: 1, ControlType: 50020, IsOffscreen: true)], 50);
+        Assert.Equal(MeetingSpeakerReadStatus.Readable, observation.Status);
+        Assert.Equal(new[] { "Morgan" }, observation.SpeakingNames);
+    }
+    [Fact]
+    public void ExplicitMarkerWithMultipleParticipantSiblingsIsAmbiguous()
+    {
+        var observation = TeamsSpeakerClassifier.Classify([
+            new("Participant surface", ControlType: 50032),
+            new("Morgan, Video on", Parent: 0),
+            new("Jordan, Video on", Parent: 0),
+            new("Active speaker", Parent: 0, ControlType: 50020)], 50);
+        Assert.Equal(MeetingSpeakerReadStatus.Unavailable, observation.Status);
+        Assert.Empty(observation.SpeakingNames);
+    }
+    [Fact]
+    public void ArbitraryChatMarkerCannotAttributeToUnrelatedTile()
+    {
+        var observation = TeamsSpeakerClassifier.Classify([
+            new("Morgan, Video on", Parent: 0),
+            new("Chat history", ControlType: 50032),
+            new("Active speaker", Parent: 1, ControlType: 50020)], 50);
+        Assert.Equal(MeetingSpeakerReadStatus.Unavailable, observation.Status);
+        Assert.Empty(observation.SpeakingNames);
+    }
     [Theory]
     [InlineData("Active speaker", "")]
     [InlineData("", "Speaking")]
@@ -181,5 +222,7 @@ public sealed class TeamsSpeakerObserverTests(ITestOutputHelper output)
         output.WriteLine($"Readings: {readings.Count}; readable: {readings.Count(reading => reading.Observation.Status == MeetingSpeakerReadStatus.Readable)}; self name available: {readings.Any(reading => reading.Observation.SelfName is not null)}; explicit speaking names: {readings.Max(reading => reading.Observation.SpeakingNames.Count)}. Names redacted. Mapping a real meeting still requires separate qualification.");
         output.WriteLine($"Most populated read: visible windows {best.Diagnostics.WindowCount}; nodes inspected {best.Diagnostics.NodeCount}; budget exceeded {best.Diagnostics.BudgetExceeded}; error HRESULT {best.Diagnostics.ErrorHResult:X8}.");
         output.WriteLine($"Budget failures: {readings.Count(reading => reading.Diagnostics.BudgetExceeded)}; errors: {string.Join(", ", readings.Where(reading => reading.Diagnostics.ErrorHResult is not null).Select(reading => $"{reading.Diagnostics.ErrorHResult:X8}").Distinct())}.");
+        foreach (var shape in best.Diagnostics.NodeShapes ?? [])
+            output.WriteLine($"Node shape: parent={shape.Parent}; control={shape.ControlType}; nameLength={shape.NameLength}; automationIdLength={shape.AutomationIdLength}; helpLength={shape.HelpTextLength}; itemStatusLength={shape.ItemStatusLength}; tile={shape.IsTile}; knownTileAutomationId={shape.HasKnownTileAutomationId}; tileDescription={shape.HasTileDescription}; selfPrefix={shape.HasSelfPrefix}; parsedName={shape.HasParsedName}; speakingMarker={shape.HasSpeakingMarker}; silentMarker={shape.HasSilentMarker}.");
     }
 }

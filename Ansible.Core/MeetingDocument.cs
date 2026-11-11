@@ -9,6 +9,9 @@ public enum MeetingAudioSource { Mixed, Microphone, Playback }
 
 public sealed record MeetingTurn(string SpeakerId, double StartSeconds, double EndSeconds, string Text, bool IsProvisional = false)
 {
+    /// <summary>The speaker ID of speech the model could not attribute to a speaker. Saved meetings store this value.</summary>
+    public const string UnattributedSpeakerId = "Unknown speaker";
+
     public MeetingTimingQuality TimingQuality { get; init; }
     public string? OriginalText { get; init; }
     public MeetingAudioSource Source { get; init; }
@@ -16,9 +19,12 @@ public sealed record MeetingTurn(string SpeakerId, double StartSeconds, double E
 
 public sealed record MeetingDocument
 {
+    /// <summary>The title of a meeting nobody has named. Saved meetings store this value.</summary>
+    public const string UntitledTitle = "New meeting";
+
     public int SchemaVersion { get; init; } = 1;
     public Guid Id { get; init; } = Guid.NewGuid();
-    public string Title { get; init; } = "New meeting";
+    public string Title { get; init; } = UntitledTitle;
     public DateTimeOffset CreatedAt { get; init; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; init; } = DateTimeOffset.UtcNow;
     public MeetingStatus Status { get; init; } = MeetingStatus.Recording;
@@ -30,6 +36,20 @@ public sealed record MeetingDocument
         // Source-generated deserialization supplies null for this field in older saved meetings.
         init => field = value ?? new Dictionary<string, string>();
     } = new Dictionary<string, string>();
+
+    [JsonIgnore]
+    public bool IsUntitled => IsUntitledTitle(Title);
+
+    /// <summary>The end of the last recognized speech, or null when the meeting has no speech.</summary>
+    [JsonIgnore]
+    public TimeSpan? SpeechDuration => Turns.Count == 0 ? null : TimeSpan.FromSeconds(Turns.Max(turn => turn.EndSeconds));
+
+    /// <summary>Attributed speakers only; speech the model could not attribute is not a speaker.</summary>
+    [JsonIgnore]
+    public int SpeakerCount => Turns.Select(turn => turn.SpeakerId)
+        .Where(id => id != MeetingTurn.UnattributedSpeakerId).Distinct(StringComparer.Ordinal).Count();
+
+    internal static bool IsUntitledTitle(string title) => string.Equals(title.Trim(), UntitledTitle, StringComparison.Ordinal);
 
     public string GetSpeakerName(string speakerId) => SpeakerNames.TryGetValue(speakerId, out var name) ? name
         : AutoSpeakerNames.TryGetValue(speakerId, out var automaticName) ? automaticName : speakerId;

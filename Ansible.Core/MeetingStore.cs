@@ -6,10 +6,16 @@ namespace Ansible.Core;
 
 public sealed record MeetingReadFailure(Guid Id, string Message);
 
-public sealed record MeetingSummary(Guid Id, string Title, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, MeetingStatus Status)
+/// <summary>List metadata for one saved meeting. Duration is the end of the last recognized speech, null without
+/// speech. SpeakerCount counts attributed speakers only; speech the model could not attribute is not a speaker.</summary>
+public sealed record MeetingSummary(Guid Id, string Title, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, MeetingStatus Status,
+    TimeSpan? Duration, int SpeakerCount)
 {
-    internal static MeetingSummary From(MeetingDocument document) =>
-        new(document.Id, document.Title, document.CreatedAt, document.UpdatedAt, document.Status);
+    public bool IsUntitled => MeetingDocument.IsUntitledTitle(Title);
+
+    public static MeetingSummary From(MeetingDocument document) =>
+        new(document.Id, document.Title, document.CreatedAt, document.UpdatedAt, document.Status,
+            document.SpeechDuration, document.SpeakerCount);
 }
 
 public sealed record MeetingListResult(IReadOnlyList<MeetingSummary> Summaries, IReadOnlyList<MeetingReadFailure> Failures);

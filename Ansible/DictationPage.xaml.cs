@@ -1,4 +1,4 @@
-using Ansible.Core;
+﻿using Ansible.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -16,11 +16,10 @@ public sealed partial class DictationPage : Page
     private static readonly TimeSpan CopiedDuration = TimeSpan.FromSeconds(2);
 
     private readonly DictationSession _session;
-    private readonly AppPaths _paths;
+    private readonly ModelNames _modelNames;
     private readonly HomeDictationHistory _history;
     private readonly ShortcutDictation _shortcut;
     private readonly Func<nint> _windowHandle;
-    private readonly Task _catalogNamesTask;
     private Task _copyPicturesTask = Task.CompletedTask;
     private bool _copyingPictures;
     private readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromMilliseconds(250) };
@@ -28,36 +27,33 @@ public sealed partial class DictationPage : Page
     private SessionSnapshot _state;
     private UiSessionObserver? _observer;
     private bool _picking;
-    private readonly Dictionary<string, string> _homeCatalogNames = new(StringComparer.OrdinalIgnoreCase);
     private UsageDocument? _homeUsage;
     private string? _homeUsageError;
+    private int? _homeDictations;
     private string _homeShortcutDisplay = "";
     private int _homeGreetingHour = -1;
     private bool _homeDataInitialized;
     private DateTime _homeDataDate;
     private bool _disposed;
-    // Removing the current transcript's history row must not bring it back as the separate transcript card.
     private Guid? _removedTranscriptOperationId;
-    // While the page scrolls, the history header and the wide insights rail stay on screen.
-    private readonly StickyPin _historyHeaderPin;
     private StickyPin? _railPin;
 
     private readonly AppNotices _notices;
 
-    internal DictationPage(DictationSession session, AppPaths paths, Func<nint> windowHandle, HomeDictationHistory history,
+    internal DictationPage(DictationSession session, ModelNames modelNames, Func<nint> windowHandle, HomeDictationHistory history,
         AppNotices notices, ShortcutDictation shortcut)
     {
         InitializeComponent();
-        HomeViewport.PrimaryAction = new PageAction(CompactDictateButton, RecordClicked, CompactDictateLabel);
+        HomeViewport.PrimaryAction = new PageAction(CompactDictateButton, RecordClicked, CompactDictateLabel, new FontIconSource { Glyph = "", FontSize = 16 });
         _session = session;
         _shortcut = shortcut;
         _shortcut.RecordResultChanged += RecordResultChanged;
         _notices = notices;
-        _paths = paths;
+        _modelNames = modelNames;
+        _modelNames.Ready += ModelNamesReady;
         _windowHandle = windowHandle;
         _history = history ?? throw new ArgumentNullException(nameof(history));
         _state = session.State;
-        _catalogNamesTask = LoadHomeCatalogNamesAsync();
         _clock.Tick += (_, _) =>
         {
             RenderClock();
@@ -71,7 +67,9 @@ public sealed partial class DictationPage : Page
         HistoryView.QueryChanged += HistoryQueryChanged;
         HistoryView.CopyRequested += CopyHistoryItem;
         HistoryView.RemoveRequested += RemoveHistoryItem;
-        _historyHeaderPin = HistoryView.PinHeader(HomeViewport);
+        HistoryView.EmptyHistoryFocusRequested += FocusDictate;
+        HistoryView.PinHeader(HomeViewport);
+        UpdateHomeWidth(_history.Snapshot().Count > 0);
         HistoryChanged();
         _observer = new UiSessionObserver(session, DispatcherQueue, state =>
         {
@@ -91,17 +89,19 @@ public sealed partial class DictationPage : Page
         };
     }
 
-    internal Task FinishBackgroundWorkAsync() => Task.WhenAll(_catalogNamesTask, _copyPicturesTask);
+    internal Task FinishBackgroundWorkAsync() => _copyPicturesTask;
 
     internal void Dispose()
     {
         _disposed = true;
+        _modelNames.Ready -= ModelNamesReady;
         _shortcut.RecordResultChanged -= RecordResultChanged;
         _history.Changed -= HistoryChanged;
         HistoryView.QueryChanged -= HistoryQueryChanged;
         HistoryView.CopyRequested -= CopyHistoryItem;
         HistoryView.RemoveRequested -= RemoveHistoryItem;
-        _historyHeaderPin.Dispose();
+        HistoryView.EmptyHistoryFocusRequested -= FocusDictate;
+        HistoryView.UnpinHeader();
         _railPin?.Dispose();
         _railPin = null;
         _observer?.Dispose();
@@ -150,36 +150,15 @@ public sealed partial class DictationPage : Page
         CopyRetainedVideoButton.Visibility = retained?.VideoPath is not null ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    private async Task LoadHomeCatalogNamesAsync()
+    private void ModelNamesReady()
     {
-        var dispatcher = DispatcherQueue;
-        try
-        {
-            var entries = await NativeModelCatalog.LoadAsync(_paths.ModelCatalog).ConfigureAwait(false);
-            var names = entries
-                .Where(entry => !string.IsNullOrWhiteSpace(entry.DisplayName))
-                .ToDictionary(entry => entry.Id, entry => entry.DisplayName!, StringComparer.OrdinalIgnoreCase);
-            dispatcher.TryEnqueue(() =>
-            {
-                if (_disposed) { return; }
-                _homeCatalogNames.Clear();
-                foreach (var pair in names) { _homeCatalogNames[pair.Key] = pair.Value; }
-                _homeDataInitialized = false;
-                RenderHomeData();
-                RenderHomeHistory(animate: false);
-            });
-        }
-        catch
-        {
-            // Installed model snapshots still carry catalog display names. An unavailable catalog adds no label.
-        }
+        if (_disposed) { return; }
+        _homeDataInitialized = false;
+        RenderHomeData();
+        RenderHomeHistory(animate: false);
     }
 
-    private string? HomeModelDisplayName(string modelId)
-    {
-        if (_homeCatalogNames.TryGetValue(modelId, out var catalogName)) { return catalogName; }
-        return _state.Models.FirstOrDefault(model => model.Id == modelId)?.DisplayName;
-    }
+    private HomeModelName? HomeModelNameFor(string modelId) => _modelNames.Find(modelId, _state.Models);
 
     private void RenderHomeData()
     {
@@ -200,25 +179,7 @@ public sealed partial class DictationPage : Page
         if (_homeShortcutDisplay != settings.Shortcut.DisplayText)
         {
             _homeShortcutDisplay = settings.Shortcut.DisplayText;
-            ShortcutKeys.Children.Clear();
-            var parts = _homeShortcutDisplay.Split(" + ", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-            for (var index = 0; index < parts.Length; index++)
-            {
-                if (index > 0)
-                    ShortcutKeys.Children.Add(new TextBlock { Text = "+", Style = AppStyle("CaptionSecondaryStyle"), VerticalAlignment = VerticalAlignment.Center });
-                var keycap = new Border { Style = AppStyle("KeycapStyle") };
-                keycap.Child = new TextBlock { Text = parts[index], Style = AppStyle("KeycapTextStyle") };
-                ShortcutKeys.Children.Add(keycap);
-            }
-        }
-        if (ShortcutTailText.Text != "anywhere, or") ShortcutTailText.Text = "anywhere, or";
-        var emptyHint = settings.PushToTalk
-            ? $"Hold {settings.Shortcut.DisplayText} in any app and speak. Your text appears here too."
-            : $"Press {settings.Shortcut.DisplayText} in any app, speak, then press it again. Your text appears here too.";
-        if (HistoryView.EmptyHint != emptyHint)
-        {
-            HistoryView.EmptyHint = emptyHint;
-            RenderHomeHistory(animate: false);
+            ShortcutKeycaps.Show(ShortcutKeys, _homeShortcutDisplay);
         }
         if (!_homeDataInitialized || _homeDataDate != DateTime.Today || !ReferenceEquals(_homeUsage, _state.Usage) || _homeUsageError != _state.UsageError)
         {
@@ -227,21 +188,23 @@ public sealed partial class DictationPage : Page
             _homeUsage = _state.Usage;
             _homeUsageError = _state.UsageError;
             var insights = HomeInsightsProjection.Create(_state.Usage, _state.UsageError,
-                HomeModelDisplayName, DateOnly.FromDateTime(DateTime.Today), TimeZoneInfo.Local);
+                HomeModelNameFor, DateOnly.FromDateTime(DateTime.Today), TimeZoneInfo.Local);
+            _homeDictations = insights.UsageWarning is null ? insights.Dictations : null;
             HomeInsightsColumn.Render(insights);
             PostStorageNotice(UsageNoticeKey, "Some usage statistics are missing", insights.UsageWarning);
         }
+        HistoryView.SetEmptyContext(_homeDictations);
     }
 
     private void RenderHomeHistory(bool animate)
     {
         var model = HomeHistoryProjection.Create(_history.Snapshot(), HistoryView.Query,
-            _history.OversizedCurrentResult, HomeModelDisplayName, DateTime.Today, _history.StorageError);
+            _history.OversizedCurrentResult, HomeModelNameFor, DateTime.Today, _history.StorageError);
         HistoryView.Render(model, animate);
+        UpdateHomeWidth(model.HasHistory);
         PostStorageNotice(HistoryNoticeKey, "History needs attention", model.StorageError);
     }
 
-    // Storage problems are conditions, not events: the notice stays until the error clears and cannot be closed.
     private void PostStorageNotice(string key, string title, string? message) => _notices.Set(key,
         message is null ? null : new NoticeContent(NoticeSeverity.Warning, title, message, IsClosable: false), NoticeArea.Dictation);
 
@@ -257,6 +220,12 @@ public sealed partial class DictationPage : Page
     }
 
     private void HistoryQueryChanged() => RenderHomeHistory(animate: false);
+
+    private void FocusDictate()
+    {
+        if (Microsoft.UI.Xaml.Input.FocusManager.FindFirstFocusableElement(HomeViewport) is Control control)
+            control.Focus(FocusState.Keyboard);
+    }
 
     private void CopyHistoryItem(HomeHistoryItem item)
     {
@@ -275,18 +244,11 @@ public sealed partial class DictationPage : Page
         HistoryView.ShowCopied(item.OperationId);
     }
 
-    // Renders synchronously so the view can move keyboard focus to the row that took the removed row's place.
     private void RemoveHistoryItem(HomeHistoryItem item)
     {
         if (!_history.Remove(item.OperationId)) { return; }
         if (item.OperationId == _state.TranscriptOperationId) { _removedTranscriptOperationId = item.OperationId; }
         RenderHomeHistory(animate: true);
-    }
-
-    private Style AppStyle(string key)
-    {
-        var resource = Resources.ContainsKey(key) ? Resources[key] : Application.Current.Resources[key];
-        return (Style)resource;
     }
 
     private void DictateControlSizeChanged(object sender, SizeChangedEventArgs args)
@@ -297,20 +259,27 @@ public sealed partial class DictationPage : Page
     private void UpdateShortcutLayout()
     {
         var stackedHelper = HomeViewport.ContentWidth < (double)Application.Current.Resources["ShortcutStackThreshold"];
+        ShortcutControlGrid.RowSpacing = stackedHelper ? 8 : 0;
         Grid.SetRow(ShortcutButtons, stackedHelper ? 1 : 0);
         Grid.SetColumn(ShortcutButtons, stackedHelper ? 0 : 1);
         Grid.SetColumnSpan(ShortcutButtons, stackedHelper ? 2 : 1);
-        ShortcutButtons.HorizontalAlignment = stackedHelper ? HorizontalAlignment.Right : HorizontalAlignment.Left;
     }
-    // Wide: history beside a fixed insights rail that sticks beside the history header. Narrow: the insights cards
-    // become a strip above history that scrolls away.
-    private void HomeColumnsSizeChanged(object sender, SizeChangedEventArgs args)
+
+    private void UpdateHomeWidth(bool hasHistory)
     {
-        var stacked = args.NewSize.Width < (double)Application.Current.Resources["HomeRailStackThreshold"];
+        if (HomeViewport.Wide == hasHistory) return;
+        HomeViewport.Wide = hasHistory;
+        UpdateHomeColumns(HomeColumns.ActualWidth);
+    }
+
+    private void HomeColumnsSizeChanged(object sender, SizeChangedEventArgs args) => UpdateHomeColumns(args.NewSize.Width);
+
+    private void UpdateHomeColumns(double width)
+    {
+        var stacked = !HomeViewport.Wide || width < (double)Application.Current.Resources["HomeRailStackThreshold"];
         if (stacked) { _railPin?.Dispose(); _railPin = null; }
         else if (!_disposed)
         {
-            // The rail top lines up with the stuck header's content and keeps the same gap above the visible bottom.
             var gap = HistoryView.StuckContentTop;
             _railPin ??= HomeViewport.Pin(HomeInsightsColumn, HistoryView, gap, gap);
         }
@@ -320,11 +289,10 @@ public sealed partial class DictationPage : Page
         HomeColumns.RowDefinitions.Clear();
         HomeColumns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         if (!stacked) HomeColumns.ColumnDefinitions.Add(new ColumnDefinition { Width = (GridLength)Application.Current.Resources["HomeRailColumnWidth"] });
-        HomeColumns.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        HomeColumns.RowDefinitions.Add(new RowDefinition { Height = stacked ? GridLength.Auto : new GridLength(1, GridUnitType.Star) });
         if (stacked) HomeColumns.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         Grid.SetColumn(HomeInsightsColumn, stacked ? 0 : 1);
-        Grid.SetRow(HomeInsightsColumn, 0);
-        Grid.SetRow(HistoryView, stacked ? 1 : 0);
+        Grid.SetRow(HomeInsightsColumn, stacked ? 1 : 0);
     }
 
     private void HomeViewportSizeChanged(object sender, SizeChangedEventArgs args) => UpdateShortcutLayout();

@@ -11,7 +11,6 @@ namespace Ansible;
 
 public sealed partial class MainWindow : Window
 {
-    // Notice keys, one per source. A source's newest notice replaces its previous one.
     private const string SessionNoticeKey = "session";
     private const string MicrophonePermissionNoticeKey = "microphone-permission";
     private const string MicrophoneCheckNoticeKey = "microphone-check";
@@ -42,7 +41,10 @@ public sealed partial class MainWindow : Window
     private readonly MeetingCleanupService _meetingCleanup;
     private readonly LocalDiagnosticLog _meetingDiagnostics;
     private readonly AppPaths _paths;
+    private readonly ModelNames _modelNames = new();
+    private readonly Task _modelNamesTask;
     private readonly List<(MeetingSession session, MeetingWindow window, Guid? savedId)> _meetingWindows = [];
+    private readonly HashSet<Task> _meetingCloseTasks = [];
     private readonly UiSessionObserver _observer;
     private readonly AppNotices _notices = new();
     private GlobalDictationHotkey? _hotkey;
@@ -65,7 +67,6 @@ public sealed partial class MainWindow : Window
     private bool _closing;
     private bool _popupFailed;
     private bool _creatingFloating;
-    // Caret of the shortcut destination, read once at press time. Null for in-app dictation or an unknown caret.
     private CaretBounds? _overlayAnchor;
     private bool? _capturePrivacy;
     private PageCanvas? _noticeCanvas;
@@ -96,7 +97,8 @@ public sealed partial class MainWindow : Window
         _meetingStore = new MeetingStore(Path.Combine(Path.GetDirectoryName(paths.Settings)!, "meetings"));
         _meetingDiagnostics = diagnostics;
         _meetingCleanup = new(diagnostics);
-        _meetings = new MeetingsPage(_meetingStore, OpenMeetingAsync, () => WinRT.Interop.WindowNative.GetWindowHandle(this), diagnostics, _notices);
+        _meetings = new MeetingsPage(_meetingStore, OpenMeetingAsync, DeleteMeetingAsync,
+            () => WinRT.Interop.WindowNative.GetWindowHandle(this), diagnostics, _notices);
         _history = new HomeDictationHistory(session, Path.Combine(Path.GetDirectoryName(paths.Settings)!, "dictation-history.json"), diagnostics);
         _shortcut = new ShortcutDictation(session,
             new WelcomeShortcutTargetInspector(DispatcherQueue, CurrentWelcome,
@@ -113,12 +115,12 @@ public sealed partial class MainWindow : Window
             (title, message) => _notices.Set(MeetingDetectionNoticeKey,
                 new NoticeContent(NoticeSeverity.Warning, title, message), NoticeArea.Meetings));
         _suggestions.Changed += RenderMeetingSuggestion;
-        // Page callbacks run after _pages is assigned below.
         _welcome = new WelcomeDialog(session, () => _shortcut.IsBusy, _notices);
-        _dictation = new DictationPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this), _history, _notices, _shortcut);
-        _settings = new MainPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this),
+        _dictation = new DictationPage(session, _modelNames, () => WinRT.Interop.WindowNative.GetWindowHandle(this), _history, _notices, _shortcut);
+        _settings = new MainPage(session, _modelNames, () => WinRT.Interop.WindowNative.GetWindowHandle(this),
             ChangeHotkey, ChangeDictationMode, CaptureShortcut, diagnostics, _notices,
             ChangeRecordHotkey, EnableRecordChord, captures, ChangeRecordPasteHotkey);
+        _modelNamesTask = _modelNames.LoadAsync(paths.ModelCatalog);
         _settings.ShortcutLessonRequested += OpenShortcutLesson;
         _models = new ModelManagementPage(session, paths, () => WinRT.Interop.WindowNative.GetWindowHandle(this), modelDownloads,
             () => { Navigate(_pages!.Home); return _dictation.TranscribeFileAsync(); }, diagnostics, _notices);
@@ -169,7 +171,6 @@ public sealed partial class MainWindow : Window
         var startupStarted = startupGeneration is null ? 0 : Stopwatch.GetTimestamp();
         try
         {
-            // Let the initial Window.Activate finish before Windows can display consent.
             await Task.Yield();
             token.ThrowIfCancellationRequested();
             var permissionStarted = startupGeneration is null ? 0 : Stopwatch.GetTimestamp();
@@ -179,7 +180,6 @@ public sealed partial class MainWindow : Window
             catch (Exception error)
             {
                 permissionFailure = error;
-                // The preflight retains Unavailable and blocks capture. File/model workflows still initialize.
                 Debug.WriteLine($"Ansible: microphone permission preflight failed, HRESULT 0x{error.HResult:X8}.");
             }
             finally
@@ -282,7 +282,6 @@ public sealed partial class MainWindow : Window
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { return; }
         catch (Exception error) { notice = new(NoticeSeverity.Error, "Meeting recovery failed", error.Message); }
-        // Initialization publishes its own notice. Report recovery problems afterward without delaying dictation.
         if (notice is not null && _startupTask is not null) await _startupTask;
         if (token.IsCancellationRequested || _closed || _closing) return;
         if (notice is not null) _notices.Set(MeetingRecoveryNoticeKey, notice, NoticeArea.Meetings);
@@ -304,23 +303,21 @@ public sealed partial class MainWindow : Window
         }
         var message = status switch
         {
-            MicrophonePermissionStatus.DeniedByUser => "Enable microphone access for Ansible and desktop apps in Windows Settings, then check again.",
-            MicrophonePermissionStatus.DeniedBySystem => "Windows is blocking microphone access. Check Windows Settings or contact your administrator.",
-            MicrophonePermissionStatus.NotDeclared => "This package does not declare microphone access. Install an Ansible package with microphone capability.",
-            MicrophonePermissionStatus.PromptRequired => "Microphone access is required. Check again to request access.",
-            _ => "Microphone access could not be checked. Review Windows privacy settings, then check again."
+            MicrophonePermissionStatus.DeniedByUser => "Turn it on for Ansible and desktop apps.",
+            MicrophonePermissionStatus.DeniedBySystem => "Turn it on in Windows, or ask your administrator.",
+            MicrophonePermissionStatus.NotDeclared => "Install an Ansible package that declares the microphone capability.",
+            MicrophonePermissionStatus.PromptRequired => "Select Check again to request access.",
+            _ => "Ansible could not check it. Review Windows privacy settings."
         };
         _notices.Set(MicrophonePermissionNoticeKey, new NoticeContent(NoticeSeverity.Warning, "Microphone access required", message,
-            [new("Open settings", OpenMicrophoneSettings), new("Check again", CheckMicrophonePermission)]),
+            [new("Open Windows Settings", OpenMicrophoneSettings), new("Check again", CheckMicrophonePermission)]),
             dismissed: () =>
             {
-                // Dismissal holds for this status only; a different failure, or opening Settings, shows it again.
                 if (_microphonePermission.Status != MicrophonePermissionStatus.Allowed)
                     _dismissedMicrophonePermissionStatus = _microphonePermission.Status;
             });
     }
 
-    // A check already in progress ignores the request; the notice keeps its actions rather than reflowing.
     private async void CheckMicrophonePermission()
     {
         if (_closing || _closed || !_permissionCheckComplete || _permissionRetryTask is { IsCompleted: false }) return;
@@ -371,7 +368,6 @@ public sealed partial class MainWindow : Window
         AppTitleBar.SetCompact(compact);
         foreach (var button in _pages.Sidebar.Select(page => page.Nav))
         {
-            // A local value outlasts Navigate's style swaps, so the icon stays centred in the 72 px column.
             button.HorizontalContentAlignment = compact ? HorizontalAlignment.Center : HorizontalAlignment.Left;
             if (button.Content is StackPanel content)
             {
@@ -380,7 +376,17 @@ public sealed partial class MainWindow : Window
                     label.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
             }
             ToolTipService.SetToolTip(button, compact ? AutomationProperties.GetName(button) : null);
+            ToolTipService.SetPlacement(button, Microsoft.UI.Xaml.Controls.Primitives.PlacementMode.Right);
         }
+    }
+
+    private void NoticeColumnChanged(object? sender, EventArgs args) => AlignNotices();
+
+    private void AlignNotices()
+    {
+        if (_noticeCanvas is null) return;
+        var (left, right, maxWidth) = _noticeCanvas.Column;
+        Notices.AlignWith(left, right, maxWidth);
     }
 
     private void Navigate(ShellPage page)
@@ -390,30 +396,32 @@ public sealed partial class MainWindow : Window
             _dismissedMicrophonePermissionStatus = null;
             RenderMicrophonePermission();
         }
-        // Reselecting the current page keeps its state and scroll position.
         if (ReferenceEquals(MainContent.Content, page.Page)) return;
         MainContent.Content = page.Page;
         foreach (var item in _pages.Sidebar) item.SetSelected(ReferenceEquals(item.Nav, page.Nav));
-        // Floating notices cover the bottom of the current page, so only that page reserves room for them.
-        if (_noticeCanvas is not null) _noticeCanvas.BottomInset = 0;
+        if (_noticeCanvas is not null)
+        {
+            _noticeCanvas.BottomInset = 0;
+            _noticeCanvas.ColumnChanged -= NoticeColumnChanged;
+        }
         _noticeCanvas = page.Canvas;
+        _noticeCanvas.ColumnChanged += NoticeColumnChanged;
+        AlignNotices();
         Notices.ShowPage(page.Area);
         _noticeCanvas.BottomInset = Notices.CoveredHeight;
         AppTitleBar.ShowPage(page.Title, page.Canvas);
     }
 
-    // The panel's border draws rounded corners but does not clip; clip the page so its scrollbar and content stay
-    // inside the corners.
+    // The content layer's border draws rounded corners but does not clip.
     private void MainContentSizeChanged(object sender, SizeChangedEventArgs args)
     {
         var visual = ElementCompositionPreview.GetElementVisual(MainContent);
-        var radius = new Vector2((float)Math.Max(0, ContentPanel.CornerRadius.TopLeft - ContentPanel.BorderThickness.Left));
+        var radius = new Vector2((float)Math.Max(0, ContentLayer.CornerRadius.TopLeft - ContentLayer.BorderThickness.Left));
         visual.Clip = visual.Compositor.CreateRectangleClip(0, 0, (float)args.NewSize.Width, (float)args.NewSize.Height,
             radius, radius, radius, radius);
     }
 
-    // A window hidden to the tray or minimized is not showing the lesson, so it must not hold the global shortcut.
-    // AppWindow.IsVisible stays true for a minimized window, so the presenter state is checked separately.
+    // AppWindow.IsVisible stays true for a minimized window.
     private WelcomeDialog? CurrentWelcome() =>
         !_closed && AppWindow.IsVisible
         && AppWindow.Presenter is not OverlappedPresenter { State: OverlappedPresenterState.Minimized }
@@ -431,7 +439,7 @@ public sealed partial class MainWindow : Window
         ShowWelcome();
     }
 
-    // The lesson opens over whichever page is current. Only one ContentDialog may be open per XamlRoot.
+    // Only one ContentDialog may be open per XamlRoot.
     private async void ShowWelcome()
     {
         if (_closing || _closed || _welcome.IsShowing) return;
@@ -510,24 +518,40 @@ public sealed partial class MainWindow : Window
         });
         window.Closed += async (_, _) =>
         {
+            // Every close path disposes the session before allowing Window.Close.
+            _meetingWindows.RemoveAll(item => ReferenceEquals(item.window, window));
+            var work = FinishClosedMeetingAsync();
+            _meetingCloseTasks.Add(work);
+            try { await work; }
+            finally { _meetingCloseTasks.Remove(work); }
+        };
+        return window;
+
+        async Task FinishClosedMeetingAsync()
+        {
             try
             {
-                await meeting.DisposeAsync();
-                _meetingWindows.RemoveAll(item => ReferenceEquals(item.window, window));
+                if (window.DeleteOnClose && (document?.Id ?? meeting.Document?.Id) is { } id)
+                    await _meetingStore.DeleteAsync(id);
                 if (ReferenceEquals(MainContent.Content, _meetings)) await _meetings.RefreshAsync();
             }
             catch (Exception error) { _notices.SetError(MeetingWindowNoticeKey, error, NoticeArea.Meetings); }
-        };
-        return window;
+        }
     }
 
     private bool MeetingSuggestionsBlocked => !_launchReady || !_meetingRecoveryComplete || !_session.State.IsIdle ||
         _shortcut.IsBusy ||
         _meetingWindows.Any(meeting => meeting.session.IsActive);
 
+    private Task DeleteMeetingAsync(Guid id, CancellationToken token)
+    {
+        if (_meetingWindows.Any(item => item.savedId == id || item.session.Document?.Id == id))
+            throw new InvalidOperationException("Close this meeting's window before deleting it.");
+        return _meetingStore.DeleteAsync(id, token);
+    }
+
     private void RenderMeetingSuggestion()
     {
-        // Open notetaker is ignored while a confirmation runs; MeetingSuggestions guards the second request.
         _notices.Set(MeetingSuggestionNoticeKey, _suggestions.Offer is null ? null : new NoticeContent(NoticeSeverity.Information,
             "Teams microphone is active.", "Start local notetaking? Recording starts only when you click Start.",
             [new("Open notetaker", OpenSuggestedMeeting)]), dismissed: _suggestions.Dismiss);
@@ -539,7 +563,7 @@ public sealed partial class MainWindow : Window
         {
             var window = OpenMeeting(null);
             if (!window.SelectDetectedMeeting(candidate)) return false;
-            window.Activate(); // Opening the notetaker does not start capture.
+            window.Activate();
             return true;
         });
         if (!_closing && !_closed && outcome is MeetingSuggestionOutcome.Rejected or MeetingSuggestionOutcome.Failed)
@@ -733,7 +757,6 @@ public sealed partial class MainWindow : Window
     {
         try
         {
-            // The caps follow the chord on every step, before the lesson decides whether it may dictate.
             if (_welcome.IsShowing) _welcome.ShowShortcutHeld(pressed);
             if (pressed && CurrentWelcome() is { AcceptsShortcut: false }) return;
             if (pressed) { await _shortcut.PressedAsync(_configuredHotkey); }
@@ -767,7 +790,6 @@ public sealed partial class MainWindow : Window
 
     private void PrepareRecordCapture()
     {
-        // Snapshot runs synchronously on accepted activation, before the native capture worker can see a frame.
         try { _floating?.ForceRecordPrivacy(true); }
         catch (Exception error) { ShowCapturePrivacyFailure(error.Message); throw; }
     }
@@ -852,7 +874,7 @@ public sealed partial class MainWindow : Window
         if (_closing) { return; }
         _closing = true;
         MainContent.IsEnabled = false;
-        // The dialog sits in the popup layer, outside MainContent, so it is closed rather than disabled.
+        // The dialog sits in the popup layer, outside MainContent.
         _welcome.Dismiss();
         _notices.Set(ShutdownErrorNoticeKey, null);
         _shortcut.BeginShutdown();
@@ -868,11 +890,14 @@ public sealed partial class MainWindow : Window
             if (_microphoneSettingsTask is not null) await _microphoneSettingsTask;
             await _meetings.BeginShutdownAsync();
             await _suggestions.JoinAsync();
+            await Task.WhenAll(_meetingCloseTasks.ToArray());
             var meetings = _meetingWindows.ToArray();
             await Task.WhenAll(meetings.Select(meeting => meeting.window.BeginShutdownAsync()));
             foreach (var meeting in meetings) await meeting.session.DisposeAsync();
             foreach (var meeting in _meetingWindows.ToArray()) meeting.window.Close();
-            await Task.WhenAll(_session.CloseAsync(), _models.DisposeAsync().AsTask(), _dictation.FinishBackgroundWorkAsync(), _settings.JoinAsync());
+            await Task.WhenAll(_meetingCloseTasks.ToArray());
+            await Task.WhenAll(_session.CloseAsync(), _models.DisposeAsync().AsTask(), _dictation.FinishBackgroundWorkAsync(),
+                _settings.JoinAsync(), _modelNamesTask);
             await _shortcut.JoinAsync();
             if (_recordCancelTask is { } recordCancel) await recordCancel;
             if (_floating is not null) { await _floating.ClosePreviewAsync(); }
@@ -895,7 +920,7 @@ public sealed partial class MainWindow : Window
             var joined = Task.WhenAll(new[]
             {
                 _startupTask, _meetingRecoveryTask, _permissionRetryTask, _microphoneSettingsTask,
-                _suggestions.JoinAsync(), _shortcut.JoinAsync(), _dictation.FinishBackgroundWorkAsync()
+                _suggestions.JoinAsync(), _shortcut.JoinAsync(), _dictation.FinishBackgroundWorkAsync(), _modelNamesTask
             }.OfType<Task>());
             try { await joined; }
             catch (Exception)

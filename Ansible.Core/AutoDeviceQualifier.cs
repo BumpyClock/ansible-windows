@@ -125,9 +125,9 @@ internal sealed class AutoDeviceQualifier(
     private static DeviceComparisonSnapshot Comparison(QualifiedDevice device)
     {
         var selection = device.Selection;
-        return new(device.ModelName, device.Kind,
+        return new(device.ModelId, device.ModelName, device.Kind,
             selection.Cpu.Working ? selection.Cpu.Milliseconds : null,
             selection.Gpu.Working ? selection.Gpu.Milliseconds : null,
-            selection.Backend, selection.MeasuredAt, selection.Cpu.Error, selection.Gpu.Error);
+            selection.Backend, selection.Reason, selection.MeasuredAt, selection.Cpu.Error, selection.Gpu.Error);
     }
 }

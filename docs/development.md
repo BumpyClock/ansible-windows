@@ -60,8 +60,8 @@ To build CPU only:
 Build the native runtime before building or launching the WinUI app.
 Downloaded models and generated native files stay in the ignored `.runtime`
 folder. The app package includes the runtime and public sample; it excludes
-model weights. Select `.runtime\models` through **Speech models > Model folder >
-Choose folder** to use setup's weights in the packaged app.
+model weights. Select `.runtime\models` through **Speech models > More options >
+Model folder… > Choose folder** to use setup's weights in the packaged app.
 
 ## ARM64 cross-build
 
@@ -206,35 +206,124 @@ direct installation.
 
 ## Design resources
 
-`Ansible/DesignTokens.xaml` owns app colors, typography, shared dimensions, and
-control styles. It is merged after the WinUI resource dictionary. Pages consume
-semantic resources rather than palette literals. Brand roles are separate from
-light/dark surface roles. A future color scheme can replace those brand roles
-without rewriting page layouts. High Contrast uses Windows system colors.
-The existing Windows font is retained.
+`Ansible/DesignTokens.xaml` owns the brand accent, typography, shared dimensions,
+and control styles. It is merged after the WinUI resource dictionary.
+
+Colour follows one rule. Neutral text, fills, strokes, and materials are WinUI's
+own theme resources, referenced by name (`TextFillColorSecondaryBrush`,
+`CardBackgroundFillColorDefaultBrush`, `DividerStrokeColorDefaultBrush`) and never
+redefined. The only colour the app owns is the citron accent: the
+`SystemAccentColor` ramp that WinUI derives its accent brushes from, the accent
+button, `AppAccentBrush` and `AppOnAccentBrush`, the activity ramp, and the app
+mark. Accent graphics on neutral surfaces use `AccentTextFillColorPrimaryBrush`.
+High Contrast is the platform's, except for the few app-owned brushes, which map
+to Windows system colours. `tools\Test-DesignTokens.ps1` rejects a redefined
+WinUI neutral and any raw colour outside the token dictionary. The existing
+Windows font is retained.
 `NavigationStyles.xaml` owns shared sidebar button and icon styles. Its selected
-button template keeps the current page visible during hover and press. Control
-interaction colors resolve through themed XAML resources, not copied brushes
-from the application's current theme.
+button template keeps the current page visible during hover and press.
+
+Size, shape, and spacing follow one scale, and `tools\Test-DesignTokens.ps1`
+enforces it across every XAML file except `AppMark.xaml`, which is exact brand
+geometry.
+
+- Text uses the WinUI type ramp through its `TextBlock` styles: Caption 12, Body
+  14, BodyLarge 18, Subtitle 20, Title 28, and TitleLarge 40. A control that takes
+  a `FontSize` uses the matching ramp token. Only a `FontIcon` may set a literal
+  `FontSize`, and only 12, 16, 20, 24, 32, or 48.
+- Corners use WinUI's `ControlCornerRadius` and `OverlayCornerRadius`. The token
+  dictionary defines no radius of its own. A fully round shape is the one literal
+  exception, and its `CornerRadius` must be half its own literal `Height`.
+- Spacing (`Margin`, `Padding`, `Spacing`, `RowSpacing`, `ColumnSpacing`) and the
+  gap, spacing, and inset tokens sit on the 4 DIP grid, as do thickness tokens
+  other than border and divider thickness. The values 0, 1, and 2 are allowed for
+  hairlines and optical nudges.
+- Every `StaticResource` or `ResourceKey` a view names must be defined in the
+  app's XAML or be a known WinUI resource. XAML compiles an unknown key and then
+  fails when the page loads, so an undefined key fails the check.
+- A token that no XAML resource reference or quoted C# key uses is dead and fails
+  the check. Remove it.
 
 Every page renders into `PageCanvas`. This component owns the shared title,
-subtitle, responsive header actions, content width, padding, scroll bounds, and
-bottom space. Pages supply `Title`, `Subtitle`, `HeaderActions`, and body content;
-they do not implement their own header grids or heading breakpoints. Pages with virtualized
-lists use its bounded mode and let the list own scrolling. The design check
-rejects page roots that bypass the shared canvas. `DeviceComparisonView` renders
+subtitle, responsive header actions, content width, padding, the page's only
+vertical scroller, and bottom space. Pages supply `Title`, `Subtitle`,
+`HeaderActions`, and body content; they do not implement their own header grids,
+heading breakpoints, or nested scrollers. The header and content share one column
+that starts at the page padding. The column is at most `PageReadingMaxWidth`
+(1000) wide. A `Wide` page gets `PageContentMaxWidth` (1440) instead. `Wide` can
+change while the page shows. Only Home sets it, from code, and only once History
+holds a saved dictation, because only then do its history and insights sit side
+by side. With no saved dictations Home keeps the reading width and stacks at
+every width, and its two insights cards fill their row so they end on one line.
+Content that must stay visible while the page scrolls uses `PageCanvas.Pin`.
+Home pins its History header and, in the wide layout, its insights rail that way.
+Settings is one scrolling page of six sections in this order, each a heading over
+one card of rows: Dictation, Screen and ink, Recognition, Meetings, Transcript
+cleanup, and Privacy and data. It has no tabs and no sub-group headings.
+`EmptyState` is the one empty state. It shows a glyph on
+a 48 DIP round backplate, a Subtitle title, an optional detail line, and an
+optional footer. History, Meetings, Dictionary, the meeting window transcript,
+and the Home daily rhythm card when usage statistics are unavailable use it.
+`NoticeBar` is a flat docked bar with the card stroke, the control corner radius,
+and no shadow. `NoticeBarPanel` lays out a notice by its content, so the message
+and the action buttons stack when they do not fit on one line. `NoticeHost`
+reports the height of the notice band, and `MainWindow` sets it as the current
+page's `PageCanvas.BottomInset`, which ends the page's scroll viewport above the
+band. `MainWindow` also lines the band up with the current page's column
+(`PageCanvas.Column`, `NoticeHost.AlignWith`), so a notice has the same left and
+right insets and width cap as the page content.
+`ShellTitleBar` shows the page name once `PageCanvas.IsTitleScrolledOut` is true,
+which is when less than a third of the page title's height is left in the
+viewport. It adds the copy of the page's `PrimaryAction` directly after the name
+only once `IsActionScrolledOut` is also true. The copy is a standard button, not
+an accent button. Its brand stays at 16 DIP with the app name in
+Caption type in the 48 DIP compact layout too. The design check rejects page roots that
+bypass the shared canvas. `DeviceComparisonView` renders
 structured benchmark snapshots without parsing presentation text.
 
-The shell and meeting window use one Mica backdrop per window with transparent
-chrome. Main pages use Microsoft's card pattern through the shared `CardStyle`;
-the transcript window uses a contiguous `PageSurfaceStyle`. Both use WinUI's
-translucent `LayerFillColorDefaultBrush` above Mica. Keep
-these platform resources and Acrylic flyout resources unmodified so their
-theme, High Contrast, inactive-window, transparency, and power fallbacks remain
-available. Acrylic belongs to transient flyouts and menus, not the main page.
-This follows Microsoft Learn's [Mica layering](https://learn.microsoft.com/windows/apps/design/style/mica#app-layering-with-mica),
-[layering and elevation](https://learn.microsoft.com/windows/apps/design/signature-experiences/layering),
-and [Acrylic guidance](https://learn.microsoft.com/windows/apps/design/style/acrylic).
+The shell and meeting window follow Microsoft's two-layer model. Mica is the base
+layer: one `MicaBackdrop` per window, with the title bar and sidebar directly on
+it. The page sits on one contiguous content layer, `ContentLayerStyle`, which is
+WinUI's `LayerFillColorDefaultBrush` with the card stroke. Cards segment content
+on that layer through the shared `CardStyle` (`CardBackgroundFillColorDefaultBrush`
+and `CardStrokeColorDefaultBrush`). Keep these platform resources unmodified so
+their theme, High Contrast, inactive-window, transparency, and power fallbacks
+remain available. Acrylic belongs to transient flyouts and menus, not the page.
+Content pinned over scrolling rows (the Home history header) repeats the two
+layers with a `SystemBackdropElement` hosting Mica under the layer fill, so it
+hides the rows without a visible band.
+This follows Microsoft Learn's [layering and elevation](https://learn.microsoft.com/windows/apps/design/signature-experiences/layering),
+[Mica layering](https://learn.microsoft.com/windows/apps/design/style/mica#app-layering-with-mica),
+and [system backdrops](https://learn.microsoft.com/windows/apps/develop/ui/system-backdrops).
+
+`tools\design\Capture-AppScreens.ps1 -Round <name>` builds the Debug app and
+captures the fixed review matrix into `.runtime\ux\<name>`: five pages in light
+and dark at a wide and a narrow window, one frame per viewport of scroll, plus the
+welcome lesson and a saved meeting window. Settings is one page and is captured
+like any other. The script waits for the session to be ready before it captures.
+Every invocation, including `-Only` probes, needs a fresh round name. The script
+rejects round folders that already contain PNGs, preserving previous captures.
+It dismisses a first-launch welcome lesson before navigating pages. Scroll stops
+are capped at eight frames per page and always include the bottom of a scrollable page.
+It takes each frame with the app window in the foreground and the title bar drawn
+active. After each screenshot it checks the foreground window and reads the saved
+frame to see whether the title bar was drawn active. When either check fails, it
+clicks once on the empty title bar and retries up to four times. It warns if a
+frame was still captured with the window inactive. It waits up to 10 seconds
+for the meeting transcript window to open. `-Only` limits the run to the named pages or to `extras` (the
+welcome lesson and the meeting window) for a quick local probe. Review rounds use
+the full matrix. It needs the `winapp` CLI and replaces the running development
+instance. A page that fails to load fails the run, so it
+doubles as the runtime check for unresolved XAML resources.
+
+`tools\design\ux-review-rubric.md` is the fixed checklist for scoring a round of
+these frames. It has 7 dimensions of 5 criteria each. A reviewer scores each
+criterion from 0 to 1 by counting the instances visible in the frames. A
+dimension scores 10 times the mean of its criteria, and the overall score is the
+mean of the dimensions. The capture matrix and the rubric stay fixed between
+rounds so scores are comparable. A score comes from a reviewer, human or model,
+who reads every frame of the round. Two reviewers score each round, and their
+scores are averaged.
 
 Debug builds accept `--design-theme=light` and `--design-theme=dark` as launch
 arguments for screenshot qualification. This scopes appearance to the app
@@ -242,7 +331,8 @@ window and does not change Windows settings. Release builds follow Windows.
 
 Independent visual judges must invoke the `ux-designer` skill before reviewing
 actual screenshots. Check both themes and responsive, error, and empty states.
-Showing or dismissing transient notices must not change the page viewport bounds.
+Showing or dismissing a notice must not move the page viewport top or the scroll
+offset, and a notice must not cover page content.
 
 The app mark uses exact Pencil geometry. `Ansible/Assets/Brand` retains SVG
 artwork derived from that geometry and native-size PNGs exported through Pencil MCP. There is no design
@@ -275,12 +365,13 @@ disk work never delays that completion or final insertion. Shutdown drains and
 joins the writer. `UsageError` is shown in Insights after a failed or overflowed
 write. Session notices display only undismissed warnings and errors, scoped by
 area; capture-privacy failures are app-wide. Routine success and cancel notices
-are not shown. Bounded `PageCanvas` layouts retain a finite minimum
-height and allow outer overflow in short windows, so warnings cannot collapse their lists.
-`SettingsRow` owns the shared adaptive setting
+are not shown. `SettingsRow` owns the shared adaptive setting
 layout; pages provide labels, descriptions, and controls.
+`ShortcutField` renders a shortcut as keycaps and owns the capture box for
+recording a new one. `ModelCardText` builds the plain-language text on a model
+row, and the row's **Show details** panel holds the exact technical details.
 `Badge` sizes to its label up to 240 effective pixels, trims overflow, and uses
-6px rounded corners with a 28px minimum height.
+the WinUI control corner radius with a 28px minimum height.
 
 ## Tests
 
@@ -344,6 +435,17 @@ the same native assets:
 .\tools\Test-SpeakerModels.ps1 -Model kroko
 .\tools\Test-SpeakerModels.ps1 -Model both
 ```
+
+Source-isolation checks use Kroko and the public WAV without opening a
+microphone. They verify live microphone text with silent playback and retention
+of both sources when both channels contain speech:
+
+```powershell
+dotnet test .\Ansible.Tests\Ansible.Tests.csproj --filter 'FullyQualifiedName~NativeMeetingSourceTests'
+```
+
+Run this separately from the model probes above. These are functional checks,
+not live performance or Teams participant-name qualification.
 
 Use `--stream-only` to skip WAV transcription, prepare once, then stream.
 Add `--repeat 5` for five sequential paced streams on that session. The
@@ -546,7 +648,14 @@ failures emit a Trace warning with the HRESULT at most once per minute. Kind, st
 numbers. Meeting playback is endpoint loopback of every active render device,
 summed with saturation into one playback stream. Teams process loopback was
 measured silent (about 0.000015 RMS) while endpoint loopback carried the call,
-so `MeetingCaptureRequest.ProcessId` is used only for speaker naming. The
+so `MeetingCaptureRequest.ProcessId` identifies Teams for naming and call context,
+not audio routing. `TeamsMeetingContextReader` confirms call controls before
+reading a window title. `MeetingContextMonitor` imports that title only while
+the default title remains unchanged. After observing a call, it requires at
+least three absent readings spanning five seconds before invoking normal End.
+An unreadable tree or a still-existing call window with unavailable controls
+does not prove call end. The window joins its monitor before shutdown or reuse.
+Call titles remain transcript metadata, never local diagnostic fields. The
 first output scan runs before the microphone starts. Later scans run every two
 seconds on a dedicated MTA thread that opens, initializes, and services
 endpoints, then queues them. The capture thread only starts queued endpoints,
@@ -599,8 +708,11 @@ Transient scanner catalog or apartment acquisition failures retry at the scan
 interval on the scanner's own MTA thread. Fatal scanner failures surface instead
 of silently leaving permanent microphone-only capture.
 
-Paired Nemotron or Kroko meetings load the Nemotron 3 diarizer beside the ASR.
-Both consume the same captured PCM, share memory admission, and reset or
+Meeting capture emits matching microphone and playback PCM16 buffers in each
+`MeetingAudioPacket`. Recognition preserves their shared sample clock and
+source provenance. Microphone ASR supplies local `You` turns independently of
+playback ASR. Paired Nemotron or Kroko playback loads the Nemotron 3 diarizer
+beside the ASR. Both consume the same playback PCM, share memory admission, and reset or
 dispose together. Native paired output is cumulative timed anonymous speaker
 turns; unknown or overlapping speech stays unlabeled. The VibeVoice streaming
 path remains when no paired Nemotron or Kroko ASR is available. That path still bounds native
@@ -650,6 +762,9 @@ starts a worker. Preparation, offline recognition and streaming share
 `NativeAutoRecovery`; a GPU failure updates only its qualified-device ticket's
 cache entry. Consumed live audio is never replayed. Qualifier contract tests use
 temporary cache files and a fake worker without loading speech models.
+Cached selections retain their meeting pace limit so reload validates the same
+decision that qualification made, including a CPU choice over a near-tie GPU
+that misses the meeting limit.
 
 `ModelStore` owns one directory's app-side file protocol. `ModelDownloadManager`
 serializes its operations and joins transfer or verification before disposing
@@ -687,7 +802,10 @@ admission bounded.
 Meeting naming uses the selected Teams process on a dedicated worker. A
 provider-side FindAllBuildCache query, scoped to each selected Teams window's
 descendants, finds candidate MenuItems or nodes with known participant/video
-automation IDs. Bounded raw traversal then runs only inside validated tiles.
+automation IDs. Each validated tile is fetched with a raw-view subtree cache.
+Traversal reads cached children locally instead of making a provider call for
+every child and sibling. The raw-view filter is necessary because a default
+control-view cache omits Teams' non-control speaking descendants.
 Node, depth, and time budgets remain 256
 nodes, depth 32, and 750 ms. Classification recognizes current Teams labels
 such as `, video is on/off`, `Myself video, <name>, ...`, mute state, and
@@ -697,8 +815,13 @@ speaking markers in named tiles or their descendants remain necessary.
 Mapping still requires aligned source-exclusive turns and independent
 consistent evidence. Names are not inferred from transcript text. Popups,
 minimized or hidden tiles, or Teams not exposing speaking metadata can prevent
-naming. A baseline live read of 256 raw UIA nodes across Teams windows
-returned Unavailable. Live success on a real call is not yet established. Optional
+naming. A live call check on 2026-11-10 reached two named tiles and their
+descendants but found no explicit speaking markers. A visible speaking border
+alone is not evidence available to this accessibility reader. The read-only
+`ExistingTeamsWindowCanBeReadWithoutInteraction` test prints redacted node
+shapes to distinguish traversal failure from missing markers. Passing that
+test does not prove participant names were obtained. Live success on a real
+call is not yet established. Optional
 Nemotron timing runs on CPU through the existing C ABI; deterministic alignment
 tests do not prove live ASR accuracy. Keep its 30-second audio ring in memory.
 Meeting wording cleanup is `IMeetingTextCleanup`. Core snapshots the cleanup

@@ -1,0 +1,256 @@
+<#
+.SYNOPSIS
+Builds the Debug app, launches it per theme, and captures the fixed UX review matrix.
+
+.DESCRIPTION
+The matrix is 5 pages x light/dark x wide/narrow, each long page at one stop per viewport, plus the welcome
+lesson and a saved meeting transcript window. Captures land in .runtime\ux\<Round>. The matrix must stay
+the same between review rounds so scores stay comparable. A page that fails to load fails the run, so this
+is also the runtime check for unresolved XAML resources.
+Use a fresh Round name for every invocation, including partial captures. Existing PNGs are never overwritten.
+
+Requires the winapp CLI and Windows Developer Mode. Replaces the running development instance.
+#>
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory)][string]$Round,
+    [ValidateSet('light', 'dark')][string[]]$Theme = @('light', 'dark'),
+    [string[]]$Only,
+    [switch]$SkipBuild
+)
+
+$ErrorActionPreference = 'Stop'
+$repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$buildOutput = Join-Path $repo 'Ansible\bin\x64\Debug\net10.0-windows10.0.26100.0\win-x64'
+$layout = Join-Path $repo '.runtime\ux\layout'
+$out = Join-Path $repo ".runtime\ux\$Round"
+if (Test-Path -LiteralPath $out) {
+    if (Get-ChildItem -LiteralPath $out -File -Filter *.png) {
+        throw "Round '$Round' already contains PNGs. Choose a fresh round name so captures cannot mix."
+    }
+}
+New-Item -ItemType Directory -Force $out | Out-Null
+
+Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Windows.Forms, System.Drawing
+if (-not ('DesignCapture' -as [type])) {
+    Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class DesignCapture {
+    [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int width, int height, uint flags);
+    [DllImport("user32.dll")] public static extern uint GetDpiForWindow(IntPtr hwnd);
+    [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+    [DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
+    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
+    [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extra);
+    // A real click on the empty title bar. It activates the window as pointer input, so no focus visuals appear.
+    public static void Click(int x, int y) {
+        SetCursorPos(x, y);
+        mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero);
+        mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);
+    }
+}
+'@
+}
+
+function Stop-DevelopmentApp {
+    Get-Process Ansible -ErrorAction SilentlyContinue |
+        Where-Object { $_.Path -and $_.Path.StartsWith("$repo\", [StringComparison]::OrdinalIgnoreCase) } |
+        Stop-Process -Force -Confirm:$false
+    Start-Sleep -Milliseconds 1500
+}
+
+function Invoke-Ui {
+    param([string[]]$Arguments, [switch]$Optional)
+    $output = & winapp ui @Arguments 2>&1
+    if ($LASTEXITCODE -ne 0 -and -not $Optional) { throw "winapp ui $($Arguments -join ' ') failed: $output" }
+    $output
+}
+
+function Set-WindowSize {
+    param([IntPtr]$Handle, [int]$WidthDips, [int]$HeightDips)
+    $context = [DesignCapture]::SetThreadDpiAwarenessContext([IntPtr]::new(-4))
+    try {
+        $scale = [DesignCapture]::GetDpiForWindow($Handle) / 96.0
+        [DesignCapture]::SetWindowPos($Handle, [IntPtr]::Zero, 0, 40, [int]($WidthDips * $scale), [int]($HeightDips * $scale), 0x0014) | Out-Null
+        $script:parkX = [int](($WidthDips - 220) * $scale)
+        $script:parkY = 40 + [int](20 * $scale)
+        $script:scale = $scale
+        [DesignCapture]::SetCursorPos($script:parkX, $script:parkY) | Out-Null
+    } finally { [DesignCapture]::SetThreadDpiAwarenessContext($context) | Out-Null }
+    Start-Sleep -Milliseconds 700
+}
+
+function Test-TitleBarActive {
+    param([string]$Path)
+    $bitmap = [System.Drawing.Bitmap]::new($Path)
+    try {
+        $scale = $script:scale
+        $low = 255; $high = 0
+        for ($y = [int](14 * $scale); $y -lt [int](34 * $scale); $y += 2) {
+            for ($x = [int](44 * $scale); $x -lt [int](100 * $scale); $x += 2) {
+                $pixel = $bitmap.GetPixel($x, $y)
+                $luma = [int](0.299 * $pixel.R + 0.587 * $pixel.G + 0.114 * $pixel.B)
+                if ($luma -lt $low) { $low = $luma }
+                if ($luma -gt $high) { $high = $luma }
+            }
+        }
+        ($high - $low) -ge 120
+    } finally { $bitmap.Dispose() }
+}
+
+function Save-Window {
+    param([IntPtr]$Handle, [string]$Name)
+    # The window is activated with one click on its empty title bar; a second click within the double-click time would maximize it.
+    $path = Join-Path $out "$Name.png"
+    $click = $false
+    for ($attempt = 1; $attempt -le 4; $attempt++) {
+        if ($Handle -eq $script:mainWindow -and ($click -or [DesignCapture]::GetForegroundWindow() -ne $Handle)) {
+            $context = [DesignCapture]::SetThreadDpiAwarenessContext([IntPtr]::new(-4))
+            try { [DesignCapture]::Click($script:parkX, $script:parkY) }
+            finally { [DesignCapture]::SetThreadDpiAwarenessContext($context) | Out-Null }
+            Start-Sleep -Milliseconds 800
+        }
+        Invoke-Ui @('screenshot', '-w', "$Handle", '-o', $path, '--json') | Out-Null
+        $foreground = [DesignCapture]::GetForegroundWindow()
+        $drawnActive = $Handle -ne $script:mainWindow -or (Test-TitleBarActive $path)
+        if ($foreground -eq $Handle -and $drawnActive) { break }
+        [uint32]$owner = 0
+        [DesignCapture]::GetWindowThreadProcessId($foreground, [ref]$owner) | Out-Null
+        $holder = (Get-Process -Id $owner -ErrorAction SilentlyContinue).ProcessName
+        if ($attempt -eq 4) {
+            Write-Warning "$Name was captured with the window inactive (foreground: $holder, title bar drawn active: $drawnActive)."
+        } else {
+            Write-Verbose "$Name attempt $attempt inactive (foreground: $holder, title bar drawn active: $drawnActive)."
+            $click = $true
+            Start-Sleep -Milliseconds 600
+        }
+    }
+    Write-Output "Captured $Name"
+}
+
+function Get-PageScroller {
+    param([IntPtr]$Handle)
+    $root = [System.Windows.Automation.AutomationElement]::FromHandle($Handle)
+    $condition = [System.Windows.Automation.PropertyCondition]::new(
+        [System.Windows.Automation.AutomationElement]::AutomationIdProperty, 'PageViewport')
+    # The automation tree is briefly empty while a page reflows after a resize or navigation.
+    $deadline = (Get-Date).AddSeconds(8)
+    do {
+        $viewport = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condition)
+        if (-not $viewport) { Start-Sleep -Milliseconds 400 }
+    } until ($viewport -or (Get-Date) -gt $deadline)
+    if (-not $viewport) { throw 'PageViewport was not found. The page did not load.' }
+    $pattern = $null
+    if ($viewport.TryGetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern, [ref]$pattern)) { $pattern }
+}
+
+function Get-ScrollStops {
+    param([IntPtr]$Handle)
+    $scroller = Get-PageScroller $Handle
+    if (-not $scroller -or -not $scroller.Current.VerticallyScrollable) { return @(-1) }
+    $view = $scroller.Current.VerticalViewSize / 100.0
+    $step = 90.0 * $view / (1 - $view)
+    $stops = @(0)
+    for ($percent = $step; $percent -lt 100; $percent += $step) { $stops += $percent }
+    @($stops | Select-Object -First 7) + 100
+}
+
+function Set-PageScroll {
+    param([IntPtr]$Handle, [double]$Percent)
+    (Get-PageScroller $Handle).SetScrollPercent(-1, $Percent)
+}
+
+function Wait-SessionReady {
+    param([IntPtr]$Handle)
+    Start-Sleep -Seconds 4
+    $root = [System.Windows.Automation.AutomationElement]::FromHandle($Handle)
+    $starting = [System.Windows.Automation.PropertyCondition]::new(
+        [System.Windows.Automation.AutomationElement]::NameProperty, 'No speech model loaded')
+    $deadline = (Get-Date).AddSeconds(30)
+    while ($root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $starting) -and (Get-Date) -lt $deadline) {
+        Start-Sleep -Milliseconds 500
+    }
+    Start-Sleep -Seconds 2
+}
+
+if (-not $SkipBuild) {
+    Stop-DevelopmentApp
+    dotnet build (Join-Path $repo 'Ansible\Ansible.csproj') -c Debug -p:Platform=x64 -v q -nologo
+    if ($LASTEXITCODE -ne 0) { throw 'Debug build failed.' }
+}
+
+$pages = [ordered]@{ home = 'DictationNav'; meetings = 'MeetingsNav'; models = 'ModelsNav'; dictionary = 'CustomWordsNav'; settings = 'SettingsNav' }
+$sizes = [ordered]@{ wide = @(1440, 960); narrow = @(860, 760) }
+
+foreach ($mode in $Theme) {
+    Stop-DevelopmentApp
+    $launch = & winapp run $buildOutput --output-appx-directory $layout --detach --json --args "--design-theme=$mode" | Out-String
+    if ($LASTEXITCODE -ne 0) { throw "Launch failed: $launch" }
+    $appId = ($launch.Substring($launch.IndexOf('{')) | ConvertFrom-Json).ProcessId
+    $deadline = (Get-Date).AddSeconds(40)
+    do {
+        Start-Sleep -Milliseconds 500
+        $app = Get-Process -Id $appId -ErrorAction SilentlyContinue
+        if (-not $app) { throw "The app exited during startup ($mode). Check the Application event log." }
+    } until ($app.MainWindowHandle -ne [IntPtr]::Zero -or (Get-Date) -gt $deadline)
+    if ($app.MainWindowHandle -eq [IntPtr]::Zero) { throw "No main window after 40 seconds ($mode)." }
+    $window = $app.MainWindowHandle
+    $script:mainWindow = $window
+    Wait-SessionReady $window
+    Invoke-Ui @('invoke', 'SkipButton', '-w', "$window", '-q') -Optional | Out-Null
+    Start-Sleep -Milliseconds 800
+
+    foreach ($size in $sizes.GetEnumerator()) {
+        Set-WindowSize $window $size.Value[0] $size.Value[1]
+        foreach ($page in $pages.GetEnumerator()) {
+            if ($Only -and $page.Key -notin $Only) { continue }
+            Invoke-Ui @('invoke', $page.Value, '-w', "$window", '-q') | Out-Null
+            Start-Sleep -Milliseconds 900
+            $name = "$($page.Key)-$mode-$($size.Key)"
+            $stop = 1
+            foreach ($percent in Get-ScrollStops $window) {
+                if ($percent -ge 0) { Set-PageScroll $window $percent }
+                Start-Sleep -Milliseconds 500
+                Save-Window $window "$name-$stop"
+                $stop++
+            }
+        }
+    }
+
+    if ($Only -and 'extras' -notin $Only) { continue }
+    Set-WindowSize $window $sizes.wide[0] $sizes.wide[1]
+    Invoke-Ui @('invoke', 'SettingsNav', '-w', "$window", '-q') | Out-Null
+    Start-Sleep -Milliseconds 900
+    Set-PageScroll $window 0
+    Start-Sleep -Milliseconds 500
+    Invoke-Ui @('invoke', 'ShortcutLessonButton', '-w', "$window", '-q') | Out-Null
+    Start-Sleep -Milliseconds 1500
+    Save-Window $window "welcome-$mode-wide-1"
+    # A key press would switch the app to keyboard focus visuals for later frames.
+    Invoke-Ui @('invoke', 'SkipButton', '-w', "$window", '-q') | Out-Null
+    Start-Sleep -Milliseconds 800
+
+    Invoke-Ui @('invoke', 'MeetingsNav', '-w', "$window", '-q') | Out-Null
+    Start-Sleep -Milliseconds 900
+    $rows = Invoke-Ui @('inspect', 'MeetingGroups', '-w', "$window", '-d', '2') -Optional | Out-String
+    if ($rows -match '(?m)^\s+(btn-[0-9a-z-]+) Button') {
+        # A real click, so the transcript window opens in pointer mode without keyboard focus visuals.
+        Invoke-Ui @('click', $Matches[1], '-w', "$window", '-q') | Out-Null
+        $deadline = (Get-Date).AddSeconds(10)
+        do {
+            Start-Sleep -Milliseconds 700
+            $handles = @((Invoke-Ui @('list-windows', '-a', "$appId") | Out-String) -split "`n" |
+                ForEach-Object { if ($_ -match 'HWND (\d+)') { [IntPtr][long]$Matches[1] } } |
+                Where-Object { $_ -ne $window })
+        } until ($handles.Count -gt 0 -or (Get-Date) -gt $deadline)
+        if ($handles.Count -eq 0) { throw "The meeting transcript window did not open ($mode)." }
+        Start-Sleep -Milliseconds 1500
+        Save-Window $handles[0] "meeting-window-$mode-1"
+    } else { Write-Warning 'No saved meeting row to open.' }
+}
+
+Stop-DevelopmentApp
+Write-Output "Round $Round captured in $out"
+Get-ChildItem -LiteralPath $out -Filter *.png | Select-Object -ExpandProperty Name

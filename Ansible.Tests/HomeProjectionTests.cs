@@ -17,7 +17,7 @@ public sealed class HomeProjectionTests
             var local = new DateTime(2026, 10, 20, 15, 5, 0);
             var item = History(new DateTimeOffset(local, TimeZoneInfo.Local.GetUtcOffset(local)), "speech");
 
-            var row = new HomeHistoryEntry(item, "Model");
+            var row = new HomeHistoryEntry(item, Named("Model"));
 
             Assert.Equal("15:05", row.TimeText);
             Assert.Contains("Word count unavailable", row.MetadataText);
@@ -34,14 +34,100 @@ public sealed class HomeProjectionTests
             TimeZoneInfo.Local.GetUtcOffset(today.AddDays(day).AddHours(12)));
         HomeHistoryItem[] items = [History(Local(0), "newest"), History(Local(0), "another"), History(Local(-1), "older")];
 
-        var model = HomeHistoryProjection.Create(items, "OLDER", false, _ => "Speech model", today);
+        var model = HomeHistoryProjection.Create(items, "OLDER", false, _ => Named("Speech model"), today);
 
         Assert.Equal(2, model.TodayCount);
         var group = Assert.Single(model.Groups);
-        Assert.Equal("YESTERDAY", group.Label);
+        Assert.Equal("Yesterday", group.Label);
         var entry = Assert.Single(group.Entries);
         Assert.Equal("older", entry.Text);
-        Assert.Equal("Speech model", entry.ModelName);
+        Assert.Equal("Speech model", entry.Model?.Name);
+    }
+
+    [Theory]
+    [InlineData(0, "FirstRun")]
+    [InlineData(2, "NothingSaved")]
+    [InlineData(null, "NothingSaved")]
+    public void EmptyHistoryClaimsNoDictationsOnlyWhenUsageKnowsThereWereNone(int? dictations, string kind)
+    {
+        var model = HomeHistoryProjection.Create([], "", false, _ => null, new DateTime(2026, 10, 20));
+
+        var empty = HomeHistoryProjection.EmptyState(model, "", dictations);
+
+        Assert.NotNull(empty);
+        Assert.Equal(kind, empty.Kind.ToString());
+        if (empty.Kind == HomeHistoryEmptyKind.FirstRun) Assert.Equal("No dictations yet", empty.Title);
+        else Assert.DoesNotContain("No dictations", empty.Title);
+    }
+
+    [Fact]
+    public void EmptyHistoryExplainsLifetimeDictationsItDoesNotHold()
+    {
+        var model = HomeHistoryProjection.Create([], "", false, _ => null, new DateTime(2026, 10, 20));
+
+        var several = HomeHistoryProjection.EmptyState(model, "", 2)!;
+        var one = HomeHistoryProjection.EmptyState(model, "", 1)!;
+        var unknown = HomeHistoryProjection.EmptyState(model, "", null)!;
+
+        Assert.Equal("New dictations appear here. 2 earlier dictations are no longer saved.", several.Detail);
+        Assert.Equal("New dictations appear here. Your earlier dictation is no longer saved.", one.Detail);
+        Assert.Equal("New dictations appear here.", unknown.Detail);
+        Assert.All(new[] { several, one, unknown }, empty => Assert.Equal("No saved dictations", empty.Title));
+    }
+
+    [Fact]
+    public void EmptyHistoryWithAStorageErrorDoesNotClaimTranscriptsWereRemoved()
+    {
+        var model = HomeHistoryProjection.Create([], "", false, _ => null, new DateTime(2026, 10, 20), "Saved history could not be loaded.");
+
+        var empty = HomeHistoryProjection.EmptyState(model, "", 2)!;
+
+        Assert.Equal(HomeHistoryEmptyKind.NothingSaved, empty.Kind);
+        Assert.DoesNotContain("no longer saved", empty.Detail);
+        Assert.Contains("may be missing", empty.Detail);
+    }
+
+    [Fact]
+    public void HomeNamesModelsLikeSpeechModelsAndKeepsTheCatalogNameForTheTooltip()
+    {
+        var entry = new NativeModelEntry
+        {
+            Id = "kroko", Family = "kroko_asr", Mode = "streaming", Filename = "model.gguf", Bytes = 1,
+            Sha256 = new string('0', 64), DisplayName = "Kroko English Community 64-L Q8", Precision = "Q8_0"
+        };
+        var name = HomeModelName.From(entry);
+        var item = History(DateTimeOffset.Now, "speech");
+
+        var history = HomeHistoryProjection.Create([item], "", false, _ => name, DateTime.Today);
+        var insights = HomeInsightsProjection.Create(new UsageDocument
+        {
+            Entries = [new UsageEntry { Id = Guid.NewGuid(), CompletedAt = DateTimeOffset.Now, ModelId = "kroko",
+                Source = UsageSource.Dictation, Words = 1, RecordingSeconds = 1, ElapsedSeconds = 1 }]
+        }, null, _ => name, DateOnly.FromDateTime(DateTime.Today), TimeZoneInfo.Local);
+
+        Assert.Equal(ModelNames.Plain(entry), name.Name);
+        Assert.Equal("Kroko English Community 64-L", name.Name);
+        Assert.Equal("Kroko English Community 64-L Q8", name.FullName);
+        Assert.EndsWith("· Kroko English Community 64-L", Assert.Single(Assert.Single(history.Groups).Entries).MetadataText);
+        var row = Assert.Single(Stats(insights).Models);
+        Assert.Equal("Kroko English Community 64-L", row.DisplayName);
+        Assert.Equal("Kroko English Community 64-L Q8", row.FullName);
+    }
+
+    [Fact]
+    public void SearchWithoutMatchesNamesTheQueryAndMatchingRowsShowNoEmptyState()
+    {
+        var item = History(DateTimeOffset.Now, "speech");
+        var today = DateTime.Today;
+
+        var missed = HomeHistoryProjection.Create([item], "absent", false, _ => null, today);
+        var matched = HomeHistoryProjection.Create([item], "speech", false, _ => null, today);
+
+        var empty = HomeHistoryProjection.EmptyState(missed, "absent", 0);
+        Assert.NotNull(empty);
+        Assert.Equal(HomeHistoryEmptyKind.NoMatches, empty.Kind);
+        Assert.Contains("\"absent\"", empty.Detail);
+        Assert.Null(HomeHistoryProjection.EmptyState(matched, "speech", 0));
     }
 
     [Fact]
@@ -53,7 +139,7 @@ public sealed class HomeProjectionTests
 
         var model = HomeHistoryProjection.Create([item], "", false, _ => null, today);
 
-        Assert.Equal(lastYear.ToString("ddd, MMM d, yyyy", CultureInfo.CurrentCulture).ToUpperInvariant(),
+        Assert.Equal(lastYear.ToString("ddd d MMM yyyy", CultureInfo.CurrentCulture),
             Assert.Single(model.Groups).Label);
     }
 
@@ -62,22 +148,28 @@ public sealed class HomeProjectionTests
     {
         var today = new DateOnly(2026, 10, 20);
         var missing = HomeInsightsProjection.Create(null, "Cannot read local usage.", _ => null, today, TimeZoneInfo.Utc);
-        var empty = HomeInsightsProjection.Create(new UsageDocument(), null, _ => null, today, TimeZoneInfo.Utc);
+        var loaded = HomeInsightsProjection.Create(new UsageDocument(), null, _ => null, today, TimeZoneInfo.Utc);
 
-        Assert.Equal("--", missing.SessionsText);
-        Assert.Equal("--", missing.WordsText);
-        Assert.Equal("--", missing.MicrophoneMinutesText);
-        Assert.Equal("--", missing.StreakText);
-        Assert.Equal("Cannot read local usage.", missing.AvailabilityMessage);
-        Assert.Null(missing.Activity);
-        Assert.Null(missing.HourlyActivity);
+        Assert.Equal("Cannot read local usage.", Assert.IsType<HomeUsageUnavailable>(missing.Usage).Message);
+        Assert.Null(missing.Dictations);
+        Assert.Null(missing.UsageWarning);
+        var empty = Stats(loaded);
         Assert.Equal("0", empty.SessionsText);
         Assert.Equal("0", empty.WordsText);
         Assert.Equal(0.ToString("N1"), empty.MicrophoneMinutesText);
-        Assert.Equal("No streak", empty.StreakText);
-        Assert.NotNull(empty.Activity);
-        Assert.Empty(empty.HourlyActivity!);
-        Assert.Null(empty.AvailabilityMessage);
+        Assert.Null(empty.StreakText);
+        Assert.Equal(0, empty.Dictations);
+        Assert.Equal(0, loaded.Dictations);
+        Assert.Empty(empty.Activity);
+        Assert.Empty(empty.HourlyActivity);
+    }
+
+    [Fact]
+    public void UnavailableUsageWithoutAnErrorSaysStatisticsAreNotAvailableYet()
+    {
+        var missing = HomeInsightsProjection.Create(null, null, _ => null, new DateOnly(2026, 10, 20), TimeZoneInfo.Utc);
+
+        Assert.Equal("Usage statistics are not available yet.", Assert.IsType<HomeUsageUnavailable>(missing.Usage).Message);
     }
 
     [Fact]
@@ -87,9 +179,7 @@ public sealed class HomeProjectionTests
         var view = HomeInsightsProjection.Create(new UsageDocument(), error, _ => null,
             new DateOnly(2026, 10, 20), TimeZoneInfo.Utc);
 
-        Assert.Equal("0", view.SessionsText);
-        Assert.NotNull(view.Activity);
-        Assert.Null(view.AvailabilityMessage);
+        Assert.Equal("0", Stats(view).SessionsText);
         Assert.Equal(error, view.UsageWarning);
     }
 
@@ -108,14 +198,15 @@ public sealed class HomeProjectionTests
                 Entry("file", UsageSource.File, 600)]
         };
 
-        var model = HomeInsightsProjection.Create(document, null, id => id, new DateOnly(2026, 10, 20), TimeZoneInfo.Utc);
+        var model = Stats(HomeInsightsProjection.Create(document, null, Named, new DateOnly(2026, 10, 20), TimeZoneInfo.Utc));
 
         Assert.Equal("2", model.SessionsText);
+        Assert.Equal(2, model.Dictations);
         Assert.Equal("60", model.WordsText);
         Assert.Equal("60", model.PaceText);
         Assert.Equal(2, model.Models[0].Sessions);
         Assert.All(model.Models, row => Assert.Equal(3, row.MaximumSessions));
-        Assert.Equal(2, model.Activity![new DateOnly(2026, 10, 20)]);
+        Assert.Equal(2, model.Activity[new DateOnly(2026, 10, 20)]);
         Assert.Equal(1.ToString("N1"), model.MicrophoneMinutesText);
     }
 
@@ -134,14 +225,14 @@ public sealed class HomeProjectionTests
             ]
         };
 
-        var model = HomeInsightsProjection.Create(usage, null, _ => null, new DateOnly(2026, 10, 20), TimeZoneInfo.Utc);
+        var model = Stats(HomeInsightsProjection.Create(usage, null, _ => null, new DateOnly(2026, 10, 20), TimeZoneInfo.Utc));
 
         Assert.Equal("--", model.WordsText);
         Assert.Equal("--", model.PaceText);
         Assert.Equal("2", model.SessionsText);
         Assert.Equal(3.ToString("N1"), model.MicrophoneMinutesText);
         Assert.Contains("no word count", model.Footnote);
-        Assert.Equal(2, model.Activity![new DateOnly(2026, 10, 20)]);
+        Assert.Equal(2, model.Activity[new DateOnly(2026, 10, 20)]);
     }
 
     [Fact]
@@ -159,12 +250,12 @@ public sealed class HomeProjectionTests
             ]
         };
 
-        var model = HomeInsightsProjection.Create(usage, null, id => id, new DateOnly(2026, 10, 20), TimeZoneInfo.Utc);
+        var model = Stats(HomeInsightsProjection.Create(usage, null, Named, new DateOnly(2026, 10, 20), TimeZoneInfo.Utc));
 
         Assert.Equal("60", model.WordsText);
         Assert.Equal("120", model.PaceText);
         Assert.Equal(2, model.Models.Count);
-        Assert.Equal(1, model.Activity![new DateOnly(2026, 10, 20)]);
+        Assert.Equal(1, model.Activity[new DateOnly(2026, 10, 20)]);
     }
 
     [Theory]
@@ -220,19 +311,55 @@ public sealed class HomeProjectionTests
             Entries = [Entry(6, UsageSource.Dictation), Entry(7, UsageSource.Dictation), Entry(8, UsageSource.File)]
         };
 
-        var model = HomeInsightsProjection.Create(usage, null, id => id, today, zone);
+        var model = Stats(HomeInsightsProjection.Create(usage, null, Named, today, zone));
 
-        Assert.Equal(1, model.Activity![today.AddDays(-1)]);
+        Assert.Equal(1, model.Activity[today.AddDays(-1)]);
         Assert.Equal(1, model.Activity[today]);
         Assert.Equal("2 days streak", model.StreakText);
         Assert.Equal(3, Assert.Single(model.Models).Sessions);
         Assert.Equal(
             [new HomeActivityHour(today.AddDays(-1), 23, 1), new HomeActivityHour(today, 0, 1)],
             model.HourlyActivity);
-        var chart = HomeInsightsProjection.CreateActivity(model.HourlyActivity!, today, false);
+        var chart = HomeInsightsProjection.CreateActivity(model.HourlyActivity, today, false);
         Assert.Equal(1, chart.Hours[23].Dictations);
         Assert.Equal(1, chart.Hours[0].Dictations);
         Assert.Equal(0, chart.Hours[1].Dictations);
+    }
+
+    [Fact]
+    public void LastDictationIsTheNewestLocalDictationDayAndOmittedWhenUsageIsIncomplete()
+    {
+        var zone = TimeZoneInfo.CreateCustomTimeZone("Test West", TimeSpan.FromHours(-7), "Test West", "Test West");
+        var today = new DateOnly(2026, 10, 20);
+        UsageEntry Entry(DateTimeOffset completed, UsageSource source) => new()
+        {
+            Id = Guid.NewGuid(), CompletedAt = completed, ModelId = "model", Source = source, Words = 10,
+            RecordingSeconds = source == UsageSource.Dictation ? 10 : 0, ElapsedSeconds = 1
+        };
+        var usage = new UsageDocument
+        {
+            Entries =
+            [
+                Entry(new DateTimeOffset(2026, 9, 2, 3, 0, 0, TimeSpan.Zero), UsageSource.Dictation),
+                Entry(new DateTimeOffset(2026, 8, 30, 12, 0, 0, TimeSpan.Zero), UsageSource.Dictation),
+                Entry(new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.Zero), UsageSource.File)
+            ]
+        };
+        var lastYear = new UsageDocument
+        {
+            Entries = [Entry(new DateTimeOffset(2025, 12, 30, 12, 0, 0, TimeSpan.Zero), UsageSource.Dictation)]
+        };
+
+        var model = Stats(HomeInsightsProjection.Create(usage, null, Named, today, zone));
+        var older = Stats(HomeInsightsProjection.Create(lastYear, null, Named, today, zone));
+        var incomplete = Stats(HomeInsightsProjection.Create(usage, "Local counts could not be saved.", Named, today, zone));
+        var none = Stats(HomeInsightsProjection.Create(new UsageDocument(), null, Named, today, zone));
+
+        Assert.Equal($"Last dictation {new DateOnly(2026, 9, 1).ToString("d MMM", CultureInfo.CurrentCulture)}", model.LastDictationText);
+        Assert.Equal($"Last dictation {new DateOnly(2025, 12, 30).ToString("d MMM yyyy", CultureInfo.CurrentCulture)}", older.LastDictationText);
+        Assert.Null(incomplete.LastDictationText);
+        Assert.Null(none.LastDictationText);
+        Assert.IsType<HomeUsageUnavailable>(HomeInsightsProjection.Create(null, null, Named, today, zone).Usage);
     }
 
     [Fact]
@@ -251,7 +378,7 @@ public sealed class HomeProjectionTests
                 Entry(18, UsageSource.Dictation), Entry(17, UsageSource.File)]
         };
 
-        var model = HomeInsightsProjection.Create(usage, null, id => id, today, TimeZoneInfo.Utc);
+        var model = Stats(HomeInsightsProjection.Create(usage, null, Named, today, TimeZoneInfo.Utc));
 
         Assert.Equal("2 days streak", model.StreakText);
     }
@@ -331,10 +458,10 @@ public sealed class HomeProjectionTests
             ModelId = "model", Source = UsageSource.Dictation, Words = 10, RecordingSeconds = 10, ElapsedSeconds = 1
         };
 
-        var model = HomeInsightsProjection.Create(usage, null, _ => "Model", today, zone);
-        var chart = HomeInsightsProjection.CreateActivity(model.HourlyActivity!, today, false);
+        var model = Stats(HomeInsightsProjection.Create(usage, null, _ => Named("Model"), today, zone));
+        var chart = HomeInsightsProjection.CreateActivity(model.HourlyActivity, today, false);
 
-        Assert.Equal(new HomeActivityHour(today, 1, 2), Assert.Single(model.HourlyActivity!));
+        Assert.Equal(new HomeActivityHour(today, 1, 2), Assert.Single(model.HourlyActivity));
         Assert.Equal(2, chart.Hours[1].Dictations);
         Assert.Equal(2, chart.Hours.Sum(hour => hour.Dictations));
     }
@@ -403,6 +530,10 @@ public sealed class HomeProjectionTests
         Assert.Contains("keys", tag.Meaning);
         Assert.DoesNotContain("clipboard", tag.Meaning, StringComparison.OrdinalIgnoreCase);
     }
+
+    private static HomeModelName Named(string id) => new(id, id);
+
+    private static HomeUsageStats Stats(HomeInsightsViewModel model) => Assert.IsType<HomeUsageStats>(model.Usage);
 
     private static HomeHistoryItem History(DateTimeOffset time, string text) =>
         new(Guid.NewGuid(), time, text, "model", null, TimeSpan.FromSeconds(5));

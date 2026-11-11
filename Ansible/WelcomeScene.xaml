@@ -4,41 +4,32 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <UserControl.Resources>
         <!-- Parts built in code take these styles so ThemeResource brushes follow theme changes. -->
-        <Style x:Key="SceneCapShadowStyle" TargetType="Border">
-            <Setter Property="Background" Value="{ThemeResource AppKeyBorderBrush}" />
-            <Setter Property="CornerRadius" Value="8" />
-            <Setter Property="Margin" Value="0,3,0,-3" />
+        <Style x:Key="SceneCapFaceStyle" TargetType="Border" BasedOn="{StaticResource KeycapStyle}">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
         </Style>
-        <Style x:Key="SceneCapFaceStyle" TargetType="Border">
-            <Setter Property="Background" Value="{ThemeResource AppControlBrush}" />
-            <Setter Property="BorderBrush" Value="{ThemeResource AppKeyBorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="8" />
-        </Style>
-        <Style x:Key="SceneCapLitStyle" TargetType="Border">
+        <Style x:Key="SceneCapLitStyle" TargetType="Border" BasedOn="{StaticResource SceneCapFaceStyle}">
             <Setter Property="Background" Value="{ThemeResource AccentSoftBrush}" />
-            <Setter Property="BorderBrush" Value="{ThemeResource AccentGraphicBrush}" />
-            <Setter Property="BorderThickness" Value="1.5" />
-            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="BorderBrush" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
         </Style>
         <Style x:Key="SceneCapLabelStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="16" />
+            <Setter Property="FontSize" Value="{StaticResource BodyFontSize}" />
             <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Foreground" Value="{ThemeResource AppTextBrush}" />
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
             <Setter Property="Margin" Value="16,0" />
             <Setter Property="HorizontalAlignment" Value="Center" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
         <Style x:Key="SceneCapLitLabelStyle" TargetType="TextBlock" BasedOn="{StaticResource SceneCapLabelStyle}">
-            <Setter Property="Foreground" Value="{ThemeResource AccentForegroundBrush}" />
+            <Setter Property="Foreground" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
         </Style>
         <Style x:Key="ScenePlusStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="14" />
-            <Setter Property="Foreground" Value="{ThemeResource AppSecondaryTextBrush}" />
+            <Setter Property="FontSize" Value="{StaticResource BodyFontSize}" />
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
         <Style x:Key="SceneBarStyle" TargetType="Rectangle">
-            <Setter Property="Fill" Value="{ThemeResource PillWaveBrush}" />
+            <Setter Property="Fill" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
             <Setter Property="Width" Value="3" />
             <Setter Property="RadiusX" Value="1.5" />
             <Setter Property="RadiusY" Value="1.5" />
@@ -46,38 +37,36 @@
         </Style>
         <Style x:Key="SceneLineStyle" TargetType="Border">
             <Setter Property="Height" Value="5" />
-            <Setter Property="CornerRadius" Value="2.5" />
-            <Setter Property="Background" Value="{ThemeResource AppTrackBrush}" />
+            <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
+            <Setter Property="Background" Value="{ThemeResource ControlStrongFillColorDisabledBrush}" />
         </Style>
         <Style x:Key="SceneLitLineStyle" TargetType="Border" BasedOn="{StaticResource SceneLineStyle}">
-            <Setter Property="Background" Value="{ThemeResource AccentGraphicBrush}" />
+            <Setter Property="Background" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
             <Setter Property="RenderTransformOrigin" Value="0,0.5" />
         </Style>
     </UserControl.Resources>
-    <Border Height="168" Padding="20,0" CornerRadius="16" Background="{ThemeResource AppSearchBrush}">
-        <Grid VerticalAlignment="Center" RowSpacing="18">
+    <Border Height="168" Padding="20,0" CornerRadius="{StaticResource OverlayCornerRadius}" Background="{ThemeResource ControlAltFillColorSecondaryBrush}">
+        <Grid VerticalAlignment="Center" RowSpacing="16">
             <Grid.RowDefinitions>
                 <RowDefinition Height="80" />
                 <RowDefinition Height="20" />
             </Grid.RowDefinitions>
-            <!-- A long chord shrinks the row rather than widening the dialog. -->
             <Viewbox StretchDirection="DownOnly" AutomationProperties.AccessibilityView="Raw" IsHitTestVisible="False">
                 <StackPanel Orientation="Horizontal" Spacing="16">
                     <StackPanel x:Name="Keys" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" />
-                    <FontIcon Glyph="&#xE76C;" FontSize="12" Foreground="{ThemeResource AppSecondaryTextBrush}" VerticalAlignment="Center" />
+                    <FontIcon Glyph="&#xE76C;" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
                     <Grid VerticalAlignment="Center">
                         <Border Height="36" Padding="16,0" CornerRadius="18"
-                                Background="{ThemeResource PillBackdropFillBrush}" BorderBrush="{ThemeResource PillStrokeBrush}" BorderThickness="1">
-                            <StackPanel x:Name="Bars" Orientation="Horizontal" Spacing="3" Height="20" VerticalAlignment="Center" />
+                                Background="{ThemeResource SolidBackgroundFillColorBaseBrush}" BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}" BorderThickness="1">
+                            <StackPanel x:Name="Bars" Orientation="Horizontal" Spacing="4" Height="20" VerticalAlignment="Center" />
                         </Border>
-                        <!-- The accent ring marks a live microphone. -->
-                        <Border x:Name="ListeningRing" CornerRadius="18" BorderBrush="{ThemeResource AccentGraphicBrush}"
+                        <Border x:Name="ListeningRing" Height="36" CornerRadius="18" BorderBrush="{ThemeResource AccentTextFillColorPrimaryBrush}"
                                 BorderThickness="1.5" Opacity="0" />
                     </Grid>
-                    <FontIcon Glyph="&#xE76C;" FontSize="12" Foreground="{ThemeResource AppSecondaryTextBrush}" VerticalAlignment="Center" />
-                    <Border Width="150" Height="72" Padding="16,0" CornerRadius="10" VerticalAlignment="Center"
-                            Background="{ThemeResource AppCardBrush}" BorderBrush="{ThemeResource AppBorderBrush}" BorderThickness="1">
-                        <StackPanel Spacing="9" VerticalAlignment="Center">
+                    <FontIcon Glyph="&#xE76C;" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                    <Border Width="150" Height="72" Padding="16,0" CornerRadius="{StaticResource OverlayCornerRadius}" VerticalAlignment="Center"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                        <StackPanel Spacing="8" VerticalAlignment="Center">
                             <Grid Width="112" HorizontalAlignment="Left">
                                 <Border Style="{StaticResource SceneLineStyle}" />
                                 <Border Style="{StaticResource SceneLitLineStyle}"><Border.RenderTransform><ScaleTransform x:Name="LineFill1" ScaleX="0" /></Border.RenderTransform></Border>
@@ -95,7 +84,7 @@
                 </StackPanel>
             </Viewbox>
             <TextBlock x:Name="Prompt" Grid.Row="1" HorizontalAlignment="Center" MaxLines="1" TextTrimming="CharacterEllipsis"
-                       Style="{StaticResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource AppSecondaryTextBrush}" />
+                       Style="{StaticResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
         </Grid>
     </Border>
 </UserControl>

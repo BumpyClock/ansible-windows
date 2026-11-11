@@ -16,7 +16,9 @@ The native build pins audio.cpp v0.9.0, applies tracked patches including
 `tools/patches/audio-nemotron-stream-timestamps.patch`, and supports CPU and
 optional Vulkan. Compiled families include `nemotron_3_diar`. The patch publishes
 cumulative Nemotron token timestamps on stream updates. Paired meetings combine
-those timestamps with the Nemotron 3 diarizer on the same captured stream.
+playback ASR timestamps with the Nemotron 3 diarizer on the same playback stream.
+Microphone ASR runs separately and retains local-source identity. Qualification
+of the playback pair alone does not qualify the combined two-stream workload.
 
 The [catalog](../tools/audio-models.json) pins each model's revision, file length,
 SHA-256, license, task, and capabilities. Use those capabilities rather than assuming
@@ -313,6 +315,9 @@ microphone/video acoustic synchronization or physical multi-monitor behavior.
 - VibeVoice streaming can return speaker annotations without speech metadata.
   The app parses its speaker-attributed text for shortcut insertion. Unexpected
   output remains unknown and is not inserted; its speech-word count stays unknown.
+  Meeting finalization rejects unknown speech from either source instead of
+  replacing live turns with a successful empty transcript. Known empty speech
+  remains a valid final result.
 - Offline VibeVoice 7B microphone dictation buffers at most five minutes of PCM16
   in memory, then uses offline recognition after Finish. This does not enable
   native streaming or live previews for that model.

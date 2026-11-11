@@ -19,6 +19,9 @@ internal sealed record DeviceBenchmarkResult(NativeBackend Backend, double? Mill
 internal sealed record DeviceBenchmarkSelection(string Key, DeviceBenchmarkResult Cpu, DeviceBenchmarkResult Gpu,
     NativeBackend Backend, DateTimeOffset MeasuredAt)
 {
+    public double? PaceLimitMilliseconds { get; init; }
+    [JsonIgnore] public DeviceChoiceReason Reason { get; init; }
+
     public string Summary => $"Auto selected {Backend}. CPU: {Describe(Cpu)}; Vulkan: {Describe(Gpu)}. " +
         $"Public sample median of three runs measured {MeasuredAt:u}; loading and warmup excluded.";
     private static string Describe(DeviceBenchmarkResult result) =>
@@ -75,7 +78,7 @@ internal static class DeviceBenchmark
     {
         if (!prior.Cpu.Working) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(error);
         return Select(prior.Key, prior.Cpu,
-            new(NativeBackend.Vulkan, null, $"real recognition failed after qualification: {error.Message}"))
+            new(NativeBackend.Vulkan, null, $"real recognition failed after qualification: {error.Message}"), prior.PaceLimitMilliseconds)
             with { MeasuredAt = prior.MeasuredAt };
     }
 
@@ -100,17 +103,30 @@ internal static class DeviceBenchmark
     {
         if (cpu.Backend != NativeBackend.Cpu || gpu.Backend != NativeBackend.Vulkan)
             throw new InvalidDataException("Benchmark device identity does not match the requested backend.");
+        if (paceLimitMilliseconds is { } limit && (!double.IsFinite(limit) || limit <= 0))
+            throw new InvalidDataException("The meeting pace limit must be a positive finite duration.");
         if (cpu.Fatal || gpu.Fatal)
             throw new InvalidDataException($"Device qualification stopped: CPU: {cpu.Error}; Vulkan: {gpu.Error}");
         if (!cpu.Working && !gpu.Working)
             throw new InvalidOperationException($"Neither device passed qualification. CPU: {cpu.Error}; Vulkan: {gpu.Error}");
+        var (backend, reason) =
+            !cpu.Working ? (NativeBackend.Vulkan, DeviceChoiceReason.CpuUnavailable)
+            : !gpu.Working ? (NativeBackend.Cpu, DeviceChoiceReason.GpuUnavailable)
+            : Compare(cpu.Milliseconds!.Value, gpu.Milliseconds!.Value, paceLimitMilliseconds);
+        return new(key, cpu, gpu, backend, DateTimeOffset.UtcNow)
+            { Reason = reason, PaceLimitMilliseconds = paceLimitMilliseconds };
+    }
+
+    private static (NativeBackend, DeviceChoiceReason) Compare(double cpu, double gpu, double? paceLimitMilliseconds)
+    {
         // Differences below five percent are not enough evidence to override the GPU preference.
-        var preferGpu = gpu.Working && (!cpu.Working || gpu.Milliseconds <= cpu.Milliseconds * 1.05);
+        if (gpu > cpu * 1.05) return (NativeBackend.Cpu, DeviceChoiceReason.Faster);
         // A near tie is not a reason to pick the device that misses a meeting's pace when the other keeps it.
-        if (preferGpu && cpu.Working && paceLimitMilliseconds is { } limit && gpu.Milliseconds > limit && cpu.Milliseconds <= limit)
-            preferGpu = false;
-        var backend = preferGpu ? NativeBackend.Vulkan : NativeBackend.Cpu;
-        return new(key, cpu, gpu, backend, DateTimeOffset.UtcNow);
+        if (paceLimitMilliseconds is { } limit && gpu > limit && cpu <= limit)
+            return (NativeBackend.Cpu, DeviceChoiceReason.KeepsMeetingPace);
+        return gpu < cpu ? (NativeBackend.Vulkan, DeviceChoiceReason.Faster)
+            : gpu == cpu ? (NativeBackend.Vulkan, DeviceChoiceReason.SameTime)
+            : (NativeBackend.Vulkan, DeviceChoiceReason.GpuPreferredWhenClose);
     }
 
     internal static string Key(DeviceBenchmarkRequest request, string modelHash, CancellationToken token,
@@ -156,10 +172,16 @@ internal static class DeviceBenchmark
         try
         {
             var entries = JsonSerializer.Deserialize(file, DeviceBenchmarkJson.Default.ListDeviceBenchmarkSelection);
-            if (entries is null || entries.Count > 128 || entries.Any(entry => entry is null ||
-                string.IsNullOrWhiteSpace(entry.Key) || entry.Cpu is null || entry.Gpu is null ||
-                Select(entry.Key, entry.Cpu, entry.Gpu).Backend != entry.Backend)) return [];
-            return entries;
+            if (entries is null || entries.Count > 128) return [];
+            List<DeviceBenchmarkSelection> selections = [];
+            foreach (var entry in entries)
+            {
+                if (entry is null || string.IsNullOrWhiteSpace(entry.Key) || entry.Cpu is null || entry.Gpu is null) return [];
+                var derived = Select(entry.Key, entry.Cpu, entry.Gpu, entry.PaceLimitMilliseconds);
+                if (derived.Backend != entry.Backend) return [];
+                selections.Add(entry with { Reason = derived.Reason });
+            }
+            return selections;
         }
         catch (Exception error) when (error is JsonException or InvalidDataException or InvalidOperationException)
         {

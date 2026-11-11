@@ -2,15 +2,15 @@ using System.Globalization;
 
 namespace Ansible;
 
-/// <summary>The day headings shared by Home history and Meetings.</summary>
 internal static class DayLabel
 {
-    /// <summary>TODAY, YESTERDAY, then the date. The year appears only for dates outside the current year.</summary>
     public static string For(DateOnly date, DateOnly today)
     {
-        if (date == today) return "TODAY";
-        if (date == today.AddDays(-1)) return "YESTERDAY";
-        var format = date.Year == today.Year ? "ddd, MMM d" : "ddd, MMM d, yyyy";
-        return date.ToString(format, CultureInfo.CurrentCulture).ToUpperInvariant();
+        if (date == today) return "Today";
+        if (date == today.AddDays(-1)) return "Yesterday";
+        return Date(date, today);
     }
+
+    public static string Date(DateOnly date, DateOnly today) =>
+        date.ToString(date.Year == today.Year ? "ddd d MMM" : "ddd d MMM yyyy", CultureInfo.CurrentCulture);
 }

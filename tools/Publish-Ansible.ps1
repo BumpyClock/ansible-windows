@@ -72,17 +72,13 @@ function Build-VerifiedPackage {
     $inspection = Join-Path $root ".runtime\package-validation\$([Guid]::NewGuid().ToString('N'))"
     try {
         [IO.Compression.ZipFile]::ExtractToDirectory($packagePath, $inspection)
+        $modelIcons = Get-ChildItem -LiteralPath (Join-Path $root "Ansible\Assets\ModelIcons") -File |
+            ForEach-Object { "Assets\ModelIcons\$($_.Name)" }
         foreach ($resource in @(
             "AppxManifest.xml", "resources.pri", "Ansible.exe", "DeviceProbe\Ansible.DeviceProbe.exe",
             "audiocpp.dll", "record_capture.dll", "audio-models.json", "validation-sample.wav", "audio.cpp-LICENSE",
-            "Assets\AppIcon.ico", "Assets\StoreLogo.png",
-            "Assets\ModelIcons\moonshine.png", "Assets\ModelIcons\moonshine-dark.png",
-            "Assets\ModelIcons\qwen.png", "Assets\ModelIcons\qwen-dark.png",
-            "Assets\ModelIcons\vibevoice.png", "Assets\ModelIcons\vibevoice-dark.png",
-            "Assets\ModelIcons\nvidia.png", "Assets\ModelIcons\nvidia-dark.png",
-            "Assets\ModelIcons\NOTICE.txt", "Assets\ModelIcons\moonshine-LICENSE.txt",
-            "Assets\ModelIcons\qwen-LICENSE.txt", "Assets\ModelIcons\vibevoice-LICENSE.txt"
-        )) {
+            "Assets\AppIcon.ico", "Assets\StoreLogo.png"
+        ) + $modelIcons) {
             if (-not (Test-Path -LiteralPath (Join-Path $inspection $resource) -PathType Leaf)) {
                 throw "The NativeAOT MSIX is missing '$resource'."
             }
@@ -96,7 +92,6 @@ function Build-VerifiedPackage {
         [xml]$resources = Get-Content -LiteralPath $priDump
         $resourceMap = $resources.PriInfo.ResourceMap | Where-Object name -EQ $identity.Name
         if (-not $resourceMap) { throw "The package resource index has no map for '$($identity.Name)'." }
-        # Every XAML file in the app compiles to an embedded .xbf; the list comes from source so it cannot drift.
         $compiledXaml = @(Get-ChildItem -LiteralPath (Join-Path $root "Ansible") -Filter *.xaml | ForEach-Object { "$($_.BaseName).xbf" })
         if ($compiledXaml.Count -eq 0) { throw "No app XAML files were found to verify in the package." }
         foreach ($xaml in $compiledXaml) {

@@ -13,6 +13,8 @@ public sealed partial class HomeHistoryView : UserControl
     private static readonly TimeSpan CopiedDuration = TimeSpan.FromSeconds(2);
     private const string CopyGlyph = "\uE8C8";
     private const string CopiedGlyph = "\uE73E";
+    private const string MicrophoneGlyph = "\uE720";
+    private const string SearchGlyph = "\uE721";
     private const double ActionsRestOpacity = 0.65;
     private const double NarrowRowWidth = 420;
 
@@ -26,15 +28,24 @@ public sealed partial class HomeHistoryView : UserControl
     private TransitionCollection? _transitions;
     private long _transitionGeneration;
     private bool _narrow;
+    private HomeHistoryViewModel? _model;
+    private int? _dictations;
+    private PageCanvas? _pinCanvas;
+    private StickyPin? _headerPin;
 
     internal event Action? QueryChanged;
     internal event Action<HomeHistoryItem>? CopyRequested;
     internal event Action<HomeHistoryItem>? RemoveRequested;
+    internal event Action? EmptyHistoryFocusRequested;
 
     internal string Query => HistorySearchBox.Text.Trim();
 
-    /// <summary>How to dictate, shown when nothing is saved yet. The page sets it from the current shortcut.</summary>
-    internal string EmptyHint { get; set; } = "Choose Dictate to start your history.";
+    internal void SetEmptyContext(int? dictations)
+    {
+        if (_dictations == dictations) return;
+        _dictations = dictations;
+        RenderEmptyState();
+    }
 
     public HomeHistoryView()
     {
@@ -44,13 +55,37 @@ public sealed partial class HomeHistoryView : UserControl
         HistoryContent.BringIntoViewRequested += HistoryContentBringIntoViewRequested;
     }
 
-    /// <summary>Where content beside history should stick so its top lines up with the stuck header's content.</summary>
     internal double StuckContentTop => HistoryHeaderGrid.Padding.Top;
 
-    /// <summary>Sticks the header row (title, count, search) to the top of the page while the rows scroll under it.</summary>
-    internal StickyPin PinHeader(PageCanvas canvas) => canvas.Pin(HistoryHeaderGrid, this, indicator: HistoryHeaderDivider);
+    internal void PinHeader(PageCanvas canvas)
+    {
+        _pinCanvas = canvas;
+        UpdateHeaderPin();
+    }
 
-    // A row revealed by keyboard focus must land below the stuck header, not under it.
+    internal void UnpinHeader()
+    {
+        _pinCanvas = null;
+        UpdateHeaderPin();
+    }
+
+    private void UpdateHeaderPin()
+    {
+        var pinned = _pinCanvas is not null && _model?.HasHistory == true;
+        if (pinned == (_headerPin is not null)) return;
+        if (pinned)
+        {
+            HistoryHeaderDivider.Visibility = Visibility.Visible;
+            _headerPin = _pinCanvas!.Pin(HistoryHeaderGrid, this, indicator: HistoryHeaderDivider);
+        }
+        else
+        {
+            _headerPin!.Dispose();
+            _headerPin = null;
+            HistoryHeaderDivider.Visibility = Visibility.Collapsed;
+        }
+    }
+
     private void HistoryContentBringIntoViewRequested(UIElement sender, BringIntoViewRequestedEventArgs args)
     {
         var rect = args.TargetRect;
@@ -59,23 +94,24 @@ public sealed partial class HomeHistoryView : UserControl
         args.TargetRect = new Windows.Foundation.Rect(rect.X, rect.Y - header, rect.Width, rect.Height + header);
     }
 
-    /// <summary>
-    /// Renders the projection. Rows are reused by operation, so with <paramref name="animate"/> a new dictation,
-    /// a removal, or a delivery outcome changes only what changed. Search and date changes rebuild without
-    /// transitions so every row does not animate at once.
-    /// </summary>
     internal void Render(HomeHistoryViewModel model, bool animate)
     {
+        _model = model;
         var count = model.AllOperationIds.Count;
         var query = Query;
         HistoryCountPill.Text = query.Length > 0 && model.HasHistory
             ? $"{model.Groups.Sum(group => group.Entries.Count):N0} of {count:N0}"
             : $"{count:N0} {(count == 1 ? "transcription" : "transcriptions")}";
+        HistoryCountPill.Visibility = model.HasHistory ? Visibility.Visible : Visibility.Collapsed;
+        var searchVisibility = model.HasHistory ? Visibility.Visible : Visibility.Collapsed;
+        HistorySearchBox.Visibility = searchVisibility;
+        HistorySearchIcon.Visibility = searchVisibility;
+        HistorySearchShortcut.Visibility = searchVisibility;
+        if (HistoryHeaderGrid.RowDefinitions.Count > 1) { HistoryHeaderGrid.RowSpacing = model.HasHistory ? 8 : 0; }
         OversizedNotice.Text = $"A transcript over {HomeDictationHistory.MaximumCharacters:N0} characters stays in the current result and is not added to saved history.";
         OversizedNotice.Visibility = model.OversizedCurrentResult ? Visibility.Visible : Visibility.Collapsed;
-        EmptyState.Visibility = model.HasMatches ? Visibility.Collapsed : Visibility.Visible;
-        EmptyTitle.Text = model.HasHistory ? "No matches" : "No dictations yet";
-        EmptyDetail.Text = model.HasHistory ? $"No saved transcript contains \"{query}\"." : EmptyHint;
+        RenderEmptyState();
+        UpdateHeaderPin();
         animate &= HistoryRows.Children.Count > 0;
 
         var desired = new List<UIElement>();
@@ -106,7 +142,7 @@ public sealed partial class HomeHistoryView : UserControl
             HistoryRows.ChildrenTransitions = null;
             HistoryRows.Children.Clear();
             foreach (var element in desired) { HistoryRows.Children.Add(element); }
-            // Rows leaving the tree do not reliably raise PointerExited or LostFocus; start rebuilt rows at rest.
+            // Rows leaving the tree do not reliably raise PointerExited or LostFocus.
             foreach (var row in _rows.Values.Where(row => row.Hovered || row.Focused))
             {
                 row.Hovered = false;
@@ -120,7 +156,6 @@ public sealed partial class HomeHistoryView : UserControl
             });
         }
 
-        // Filtered-out rows stay cached so clearing a search restores them without rebuilding.
         var all = model.AllOperationIds;
         foreach (var id in _rows.Keys.Where(id => !all.Contains(id)).ToArray())
         {
@@ -131,7 +166,18 @@ public sealed partial class HomeHistoryView : UserControl
             _groupHeaders.Remove(label);
     }
 
-    /// <summary>Shows the copied state on a row after the page put its transcript on the clipboard.</summary>
+    private void RenderEmptyState()
+    {
+        if (_model is null) return;
+        var empty = HomeHistoryProjection.EmptyState(_model, Query, _dictations);
+        EmptyMessage.Visibility = empty is null ? Visibility.Collapsed : Visibility.Visible;
+        if (empty is null) return;
+        var noMatches = empty.Kind == HomeHistoryEmptyKind.NoMatches;
+        EmptyMessage.Glyph = noMatches ? SearchGlyph : MicrophoneGlyph;
+        EmptyMessage.Title = empty.Title;
+        EmptyMessage.Detail = empty.Detail;
+    }
+
     internal void ShowCopied(Guid operationId)
     {
         RestoreCopied();
@@ -142,7 +188,6 @@ public sealed partial class HomeHistoryView : UserControl
         _copiedTimer.Start();
     }
 
-    /// <summary>Removes and inserts only the changed children. Fails when existing children would need to move.</summary>
     private bool TryReconcile(List<UIElement> desired)
     {
         var children = HistoryRows.Children;
@@ -208,14 +253,13 @@ public sealed partial class HomeHistoryView : UserControl
         tagContent.Children.Add(row.TagIcon);
         tagContent.Children.Add(row.TagText);
         row.TagHost = new Border { Child = tagContent, VerticalAlignment = VerticalAlignment.Center, Visibility = Visibility.Collapsed };
-        // A left-aligned star column lets the meta line trim before it pushes the tag out of the row.
         var metaLine = new Grid { ColumnSpacing = (double)resources["HistoryMetaGap"], HorizontalAlignment = HorizontalAlignment.Left };
         metaLine.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         metaLine.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         metaLine.Children.Add(row.Meta);
         Grid.SetColumn(row.TagHost, 1);
         metaLine.Children.Add(row.TagHost);
-        row.Body = new StackPanel { Spacing = 6 };
+        row.Body = new StackPanel { Spacing = 4 };
         row.Body.Children.Add(row.Transcript);
         row.Body.Children.Add(metaLine);
         row.Layout.Children.Add(row.Body);
@@ -267,14 +311,14 @@ public sealed partial class HomeHistoryView : UserControl
     private void UpdateRowState(HistoryRowView row)
     {
         var active = row.Hovered || row.MenuOpen;
-        // High Contrast hover is the system highlight, which would hide window-text transcript. Keep rows plain there.
+        // High Contrast hover is the system highlight, which would hide window-text transcript.
         var highContrast = _accessibility.HighContrast;
         if (highContrast) { row.Root.ClearValue(Border.BackgroundProperty); }
         else { row.Root.Background = active ? HoverFillAnchor.Background : RestFill(); }
         row.Actions.Opacity = active || row.Focused || highContrast || row.NeedsCopy ? 1 : ActionsRestOpacity;
     }
 
-    // The hover fill at zero alpha. The brush fade interpolates every channel, so resting on Transparent
+    // The brush fade interpolates every channel, so resting on Transparent
     // (white at zero alpha) would pass through translucent white on the way in and out.
     private SolidColorBrush RestFill()
     {
@@ -286,13 +330,12 @@ public sealed partial class HomeHistoryView : UserControl
 
     private static void ApplyRowLayout(HistoryRowView row, bool narrow)
     {
-        // Narrow rows put the time above the transcript instead of clipping a fixed time column.
         Grid.SetColumnSpan(row.Time, narrow ? 2 : 1);
         Grid.SetRow(row.Body, narrow ? 1 : 0);
         Grid.SetRowSpan(row.Body, narrow ? 1 : 2);
         Grid.SetColumn(row.Body, narrow ? 0 : 1);
         Grid.SetColumnSpan(row.Body, narrow ? 2 : 1);
-        row.Time.Margin = narrow ? new Thickness(0, 0, 0, 4) : new Thickness(0, 3, 0, 0);
+        row.Time.Margin = narrow ? new Thickness(0, 0, 0, 4) : new Thickness(0, 2, 0, 0);
     }
 
     private void HistoryRowsSizeChanged(object sender, SizeChangedEventArgs args)
@@ -336,14 +379,14 @@ public sealed partial class HomeHistoryView : UserControl
         var index = HistoryRows.Children.IndexOf(row.Root);
         RemoveRequested?.Invoke(row.Item);
         if (HistoryRows.Children.Contains(row.Root)) { return; }
-        // Keep keyboard users in the list: focus the row that took this one's place, or search when none is left.
         var next = HistoryRows.Children.Skip(Math.Max(0, index)).Concat(HistoryRows.Children.Take(Math.Max(0, index)).Reverse())
             .Select(child => _rows.Values.FirstOrDefault(candidate => ReferenceEquals(candidate.Root, child)))
             .FirstOrDefault(candidate => candidate is not null);
         DispatcherQueue.TryEnqueue(() =>
         {
             if (next is not null) { next.More.Focus(FocusState.Keyboard); }
-            else { HistorySearchBox.Focus(FocusState.Keyboard); }
+            else if (HistorySearchBox.Visibility == Visibility.Visible) { HistorySearchBox.Focus(FocusState.Keyboard); }
+            else { EmptyHistoryFocusRequested?.Invoke(); }
         });
     }
 
@@ -369,6 +412,7 @@ public sealed partial class HomeHistoryView : UserControl
 
     private void FocusHistorySearchInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
+        if (HistorySearchBox.Visibility != Visibility.Visible) { return; }
         HistorySearchBox.Focus(FocusState.Keyboard);
         args.Handled = true;
     }
@@ -390,7 +434,7 @@ public sealed partial class HomeHistoryView : UserControl
             Grid.SetColumn(HistorySearchIcon, 0); Grid.SetColumnSpan(HistorySearchIcon, 2); Grid.SetRow(HistorySearchIcon, 1);
             Grid.SetColumn(HistorySearchShortcut, 0); Grid.SetColumnSpan(HistorySearchShortcut, 2); Grid.SetRow(HistorySearchShortcut, 1);
             HistorySearchBox.HorizontalAlignment = HorizontalAlignment.Stretch;
-            HistoryHeaderGrid.RowSpacing = 10;
+            HistoryHeaderGrid.RowSpacing = _model?.HasHistory == true ? 8 : 0;
         }
         else
         {
@@ -438,13 +482,14 @@ public sealed partial class HomeHistoryView : UserControl
             if (Time.Text != entry.TimeText)
             {
                 Time.Text = entry.TimeText;
-                // Copy and More names carry the row time so a screen reader can tell rows apart.
                 ToolTipService.SetToolTip(Copy, ReferenceEquals(view._copiedRow, this) ? "Copied" : "Copy transcript");
                 AutomationProperties.SetName(Copy, $"Copy transcript from {entry.TimeText}");
                 ToolTipService.SetToolTip(More, "More actions");
                 AutomationProperties.SetName(More, $"More actions for transcript from {entry.TimeText}");
             }
             if (Meta.Text != entry.MetadataText) { Meta.Text = entry.MetadataText; }
+            var modelTip = entry.Model?.FullName;
+            if (!Equals(ToolTipService.GetToolTip(Meta), modelTip)) { ToolTipService.SetToolTip(Meta, modelTip); }
             if (deliveryChanged) { view.UpdateTag(this, entry.Tag); }
             _rendered = true;
         }

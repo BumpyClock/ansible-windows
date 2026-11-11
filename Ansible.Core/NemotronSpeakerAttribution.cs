@@ -18,7 +18,6 @@ public sealed class NemotronSpeakerAttribution
     private SpeakerActivity[] _activities = [];
     private ActivityTimeline? _timeline;
     private const long SampleRate = 16000;
-    private const string UnknownSpeaker = "Unknown speaker";
     internal const long MaximumSamples = SampleRate * 120 * 60;
     internal const int MaximumTokens = 262144;
     internal const int MaximumActivities = 100000;
@@ -49,7 +48,7 @@ public sealed class NemotronSpeakerAttribution
         var timeline = Timeline(activities, processedSamples, cancellationToken);
         var turns = new List<MeetingTurn>();
         var turnText = new StringBuilder();
-        var turnSpeaker = UnknownSpeaker;
+        var turnSpeaker = MeetingTurn.UnattributedSpeakerId;
         long turnStart = 0, turnEnd = 0;
         var turnQuality = MeetingTimingQuality.Unknown;
         var speech = new StringBuilder();
@@ -111,7 +110,7 @@ public sealed class NemotronSpeakerAttribution
                 var quality = word.HasNativeTiming && word.End > word.Start
                     ? MeetingTimingQuality.Aligned : MeetingTimingQuality.Unknown;
                 var speaker = quality == MeetingTimingQuality.Aligned
-                    ? timeline.GetSpeaker(word.Start, word.End, timing) : UnknownSpeaker;
+                    ? timeline.GetSpeaker(word.Start, word.End, timing) : MeetingTurn.UnattributedSpeakerId;
                 if (turnText.Length > 0 && (speaker != turnSpeaker || quality != turnQuality ||
                     word.Start - turnEnd > SampleRate || Math.Max(turnEnd, word.End) - turnStart > 10 * SampleRate))
                     FinishTurn();
@@ -267,7 +266,7 @@ public sealed class NemotronSpeakerAttribution
             // emitted just after its speaker stopped, so the emission allowance before it decides.
             TokenTimingModel.EmissionFrame => TryGetMajority(start, end)
                 ?? (start > 0 ? TryGetMajority(Math.Max(0, start - EmissionLagSamples), start) : null)
-                ?? UnknownSpeaker,
+                ?? MeetingTurn.UnattributedSpeakerId,
             // A word span opens up to one start lag into the word and can run through the following
             // pause into the next speaker's onset, so the speech around its opening decides. When the
             // emission allowance around the opening is silent, the rest of the start lag before it is the
@@ -276,7 +275,7 @@ public sealed class NemotronSpeakerAttribution
             TokenTimingModel.WordSpan => TryGetMajority(Math.Max(0, start - EmissionLagSamples), Math.Min(end, start + EmissionLagSamples))
                 ?? (start > EmissionLagSamples ? TryGetMajority(Math.Max(0, start - WordSpanStartLagSamples), start - EmissionLagSamples) : null)
                 ?? TryGetFirstRunMajority(start, end)
-                ?? UnknownSpeaker,
+                ?? MeetingTurn.UnattributedSpeakerId,
             _ => throw new ArgumentOutOfRangeException(nameof(timing))
         };
 
@@ -304,7 +303,7 @@ public sealed class NemotronSpeakerAttribution
             var startPoint = FindPoint(start);
             var endPoint = FindPoint(end);
             if (CoverageAt(endPoint, end, 8) != CoverageAt(startPoint, start, 8))
-                return UnknownSpeaker;
+                return MeetingTurn.UnattributedSpeakerId;
             var best = -1;
             long bestCoverage = 0, covered = 0;
             for (var speaker = 0; speaker < 8; speaker++)
@@ -319,7 +318,7 @@ public sealed class NemotronSpeakerAttribution
             }
             if (covered == 0) return null;
             // Silence inside the span does not vote: a strict majority of the diarized speech decides.
-            return bestCoverage * 2 > covered ? $"Speaker {best}" : UnknownSpeaker;
+            return bestCoverage * 2 > covered ? $"Speaker {best}" : MeetingTurn.UnattributedSpeakerId;
         }
 
         private int FindPoint(long sample)

@@ -6,21 +6,20 @@
              AutomationProperties.Name="Notifications" AutomationProperties.LandmarkType="Custom"
              PointerEntered="HostPointerEntered" PointerExited="HostPointerExited"
              GotFocus="HostGotFocus" LostFocus="HostLostFocus">
-    <!-- Floats over the bottom of the content panel and never moves page content; the host adds its height to the
-         current page's bottom padding instead. No background, so the empty area passes input to the page. -->
-    <StackPanel x:Name="Layout" MaxWidth="{StaticResource NoticeHostMaxWidth}" Margin="{StaticResource NoticeHostMargin}"
-                Spacing="{StaticResource NoticeHostSpacing}" HorizontalAlignment="Stretch">
-        <Button x:Name="MoreButton" HorizontalAlignment="Center" Height="28" Padding="12,0" CornerRadius="14"
-                FontSize="12" Visibility="Collapsed" Click="MoreClicked"
-                AutomationProperties.AutomationId="MoreNoticesButton" />
-        <!-- Theme transitions follow the Windows animation setting: notices rise into place and the others slide. -->
-        <StackPanel x:Name="Bars" Spacing="{StaticResource NoticeHostSpacing}">
-            <StackPanel.ChildrenTransitions>
-                <TransitionCollection>
-                    <EntranceThemeTransition FromVerticalOffset="12" IsStaggeringEnabled="False" />
-                    <RepositionThemeTransition />
-                </TransitionCollection>
-            </StackPanel.ChildrenTransitions>
+    <Grid x:Name="Layout" Margin="{StaticResource NoticeHostMargin}">
+        <Grid.ColumnDefinitions><ColumnDefinition x:Name="BarColumn" Width="*" /></Grid.ColumnDefinitions>
+        <StackPanel Spacing="{StaticResource NoticeHostSpacing}">
+            <Button x:Name="MoreButton" HorizontalAlignment="Left" Height="28" Padding="12,0" CornerRadius="14"
+                    FontSize="{StaticResource CaptionFontSize}" Visibility="Collapsed" Click="MoreClicked"
+                    AutomationProperties.AutomationId="MoreNoticesButton" />
+            <StackPanel x:Name="Bars" Spacing="{StaticResource NoticeHostSpacing}">
+                <StackPanel.ChildrenTransitions>
+                    <TransitionCollection>
+                        <EntranceThemeTransition FromVerticalOffset="12" IsStaggeringEnabled="False" />
+                        <RepositionThemeTransition />
+                    </TransitionCollection>
+                </StackPanel.ChildrenTransitions>
+            </StackPanel>
         </StackPanel>
-    </StackPanel>
+    </Grid>
 </UserControl>

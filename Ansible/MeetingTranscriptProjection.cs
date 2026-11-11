@@ -5,7 +5,6 @@ using Ansible.Core;
 
 namespace Ansible;
 
-/// <summary>Groups adjacent speaker turns without changing the saved recognition boundaries.</summary>
 internal sealed class MeetingTranscriptProjection
 {
     public ObservableCollection<MeetingTranscriptRow> Rows { get; } = [];
@@ -38,8 +37,7 @@ internal sealed class MeetingTranscriptProjection
     }
 }
 
-// Public for the XAML compiler's typed bindings. This type has no WinUI dependency so the
-// reconciliation and recycled-row state can be checked without starting a window.
+// Public for the XAML compiler's typed bindings.
 public sealed class MeetingTranscriptRow : INotifyPropertyChanged
 {
     private MeetingTurn[] _turns = [];
@@ -63,6 +61,7 @@ public sealed class MeetingTranscriptRow : INotifyPropertyChanged
     public string OriginalText => _originalText;
     public bool HasCleanup => _hasCleanup;
     public string TimingText => _timingText;
+    public string OriginalToggleText => _isOriginalExpanded ? "Hide original wording" : "Show original wording";
 
     public bool IsOriginalExpanded
     {
@@ -72,6 +71,7 @@ public sealed class MeetingTranscriptRow : INotifyPropertyChanged
             if (_isOriginalExpanded == value) return;
             _isOriginalExpanded = value;
             Notify();
+            Notify(nameof(OriginalToggleText));
         }
     }
 
@@ -98,13 +98,11 @@ public sealed class MeetingTranscriptRow : INotifyPropertyChanged
             var original = _turns.Any(turn => turn.OriginalText is not null)
                 ? string.Join(" ", _turns.Select(turn => turn.OriginalText ?? turn.Text)) : "";
             var hasCleanup = _turns.Any(turn => turn.OriginalText is not null && turn.OriginalText != turn.Text);
-            var timing = $"{FormatTurnTime(_turns)}{(_turns.Any(turn => turn.IsProvisional) ? " · provisional" : "")}{(hasCleanup ? " · wording edited" : "")}";
-            // Unchanged completed blocks keep text selection while the live tail is revised.
+            var timing = string.Join(" · ", new[] { FormatTurnTime(_turns), _turns.Any(turn => turn.IsProvisional) ? "Updating" : null }.OfType<string>());
             if (_text != text) { _text = text; Notify(nameof(Text)); }
             if (_originalText != original) { _originalText = original; Notify(nameof(OriginalText)); }
             if (_hasCleanup != hasCleanup) { _hasCleanup = hasCleanup; Notify(nameof(HasCleanup)); }
             if (_timingText != timing) { _timingText = timing; Notify(nameof(TimingText)); }
-            // Extending or cleaning the same speaker block keeps its expanded original.
             if (previous is not null && (previous.StartSeconds != first.StartSeconds || previous.Source != first.Source ||
                 (previous.OriginalText ?? previous.Text) != (first.OriginalText ?? first.Text)))
                 IsOriginalExpanded = false;
@@ -114,12 +112,11 @@ public sealed class MeetingTranscriptRow : INotifyPropertyChanged
 
     private void Notify([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     private static string FormatTime(double seconds) => TimeSpan.FromSeconds(Math.Max(0, seconds)).ToString(seconds >= 3600 ? @"h\:mm\:ss" : @"m\:ss");
-    private static string FormatTurnTime(IReadOnlyList<MeetingTurn> turns)
+    private static string? FormatTurnTime(IReadOnlyList<MeetingTurn> turns)
     {
-        if (turns.Any(turn => turn.TimingQuality == MeetingTimingQuality.Unknown)) return "Time unavailable";
-        var time = FormatTime(turns[0].StartSeconds);
-        if (turns.Count > 1) time += $" to {FormatTime(turns.Max(turn => turn.EndSeconds))}";
-        return turns.All(turn => turn.TimingQuality == MeetingTimingQuality.Aligned)
-            ? $"{time} · ASR-aligned" : $"≈ {time} · approximate chunk time";
+        if (turns.Any(turn => turn.TimingQuality == MeetingTimingQuality.Unknown)) return null;
+        var start = turns[0].StartSeconds;
+        var time = FormatTime(start);
+        return start == 0 || turns.All(turn => turn.TimingQuality == MeetingTimingQuality.Aligned) ? time : $"About {time}";
     }
 }

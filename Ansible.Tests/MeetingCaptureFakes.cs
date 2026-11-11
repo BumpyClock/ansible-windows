@@ -26,7 +26,7 @@ internal sealed class FakeMeetingCaptureFactory : IMeetingCaptureFactory
 /// Meeting capture fake that follows the <see cref="IMeetingCapture"/> contract: contiguous activity from sample zero,
 /// raised before the packet enters <see cref="Audio"/>, and a clock that defaults to the emitted sample count.
 /// </summary>
-internal sealed class FakeMeetingCapture(Channel<byte[]> audio) : IMeetingCapture
+internal sealed class FakeMeetingCapture(Channel<MeetingAudioPacket> audio) : IMeetingCapture
 {
     private readonly object _lifecycle = new();
     private long _emittedSamples;
@@ -36,10 +36,9 @@ internal sealed class FakeMeetingCapture(Channel<byte[]> audio) : IMeetingCaptur
     private int _stopCalls;
     private Task? _stop;
 
-    public FakeMeetingCapture() : this(Channel.CreateUnbounded<byte[]>()) { }
+    public FakeMeetingCapture() : this(Channel.CreateUnbounded<MeetingAudioPacket>()) { }
 
-    public ChannelReader<byte[]> Audio => audio.Reader;
-    public long? SampleZeroTimestamp => null;
+    public ChannelReader<MeetingAudioPacket> Audio => audio.Reader;
     public double CapturedSeconds => Interlocked.Read(ref _emittedSamples) / 16000.0;
     public long ClockSamplePosition
     {
@@ -72,9 +71,11 @@ internal sealed class FakeMeetingCapture(Channel<byte[]> audio) : IMeetingCaptur
 
     public void Send(int bytes) => Send(new byte[bytes]);
 
-    public void Send(byte[] packet)
+    public void Send(byte[] packet) => Send(new MeetingAudioPacket(packet, packet));
+
+    public void Send(MeetingAudioPacket packet)
     {
-        var samples = packet.Length / 2;
+        var samples = packet.Samples;
         var start = Interlocked.Read(ref _emittedSamples);
         Activity?.Invoke(new(start, samples, MicrophoneRms, PlaybackRms));
         Interlocked.Add(ref _emittedSamples, samples);

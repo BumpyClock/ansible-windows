@@ -54,7 +54,7 @@ internal sealed class MeetingCapture : IMeetingCapture
     private double _nextHealthSeconds = 1, _nextLogSeconds = 5;
     private MeetingCaptureStage _stage = MeetingCaptureStage.InitializeCom;
     private MeetingCaptureHealth? _health;
-    private readonly Channel<byte[]> _audio = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(750)
+    private readonly Channel<MeetingAudioPacket> _audio = Channel.CreateBounded<MeetingAudioPacket>(new BoundedChannelOptions(750)
         { SingleWriter = true, SingleReader = true, AllowSynchronousContinuations = false });
     private readonly CancellationTokenSource _stop;
     private readonly TaskCompletionSource _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -74,8 +74,7 @@ internal sealed class MeetingCapture : IMeetingCapture
     private readonly ConcurrentDictionary<string, byte> _claimedOutputs = new(StringComparer.Ordinal);
     private long _outputsLost;
     private bool _enumerationFailed;
-    public ChannelReader<byte[]> Audio => _audio.Reader;
-    public long? SampleZeroTimestamp => null;
+    public ChannelReader<MeetingAudioPacket> Audio => _audio.Reader;
     public double CapturedSeconds => Interlocked.Read(ref _samples) / 16000.0;
     public long ClockSamplePosition
     {
@@ -411,14 +410,14 @@ internal sealed class MeetingCapture : IMeetingCapture
             MeetingPcmMixer.Accumulate(playback, output.Timeline.Read(samples, out var captured));
             playbackSamples = Math.Max(playbackSamples, captured);
         }
-        var packet = MeetingPcmMixer.Mix(microphone.Read(samples, out var micSamples),
-            playback, out var micRms, out var playbackRms);
+        var microphonePcm = microphone.Read(samples, out var micSamples);
+        var mixed = MeetingPcmMixer.Mix(microphonePcm, playback, out var micRms, out var playbackRms);
         _metrics.ObserveMix(samples, micSamples, playbackSamples, micRms, playbackRms);
         Activity?.Invoke(new(start, samples, micRms, playbackRms));
-        if (!_audio.Writer.TryWrite(packet))
+        if (!_audio.Writer.TryWrite(new(microphonePcm, playback)))
             throw new IOException("Meeting transcription is falling behind: the 30-second capture queue is full.");
         Interlocked.Add(ref _samples, samples);
-        LevelChanged?.Invoke(AudioMeter.Pcm16Level(packet));
+        LevelChanged?.Invoke(AudioMeter.Pcm16Level(mixed));
     }
     private void Fill(IMeetingAudioSource source, MeetingPacketTimeline target, MeetingPacketClock sourceClock,
         long origin, long clockPosition, bool microphone)

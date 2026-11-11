@@ -99,4 +99,12 @@ public sealed class MeetingTranscriptTests
         Assert.Equal(new[] { "Speaker 0", "Speaker 1" }, turns.Select(turn => turn.SpeakerId));
         Assert.Equal(new[] { "First", "Second" }, turns.Select(turn => turn.Text));
     }
+
+    [Fact]
+    public void AdjacentVibeVoiceSpeakerLabelsRemainSeparateFromSpeech()
+    {
+        var turns = new MeetingTranscript().Update("Speaker0: hello.Speaker1: world.", 5, true);
+        Assert.Equal(["Speaker 0", "Speaker 1"], turns.Select(turn => turn.SpeakerId));
+        Assert.Equal(["hello.", "world."], turns.Select(turn => turn.Text));
+    }
 }

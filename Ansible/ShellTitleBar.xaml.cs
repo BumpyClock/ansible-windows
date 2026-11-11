@@ -11,8 +11,8 @@ using Microsoft.UI.Xaml.Media;
 namespace Ansible;
 
 /// <summary>
-/// The main window's title bar: the brand above the sidebar and, once the current page's heading scrolls out,
-/// the page name and a copy of the page's declared primary action.
+/// The main window's title bar: the brand above the sidebar, the page name once the current page's title scrolls
+/// out, and a copy of the page's declared primary action once the page's header actions scroll out.
 /// </summary>
 public sealed partial class ShellTitleBar : UserControl
 {
@@ -52,15 +52,14 @@ public sealed partial class ShellTitleBar : UserControl
         Follow(null, null);
     }
 
-    /// <summary>Narrows the brand to the compact sidebar's icon column.</summary>
     public void SetCompact(bool compact)
     {
         var resources = Application.Current.Resources;
-        BrandColumn.Width = (GridLength)resources[compact ? "CompactSidebarColumnWidth" : "SidebarColumnWidth"];
-        AppWordmark.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
-        Brand.Margin = compact ? new Thickness(0) : (Thickness)resources["SidebarBrandMargin"];
-        Brand.HorizontalAlignment = compact ? HorizontalAlignment.Center : HorizontalAlignment.Left;
+        BrandColumn.Width = compact ? GridLength.Auto : (GridLength)resources["SidebarColumnWidth"];
+        var rail = ((GridLength)resources["CompactSidebarColumnWidth"]).Value;
+        Brand.Margin = compact ? new Thickness((rail - BrandMark.Width) / 2, 0, 0, 0) : (Thickness)resources["SidebarBrandMargin"];
         PageTitle.Margin = (Thickness)resources[compact ? "CompactTitleBarPageTitleMargin" : "TitleBarPageTitleMargin"];
+        RefreshDragRegions();
     }
 
     /// <summary>
@@ -78,9 +77,9 @@ public sealed partial class ShellTitleBar : UserControl
     {
         if (!ReferenceEquals(_canvas, canvas))
         {
-            if (_canvas is not null) _canvas.HeadingScrolledOutChanged -= HeadingScrolledOutChanged;
+            if (_canvas is not null) _canvas.HeaderScrolledOutChanged -= HeaderScrolledOutChanged;
             _canvas = canvas;
-            if (canvas is not null) canvas.HeadingScrolledOutChanged += HeadingScrolledOutChanged;
+            if (canvas is not null) canvas.HeaderScrolledOutChanged += HeaderScrolledOutChanged;
         }
         if (!ReferenceEquals(_action, action))
         {
@@ -90,26 +89,30 @@ public sealed partial class ShellTitleBar : UserControl
         }
     }
 
-    private void HeadingScrolledOutChanged(object? sender, EventArgs args) => Render();
+    private void HeaderScrolledOutChanged(object? sender, EventArgs args) => Render();
 
-    // Deferred so a page that updates several properties of its action renders the copy once.
     private void ActionChanged() => DispatcherQueue.TryEnqueue(Render);
 
     private void Render()
     {
         if (_closed) return;
-        var scrolled = _canvas is { IsHeadingScrolledOut: true } && PageTitle.Text.Length > 0;
-        var action = scrolled && _action is { IsVisible: true } ? _action : null;
+        var scrolled = _canvas is { IsTitleScrolledOut: true } && PageTitle.Text.Length > 0;
+        var action = scrolled && _canvas is { IsActionScrolledOut: true } && _action is { IsVisible: true } ? _action : null;
         if (action is not null)
         {
-            PrimaryActionCopy.Content = action.Label;
+            if (!ReferenceEquals(PrimaryActionIcon.IconSource, action.Icon)) PrimaryActionIcon.IconSource = action.Icon;
+            PrimaryActionIcon.Visibility = action.Icon is null ? Visibility.Collapsed : Visibility.Visible;
+            PrimaryActionLabel.Text = action.Label;
             PrimaryActionCopy.IsEnabled = action.IsEnabled;
             AutomationProperties.SetName(PrimaryActionCopy, action.AccessibleName);
         }
         var changed = SetShown(PageTitle, scrolled) | SetShown(PrimaryActionCopy, action is not null);
-        // The TitleBar keeps visible controls in its content clickable; refresh its regions after the button toggles.
-        if (changed) DispatcherQueue.TryEnqueue(() => { if (!_closed) Bar.RecomputeDragRegions(); });
+        // The TitleBar keeps visible controls in its content clickable.
+        if (changed) RefreshDragRegions();
     }
+
+    // Deferred so the regions are computed from the layout the change produces.
+    private void RefreshDragRegions() => DispatcherQueue.TryEnqueue(() => { if (!_closed) Bar.RecomputeDragRegions(); });
 
     private static bool SetShown(UIElement element, bool shown)
     {
@@ -124,7 +127,6 @@ public sealed partial class ShellTitleBar : UserControl
         if (_action is { IsEnabled: true } action) action.Invoke();
     }
 
-    // The page name and action fade and rise into the title bar, and fade out. Skipped when Windows animations are off.
     private void AddAnimations()
     {
         if (!new Windows.UI.ViewManagement.UISettings().AnimationsEnabled) return;

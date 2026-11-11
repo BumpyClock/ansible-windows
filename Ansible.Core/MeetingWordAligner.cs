@@ -72,6 +72,8 @@ public static class MeetingWordAlignment
     private const int SampleRate = 16000;
     private const int MaximumTokens = 8192;
     private const int MaximumTextCharacters = 65536;
+    private const int MeetingMaximumTokens = 100000;
+    private const int MeetingMaximumTextCharacters = 1_000_000;
 
     /// <summary>
     /// Maps a cumulative native timestamp snapshot onto the exact speech text. Every lexical word must
@@ -79,13 +81,25 @@ public static class MeetingWordAlignment
     /// </summary>
     public static SpeechWordTimings? MapSpeechWords(string speech, IReadOnlyList<MeetingTimedToken> tokens,
         long processedSamples, SpeechWordTimingSource source, CancellationToken cancellationToken = default)
+        => MapSpeechWords(speech, tokens, processedSamples, source, 16000L * 5 * 60, MaximumTokens,
+            MaximumTextCharacters, cancellationToken);
+
+    /// <summary>Maps a bounded two-hour meeting snapshot. Dictation retains its shorter timestamp limits.</summary>
+    public static SpeechWordTimings? MapMeetingSpeechWords(string speech, IReadOnlyList<MeetingTimedToken> tokens,
+        long processedSamples, SpeechWordTimingSource source, CancellationToken cancellationToken = default)
+        => MapSpeechWords(speech, tokens, processedSamples, source, 16000L * 120 * 60, MeetingMaximumTokens,
+            MeetingMaximumTextCharacters, cancellationToken);
+
+    private static SpeechWordTimings? MapSpeechWords(string speech, IReadOnlyList<MeetingTimedToken> tokens,
+        long processedSamples, SpeechWordTimingSource source, long maximumSamples, int maximumTokens,
+        int maximumTextCharacters, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(speech);
         ArgumentNullException.ThrowIfNull(tokens);
         cancellationToken.ThrowIfCancellationRequested();
-        if (processedSamples is <= 0 or > 16000 * 5 * 60 || speech.Length > MaximumTextCharacters ||
-            tokens.Count is 0 or > MaximumTokens) return null;
-        var words = ReadWords(tokens, processedSamples / (double)SampleRate);
+        if (processedSamples <= 0 || processedSamples > maximumSamples || speech.Length > maximumTextCharacters ||
+            tokens.Count == 0 || tokens.Count > maximumTokens) return null;
+        var words = ReadWords(tokens, processedSamples / (double)SampleRate, maximumTextCharacters);
         if (words is null || words.Count == 0) return null;
         var expected = LexicalWords(speech);
         if (expected.Count != words.Count) return null;
@@ -109,7 +123,7 @@ public static class MeetingWordAlignment
         if (!double.IsFinite(clipDurationSeconds) || clipDurationSeconds is <= 0 or > 30 ||
             tokens.Count is 0 or > MaximumTokens || turns.Count > 512)
             return turns;
-        var words = ReadWords(tokens, clipDurationSeconds);
+        var words = ReadWords(tokens, clipDurationSeconds, MaximumTextCharacters);
         if (words is null || words.Count == 0) return turns;
         var firstWords = new Dictionary<string, List<int>>(StringComparer.Ordinal);
         for (var index = 0; index < words.Count; index++)
@@ -260,7 +274,7 @@ public static class MeetingWordAlignment
         return (start, count);
     }
 
-    private static List<TimedWord>? ReadWords(IReadOnlyList<MeetingTimedToken> tokens, double duration)
+    private static List<TimedWord>? ReadWords(IReadOnlyList<MeetingTimedToken> tokens, double duration, int maximumTextCharacters)
     {
         var text = new StringBuilder();
         var offsets = new List<(int Start, int End, MeetingTimedToken Token)>(tokens.Count);
@@ -273,7 +287,7 @@ public static class MeetingWordAlignment
                 token.Text.All(character => !char.IsLetterOrDigit(character))) continue;
             if (token is null || token.Text is null || token.StartSample < 0 || token.EndSample <= token.StartSample ||
                 token.StartSample < previousStart || token.EndSample < previousEnd || token.EndSample > duration * SampleRate ||
-                token.Text.Length > MaximumTextCharacters - text.Length)
+                token.Text.Length > maximumTextCharacters - text.Length)
                 return null;
             var start = text.Length;
             text.Append(token.Text);

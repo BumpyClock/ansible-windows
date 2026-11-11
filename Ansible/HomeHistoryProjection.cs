@@ -3,21 +3,15 @@ using System.Globalization;
 
 namespace Ansible;
 
-/// <summary>
-/// How a row tag reads. Inserted uses the accent. Unverified is quiet secondary text. NotInserted is amber,
-/// and its row keeps Copy visible because the text did not fully reach the app.
-/// </summary>
 internal enum HomeHistoryTagTone { Inserted, Unverified, NotInserted }
 
-/// <summary>A row tag for a real insertion outcome.</summary>
 internal sealed record HomeHistoryTag(string Label, string Glyph, HomeHistoryTagTone Tone, string Meaning)
 {
     public bool NeedsCopy => Tone == HomeHistoryTagTone.NotInserted;
 }
 
-internal sealed record HomeHistoryEntry(HomeHistoryItem Item, string? ModelName)
+internal sealed record HomeHistoryEntry(HomeHistoryItem Item, HomeModelName? Model)
 {
-    // Only real insertion outcomes get a tag. In-app dictations, deferred, and pending deliveries have none.
     public HomeHistoryTag? Tag => Item.Delivery switch
     {
         TextDeliveryStatus.Verified => new("Inserted", "\uE73E", HomeHistoryTagTone.Inserted,"Inserted and confirmed in the target field."),
@@ -41,7 +35,7 @@ internal sealed record HomeHistoryEntry(HomeHistoryItem Item, string? ModelName)
                 wordCount = $"{words:N0} {unit}";
             }
             var metadata = $"{wordCount} · {Item.Elapsed:mm\\:ss}";
-            if (ModelName is { Length: > 0 }) metadata += $" · {ModelName}";
+            if (Model?.Name is { Length: > 0 } name) metadata += $" · {name}";
             return metadata;
         }
     }
@@ -58,13 +52,30 @@ internal sealed record HomeHistoryViewModel(
     IReadOnlySet<Guid> AllOperationIds,
     string? StorageError = null);
 
+internal enum HomeHistoryEmptyKind { NoMatches, NothingSaved, FirstRun }
+
+internal sealed record HomeHistoryEmptyState(HomeHistoryEmptyKind Kind, string Title, string Detail);
+
 internal static class HomeHistoryProjection
 {
+    internal static HomeHistoryEmptyState? EmptyState(HomeHistoryViewModel model, string query, int? dictations) =>
+        model.HasMatches ? null
+        : model.HasHistory ? new(HomeHistoryEmptyKind.NoMatches, "No matches", $"No saved transcript contains \"{query}\".")
+        : model.StorageError is not null ? new(HomeHistoryEmptyKind.NothingSaved, "No saved dictations",
+            "History storage has a problem, so saved transcripts may be missing.")
+        : dictations == 0 ? new(HomeHistoryEmptyKind.FirstRun, "No dictations yet", "Your transcripts appear here after you dictate.")
+        : new(HomeHistoryEmptyKind.NothingSaved, "No saved dictations", "New dictations appear here." + dictations switch
+        {
+            1 => " Your earlier dictation is no longer saved.",
+            { } count => $" {count:N0} earlier dictations are no longer saved.",
+            null => ""
+        });
+
     internal static HomeHistoryViewModel Create(
         IReadOnlyList<HomeHistoryItem> all,
         string query,
         bool oversizedCurrentResult,
-        Func<string, string?> modelName,
+        Func<string, HomeModelName?> modelName,
         DateTime today,
         string? storageError = null)
     {

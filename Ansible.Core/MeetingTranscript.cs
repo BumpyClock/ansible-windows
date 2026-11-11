@@ -15,14 +15,14 @@ public sealed partial class MeetingTranscript
 
         var text = cumulativeText.TrimEnd();
         if (!isFinal) text = IncompleteLabel().Replace(text, "");
-        var labels = SpeakerLabel().Matches(text);
+        var labels = MeetingSpeakerLabels.Find(text);
         var parsed = new List<(string SpeakerId, string Text)>();
         var start = 0;
-        var speakerId = "Unknown speaker";
-        foreach (Match label in labels)
+        var speakerId = MeetingTurn.UnattributedSpeakerId;
+        foreach (var label in labels)
         {
             AddText(text[start..label.Index]);
-            speakerId = "Speaker " + NormalizeNumber(label.Groups[1].Value);
+            speakerId = label.SpeakerId;
             start = label.Index + label.Length;
         }
         AddText(text[start..]);
@@ -47,15 +47,6 @@ public sealed partial class MeetingTranscript
             if (value.Length > 0) parsed.Add((speakerId, value));
         }
     }
-
-    private static string NormalizeNumber(string number)
-    {
-        var trimmed = number.TrimStart('0');
-        return trimmed.Length == 0 ? "0" : trimmed;
-    }
-
-    [GeneratedRegex(@"(?<!\S)Speaker\s*([0-9]+)\s*:", RegexOptions.CultureInvariant)]
-    private static partial Regex SpeakerLabel();
 
     [GeneratedRegex(@"(?<!\S)(?:S|Sp|Spe|Spea|Speak|Speake|Speaker(?:\s*[0-9]*)?)$", RegexOptions.CultureInvariant)]
     private static partial Regex IncompleteLabel();

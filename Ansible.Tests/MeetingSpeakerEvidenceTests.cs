@@ -178,25 +178,87 @@ public sealed class MeetingSpeakerEvidenceTests
     }
 
     [Fact]
-    public async Task SourceTagsRetainPriorAlignedBoundsButDoNotInferMissingOrChunkEvidence()
+    public async Task PlaybackRefinementPreservesExplicitAndInferredSourceTags()
     {
-        await using var evidence = Create();
+        var aligner = new FakeWordAligner
+        {
+            Align = candidates => candidates.Select(turn => turn with
+                { StartSeconds = 3, EndSeconds = 4, TimingQuality = MeetingTimingQuality.Aligned }).ToArray()
+        };
+        await using var evidence = Create(aligner: aligner);
+        evidence.Append(new byte[5 * 32000]);
         MeetingTurn[] previous = [
-            Turn(0, 1, MeetingTimingQuality.Aligned) with { Source = MeetingAudioSource.Playback },
-            Turn(2, 3, MeetingTimingQuality.Aligned) with { Source = MeetingAudioSource.Microphone },
-            Turn(4, 5) with { Source = MeetingAudioSource.Playback }
+            Turn(0, 1, MeetingTimingQuality.Aligned) with { Source = MeetingAudioSource.Playback }
         ];
         MeetingTurn[] turns = [
-            Turn(0, 1, MeetingTimingQuality.Aligned) with { Text = "Revised" },
-            Turn(2, 4, MeetingTimingQuality.Aligned),
-            Turn(4, 5)
+            Turn(0, 1, MeetingTimingQuality.Aligned) with { Source = MeetingAudioSource.Playback },
+            Turn(1, 2, MeetingTimingQuality.Aligned) with { Source = MeetingAudioSource.Microphone },
+            Turn(2, 3, MeetingTimingQuality.Aligned),
+            Turn(2, 5) with { Text = "New playback", Source = MeetingAudioSource.Playback }
         ];
 
-        evidence.RefineTimedTurns(turns, previous);
+        evidence.RefinePlaybackChunkTurns(turns, previous, 5 * 16000);
 
+        Assert.Equal(1, aligner.AlignCalls);
+        Assert.Equal(previous[0], turns[0]);
         Assert.Equal(MeetingAudioSource.Playback, turns[0].Source);
-        Assert.Equal(MeetingAudioSource.Mixed, turns[1].Source);
+        Assert.Equal(MeetingAudioSource.Microphone, turns[1].Source);
         Assert.Equal(MeetingAudioSource.Mixed, turns[2].Source);
+        Assert.Equal(MeetingAudioSource.Playback, turns[3].Source);
+        Assert.Equal(MeetingTimingQuality.Aligned, turns[3].TimingQuality);
+        Assert.Equal(2, aligner.Inputs[0].Count);
+        Assert.Equal(previous[0], aligner.Inputs[0][0]);
+    }
+
+    [Fact]
+    public async Task PlaybackReuseFindsUniqueSpeechAfterSortAndDoesNotReuseRepeatedSpeech()
+    {
+        await using var evidence = Create();
+        var matching = Turn(2, 3, MeetingTimingQuality.Aligned) with { Text = "Unique", Source = MeetingAudioSource.Playback };
+        var repeated = Turn(3, 4, MeetingTimingQuality.Aligned) with { Source = MeetingAudioSource.Playback };
+        MeetingTurn[] previous = [Turn(0, 1) with { Source = MeetingAudioSource.Microphone }, matching, repeated, repeated];
+        var chunk = Turn(0, 5) with { Text = "Unique", Source = MeetingAudioSource.Playback, IsProvisional = true };
+        var ambiguous = Turn(0, 5) with { Source = MeetingAudioSource.Playback };
+        MeetingTurn[] turns = [chunk, ambiguous];
+
+        evidence.RefinePlaybackChunkTurns(turns, previous, 5 * 16000);
+
+        Assert.Equal(matching with { IsProvisional = true }, turns[0]);
+        Assert.Equal(ambiguous, turns[1]);
+    }
+
+    [Fact]
+    public async Task PlaybackReuseDoesNotCopyOneOldTimingOntoMultipleNewOccurrences()
+    {
+        await using var evidence = Create();
+        var old = Turn(2, 3, MeetingTimingQuality.Aligned) with { Source = MeetingAudioSource.Playback };
+        MeetingTurn[] turns = [Turn(0, 1) with { Source = MeetingAudioSource.Playback }, Turn(1, 2) with { Source = MeetingAudioSource.Playback }];
+        var original = turns.ToArray();
+
+        evidence.RefinePlaybackChunkTurns(turns, [old], 5 * 16000);
+
+        Assert.Equal(original, turns);
+    }
+
+    [Fact]
+    public async Task AlignedPlaybackSpanPreventsNewChunkFromReusingItsAudioWords()
+    {
+        var aligner = new FakeWordAligner
+        {
+            Align = candidates => MeetingWordAlignment.Align(candidates,
+                [new MeetingTimedToken("Speech", 19200, 22400)], 5)
+        };
+        await using var evidence = Create(aligner: aligner);
+        evidence.Append(new byte[5 * 32000]);
+        var anchor = Turn(1, 2, MeetingTimingQuality.Aligned) with { Text = "Other speech", Source = MeetingAudioSource.Playback };
+        var chunk = Turn(0, 5) with { Source = MeetingAudioSource.Playback };
+        MeetingTurn[] turns = [anchor, chunk];
+
+        evidence.RefinePlaybackChunkTurns(turns, [], 5 * 16000);
+
+        Assert.Equal(1, aligner.AlignCalls);
+        Assert.Equal(anchor, turns[0]);
+        Assert.Equal(chunk, turns[1]);
     }
 
     [Fact]
@@ -237,8 +299,7 @@ public sealed class MeetingSpeakerEvidenceTests
         Assert.Equal(2, observer.Starts);
         Assert.Equal(2, reports.Count(report => report == new EvidenceReport(MeetingDiagnosticKind.NamingAvailability, true)));
         second.Raise(new(0, 16000, 0, 0.2));
-        MeetingTurn[] turns = [Turn(5, 6, MeetingTimingQuality.Aligned)];
-        evidence.RefineTimedTurns(turns, []);
+        MeetingTurn[] turns = [Turn(5, 6, MeetingTimingQuality.Aligned) with { Source = MeetingAudioSource.Playback }];
         Assert.Equal(MeetingAudioSource.Playback, turns[0].Source);
     }
 
@@ -254,11 +315,10 @@ public sealed class MeetingSpeakerEvidenceTests
         observer.Report(8 * 16000, "Blair");
         source.Clock = 9 * 16000;
         MeetingTurn[] turns = [
-            Turn(0, 1, MeetingTimingQuality.Aligned),
-            Turn(2, 3, MeetingTimingQuality.Aligned),
-            Turn(7, 9, MeetingTimingQuality.Aligned)
+            Turn(0, 1, MeetingTimingQuality.Aligned) with { Source = MeetingAudioSource.Playback },
+            Turn(2, 3, MeetingTimingQuality.Aligned) with { Source = MeetingAudioSource.Playback },
+            Turn(7, 9, MeetingTimingQuality.Aligned) with { Source = MeetingAudioSource.Playback }
         ];
-        evidence.RefineTimedTurns(turns, []);
         var document = new MeetingDocument { Turns = turns };
         Assert.Equal("Alex", evidence.NameSpeakers(document).GetSpeakerName("Speaker 0"));
 
@@ -272,8 +332,7 @@ public sealed class MeetingSpeakerEvidenceTests
 
         Assert.Empty(evidence.NameSpeakers(document).AutoSpeakerNames);
         Assert.Equal(0, source.Subscribers);
-        MeetingTurn[] tail = [Turn(9, 10, MeetingTimingQuality.Aligned)];
-        evidence.RefineTimedTurns(tail, []);
+        MeetingTurn[] tail = [Turn(9, 10, MeetingTimingQuality.Aligned) with { Source = MeetingAudioSource.Playback }];
         Assert.Equal(MeetingAudioSource.Playback, tail[0].Source);
     }
 
@@ -461,11 +520,10 @@ public sealed class MeetingSpeakerEvidenceTests
         observer.Report(8 * 16000, "Blair");
         source.Clock = 9 * 16000;
         MeetingTurn[] turns = [
-            Turn(0, 1, MeetingTimingQuality.Aligned),
-            Turn(2, 3, MeetingTimingQuality.Aligned),
-            Turn(7, 9, MeetingTimingQuality.Aligned)
+            Turn(0, 1, MeetingTimingQuality.Aligned) with { Source = MeetingAudioSource.Playback },
+            Turn(2, 3, MeetingTimingQuality.Aligned) with { Source = MeetingAudioSource.Playback },
+            Turn(7, 9, MeetingTimingQuality.Aligned) with { Source = MeetingAudioSource.Playback }
         ];
-        evidence.RefineTimedTurns(turns, []);
         var document = new MeetingDocument { Turns = turns };
         Assert.Equal("Alex", evidence.NameSpeakers(document).GetSpeakerName("Speaker 0"));
         var drained = false;

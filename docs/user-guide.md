@@ -6,8 +6,12 @@ See the [README](../README.md#build-and-run) to build and launch the app.
 
 A new install opens a three-step welcome lesson in a dialog over Home. An
 existing `settings.json` that has no welcome flag is treated as already
-complete, so current installs are not forced through it. **Skip for now** (top
-right, or Escape) and **Done** both save completion in settings.
+complete, so current installs are not forced through it. **Next** moves through
+the steps, and **Back** returns. **Back** is hidden on the first step. **Skip
+for now** (or Escape) and **Done** both save completion in settings. **Done**
+replaces **Next** on the last step, and **Skip for now** is hidden there. **Next**
+and **Done** are the dialog's default button, so Enter activates them. The dialog
+follows the window's light or dark theme.
 
 1. Intro. Speak into a focused field. Recognition stays on this device.
 2. Shortcut. Keycaps for your chord press down while you hold those keys and
@@ -25,7 +29,7 @@ switch without sliding, and the check mark appears without a bounce.
 Practice needs microphone permission and an installed microphone-capable model.
 **Set up a speech model** closes the lesson without completing it and opens
 Speech models. The lesson opens again at the next launch until you finish or
-skip. **Settings > Shortcut > Practice** replays it from the first step. Change
+skip. **Settings > Dictation > Shortcut > Practice** replays it from the first step. Change
 the chord there too.
 
 ## Close to the notification area
@@ -44,11 +48,12 @@ put the icon in the hidden-icons overflow.
 
 ## Home and appearance
 
-Every page scrolls as one document inside the content panel; lists and cards do
+Every page scrolls as one document inside the content layer; lists and cards do
 not scroll on their own.
 
 **Home** shows the latest successful dictations, newest first, grouped as Today,
-Yesterday, and older dates. Each row shows the time, transcript, **Copy
+Yesterday, and older dates. A day heading reads weekday, day, and abbreviated
+month, such as **Thu 29 Oct**, with the year only outside the current year. Each row shows the time, transcript, **Copy
 transcript**, and a **More** menu with **Remove from history**. Remove deletes
 that entry from saved history. Removing the current dictation's row also hides
 its transcript card. Shortcut dictations keep an insertion tag across restarts:
@@ -63,43 +68,82 @@ arrived. The app never retries that uncertain input automatically. In-app
 dictations have no tag. History reloads after restart. It keeps at most 100
 successful dictations within a 500,000-character text budget. Large entries can
 make fewer than 100 fit. An entry larger than that budget stays in the
-current-result area only. Search covers every retained entry. While you scroll Home, the History header and search box stay at the top, and on wide windows the insights cards stay beside the list. WAV results stay
+current-result area only. Search covers every retained entry. While you scroll Home with saved rows, the History header and search box stay at the top, even when a search has no matches. On wide windows the insights cards stay beside the list. WAV results stay
 outside dictation history and remain in the separate transcript area. Audio is
 never saved. Prior session-only transcripts from earlier app versions cannot be
 recovered.
 
 Use **Dictate** or your configured shortcut to record. Choose the active model
-and use **Transcribe WAV file** on **Speech models**.
-Insights show measured local counts, not estimates. The large number is
-all-time dictated words on this device. Words per microphone minute, dictation
-count, and microphone minutes sit with it. Pace and microphone time include
-pauses. File transcription is excluded from those dictation totals and from
-pace. Missing or unreadable usage stays unknown (`--`), not zero. A loaded
-empty file can show zero. Unknown word counts stay unknown and blank the word
-total and pace. There is no time-saved figure. Activity is a dotted 24-hour
-clock of completed dictations by local completion hour over the last 7 or 30
-calendar days, including today. Week and Month stay. The center is the period
-total. Marks are 00, 06, 12, and 18. Accent dots scale to the busiest hour.
-Hover an hour for its actual count. Files are not included. **Most-used models** counts dictation and WAV sessions
-together, all time. A failed or overflowed background usage write appears
-there as a warning; it does not delay transcript insertion. History and local
-usage counts are separate. Turning off usage statistics does not change saved
-dictation history.
+and use **Transcribe WAV file…** from the **More options** menu on **Speech models**.
+With no saved rows, History shows an empty state under its header instead of a list, and
+the count badge beside the History title is hidden. It says **No dictations
+yet** only when usage shows no dictations. When usage counts dictations that
+History does not hold, it says **No saved dictations**. The detail starts with
+**New dictations appear here.** and adds that the earlier dictations are no
+longer saved, for example **12 earlier dictations are no longer saved.** or
+**Your earlier dictation is no longer saved.** When History storage has a
+problem, it says that saved transcripts may be missing. When usage is
+unavailable, it says **New dictations appear here.** The search box and its Ctrl K hint are hidden while
+History holds no entries. A search with no hits shows **No matches** and the
+search text, and keeps the search box.
 
-Ansible uses a Mica window base and follows Windows light, dark, and High Contrast appearance. Pages sit
-directly on that base; each section is a title above one borderless tonal card, and High Contrast adds
-outlines. The default
-Ink / Citron identity matches the Pencil design. Additional color schemes are
-prepared through shared brand tokens; a scheme picker is not yet available.
-Compact windows use an icon sidebar, smaller page padding, and stacked controls.
+Home has two insight cards. They show measured local counts, not estimates. The
+**Words dictated** card shows the all-time dictated word count on this device.
+Words per minute, dictations, and microphone minutes sit with it. Pace and
+microphone time include pauses. File transcription is excluded from those
+dictation totals and from pace. Missing or unreadable usage stays unknown
+(`--`), not zero. A loaded empty file can show zero. Unknown word counts stay
+unknown and blank the word total and pace. There is no time-saved figure.
+**Most-used models** sits inside the **Words dictated** card, under the word
+count and stats. It counts dictation and WAV sessions together, all time.
+
+The **Daily rhythm** card is a dotted 24-hour clock of completed dictations by
+local completion hour over the last 7 or 30 calendar days, including today.
+**Week** and **Month** choose the period, and the caption under the title reads
+**Last 7 days** or **Last 30 days**. The center is the period total. Each hour
+has a tick, longer every six hours, and the labels are 00, 06, 12, and 18.
+Accent dots scale to the busiest hour. Hover an hour for its actual count.
+Files are not included. The clock is drawn for every period, including one with
+no dictations. Under an empty one, the card says when the last dictation was,
+or **No dictations in this period** when usage does not know. When usage
+statistics are unavailable, the card shows a message instead of the clock. A
+streak badge appears only for a real streak, meaning consecutive days with a
+dictation that end today or yesterday.
+
+A failed or overflowed background usage write appears in the insights as a warning; it
+does not delay transcript insertion. History and local usage counts are
+separate. Turning off usage statistics does not change saved dictation history.
+
+Ansible follows Windows light, dark, and High Contrast appearance and uses Windows materials and neutral
+colours. The title bar and sidebar sit on the Mica window base. Each page sits on one content layer, and
+cards group related content on it. The citron accent is the only brand colour.
+Compact windows use a 48 DIP icon sidebar, smaller page padding, and stacked
+controls. In the compact layout the title bar keeps the app icon and name. Pages
+are at most 1000 DIP wide, so a page of one column of rows reads in a narrow
+measure. Home uses up to 1440 DIP once History holds a saved dictation, with
+history beside its insights. With no saved dictations Home keeps the 1000 DIP
+width and stacks at every width. Page content starts at the left page padding.
+
+When less than a third of the page title's height is left in view, the title bar shows the page name.
+On Home and Meetings, once the header actions have scrolled out too, the title
+bar also shows a copy of the page's main action, the dictation button or
+**Start meeting**, right after the page name. The copy has the same label, state, and icon as
+the original, and it is a standard button, not an accent button. When Home is
+stacked, History comes before the insight cards, and the two cards sit side by
+side and end on one line.
+
+Settings is one scrolling page. Its sections, in order, are **Dictation**,
+**Screen and ink**, **Recognition**, **Meetings**, **Transcript cleanup**, and
+**Privacy and data**. Each is a heading over one card of rows. This guide names a
+setting as **Settings > Section > Row**.
 
 ## Microphone access
 
 Ansible checks microphone permission at launch, before recording can start. If
 Windows requires consent, the app requests it then. Already granted access does
-not prompt again. If Windows blocks access, a compact overlay offers **Open
-settings** and **Check again** without changing page height. Dismiss it to reveal
-the content underneath. Open **Settings** in Ansible to show the guidance again.
+not prompt again. If Windows blocks access, a notice offers **Open Windows
+Settings** and **Check again**. Dismiss it to hide it. Open **Settings** in
+Ansible to show the guidance again.
 Enable the applicable microphone
 access settings, then return to Ansible. Policy restrictions may require your
 administrator. File transcription and model management remain available.
@@ -114,27 +158,35 @@ capture. Camera and calendar access are not requested.
 
 **Speech models** lists models in three groups: **In use** (the dictation model
 and the meeting companion), **Installed**, and **Available**. Rows keep catalog
-order within each group. A **Custom words** chip marks models that use the
-Dictionary. The info button expands a row's details in place.
+order within each group. Each row gives plain-language facts, such as what the
+model does, whether it uses your Dictionary words, its size on disk, and the
+memory it needs. A badge marks a model in use, either **In use for dictation** or
+**In use for meetings**. The row's **More options** (...) menu holds **Show
+details**, which expands exact technical details in place. They include the
+languages, license, catalog name, source, precision, byte count, hash, and
+location.
 
-Select **Download** on a row, or open **Model folder** and use **Choose folder** to
-select a folder containing catalog weights. Download progress shows in the row.
+Select **Download** on a row, or open **More options > Model folder…** in the
+page header and use **Choose folder** to select a folder containing catalog
+weights. Download progress shows in the row.
 Select **Use for dictation** on an installed model to make it active.
 
 Downloads start only when requested. **Pause** keeps partial files for **Resume**.
 The app verifies the length and SHA-256 before installing weights. If recognition
-is active when verification finishes, use **Install verified model** after it
+is active when verification finishes, select **Install** on the row after it
 ends. You can dictate with an existing model during a download.
 
-**Model folder > Verify installed files** checks the chosen folder without downloading.
-Use the model card's remove icon to remove weights or discard a partial download;
-both require confirmation. Installation, removal, and folder changes are available
+**More options > Model folder… > Verify installed files** checks the chosen folder
+without downloading.
+Use the row's **More options** menu to choose **Remove from this device** for
+installed weights or **Discard partial download** for a partial one; both require
+confirmation. Installation, removal, and folder changes are available
 only while recognition is idle. Removing the last model leaves the app disconnected
 until another model is installed.
 
 If a model installs but its resume data cannot be removed, the card reports
-that cleanup failed. The verified model remains installed. Choose **Model folder >
-Verify installed files** to retry cleanup without downloading or removing the
+that cleanup failed. The verified model remains installed. Choose **More options >
+Model folder… > Verify installed files** to retry cleanup without downloading or removing the
 weights. An interrupted resume-data update never replaces the previous valid
 metadata with a partially written file.
 
@@ -151,8 +203,8 @@ for that session. The saved choice is retained until you explicitly select
 another model.
 
 `nemotron-3-diarization-q8` is in the catalog and can be downloaded from
-**Speech models**. Its row shows **Meeting companion** and never offers **Use for
-dictation**; the companion cannot be selected for dictation, replay, or WAV
+**Speech models**. Once installed, its row carries the **In use for meetings**
+badge and never offers **Use for dictation**; the companion cannot be selected for dictation, replay, or WAV
 transcription. Installing only that companion leaves dictation disconnected.
 There is no meeting model picker. Start honors an explicitly saved **Use for
 dictation** selection only when that model is meeting-capable streaming ASR. An automatic
@@ -193,10 +245,11 @@ prove that a model can load or run on your hardware.
    saved F9 or another shortcut, hold that instead.
 3. Wait for recognition and check the inserted text.
 
-The default activation mode is **Hold to talk**. In **Settings > Activation mode**,
-choose **Press to start and stop** to finish with a second shortcut press instead.
-Click the shortcut field to record a different key or key combination; Esc
-cancels the change. **Reset** restores Ctrl + Win. Saved F9 and other custom
+The default activation mode is **Hold to talk**. In **Settings > Dictation >
+Activation**, choose **Press to start and stop** to finish with a second shortcut
+press instead. The **Shortcut** row shows the shortcut as keycaps. Select
+**Change**, then press the key or key combination you want; Esc cancels the
+change. **Reset** restores Ctrl + Win. Saved F9 and other custom
 shortcuts stay until you change or reset them. Modifier-only chords support
 Ctrl + Win and Alt + Win. Other shortcuts still need a primary key, including F9. A short
 Ctrl + Win tap does not start dictation. A quick third key still goes to
@@ -234,10 +287,10 @@ capture stops, including after the hold-to-talk release tail. If stopping fails,
 it remains visible until capture is released. It does not show transcript text.
 Reduced-motion mode shows the same shape without bar animation.
 
-**Settings > Show overlay at the text cursor** chooses where the pill appears. Looking up the
-caret no longer delays the microphone. The pill may first appear at the bottom
-centre of the screen, then move under the verified caret when that check
-completes. By default it sits just under the text cursor of the destination
+**Settings > Dictation > Show overlay at the text cursor** chooses where the pill
+appears. Looking up the caret does not delay the microphone. The pill may first
+appear at the bottom centre of the screen, then move under the verified caret
+when that check completes. By default it sits just under the text cursor of the destination
 field. The cursor position is read from the Windows caret or the field's UI
 Automation text provider. The pill does not follow later cursor movement. If
 the pill would leave the work area it moves above the cursor line. When Windows
@@ -247,24 +300,24 @@ to the next dictation and persists across restarts.
 
 ### Record chord
 
-Enable **Record chord** in Settings. Its default is **Alt + Win**. It starts
-dictation, a silent screen recording, and an ink overlay together. The pointer's
-monitor at activation stays fixed for the take. The ordinary dictation shortcut
-stays voice-only. Enable **Settings > Record chord > Press once to start and stop**
-to start with one press, release the keys while dictating and drawing, then press
-again to finish. This keeps held keys from disabling a laptop touchpad. The
-setting is independent of voice dictation's **Activation mode** and persists
+Turn on **Dictate with screen and ink** in **Settings > Screen and ink**. The **Record shortcut** row sets its chord, with a default of
+**Alt + Win**. The chord starts dictation, a silent screen recording, and an ink
+overlay together. The pointer's monitor at activation stays fixed for the take.
+The ordinary dictation shortcut stays voice-only. Turn on **Settings > Screen and
+ink > Press once to start and stop** to start with one press, release the keys
+while dictating and drawing, then press again to finish. This keeps held keys from disabling a laptop touchpad. The
+setting is independent of voice dictation's **Activation** setting and persists
 across restarts. With it off, hold the record shortcut; release uses the 500 ms
 tail. Only the chord that started the take can stop it.
 
 Recording never pastes automatically and needs no editable field. Finish the
 take, wait for recognition, then focus the chat or text field where you want the
 result. Press **Alt + Shift + W** and release to paste the latest capture's text,
-ink markers, pictures, and optional video link. Change **Settings > Record chord >
-Paste capture shortcut** to another chord, such as **Ctrl + Shift + V**. This is
+ink markers, pictures, and optional video link. Change **Settings > Screen and
+ink > Paste capture shortcut** to another chord, such as **Ctrl + Shift + V**. This is
 separate from both the record shortcut and voice dictation's paste-key preference.
 Activation shortcuts cannot use a paste chord that Ansible sends for delivery.
-With Record chord enabled, **Ctrl + V** is unavailable for voice, record, and
+With **Dictate with screen and ink** on, **Ctrl + V** is unavailable for voice, record, and
 Paste capture activation because it delivers the bundle. **Ctrl + Shift + V**
 is unavailable for active shortcuts when voice dictation sends that paste key.
 Previously accepted voice or record shortcuts that would intercept delivery
@@ -291,7 +344,7 @@ ink, the result contains one final screen picture. Pictures have burned-in
 labels and a maximum 1920-pixel long edge. Eight is a provisional cap; it is not
 a measured attachment maximum across every destination.
 
-If ink is unreliable, **Local diagnostics** in Settings can record input-delay,
+If ink is unreliable, **Settings > Privacy and data > Local diagnostics** can record input-delay,
 drawing, and frame-wait counters for a take. It remains opt-in and records no
 stroke coordinates, pictures, audio, or transcript text in the diagnostic log.
 
@@ -328,8 +381,11 @@ offset on the shared take clock.
 
 ### Text insertion
 
-Notices float over the bottom of the content panel and never move page
-content; the page gains bottom space so its last rows stay reachable. Errors
+Notices sit in a band at the bottom of the content layer. The page's scroll
+area ends above that band, so a notice never covers page content, and content
+at the top of the page does not move when a notice appears. A notice sizes to
+its content. When the message and its buttons do not fit on one line,
+the buttons move under the message. Errors
 list first, then warnings, then information. At most three show at once, and
 **N more notices** opens the rest. Only warning and error session notices
 appear, each limited to the pages for its area. Capture-privacy failures,
@@ -344,7 +400,7 @@ means input was queued but the change could not be verified; check the
 destination before inserting again. Partial input and rejected delivery also
 produce warnings or errors. A notice stays until dismissed or replaced.
 
-**Settings > Text insertion** offers two methods:
+**Settings > Dictation > Text insertion** offers two methods:
 
 - **Paste text** (replaces the clipboard) is the default. Ansible puts the speech text on
   the clipboard immediately and sends the selected paste shortcut. The text remains available for
@@ -352,7 +408,7 @@ produce warnings or errors. A notice stays until dismissed or replaced.
   is replaced, not backed up or restored. It requests exclusion from Windows
   clipboard history, clipboard monitors, and cloud sync. Publication failures
   are reported and prevent the paste shortcut from being sent.
-- **Type characters** sends Unicode keystrokes. **Gap between characters (ms)**
+- **Type characters** sends Unicode keystrokes. **Delay between characters (ms)**
   ranges from 0 to 200, with a default of 20. A zero gap sends a burst that can
   garble text in slow targets such as Notepad. Use paced typing for apps that
   block Ctrl+V.
@@ -398,7 +454,8 @@ On **Home**, use **Dictate** to start microphone capture, then
 the current native step; partial text can remain visible for copying. A blocking
 native call cannot be forcibly interrupted.
 
-On **Models**, select **Transcribe WAV file** for a recording. **Copy** copies the visible
+On **Models**, open **More options** in the header and select **Transcribe WAV
+file…** for a recording. **Copy** copies the visible
 transcript. These page controls do not automatically insert text into another app.
 
 WAV input is limited to five minutes, 100 MiB on disk, and 64 MiB of decoded float
@@ -435,10 +492,16 @@ Leave **Language hint** blank for English-only Moonshine and Kroko. Other models
 model-dependent language support; individual languages are not qualified by this
 app. Unsupported native options produce an error.
 
-Open **Dictionary** in the sidebar. **Add new** adds one name, word, or phrase.
-**Import** accepts one entry per line. Search filters the list. Each row offers
-Edit and Remove. **Undo remove** restores the latest deletion. Existing saved
-words stay in the list. Changes save immediately.
+Open **Dictionary** in the sidebar. One field finds and adds. Type a name, word,
+or phrase, then select **Add** or press Enter. The list filters as you type.
+**Import…** in the header's **More options** menu accepts one entry per line. **Add**
+is the page's only accent button. Each row offers Edit and Remove.
+**Undo** in the confirmation restores the latest removal. Existing saved words
+stay in the list. Changes save immediately. The line under the field shows how
+many words the dictionary holds, for example **12 of 100 words**. A message about
+a rejected word replaces that line until it clears. With no words, the page says
+**No words yet**. A search with no match says **No matching words** and offers
+Enter to add the search text.
 
 Blank lines are removed, whitespace is normalized, and duplicate entries are
 merged. Limits are 100 unique entries, 100 characters per entry, and 4 KiB of
@@ -474,13 +537,16 @@ driver, mode and history, device, threads, and headroom. Malformed cache content
 is ignored; Auto qualifies the devices again.
 When both devices work
 and GPU is within five percent of CPU, Auto selects GPU, except that a meeting
-prefers the device that keeps half real time when only one of them does. Settings shows the last
-comparison, including its model and kind (streaming, meeting, or whole recording), the selected processor, and device
-timings, after a qualification runs. Each model and kind keeps its own result, so
+prefers the device that keeps half real time when only one of them does. **Settings >
+Recognition > Compare processors** shows the last
+speed test, including its model and kind (recognizing while you speak, meetings, or
+recognizing after you finish), the processor Auto uses, a line that says why, and device
+timings in seconds, such as **0.8 s**, after a qualification runs. The badge reads
+**Auto uses the CPU** or **Auto uses the graphics card**. Each model and kind keeps its own result, so
 one model can use GPU while another uses CPU. The last device result stays in place when you change the
 choice; it updates when recognition next prepares a model.
 
-**Run benchmark** below the processor choice measures CPU and GPU again for the
+**Run speed test** below the processor choice measures CPU and GPU again for the
 selected dictation model, whatever the processor setting is. It ignores cached
 results and uses the dictation mode and, for Kroko, the vocabulary decoder mode.
 Use it after plugging in, updating a graphics driver, or switching models. The
@@ -489,7 +555,7 @@ while it runs. A run takes about 20 to 30 seconds per model on a recent laptop.
 Dictation, replay, WAV transcription, and meetings cannot start until it
 finishes or is cancelled. A complete run replaces the cached result that Auto
 uses for that model. A cancelled, failed, or timed-out run keeps the previous
-result and comparison; errors appear on Settings.
+result and comparison; errors appear in **Settings > Recognition**.
 
 A GPU worker crash, timeout, or running out of GPU memory disqualifies GPU; a
 successful CPU result is used.
@@ -502,8 +568,8 @@ is reported but does not prevent using the qualified device or a qualified
 fallback in the current session.
 Qualification cannot catch a later in-process native driver crash.
 
-**CPU** and **GPU (Vulkan)** remain available as manual choices. Vulkan uses
-device 0 and needs a Vulkan build, a compatible driver, and supported model
+**CPU** and **Graphics card (GPU)** remain available as manual choices. The
+graphics card uses the Vulkan backend on device 0 and needs a Vulkan build, a compatible driver, and supported model
 operations. Manual GPU failures are shown without an automatic CPU retry.
 
 Auto selects CPU for Nemotron dictation because its GPU streaming path has a
@@ -514,9 +580,11 @@ memory to load and decode. Keep the guard enabled.
 
 ### Transcript cleanup
 
-Open **Settings > Transcript cleanup**. Choose **Copilot CLI** or **OpenAI API**.
-Each provider has its own model and reasoning effort. Fields save as you change
-them. Automatic cleanup stays off until you turn on **Clean up automatically**
+Open **Settings > Transcript cleanup**. Choose **GitHub Copilot** or **OpenAI** under
+**Service**. Each service has its own model and thinking effort. For GitHub Copilot,
+the model and thinking effort sit under the **Advanced** row, and for OpenAI only the
+thinking effort does. **Show** opens them and **Hide** closes them. The OpenAI model
+and API key stay visible. Fields save as you change them. Automatic cleanup stays off until you turn on **Clean up automatically**
 and confirm with **Turn on** in the dialog. That confirmation is the opt-in to send meeting
 text to the cloud. Enabling OpenAI automatic cleanup
 requires a saved API key and an OpenAI API model ID. No OpenAI model is guessed.
@@ -529,9 +597,9 @@ The selected provider is used alone. There is no fallback to the other provider
 or another account. Audio is never uploaded. Only finalized local text is sent,
 and only after the original transcript is saved.
 
-**Copilot CLI** uses the installed GitHub Copilot CLI and its signed-in account.
+**GitHub Copilot** uses the installed GitHub Copilot CLI and its signed-in account.
 Run `copilot login` if needed. It does not use an OpenAI API key. The default
-model is `gpt-6-luna` with `high` reasoning. Cleanup starts a subprocess with
+model is `gpt-6-luna` with `high` thinking effort. Cleanup starts a subprocess with
 tools, hooks, memory, and custom instructions disabled. That isolation applies
 only to the subprocess. It does not change your global Copilot CLI config.
 Obsolete `--no-remote` is not passed. `--no-remote-export` is replaced by
@@ -539,12 +607,12 @@ Obsolete `--no-remote` is not passed. `--no-remote-export` is replaced by
 the CLI is incompatible and keeps the original transcript. CLI errors are
 classified. Raw stderr is not shown.
 
-**OpenAI API** posts transcript text to the OpenAI Responses API with `store`
+**OpenAI** posts transcript text to the OpenAI Responses API with `store`
 false. Enter a valid OpenAI API model ID from your OpenAI account. Copilot
-aliases are not mapped. Save the key with **Save API key**. The key is stored
+aliases are not mapped. Save the key with **Save key**. The key is stored
 in Windows Credential Locker. It is not written to `settings.json` or logs.
 OpenAI API billing is separate from Copilot. Remove the saved key with
-**Remove saved key**.
+**Remove key**.
 
 The meeting snapshots the cleanup provider at Start. Automatic cleanup runs
 only after a successful **End meeting** when that snapshot has automatic cleanup
@@ -552,27 +620,29 @@ on. Failed, discarded, or empty meetings are not sent. Reopening a saved meeting
 does not send text. **Exit** cancels pending cleanup, waits for it to
 stop, and does not start a new cloud cleanup during shutdown. **Clean up wording**
 asks you to confirm the currently saved Settings provider and model. It does not
-edit those values in the meeting window. **Restore original** remains. Failed,
-cancelled, or partial cleanup keeps the original wording. Cleanup success and
-failure are separate from recognition errors. Review model output. It can be wrong.
+edit those values in the meeting window. **Restore original wording** in the
+**More options (...)** menu remains. Failed, cancelled, or partial cleanup keeps
+the original wording. Cleanup success and failure are separate from recognition
+errors. Review model output. It can be wrong.
 
 ## Meeting transcripts
 
 Automatic Teams detection is enabled by default while Ansible is open. After
 stable microphone activity, a prompt in the main window offers **Open notetaker**
-with Teams selected. Click **Start** in that window to capture audio. Detection
-reads Windows audio-session metadata, never microphone samples. Microphone use
+with Teams selected. Click **Start meeting** in that window to capture audio.
+Detection reads Windows audio-session metadata, never microphone samples. Microphone use
 can include a Teams test call or another audio workflow; it is not proof of a
 scheduled meeting. Muted calls without an active capture session may be missed.
 Dismissal suppresses the same process until its activity has ended for ten
-seconds. Disable **Suggest notetaking when Teams uses the microphone** in
-Settings. Other apps still start
-manually; detection does not fetch calendar events or automatically end recording.
+seconds. Turn off **Settings > Meetings > Suggest notes when Teams uses the
+microphone** to stop these prompts. Other apps still start manually; detection
+does not fetch calendar events or automatically end recording.
 
-Open **Meetings > Start meeting**, then start. Start snapshots the recognition
-processor, language hint, and vocabulary for that meeting. After Start, the
-window shows **Preparing**. Wait until it shows **Transcribing** before speaking.
-A cold Auto run benchmarks and loads the meeting model before capture opens, so
+Open **Meetings > Start meeting** (the button has a plus icon), then select **Start meeting** in the window.
+Start snapshots the recognition processor, language hint, and vocabulary for that
+meeting. After Start, the window shows **Getting ready**. Wait until it shows
+**Recording** and the transcript area says **Listening** before speaking. A cold
+Auto run benchmarks and loads the meeting model before capture opens, so
 the 30-second recognition backlog does not fill during qualification. That first
 preparation can take longer than later meetings that reuse a cached device
 choice. The app then records the Windows default microphone plus everything
@@ -582,14 +652,25 @@ the meeting join within about two seconds. Devices that another app holds in
 exclusive mode are skipped. Use headphones: echo cancellation is not
 implemented.
 
-The optional **Teams app for speaker names** choice is used only for automatic
-speaker naming. It does not limit what audio is recorded. The lookup is
+The optional **Teams call** choice supplies the meeting title, automatic stop,
+and automatic speaker naming. It does not limit what audio is recorded. The lookup is
 read-only Windows accessibility. It does not change Teams settings. Teams process audio
 can be silent to Windows application loopback even when you hear the call,
 which is why recording uses output devices instead.
 
-While recording, the window shows a microphone line and a **Speakers and
-headphones** line with the device count. Each line uses one of
+Ansible imports the title only from a confirmed Teams call window and only while
+you have not given the meeting a title. Until then, the window heading and the Meetings
+list both read **Meeting at** the start time. That generated name is never saved. A title you
+enter is kept. After observing an active call, Ansible finishes captured speech and saves
+the transcript when the call is confirmed absent for at least five seconds over
+multiple checks. Silence, Teams mute, minimization, and unreadable accessibility
+state do not end your notes. While call monitoring is unreadable, a persistent
+warning asks you to use **End meeting** manually. It clears when monitoring recovers.
+Unsupported call layouts may require you to use
+**End meeting** manually. Without a selected Teams call, stopping remains manual.
+
+While recording, the window header shows a **Microphone** line and a **Speakers
+and headphones** line with the device count. Each line uses one of
 **Audio detected**, **No audio packets**, **No recent audio packets**, or
 **Quiet**. Detected means RMS energy at or above 0.001 (-60 dBFS) in the last
 five seconds. That is not speech detection and does not mean words were
@@ -597,10 +678,10 @@ recognized.
 
 After 15 seconds with no playback signal, an inline hint appears. Silence can
 be normal when others are quiet. If no output device can be recorded, only the
-microphone is transcribed until one becomes available. **More > Open audio
-diagnostics folder** opens the local metadata logs described under [Local data
-and privacy](#local-data-and-privacy), if any have been saved. It does not create
-the folder.
+microphone is transcribed until one becomes available. **More options (...) >
+Open audio diagnostics folder** in the meeting window opens the local metadata
+logs described under [Local data and privacy](#local-data-and-privacy), if any
+have been saved. It does not create the folder.
 
 | What you see | Reading |
 | --- | --- |
@@ -634,23 +715,31 @@ Meetings window shows a **Speaker model changed** notice naming the skipped
 model, its measured pace, and the model in use. A manual processor choice
 skips that check. The caption shows the measured pace of the chosen model.
 
-Text appears throughout the meeting as native chunks finish. Paired Nemotron or
-Kroko meetings publish cumulative timed anonymous speaker turns (`Speaker 0`
-through `Speaker 7`). The diarizer works in four-second chunks, so the newest
-words can show **Unknown speaker** for up to about five seconds before their
-label arrives. Overlapping speech and words with no speaker activity near them
+Text appears throughout the meeting as native chunks finish. The default
+microphone and system playback are recognized separately on the same meeting
+clock. Microphone speech is labeled **You**. Listening through headphones does
+not change which microphone Windows supplies. Muting Teams does not mute
+Ansible's separate microphone capture.
+Paired Nemotron or Kroko playback publishes cumulative timed anonymous speaker turns (`Speaker 0`
+through `Speaker 7`). The diarizer works in four-second chunks and publishes
+closed speech intervals. The newest words can show **Unknown speaker** until
+their interval closes; a long continuous turn can take longer than five seconds.
+Overlapping speech and words with no speaker activity near them
 stay **Unknown speaker**. Kroko words that run through a pause are judged by
 the speech where they begin, so the last word before a pause stays with its
 speaker when someone else speaks next.
 VibeVoice meetings keep that model's speaker labels. Rename a speaker by
 selecting its heading. When Teams is selected, the app reads visible
 participant tiles through Windows accessibility. It looks for explicit speaking
-markers on named tiles or their visible descendants. Current Teams labels such
+markers on named tiles, their accessibility descendants, or an enclosing surface
+with one unambiguous participant tile. Screen-reader-only marker labels are
+included even when not drawn on screen. Current Teams labels such
 as **video is on**, **video is off**, **Myself video**, mute state, and
 **Has control of production tools** are tile descriptions, not names. Names that
 contain commas stay intact. Unmuted, video on, and roster presence do not prove
-speaking. Mapping still requires two consistent, nonoverlapping final turns with
-an exclusive microphone/playback source and full observation coverage.
+speaking. Mapping remote names still requires two consistent, nonoverlapping
+final playback turns and full observation coverage. Background microphone
+activity does not change a playback turn's source or block its name matching.
 Ambiguous evidence retains model labels. Manual names take precedence. Other
 meeting apps retain editable model labels. Names are not inferred from
 transcript text. Popups, minimized or hidden tiles, unsupported layouts, and
@@ -659,19 +748,24 @@ mapping on a real call is not yet established. No voiceprints or calendar-name
 guesses are used.
 
 Recognition chunks are not speaker turns. The window joins adjacent chunks from
-the same speaker into one text block. Each block has the speaker heading, rename
-control, and combined time range. A speaker change starts a new block. If the
-same speaker returns after someone else, that later speech is a new block.
-Saved meetings keep each original chunk's wording and timing. Cleanup still
-aligns those saved turns. One **Original wording** expander covers the grouped
-block. If any joined chunk is untimed or **Unknown speaker**, the block is not
-shown as fully ASR-aligned.
+the same speaker into one text block. The transcript is a single scrolling list
+of these blocks. Each block has the speaker heading with a pencil rename control,
+the text, and a start time beside the heading. The start time reads like `2:05`
+when every joined chunk has an aligned time. It reads like `About 2:05` when any
+chunk has only an approximate chunk time, except that a block starting at exactly
+zero reads `0:00`. It is left out when any joined chunk is
+untimed, and **Updating** follows it while the newest words can still change. A speaker change starts a new block. If the same
+speaker returns after someone else, that later speech is a new block. Saved
+meetings keep each original chunk's wording and timing. Cleanup still aligns those
+saved turns. After cleanup changes a block, a **Show original wording** link under
+it expands that block's original text, and **Hide original wording** collapses it.
 
 Install **Nemotron ASR** weights to enable optional timing refinement on CPU
 for meetings that still publish untimed VibeVoice turns.
 It compares recognized token anchors with finalized, unchanged VibeVoice turns in a rolling
-30-second audio buffer held only in memory. Confident matches show **ASR-aligned**;
-missing or repeated phrases retain **approximate chunk time**. English digits
+30-second audio buffer held only in memory. Confident matches give a turn an
+aligned start time; missing or repeated phrases keep the approximate chunk time,
+which shows with the **About** prefix. English digits
 can match spoken quantities without changing wording.
 Long turns can use unique endpoint phrases with at least 80% word agreement;
 previously aligned spans cannot be reused by another turn. These are ASR token
@@ -680,7 +774,9 @@ memory, or other optional naming and refinement failures leave editable speaker
 labels in place and write a trace warning; they do not add diagnostic status
 cards. Chunk timestamps use native input sample positions; audio during pauses
 is excluded. Update latency and long-session speaker continuity remain
-unqualified.
+unqualified. Separate microphone and playback recognition uses additional
+model memory and inference work. The device's paired-model qualification does
+not establish combined two-stream live performance.
 
 **Pause** stops capture and transcript updates. **Resume** continues the same
 meeting and processes retained pending speech. Speech during the pause is not
@@ -700,10 +796,41 @@ running. There is no intentional save delay. Pause, End meeting and Close wait
 for the required save to finish. A crash can lose updates still awaiting disk;
 slow storage can delay those actions. Save failures remain visible and closing
 can be retried. Failed wording cleanup keeps the completed original for retry.
-The Meetings list supports
-reopening saved text; each transcript window offers Copy, text export, and Delete.
+The Meetings list groups saved
+meetings by day, newest first. Day headings and the date in the meeting window
+read weekday, day, and abbreviated month, such as **Thu 29 Oct**, with the year
+only outside the current year. Each row shows a title and one detail line. The
+line gives the length and speaker count, then the start time when the title does
+not say it. A finished meeting with no transcribed speech states the outcome once
+in that line, as **Failed before any speech was transcribed**, **Interrupted
+before any speech was transcribed**, or **No speech transcribed**, and shows no
+badge. A status badge appears only for a meeting that holds saved text and did
+not complete normally, such as **Failed**, or for a meeting still being
+captured. Select a row to reopen its saved
+text. The row's **More options (...)** menu holds **Open** and **Delete...**.
+**Delete...** asks for one confirmation and deletes the meeting permanently.
+A meeting still being captured cannot be deleted from the list. Close an open
+meeting window before deleting its transcript from the list. A finished
+meeting with no transcribed speech shows its title in secondary text, so
+meetings you can read stand out. When two or more finished meetings have no
+transcribed speech, a **More options (...)** button appears after **Start
+meeting** and holds **Delete empty meetings...**. After one confirmation it
+deletes exactly those meetings.
+
+The meeting window heading is the title, on one line. A long title is trimmed
+and shows in full in its tooltip. Select the heading or its pencil icon to open
+the **Rename meeting** dialog. The transcript is one scrolling list. With no
+transcript yet, the list shows a message that matches the state of the meeting.
+The footer shows status text, **Saving as you go** or **Saved on this device**,
+and the main buttons. The window's dialogs follow its light or dark theme. The
+**More options (...)** menu, at the right of the title, holds **Copy
+transcript**, **Export as text file**, **Restore original wording**, **Open audio
+diagnostics folder**, and **Delete meeting**. **Restore original wording** shows
+only when the transcript has cleaned-up wording. A saved meeting with no
+transcript also offers **Delete meeting** under its message.
+
 If a meeting fails before any speech is transcribed, its window restores the
-**Teams app for speaker names** choice and offers **Try again** after resources are released.
+**Teams call** choice and offers **Try again** after resources are released.
 Resolve the displayed error before retrying. The failed attempt stays saved.
 Capture is limited to two hours. A full 30-second recognition queue or capture
 failure stops the meeting with an error and keeps text already produced. Native
@@ -726,8 +853,8 @@ The original transcript is saved locally first. Then finalized text is sent to
 the selected provider. Failed, discarded, or empty meetings are not sent.
 **Clean up wording** confirms the currently saved Settings provider and model.
 It does not edit those values in the meeting dialog. Cleanup preserves speaker
-labels and timing and supports **Restore original**. Failed, cancelled, or
-incomplete cleanup keeps the original. Cleanup status is separate from
+labels and timing and supports **Restore original wording** in the **More
+options (...)** menu. Failed, cancelled, or incomplete cleanup keeps the original. Cleanup status is separate from
 recognition failure. Reopening a saved meeting does not send text. **Exit**
 cancels pending cleanup, waits for it to finish, and does not start a new cloud
 cleanup during shutdown. Copilot or OpenAI can still retain sent text
@@ -735,9 +862,9 @@ under their own policies.
 
 ## Local data and privacy
 
-**Settings > Screen capture privacy** can exclude the floating dictation overlay
-and meeting windows from supported Windows screenshots and screen sharing.
-The option is off by default, persists across restarts, and applies to open and
+**Settings > Privacy and data > Hide overlay and meeting windows from capture**
+can exclude the floating dictation overlay and meeting windows from supported
+Windows screenshots and screen sharing. The option is off by default, persists across restarts, and applies to open and
 new windows, including during a recording. The main window stays visible.
 Windows 10 version 2004 or later is required. Some capture tools do not honor
 Windows capture exclusion; this is not protection against every recorder or a
@@ -749,8 +876,9 @@ The opt-in record chord saves PNGs and silent H.264 video locally. It captures
 the screen contents of one monitor. Automatic cleanup runs at launch and after
 each take, removing captures older than seven days, then oldest first above
 2 GiB. Active writers, the current media result, and files still referenced by
-the app's current clipboard publication are protected. Settings shows total
-size and **Delete all captures**. Native clipboard picture-file references are
+the app's current clipboard publication are protected. **Settings > Screen and
+ink > Saved captures** shows total size and **Delete all captures**, which is
+disabled while no captures are saved. Native clipboard picture-file references are
 protected after restarting Ansible too. If the clipboard is busy or changes
 during inspection, cleanup waits for a later attempt instead of risking those
 files. In-use takes are retained with a warning.
@@ -764,9 +892,9 @@ Successful dictation transcripts persist as text and metadata in
 locally. Recognition does
 not upload audio. Auto device qualification uses only the bundled public sample
 in a local process; it does not send or save user audio. Optional transcript
-cleanup sends meeting text only after you enable it in **Settings > Transcript
-cleanup** and a completed original is saved locally. Choose Copilot CLI or the
-OpenAI API. There is no provider fallback. Audio is never uploaded. The OpenAI
+cleanup sends meeting text only after you enable it in **Settings >
+Transcript cleanup** and a completed original is saved locally. Choose GitHub Copilot or
+OpenAI. There is no provider fallback. Audio is never uploaded. The OpenAI
 API key is stored in Windows Credential Locker, not in `settings.json` or logs.
 Model downloads also use the network.
 **Copy** uses the ordinary clipboard; Windows clipboard features and destination
@@ -793,7 +921,7 @@ If `dictation-history.json` is corrupt or unreadable, Ansible leaves the file
 unchanged, shows a warning, and keeps new rows in memory until storage can be
 recovered.
 
-Enable **Local diagnostics** in Settings to record operational metadata. It is
+Enable **Settings > Privacy and data > Local diagnostics** to record operational metadata. It is
 off by default and independent of **Usage statistics**. Turning it off discards
 queued records and stops new collection. A write already in progress may
 finish. Existing files are not deleted. Earlier app versions may have written
@@ -860,12 +988,12 @@ distribution includes dictation and WAV sessions. The app does not compute
 time saved. Completed sessions are queued for local writes, at most 32 pending,
 so insertion is not delayed. If a write fails or that queue overflows, Insights
 shows the error; a later successful write does not recover a lost entry.
-Shutdown drains and joins remaining writes. Disable **Usage statistics** in
-Settings to stop collection without deleting prior records. The app has no
-external usage telemetry.
+Shutdown drains and joins remaining writes. Disable **Settings > Privacy and
+data > Usage statistics** to stop collection without deleting prior records. The
+app has no external usage telemetry.
 
 Changing model folders does not move or delete weights. Package updates preserve
 local data; uninstalling removes package-local data, including models in the
 default folder. Models in a chosen folder outside package storage remain there.
-Use **Speech models > Model folder > Choose folder** to reuse development weights
+Use **Speech models > More options > Model folder… > Choose folder** to reuse development weights
 from `.runtime\models`.

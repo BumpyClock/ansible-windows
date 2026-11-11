@@ -6,6 +6,6 @@ public interface IMeetingRecognitionEngine : IAsyncDisposable
 {
     Task PrepareMeetingAsync(AudioModel model, RecognitionOptions options, CancellationToken token) => Task.CompletedTask;
     Task<IReadOnlyList<AudioModel>> ConnectAsync(CancellationToken cancellationToken);
-    Task StreamMeetingAsync(AudioModel model, ChannelReader<byte[]> audio, RecognitionOptions options,
+    Task StreamMeetingAsync(AudioModel model, ChannelReader<MeetingAudioPacket> audio, RecognitionOptions options,
         IProgress<TranscriptUpdate> progress, CancellationToken cancellationToken, Action? onReady = null);
 }

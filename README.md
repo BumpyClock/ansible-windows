@@ -16,14 +16,14 @@ model downloads, custom vocabulary for supported models, and local usage insight
 Microphone permission is checked at launch. Ansible requests missing consent
 before recording and offers Windows Settings guidance when access is blocked.
 
-Enable **Record chord** in Settings to dictate with screen context. Hold
+Enable **Dictate with screen and ink** in Settings to dictate with screen context. Hold
 **Alt + Win** to capture the pointer's monitor, draw with the left mouse button,
 then release. The result includes numbered ink markers, up to eight pictures,
 and a local link to a silent MP4. Nothing is pasted automatically. After
 recognition finishes, focus the destination field and press **Alt + Shift + W**
 to paste the latest capture. Change **Paste capture shortcut** in Settings to use
 another chord, such as **Ctrl + Shift + V**. Enable **Press once to start and stop**
-under **Record chord** to release the keys while drawing, then press again to
+under **Screen and ink** to release the keys while drawing, then press again to
 finish. This setting is independent of voice dictation's activation mode. See the
 [record chord workflow](docs/user-guide.md#record-chord).
 
@@ -42,6 +42,11 @@ The app never saves or uploads audio. Optional meeting transcript cleanup can
 send finalized text to GitHub Copilot CLI or the OpenAI API after you enable it
 in **Settings > Transcript cleanup** and a meeting ends successfully. Text you copy or insert is subject to the
 clipboard and destination app's storage policies. Model downloads require network access.
+
+Select Teams in the notetaker to import a verified call-window title and finish
+notes when the observed call ends. Custom titles are preserved. Unreadable call
+state keeps recording until you select End. Remote speaker names still require
+explicit Teams speaking evidence; model labels remain when that evidence is unavailable.
 
 Local diagnostics are off by default. You can enable them in Settings to save
 bounded operational metadata for recognition, delivery, meetings, capture,
@@ -95,7 +100,7 @@ Open `Ansible.slnx` in Visual Studio. Set `Ansible` as the startup project, sele
 Debug/x64 and **Ansible (Packaged)**, then run it. Packaged development deployment
 requires Windows Developer Mode.
 
-In **Speech models > Model folder > Choose folder**, choose this repository's
+In **Speech models > More options > Model folder… > Choose folder**, choose this repository's
 `.runtime\models` to use the weights downloaded above. A fresh app otherwise uses
 its own model folder; you can download models there from the app.
 
@@ -130,13 +135,19 @@ toolchains, commands, and precompiled runtime storage.
   Nemotron 3 Diarization, then installed Kroko with that companion, then
   VibeVoice ASR Streaming 1.5B, including when the companion is absent. Auto
   skips a candidate that measured slower than 0.50x real time on the selected
-  device and says so in the Meetings window; speaker labels trail speech by up
-  to about five seconds. Ordinary dictation stays plain ASR.
+  device and says so in the Meetings window. Remote speaker labels arrive as
+  the diarizer closes speech intervals; continuous speech can delay them beyond
+  the four-second processing chunk. Ordinary dictation stays plain ASR.
   Automatic Teams detection offers a notetaker prompt when Teams holds an active
   microphone session; it never starts recording. Disable it in Settings.
   Capture includes the default microphone plus endpoint loopback from every
-  active render device. A selected Teams process is used only for speaker
-  naming. Other app audio on those outputs can be included. Pause/Resume keeps
+  active render device. Microphone and playback recognition use separate,
+  synchronized streams. Microphone speech is labeled **You**; playback retains
+  the remote model's speaker labels until Teams names can be matched.
+  Muting Teams does not mute Ansible's independent microphone capture.
+  A selected Teams process supplies speaker naming, the call title, and automatic
+  stop when the call ends. It does not route audio.
+  Other app audio on those outputs can be included. Pause/Resume keeps
   one recognition stream; End meeting finishes pending speech. Audio stays in
   bounded memory.
   The capture limit is two hours; long-session speaker accuracy and the 5–10

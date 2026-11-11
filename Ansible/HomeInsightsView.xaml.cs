@@ -17,79 +17,107 @@ internal sealed partial class HomeModelTemplateSelector : DataTemplateSelector
 
 public sealed partial class HomeInsightsView : UserControl
 {
-    // A strip card is never narrower than this. The strip drops a column and wraps to a new row first.
-    private const double StripCardMinWidth = 220;
+    private const double StripCardMinWidth = 300;
 
-    private HomeInsightsViewModel? _model;
+    private HomeUsageStats? _stats;
+    private DateOnly _today;
 
     public HomeInsightsView()
     {
         InitializeComponent();
     }
 
-    /// <summary>False stacks the cards as a side rail. True flows them into columns as a strip above history.</summary>
     internal bool Strip
     {
         get => RailCards.MinColumnWidth < double.PositiveInfinity;
-        set => RailCards.MinColumnWidth = value ? StripCardMinWidth : double.PositiveInfinity;
+        set
+        {
+            RailCards.MinColumnWidth = value ? StripCardMinWidth : double.PositiveInfinity;
+            UpdateCardHeights();
+        }
+    }
+
+    private void UpdateCardHeights()
+    {
+        WordsCard.VerticalAlignment = Strip ? VerticalAlignment.Stretch : VerticalAlignment.Top;
+        var fill = Strip || ActivityEmptyState.Visibility == Visibility.Visible;
+        RhythmCard.VerticalAlignment = fill ? VerticalAlignment.Stretch : VerticalAlignment.Top;
     }
 
     internal void Render(HomeInsightsViewModel model)
     {
-        _model = model;
-        HomePaceText.Text = model.PaceText;
-        HomeSessionsText.Text = model.SessionsText;
-        HomeWordsText.Text = model.WordsText;
-        HomeStreakPill.Text = model.StreakText;
-        HomeStreakPill.Visibility = model.Activity is null ? Visibility.Collapsed : Visibility.Visible;
-        HomeMicrophoneText.Text = model.MicrophoneMinutesText;
-        ToolTipService.SetToolTip(HomePaceText, $"{model.PaceText} words per microphone minute, pauses included");
-        ToolTipService.SetToolTip(HomeSessionsText, $"{model.SessionsText} dictations, all time");
-        ToolTipService.SetToolTip(HomeMicrophoneText, $"{model.MicrophoneMinutesText} microphone minutes, pauses included");
-        AutomationProperties.SetName(HomePaceText, $"{model.PaceText} words per microphone minute, all time, pauses included");
-        AutomationProperties.SetName(HomeSessionsText, $"{model.SessionsText} dictations, all time");
-        AutomationProperties.SetName(HomeMicrophoneText, $"{model.MicrophoneMinutesText} microphone minutes, all time, pauses included");
-        AutomationProperties.SetName(HomeWordsText, $"{model.WordsText} words dictated, all time");
-        HomeInsightsFootnote.Text = model.Footnote;
-        HomeModelRows.ItemsSource = model.Models.Cast<object>().ToList();
-        NoModelDataText.Text = model.AvailabilityMessage ?? "No completed sessions yet.";
-        NoModelDataText.Visibility = model.Models.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        RenderActivity();
+        _today = model.Today;
+        switch (model.Usage)
+        {
+            case HomeUsageStats stats:
+                _stats = stats;
+                ShowTotals(stats.PaceText, stats.SessionsText, stats.WordsText, stats.MicrophoneMinutesText,
+                    stats.StreakText, stats.Footnote);
+                ShowModels(stats.Models, "No completed sessions yet.");
+                RenderActivity(stats);
+                break;
+            case HomeUsageUnavailable unavailable:
+                _stats = null;
+                var unknown = HomeInsightsProjection.UnknownNumber;
+                ShowTotals(unknown, unknown, unknown, unknown, null, unavailable.Message);
+                ShowModels([], unavailable.Message);
+                ClockHitTargets.Children.Clear();
+                ActivityPeriodSelector.IsEnabled = false;
+                ShowActivityMessage("No activity to show", unavailable.Message);
+                break;
+        }
+    }
+
+    private void ShowTotals(string pace, string sessions, string words, string microphoneMinutes, string? streak, string footnote)
+    {
+        HomePaceText.Text = pace;
+        HomeSessionsText.Text = sessions;
+        HomeWordsText.Text = words;
+        HomeStreakPill.Text = streak ?? "";
+        HomeStreakPill.Visibility = streak is null ? Visibility.Collapsed : Visibility.Visible;
+        HomeMicrophoneText.Text = microphoneMinutes;
+        ToolTipService.SetToolTip(HomePaceText, $"{pace} words per microphone minute, pauses included");
+        ToolTipService.SetToolTip(HomeSessionsText, $"{sessions} dictations, all time");
+        ToolTipService.SetToolTip(HomeMicrophoneText, $"{microphoneMinutes} microphone minutes, pauses included");
+        AutomationProperties.SetName(HomePaceText, $"{pace} words per microphone minute, all time, pauses included");
+        AutomationProperties.SetName(HomeSessionsText, $"{sessions} dictations, all time");
+        AutomationProperties.SetName(HomeMicrophoneText, $"{microphoneMinutes} microphone minutes, all time, pauses included");
+        AutomationProperties.SetName(HomeWordsText, $"{words} words dictated, all time");
+        HomeInsightsFootnote.Text = footnote;
+    }
+
+    private void ShowModels(IReadOnlyList<HomeModelViewModel> models, string emptyText)
+    {
+        HomeModelRows.ItemsSource = models.Cast<object>().ToList();
+        NoModelDataText.Text = emptyText;
+        NoModelDataText.Visibility = models.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void ActivityPeriodChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
     {
-        if (_model is not null) RenderActivity();
+        if (_stats is not null) RenderActivity(_stats);
     }
 
-    private void RenderActivity()
+    private void RenderActivity(HomeUsageStats stats)
     {
-        if (_model is null) return;
         ClockHitTargets.Children.Clear();
-        ActivityPeriodSelector.IsEnabled = _model.HourlyActivity is not null;
-        if (_model.HourlyActivity is null)
-        {
-            ActivityTotalText.Text = "--";
-            HomeActivityAvailabilityText.Text = _model.AvailabilityMessage ?? "Activity statistics are not available yet.";
-            HomeActivityAvailabilityText.Visibility = Visibility.Visible;
-            ActivityChartPanel.Visibility = Visibility.Collapsed;
-            return;
-        }
-
-        var activity = HomeInsightsProjection.CreateActivity(_model.HourlyActivity, _model.Today,
-            ActivityPeriodSelector.SelectedItem != WeekPeriodItem);
+        ActivityPeriodSelector.IsEnabled = true;
+        var activity = HomeInsightsProjection.CreateActivity(stats.HourlyActivity, _today,
+            month: ActivityPeriodSelector.SelectedItem != WeekPeriodItem);
         ActivityPeriodText.Text = activity.PeriodText;
+        ActivityEmptyState.Visibility = Visibility.Collapsed;
+        ActivityChartPanel.Visibility = Visibility.Visible;
+        UpdateCardHeights();
         ActivityTotalText.Text = activity.TotalValueText;
         ActivityUnitText.Text = activity.UnitText;
         AutomationProperties.SetName(ActivityTotalText, activity.TotalText);
         AutomationProperties.SetHelpText(ActivityTotalText,
             $"{activity.PeriodText}. {string.Join(". ", activity.Hours.Select(hour => hour.Description))}");
-        ActivityScaleText.Text = $"Busiest hour · {activity.ScaleText}";
+        ActivityScaleText.Text = activity.IsEmpty
+            ? stats.LastDictationText ?? "No dictations in this period"
+            : $"Busiest hour · {activity.ScaleText}";
         ActivityStartText.Text = activity.StartText;
         ActivityEndText.Text = activity.EndText;
-        HomeActivityAvailabilityText.Text = "No dictations in this period.";
-        HomeActivityAvailabilityText.Visibility = activity.IsEmpty ? Visibility.Visible : Visibility.Collapsed;
-        ActivityChartPanel.Visibility = Visibility.Visible;
         AutomationProperties.SetName(ActivityClock,
             $"{activity.TotalText}. {activity.PeriodText}. Clockwise from midnight. Each sector is one local completion hour.");
         var background = new GeometryGroup();
@@ -127,6 +155,15 @@ public sealed partial class HomeInsightsView : UserControl
             ClockHitTargets.Children.Add(shape);
         }
         ClockTicks.Data = ticks;
+    }
+
+    private void ShowActivityMessage(string title, string? detail)
+    {
+        ActivityEmptyState.Title = title;
+        ActivityEmptyState.Detail = detail ?? "";
+        ActivityEmptyState.Visibility = Visibility.Visible;
+        ActivityChartPanel.Visibility = Visibility.Collapsed;
+        UpdateCardHeights();
     }
 
     private static Point ClockPoint(double angle, double radius) =>

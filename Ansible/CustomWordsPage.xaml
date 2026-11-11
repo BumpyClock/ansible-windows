@@ -1,14 +1,23 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <Page x:Class="Ansible.CustomWordsPage"
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:local="using:Ansible">
     <local:PageCanvas Title="Dictionary"
-                      Subtitle="Words that guide recognition. Stored on this device. Not replacement rules.">
+                      Subtitle="Words you add here help Ansible recognize them when you speak. They are stored on this device.">
         <local:PageCanvas.HeaderActions>
-            <Button x:Name="ImportWordsButton" Content="Import…" MinHeight="40" Padding="20,8"
-                    AutomationProperties.AutomationId="ImportCustomWordsButton"
-                    ToolTipService.ToolTip="Import a pasted list of words" Click="ImportWordsClicked" />
+            <Button x:Name="MoreOptionsButton" Style="{StaticResource IconButtonStyle}" VerticalAlignment="Center"
+                    ToolTipService.ToolTip="More options" AutomationProperties.Name="More options">
+                <FontIcon Glyph="&#xE712;" FontSize="16"/>
+                <Button.Flyout><MenuFlyout Placement="BottomEdgeAlignedRight">
+                    <MenuFlyoutItem x:Name="ImportWordsMenuItem" Text="Import…" Click="ImportWordsClicked"
+                                    AutomationProperties.AutomationId="ImportCustomWordsButton"
+                                    AutomationProperties.Name="Import words"
+                                    ToolTipService.ToolTip="Import a pasted list of words">
+                        <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE8E5;"/></MenuFlyoutItem.Icon>
+                    </MenuFlyoutItem>
+                </MenuFlyout></Button.Flyout>
+            </Button>
         </local:PageCanvas.HeaderActions>
         <StackPanel>
             <local:NoticeBar x:Name="CompatibilityNotice" Visibility="Collapsed"
@@ -18,46 +27,42 @@
             <TextBlock x:Name="BusyText" Text="Finish the current operation to change your dictionary."
                        Margin="0,0,0,12" Visibility="Collapsed" Style="{StaticResource CaptionSecondaryStyle}" />
 
-            <!-- One field finds and adds. The count sits at the right. -->
-            <Grid ColumnSpacing="16">
+            <Grid ColumnSpacing="8" RowSpacing="4">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" MaxWidth="420" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <Grid ColumnSpacing="8">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" MaxWidth="420" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <Grid>
-                        <TextBox x:Name="SearchBox" Height="36" VerticalContentAlignment="Center"
-                                 Padding="{StaticResource HistorySearchPadding}" FontSize="{StaticResource HistorySearchFontSize}"
-                                 Background="{ThemeResource AppSearchBrush}" BorderBrush="{ThemeResource AppBorderBrush}"
-                                 UseSystemFocusVisuals="True"
-                                 AutomationProperties.AutomationId="SearchCustomWordsBox"
-                                 AutomationProperties.Name="Find or add a word" PlaceholderText="Find or add a word"
-                                 TextChanged="SearchChanged" KeyDown="SearchKeyDown" />
-                        <FontIcon Glyph="&#xE721;" FontSize="14" HorizontalAlignment="Left" VerticalAlignment="Center"
-                                  Margin="12,0,0,0" IsHitTestVisible="False" />
-                    </Grid>
-                    <Button x:Name="AddWordButton" Grid.Column="1" Height="36" MaxWidth="260"
-                            Style="{StaticResource AppPrimaryButtonStyle}" Click="AddWordClicked"
-                            AutomationProperties.AutomationId="AddCustomWordsButton" AutomationProperties.Name="Add word">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <FontIcon Glyph="&#xE710;" FontSize="12" VerticalAlignment="Center" />
-                            <TextBlock x:Name="AddWordLabel" Text="Add" TextTrimming="CharacterEllipsis" />
-                        </StackPanel>
-                    </Button>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Grid>
+                    <TextBox x:Name="SearchBox" Padding="36,4,12,4"
+                             AutomationProperties.AutomationId="SearchCustomWordsBox"
+                             AutomationProperties.Name="Find or add a word" PlaceholderText="Find or add a word"
+                             TextChanged="SearchChanged" KeyDown="SearchKeyDown" />
+                    <FontIcon Glyph="&#xE721;" FontSize="16" HorizontalAlignment="Left" VerticalAlignment="Center"
+                              Margin="12,0,0,0" IsHitTestVisible="False"
+                              Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 </Grid>
-                <TextBlock x:Name="CountText" Grid.Column="1" VerticalAlignment="Center"
+                <Button x:Name="AddWordButton" Grid.Column="1" MaxWidth="260" VerticalAlignment="Stretch"
+                        Style="{StaticResource AppPrimaryButtonStyle}" Click="AddWordClicked"
+                        AutomationProperties.AutomationId="AddCustomWordsButton" AutomationProperties.Name="Add word">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE710;" FontSize="12" VerticalAlignment="Center" />
+                        <TextBlock x:Name="AddWordLabel" Text="Add" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                </Button>
+                <TextBlock x:Name="CountText" Grid.Row="1" Grid.ColumnSpan="2"
                            Style="{StaticResource CaptionSecondaryStyle}"
                            AutomationProperties.AutomationId="CustomWordsCount"
                            AutomationProperties.LiveSetting="Polite" />
+                <TextBlock x:Name="FieldValidationText" Grid.Row="1" Grid.ColumnSpan="2" Visibility="Collapsed"
+                           TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}"
+                           AutomationProperties.AutomationId="CustomWordFieldValidation"
+                           AutomationProperties.LiveSetting="Polite"
+                           Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
             </Grid>
-            <TextBlock x:Name="FieldValidationText" Visibility="Collapsed" TextWrapping="Wrap" Margin="0,8,0,0"
-                       AutomationProperties.AutomationId="CustomWordFieldValidation"
-                       AutomationProperties.LiveSetting="Polite"
-                       Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
 
             <ItemsControl x:Name="WordsList" Margin="0,12,0,0" IsTabStop="False"
                           AutomationProperties.AutomationId="CustomWordsList"
@@ -69,12 +74,9 @@
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
-            <StackPanel x:Name="EmptyState" HorizontalAlignment="Center" Padding="24,32" Spacing="4" Visibility="Collapsed">
-                <TextBlock x:Name="EmptyTitle" Text="No words yet" Style="{StaticResource SubtitleTextBlockStyle}"
-                           TextWrapping="Wrap" TextAlignment="Center" />
-                <TextBlock x:Name="EmptyHelp" Style="{StaticResource CaptionSecondaryStyle}"
-                           TextAlignment="Center" TextWrapping="Wrap" MaxWidth="360" />
-            </StackPanel>
+            <local:EmptyState x:Name="EmptyWords" Margin="0,28,0,0" VerticalAlignment="Top" Visibility="Collapsed"
+                              IconData="{StaticResource DictionaryIconData}"
+                              AutomationProperties.AutomationId="CustomWordsEmptyState" />
 
             <ContentDialog x:Name="EntryDialog" Title="Import words" PrimaryButtonText="Import words"
                            CloseButtonText="Cancel" DefaultButton="None"
@@ -89,6 +91,7 @@
                              AcceptsReturn="True" TextWrapping="Wrap" MinHeight="160" MaxHeight="240"
                              ScrollViewer.VerticalScrollBarVisibility="Auto" TextChanged="EntryTextChanged" />
                     <TextBlock x:Name="EditorValidationText" Visibility="Collapsed" TextWrapping="Wrap"
+                               Style="{StaticResource CaptionTextBlockStyle}"
                                AutomationProperties.AutomationId="CustomWordEditorValidation"
                                AutomationProperties.LiveSetting="Polite"
                                Foreground="{ThemeResource SystemFillColorCriticalBrush}" />

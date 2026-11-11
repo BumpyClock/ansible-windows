@@ -13,14 +13,8 @@ using Windows.UI.ViewManagement;
 
 namespace Ansible;
 
-/// <summary>What the scene's waveform pill shows. Only the practice step passes a live session state.</summary>
 internal enum ScenePill { Resting, Listening, Working }
 
-/// <summary>
-/// The welcome lesson's illustration: keycaps for the saved shortcut, a waveform pill, and a text field.
-/// Nothing loops on its own. A cap presses while its real key is held, the pill follows the real session, and
-/// the field lights only after a real practice insertion. Reduced motion keeps every state change without travel.
-/// </summary>
 public sealed partial class WelcomeScene : UserControl
 {
     private readonly UISettings _uiSettings = new();
@@ -68,7 +62,6 @@ public sealed partial class WelcomeScene : UserControl
         else _working.Stop();
     }
 
-    /// <summary>A key the lesson saw go down or up. Modifier left and right variants map to the same cap.</summary>
     internal void KeyChanged(VirtualKey key, bool down)
     {
         if (down) _down.Add(key);
@@ -82,8 +75,8 @@ public sealed partial class WelcomeScene : UserControl
     }
 
     /// <summary>
-    /// The global shortcut's own press and release. RegisterHotKey swallows the primary key's down, so the lesson
-    /// never sees it; this holds the whole chord down until the hotkey reports release.
+    /// RegisterHotKey swallows the primary key's down, so the lesson
+    /// never sees it.
     /// </summary>
     internal void ChordChanged(bool held)
     {
@@ -91,7 +84,6 @@ public sealed partial class WelcomeScene : UserControl
         RenderCaps();
     }
 
-    /// <summary>Real microphone energy from the session. Shown only while the pill is listening.</summary>
     internal void ShowLevel(double pcmLevel)
     {
         if (_pill != ScenePill.Listening) return;
@@ -102,7 +94,6 @@ public sealed partial class WelcomeScene : UserControl
         PaintBars();
     }
 
-    /// <summary>Lights the field after a real practice insertion.</summary>
     internal void ShowInserted()
     {
         _fill?.Stop();
@@ -125,7 +116,6 @@ public sealed partial class WelcomeScene : UserControl
         fill.Begin();
     }
 
-    /// <summary>Returns the scene to rest: no keys held, an empty field, and a resting pill.</summary>
     internal void Reset()
     {
         _down.Clear();
@@ -151,7 +141,6 @@ public sealed partial class WelcomeScene : UserControl
         RenderCaps();
     }
 
-    // DisplayText order: Ctrl, Win, Shift, Alt, then the primary key, whose label DisplayText owns.
     private static IEnumerable<(string Label, VirtualKey[] Keys)> CapsFor(DictationShortcut shortcut)
     {
         if ((shortcut.Modifiers & 0x2) != 0) yield return ("Ctrl", [VirtualKey.Control, VirtualKey.LeftControl, VirtualKey.RightControl]);
@@ -172,13 +161,9 @@ public sealed partial class WelcomeScene : UserControl
             _bars[index].Height = FloatingPreviewPresentation.BarHeight(_pill == ScenePill.Listening ? _level : 0, index);
     }
 
-    /// <summary>
-    /// One keycap: a shadow, and a face that travels down onto it. The face's lit layer and accent label fade in
-    /// over the resting ones, so a press reads even with reduced motion.
-    /// </summary>
     private sealed class Keycap
     {
-        private const float Travel = 3;
+        private const float Travel = 2;
         private readonly Grid _face;
         private readonly Border _lit;
         private readonly TextBlock _label;
@@ -197,10 +182,7 @@ public sealed partial class WelcomeScene : UserControl
             _face.Children.Add(_label);
             _face.Children.Add(_litLabel);
             ElementCompositionPreview.SetIsTranslationEnabled(_face, true);
-            var root = new Grid { Margin = new Thickness(0, 0, 0, Travel) };
-            root.Children.Add(new Border { Style = (Style)styles["SceneCapShadowStyle"] });
-            root.Children.Add(_face);
-            Root = root;
+            Root = _face;
         }
 
         public FrameworkElement Root { get; }
@@ -221,7 +203,6 @@ public sealed partial class WelcomeScene : UserControl
                 visual.Properties.InsertVector3("Translation", Vector3.Zero);
                 return;
             }
-            // A firm press down, then an underdamped spring back up past rest.
             var spring = visual.Compositor.CreateSpringVector3Animation();
             spring.FinalValue = new Vector3(0, pressed ? Travel : 0, 0);
             spring.DampingRatio = pressed ? 0.9f : 0.4f;

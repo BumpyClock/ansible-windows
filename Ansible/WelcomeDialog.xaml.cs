@@ -3,23 +3,16 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Animation;
 using Windows.UI.ViewManagement;
 
 namespace Ansible;
 
-/// <summary>How the lesson closed. Finished covers Done and Skip for now; both save completion.</summary>
 internal enum WelcomeExit { Finished, ModelsRequested, Interrupted }
 
-/// <summary>
-/// The three-step shortcut lesson, shown modally over the main window. Steps 1 and 2 only light the keycaps;
-/// step 3 lets the global shortcut dictate into a practice field in the dialog.
-/// </summary>
 public sealed partial class WelcomeDialog : ContentDialog
 {
-    /// <summary>The notice key for failures in the welcome lesson, shared with the window that completes it.</summary>
     internal const string NoticeKey = "welcome";
     private const int PracticeStep = 2;
     private readonly DictationSession _session;
@@ -49,13 +42,10 @@ public sealed partial class WelcomeDialog : ContentDialog
         AddHandler(KeyUpEvent, new KeyEventHandler((_, args) => Scene.KeyChanged(args.Key, down: false)), handledEventsToo: true);
     }
 
-    /// <summary>True from the show request until the dialog has closed, so a second request cannot open it twice.</summary>
     internal bool IsShowing => _showing;
 
     internal bool AcceptsShortcut => _open && _step == PracticeStep && (PracticeBox.FocusState != FocusState.Unfocused || _shortcutBusy());
 
-    /// <summary>Shows the lesson from its first step and returns how it closed.</summary>
-    /// <exception cref="InvalidOperationException">The lesson, or another dialog on this XamlRoot, is already open.</exception>
     internal async Task<WelcomeExit> ShowLessonAsync(XamlRoot root)
     {
         if (_showing) throw new InvalidOperationException("The welcome lesson is already open.");
@@ -69,18 +59,17 @@ public sealed partial class WelcomeDialog : ContentDialog
             PracticeBox.Text = "";
             Celebration.Visibility = Visibility.Collapsed;
             Scene.Reset();
-            XamlRoot = root;
+            this.FollowWindowTheme(root);
             await ShowAsync();
             return _exit;
         }
         finally { _showing = false; }
     }
 
-    /// <summary>Closes the lesson without completing it, for shutdown.</summary>
     internal void Dismiss() => Leave(WelcomeExit.Interrupted);
 
-    // Escape skips, or cancels a running practice dictation. Enter takes the step's next action unless a button
-    // or the practice field already used it.
+    // Enter is the dialog's own: DefaultButton is Primary,
+    // so the stock dialog takes the step's next action unless a button or the practice field already used it.
     private void KeyPressed(object sender, KeyRoutedEventArgs args)
     {
         Scene.KeyChanged(args.Key, down: true);
@@ -89,15 +78,8 @@ public sealed partial class WelcomeDialog : ContentDialog
             args.Handled = true;
             Skip();
         }
-        else if (args.Key == Windows.System.VirtualKey.Enter && !args.Handled && NextButton.IsEnabled
-            && FocusManager.GetFocusedElement(XamlRoot) is not (ButtonBase or TextBox))
-        {
-            args.Handled = true;
-            Next();
-        }
     }
 
-    /// <summary>The global shortcut's press or release, so the caps show the chord the hook consumed.</summary>
     internal void ShowShortcutHeld(bool held) => Scene.ChordChanged(held);
 
     internal IShortcutTextTarget CapturePracticeTarget()
@@ -111,16 +93,19 @@ public sealed partial class WelcomeDialog : ContentDialog
 
     private void LessonOpened(ContentDialog sender, ContentDialogOpenedEventArgs args)
     {
-        // Shutdown can ask to close between ShowAsync and Opened.
         if (_forceClose) { Hide(); return; }
         _open = true;
         _observer = new UiSessionObserver(_session, DispatcherQueue, _ => Render(), Scene.ShowLevel);
         _readinessTimer.Start();
+        // The stock buttons are template parts.
+        foreach (var (part, id) in new[] { ("PrimaryButton", "NextButton"), ("SecondaryButton", "BackButton"), ("CloseButton", "SkipButton") })
+            if (GetTemplateChild(part) is Button button) AutomationProperties.SetAutomationId(button, id);
         RenderSteps(_step, animate: false);
-        NextButton.Focus(FocusState.Programmatic);
+        FocusPrimary();
     }
 
-    // Every close goes through Leave. Its callers refuse while a practice dictation runs; only shutdown forces it.
+    private void FocusPrimary() => (GetTemplateChild("PrimaryButton") as Button)?.Focus(FocusState.Programmatic);
+
     private void LessonClosing(ContentDialog sender, ContentDialogClosingEventArgs args)
     {
         if (!_forceClose) args.Cancel = true;
@@ -152,8 +137,10 @@ public sealed partial class WelcomeDialog : ContentDialog
         IntroPanel.Visibility = _step == 0 ? Visibility.Visible : Visibility.Collapsed;
         ShortcutPanel.Visibility = _step == 1 ? Visibility.Visible : Visibility.Collapsed;
         PracticePanel.Visibility = _step == PracticeStep ? Visibility.Visible : Visibility.Collapsed;
-        NextButton.Content = _step switch { 0 => "Get started", 1 => "Try it", _ => "Done" };
-        BackButton.Visibility = _step > 0 ? Visibility.Visible : Visibility.Collapsed;
+        // The stock footer: an empty button text hides that button.
+        PrimaryButtonText = _step == PracticeStep ? "Done" : "Next";
+        SecondaryButtonText = _step > 0 ? "Back" : "";
+        CloseButtonText = _step == PracticeStep ? "" : "Skip for now";
         RenderNavigationReadiness();
         ModelsButton.Visibility = !state.CanStart && state.IsIdle ? Visibility.Visible : Visibility.Collapsed;
         CancelPracticeButton.Visibility = state.CanCancel ? Visibility.Visible : Visibility.Collapsed;
@@ -161,8 +148,8 @@ public sealed partial class WelcomeDialog : ContentDialog
         ShortcutDetail.Text = settings.PushToTalk
             ? $"Hold {shortcut.DisplayText} until listening starts, then speak. Release to finish. Your words arrive after recognition completes."
             : shortcut.IsModifierOnly
-                ? $"Briefly hold {shortcut.DisplayText} to start. Repeat to finish. Your words arrive after recognition completes."
-                : $"Press {shortcut.DisplayText} to start. Press it again to finish. Your words arrive after recognition completes.";
+                ? $"Briefly hold {shortcut.DisplayText} to start, then speak. Repeat to finish. Your words arrive after recognition completes."
+                : $"Press {shortcut.DisplayText} to start, then speak. Press it again to finish. Your words arrive after recognition completes.";
         PracticeStatus.Text = state.IsLiveOperation
             ? state.CanFinish ? "Listening. Speak naturally, then finish with your shortcut." : "Finishing your words..."
             : _practiced ? "That's your voice, in writing. You're ready."
@@ -182,18 +169,28 @@ public sealed partial class WelcomeDialog : ContentDialog
 
     private void RenderNavigationReadiness()
     {
-        NextButton.IsEnabled = BackButton.IsEnabled = SkipButton.IsEnabled = ModelsButton.IsEnabled = IsIdle;
+        // The stock close button cannot be disabled.
+        IsPrimaryButtonEnabled = IsSecondaryButtonEnabled = ModelsButton.IsEnabled = IsIdle;
     }
 
-    private void NextClicked(object sender, RoutedEventArgs args) => Next();
-    private void BackClicked(object sender, RoutedEventArgs args) { if (IsIdle && _step > 0) GoTo(_step - 1); }
-    private void SkipClicked(object sender, RoutedEventArgs args) => Skip();
-
-    private void Next()
+    private void NextClicked(ContentDialog sender, ContentDialogButtonClickEventArgs args)
     {
-        if (!IsIdle) return;
-        if (_step == PracticeStep) Leave(WelcomeExit.Finished);
-        else GoTo(_step + 1);
+        if (IsIdle && _step == PracticeStep) { Finish(WelcomeExit.Finished); return; }
+        args.Cancel = true;
+        if (IsIdle) GoTo(_step + 1);
+    }
+
+    private void BackClicked(ContentDialog sender, ContentDialogButtonClickEventArgs args)
+    {
+        args.Cancel = true;
+        if (IsIdle && _step > 0) GoTo(_step - 1);
+    }
+
+    private void SkipClicked(ContentDialog sender, ContentDialogButtonClickEventArgs args)
+    {
+        if (IsIdle) { Finish(WelcomeExit.Finished); return; }
+        args.Cancel = true;
+        if (_session.State.CanCancel) CancelPractice();
     }
 
     private void Skip()
@@ -207,12 +204,10 @@ public sealed partial class WelcomeDialog : ContentDialog
         var previous = _step;
         _step = step;
         RenderSteps(previous, _uiSettings.AnimationsEnabled);
-        // Back can collapse under the pointer; keep focus inside the lesson.
         if (_step == PracticeStep) PracticeBox.Focus(FocusState.Programmatic);
-        else NextButton.Focus(FocusState.Programmatic);
+        else FocusPrimary();
     }
 
-    // Base values always hold the end state, so stopping a motion early, or reduced motion, still lands there.
     private void RenderSteps(int previous, bool animate)
     {
         Render();
@@ -230,7 +225,6 @@ public sealed partial class WelcomeDialog : ContentDialog
         }
         AutomationProperties.SetName(StepDots, $"Step {_step + 1} of 3");
         if (!animate || previous == _step) return;
-        // The new step slides in from the side it comes from while fading up.
         story.Children.Add(Animate(StepShift, "X", 0, 360, from: 28 * Math.Sign(_step - previous)));
         story.Children.Add(Animate(StepBody, "Opacity", 1, 220, from: 0));
         _stepMotion = story;
@@ -250,7 +244,6 @@ public sealed partial class WelcomeDialog : ContentDialog
         return animation;
     }
 
-    // Runs only from a real insertion into the practice field.
     private void Celebrate()
     {
         Celebration.Visibility = Visibility.Visible;
@@ -272,11 +265,17 @@ public sealed partial class WelcomeDialog : ContentDialog
         story.Begin();
     }
 
-    private void Leave(WelcomeExit exit)
+    private void Finish(WelcomeExit exit)
     {
         if (!_showing || _forceClose) return;
         _exit = exit;
         _forceClose = true;
+    }
+
+    private void Leave(WelcomeExit exit)
+    {
+        if (!_showing || _forceClose) return;
+        Finish(exit);
         Hide();
     }
 

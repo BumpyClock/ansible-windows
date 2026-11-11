@@ -93,6 +93,21 @@ public sealed class MeetingSpeakerMatcherTests
     }
 
     [Fact]
+    public void IndependentMicrophoneSpeechDoesNotBlockRemoteNamesButUnknownSourceDoes()
+    {
+        var matcher = Observations(0, 10, "Alex");
+        var local = Turn("You", 0, 10) with { Source = MeetingAudioSource.Microphone };
+        var document = Document(local, Turn("Speaker 0", 1, 3), Turn("Speaker 0", 5, 7));
+        var named = matcher.Refine(document);
+        Assert.Equal("Alex", named.GetSpeakerName("Speaker 0"));
+        Assert.Equal("You", named.GetSpeakerName("You"));
+        Assert.Equal(document.Turns, named.Turns);
+
+        var uncertain = document with { Turns = [local with { Source = MeetingAudioSource.Mixed }, .. document.Turns.Skip(1)] };
+        Assert.Empty(matcher.Refine(uncertain).AutoSpeakerNames);
+    }
+
+    [Fact]
     public void ConflictingLaterSpeakerEvidenceRevokesPreviousAutomaticAssignment()
     {
         var matcher = Observations(0, 7, "Alex");

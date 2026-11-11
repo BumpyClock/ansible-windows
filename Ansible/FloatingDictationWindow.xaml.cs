@@ -16,14 +16,12 @@ namespace Ansible;
 
 public sealed partial class FloatingDictationWindow : Window
 {
-    /// <summary>The notice key for the preview's failures, shared with the window that opens it.</summary>
     internal const string NoticeKey = "floating-preview";
     private readonly DictationSession _session;
     private readonly AppNotices _notices;
     private SessionSnapshot _state;
     private readonly UiSessionObserver _observer;
     private readonly MainWindow _owner;
-    // Displayed meter level after release smoothing, and the clock that times the release.
     private double _level;
     private readonly Stopwatch _levelClock = new();
     private CaretBounds? _anchor;
@@ -116,11 +114,6 @@ public sealed partial class FloatingDictationWindow : Window
         catch (Exception error) { _cleanupTasks.Add(Task.FromException(error)); }
     }
 
-    /// <summary>
-    /// Shows the pill for the live operation. <paramref name="anchor"/> is the destination caret in
-    /// physical pixels; the pill follows it when the setting allows, otherwise it rests at the bottom
-    /// of the owner's display.
-    /// </summary>
     internal void ShowPreview(CaretBounds? anchor = null)
     {
         if (_closed || !_session.State.IsLiveOperation ||
@@ -178,7 +171,6 @@ public sealed partial class FloatingDictationWindow : Window
         QueueLayout();
     }
 
-    // One key for the condition across windows, so the main window clears it after the next successful apply.
     private void ShowCapturePrivacyFailure(Exception error) => _notices.Set(MainWindow.CapturePrivacyNoticeKey,
         new NoticeContent(NoticeSeverity.Warning, "Screen capture privacy unavailable", error.Message), NoticeArea.Application);
 
@@ -291,7 +283,6 @@ public sealed partial class FloatingDictationWindow : Window
                     DeleteObject(region);
                     throw new Win32Exception(error, "Cannot hide the WinUI waveform host.");
                 }
-                // The WinUI host stays region-empty; the native composition pill draws the waveform.
                 _windowShape = shape;
             }
             if (AppWindow.Position.X != bounds.X || AppWindow.Position.Y != bounds.Y)
@@ -316,9 +307,11 @@ public sealed partial class FloatingDictationWindow : Window
                 }
             }
             var foreground = ((SolidColorBrush)PreviewRoot.BorderBrush).Color;
+            var tint = ((SolidColorBrush)PillBorder.Background).Color;
+            tint.A = (byte)(255 * (double)Application.Current.Resources["PillBackdropTintOpacity"]);
             _pill.Configure(bounds.X + shape.Item1, bounds.Y + shape.Item2, pillWidth, pillHeight,
                 scale, foreground, ((SolidColorBrush)PreviewRoot.Background).Color,
-                ((SolidColorBrush)PillBorder.Background).Color,
+                tint,
                 ((SolidColorBrush)PillBorder.BorderBrush).Color, ((SolidColorBrush)WaveBars.Background).Color,
                 _accessibility.HighContrast,
                 _settings.AdvancedEffectsEnabled);
@@ -362,7 +355,6 @@ public sealed partial class FloatingDictationWindow : Window
         PaintWaveform();
     });
 
-    // Every bar shows the current measured level through a fixed envelope. Nothing scrolls through time.
     private void UpdateWaveform(double level)
     {
         if (_closed || !_visible || _state.Phase != DictationPhase.Recording) { return; }
@@ -401,7 +393,6 @@ public sealed partial class FloatingDictationWindow : Window
         private bool _animated;
         private bool? _capturePrivacy;
         private double _scale;
-        // Logical pixels. The bar row is centred in the pill.
         private const double BarWidth = 3, BarGap = 3;
         private (int Width, int Height, double Scale, Windows.UI.Color Foreground, Windows.UI.Color Background, Windows.UI.Color BackdropFill,
             Windows.UI.Color Stroke, Windows.UI.Color Wave, bool Contrast, bool Effects) _style;
@@ -456,7 +447,6 @@ public sealed partial class FloatingDictationWindow : Window
                     _bars.Add(shape);
                     _visual.Shapes.Add(shape);
                 }
-                // Each bar geometry grows around the shape's vertical centre, so Size and Offset move together.
                 _barMotion = _compositor.CreateImplicitAnimationCollection();
                 foreach (var property in (string[])["Size", "Offset"])
                 {
@@ -493,7 +483,6 @@ public sealed partial class FloatingDictationWindow : Window
             {
                 _style = style;
                 _visual.Size = new Vector2(width, height);
-                // Inset the outline by half the 1px hairline so the stroke stays inside the pill.
                 var inset = (float)(scale / 2);
                 _geometry.Offset = new Vector2(inset);
                 _geometry.Size = new Vector2(width - 2 * inset, height - 2 * inset);
@@ -509,8 +498,6 @@ public sealed partial class FloatingDictationWindow : Window
                     _backdrop.Brush = _compositor.CreateHostBackdropBrush();
                 }
                 else { _backdrop.Brush = _compositor.CreateColorBrush(Windows.UI.Color.FromArgb(0, 0, 0, 0)); }
-                // Translucent fill and a faint hairline over the blurred host backdrop. Without the
-                // backdrop, and in high contrast, use an opaque fill and the window text colour.
                 var fill = backdrop ? backdropFill : background;
                 _outline.FillBrush = _compositor.CreateColorBrush(fill);
                 _outline.StrokeBrush = _compositor.CreateColorBrush(!backdrop ? foreground : stroke);

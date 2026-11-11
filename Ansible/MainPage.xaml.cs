@@ -1,11 +1,10 @@
+using System.ComponentModel;
 using Ansible.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Input;
 using Windows.System;
-using Windows.UI.Core;
 
 namespace Ansible;
 
@@ -22,14 +21,12 @@ public sealed partial class MainPage : Page
     private readonly Action<bool> _captureShortcut;
     private readonly LocalDiagnosticLog _diagnostics;
     private readonly DispatcherTimer _diagnosticStatusTimer = new() { Interval = TimeSpan.FromSeconds(1) };
-    private bool _recordingShortcut;
-    private TextBox? _shortcutCaptureBox;
+    private readonly ModelNames _modelNames;
     private Task? _captureSizeTask;
+    private bool _capturesSaved;
     private Task? _captureDeleteTask;
     private bool _wasRecordTake;
     private bool _joining;
-    private DictationShortcut? _pendingShortcut;
-    private bool _shortcutPrimarySeen;
     private UiSessionObserver? _observer;
     private SessionSnapshot _state;
     private bool _rendering;
@@ -39,9 +36,15 @@ public sealed partial class MainPage : Page
     private const string BenchmarkNoticeKey = "device-benchmark";
     private readonly AppNotices _notices;
 
+    private static readonly (string Value, string Label)[] ReasoningEfforts =
+    [
+        ("none", "None"), ("minimal", "Minimal"), ("low", "Low"), ("medium", "Medium"),
+        ("high", "High"), ("xhigh", "Extra high"), ("max", "Maximum")
+    ];
+
     internal event Action? ShortcutLessonRequested;
 
-    internal MainPage(DictationSession session, AppPaths paths, Func<nint> windowHandle,
+    internal MainPage(DictationSession session, ModelNames modelNames, Func<nint> windowHandle,
         Action<DictationShortcut> changeHotkey, Action<bool> changeMode, Action<bool> captureShortcut,
         LocalDiagnosticLog diagnostics, AppNotices notices, Action<DictationShortcut> changeRecordHotkey,
         Action<bool> enableRecordChord, CaptureStore captures, Action<DictationShortcut> changeRecordPasteHotkey)
@@ -58,21 +61,31 @@ public sealed partial class MainPage : Page
         _changeMode = changeMode;
         _captureShortcut = captureShortcut;
         _diagnostics = diagnostics;
+        _modelNames = modelNames;
         _state = session.State;
-        foreach (var effort in new[] { "none", "minimal", "low", "medium", "high", "xhigh", "max" })
+        foreach (var effort in ReasoningEfforts)
         {
-            CopilotCleanupEffortChoice.Items.Add(effort);
-            OpenAICleanupEffortChoice.Items.Add(effort);
+            CopilotCleanupEffortChoice.Items.Add(effort.Label);
+            OpenAICleanupEffortChoice.Items.Add(effort.Label);
         }
+        var copilotDefault = new MeetingCleanupSettings().CopilotModel;
+        CopilotCleanupModelBox.PlaceholderText = copilotDefault;
+        CopilotModelRow.Description = $"The GitHub Copilot model to use. The default is {copilotDefault}.";
+        _modelNames.Ready += RenderBenchmark;
         const string typingHelp = "Click to record a new shortcut. Esc cancels. The completed transcript is inserted once after recognition succeeds. Held Ctrl, Alt, Shift or Win keys delay insertion until released. Some editors cannot distinguish fields within the same window. Hold to talk finishes when you release the shortcut; otherwise press it again to finish. Cancelling recognition inserts no text. Check the destination before dictating.";
-        ToolTipService.SetToolTip(HotkeyCaptureBox, typingHelp);
-        AutomationProperties.SetHelpText(HotkeyCaptureBox, typingHelp);
-        // TextBox handles pointer presses itself, so listen for handled presses to restart capture on click.
-        HotkeyCaptureBox.AddHandler(PointerPressedEvent, new PointerEventHandler((_, _) => StartShortcutCapture(HotkeyCaptureBox)), true);
-        RecordHotkeyCaptureBox.AddHandler(PointerPressedEvent, new PointerEventHandler((_, _) => StartShortcutCapture(RecordHotkeyCaptureBox)), true);
-        RecordPasteHotkeyCaptureBox.AddHandler(PointerPressedEvent, new PointerEventHandler((_, _) => StartShortcutCapture(RecordPasteHotkeyCaptureBox)), true);
+        HotkeyField.Describe("Shortcut", "HotkeyCaptureBox", typingHelp);
+        RecordHotkeyField.Describe("Record shortcut");
+        RecordPasteHotkeyField.Describe("Paste capture shortcut");
+        foreach (var field in new[] { HotkeyField, RecordHotkeyField, RecordPasteHotkeyField })
+        {
+            field.CaptureStarted += ShortcutCaptureStarted;
+            field.CaptureEnded += ShortcutCaptureEnded;
+        }
+        HotkeyField.ShortcutCaptured += HotkeyCaptured;
+        RecordHotkeyField.ShortcutCaptured += RecordHotkeyCaptured;
+        RecordPasteHotkeyField.ShortcutCaptured += RecordPasteHotkeyCaptured;
         _rendering = true;
-        SetShortcutDisplay(_state.Settings.Shortcut.DisplayText);
+        ShowShortcuts();
         PushToTalkChoice.SelectedIndex = _state.Settings.PushToTalk ? 0 : 1;
         RenderInsertion(_state.IsIdle);
         _rendering = false;
@@ -85,13 +98,11 @@ public sealed partial class MainPage : Page
         Unloaded += (_, _) =>
         {
             _diagnosticStatusTimer.Stop();
-            EndShortcutCapture();
             _observer?.Dispose(); _observer = null;
         };
         _diagnosticStatusTimer.Tick += (_, _) => RenderDiagnosticStatus();
     }
 
-    // A failed change replaces the page error. The next change that succeeds clears it.
     private bool Try(Action change, string title = "Operation failed")
     {
         try { change(); }
@@ -120,10 +131,6 @@ public sealed partial class MainPage : Page
                 NativeBackend.Vulkan => 2,
                 _ => throw new InvalidDataException("The recognition processor setting is invalid.")
             };
-            // The description and the device result do not depend on the choice, so changing it does not reflow the page.
-            // The result describes the last model load and changes only when recognition prepares again.
-            DeviceComparison.Comparison = _state.DeviceComparison;
-            DeviceComparison.Summary = _state.DeviceSelectionSummary;
             RenderBenchmark();
             if (LanguageBox.FocusState == FocusState.Unfocused) { LanguageBox.Text = _state.Language; }
             UsageToggle.IsOn = _state.Settings.CollectUsage;
@@ -137,8 +144,8 @@ public sealed partial class MainPage : Page
             UsageToggle.IsEnabled = idle;
             ToolTipService.SetToolTip(UsageToggle,$"Stored on this device. Never audio or text. Session dates, model, word counts, and timing. File: {_session.UsagePath}");
             AutomationProperties.SetHelpText(UsageToggle, _session.UsagePath);
-            if (!_recordingShortcut) { SetShortcutDisplay(_state.Settings.Shortcut.DisplayText); }
-            HotkeyCaptureBox.IsEnabled = idle;
+            ShowShortcuts();
+            HotkeyField.IsEnabled = idle;
             ResetShortcutButton.Visibility = _state.Settings.Shortcut != DictationShortcut.Default ? Visibility.Visible : Visibility.Collapsed;
             ResetShortcutButton.IsEnabled = idle;
             ChangeShortcutButton.IsEnabled = idle;
@@ -148,17 +155,15 @@ public sealed partial class MainPage : Page
             RecordToggleModeToggle.IsEnabled = idle;
             IncludeVideoLinkToggle.IsOn = _state.Settings.IncludeVideoLink;
             IncludeVideoLinkToggle.IsEnabled = idle;
-            RecordHotkeyCaptureBox.IsEnabled = idle;
+            RecordHotkeyField.IsEnabled = idle;
             ChangeRecordShortcutButton.IsEnabled = idle;
             ResetRecordShortcutButton.IsEnabled = idle;
             ResetRecordShortcutButton.Visibility = _state.Settings.RecordShortcut != DictationShortcut.RecordDefault ? Visibility.Visible : Visibility.Collapsed;
-            if (_shortcutCaptureBox != RecordHotkeyCaptureBox) RecordHotkeyCaptureBox.Text = _state.Settings.RecordShortcut.DisplayText;
-            RecordPasteHotkeyCaptureBox.IsEnabled = idle;
+            RecordPasteHotkeyField.IsEnabled = idle;
             ChangeRecordPasteShortcutButton.IsEnabled = idle;
             ResetRecordPasteShortcutButton.IsEnabled = idle;
             ResetRecordPasteShortcutButton.Visibility = _state.Settings.RecordPasteShortcut != DictationShortcut.RecordPasteDefault ? Visibility.Visible : Visibility.Collapsed;
-            if (_shortcutCaptureBox != RecordPasteHotkeyCaptureBox) RecordPasteHotkeyCaptureBox.Text = _state.Settings.RecordPasteShortcut.DisplayText;
-            DeleteCapturesButton.IsEnabled = !_joining && idle && _captureSizeTask is not { IsCompleted: false } && _captureDeleteTask is not { IsCompleted: false };
+            DeleteCapturesButton.IsEnabled = _capturesSaved && !_joining && idle && _captureSizeTask is not { IsCompleted: false } && _captureDeleteTask is not { IsCompleted: false };
             if (!_joining && _wasRecordTake && !_state.IsRecordTake && _captureSizeTask is not { IsCompleted: false })
                 _captureSizeTask = RefreshCaptureSizeAsync();
             _wasRecordTake = _state.IsRecordTake;
@@ -177,27 +182,33 @@ public sealed partial class MainPage : Page
 
     private void RenderBenchmark()
     {
-        // Activity stays set after the terminal snapshot; only these phases mean the benchmark still owns the session.
         var running = _state.Activity == SessionActivity.DeviceBenchmark &&
             _state.Phase is DictationPhase.Benchmarking or DictationPhase.Cancelling;
         var model = _state.SelectedModel;
+        var fullName = model is null ? null : model.DisplayName ?? model.Id;
+        var plainName = model is null ? null : _modelNames.Find(model.Id, _state.Models)?.Name ?? fullName;
         var status = running
-            ? _state.Phase == DictationPhase.Cancelling ? "Cancelling the benchmark."
+            ? _state.Phase == DictationPhase.Cancelling ? "Stopping the speed test."
                 : _state.BenchmarkingBackend switch
                 {
-                    NativeBackend.Cpu => "Measuring CPU with the bundled public sample.",
-                    NativeBackend.Vulkan => "Measuring Vulkan with the bundled public sample.",
-                    _ => "Preparing the benchmark."
+                    NativeBackend.Cpu => "Testing the CPU with the sample recording included with Ansible.",
+                    NativeBackend.Vulkan => "Testing the graphics card with the sample recording included with Ansible.",
+                    _ => "Preparing the speed test."
                 }
-            : model is null ? "Install a dictation model to benchmark CPU and Vulkan."
-            : _state.CanStart ? $"Measure CPU and Vulkan again for {model.DisplayName ?? model.Id}."
-            : "Benchmarking is available when no other work is running.";
-        BenchmarkStatusText.Text = status;
-        ToolTipService.SetToolTip(BenchmarkStatusText, status);
+            : model is null ? "Install a dictation model to compare the CPU and graphics card."
+            : _state.CanStart ? $"Tests how fast the CPU and graphics card run {plainName}."
+            : "You can run a speed test when Ansible is not busy.";
+        BenchmarkRow.Description = status;
         BenchmarkProgress.IsActive = running;
-        BenchmarkButton.Content = running ? "Cancel" : "Run benchmark";
+        BenchmarkProgress.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
+        BenchmarkButtonText.Text = running ? "Cancel" : "Run speed test";
         BenchmarkButton.IsEnabled = running ? _state.IsBenchmarking : _state.CanStart;
-        AutomationProperties.SetName(BenchmarkButton, running ? "Cancel device benchmark" : "Run device benchmark");
+        AutomationProperties.SetName(BenchmarkButton, running ? "Cancel speed test" : "Run speed test");
+        ToolTipService.SetToolTip(BenchmarkButton, plainName == fullName ? null : fullName);
+        var comparison = _state.DeviceComparison;
+        DeviceComparison.Show(comparison, _state.DeviceSelectionSummary,
+            comparison is null ? "" : _modelNames.Find(comparison.ModelId, _state.Models)?.Name ?? comparison.ModelName,
+            _state.Settings.Backend);
     }
 
     private async void BenchmarkClicked(object sender, RoutedEventArgs args)
@@ -206,12 +217,11 @@ public sealed partial class MainPage : Page
         {
             if (_state.IsBenchmarking) { await _session.CancelAsync(); return; }
             _notices.Set(BenchmarkNoticeKey, null);
-            // Failures and timeouts arrive as a Settings notice from the terminal snapshot.
             await _session.BenchmarkDevicesAsync();
         }
         catch (Exception error)
         {
-            _notices.Set(BenchmarkNoticeKey, new NoticeContent(NoticeSeverity.Error, "Device benchmark failed", error.Message),
+            _notices.Set(BenchmarkNoticeKey, new NoticeContent(NoticeSeverity.Error, "Speed test failed", error.Message),
                 NoticeArea.Settings);
         }
     }
@@ -222,8 +232,8 @@ public sealed partial class MainPage : Page
         InsertionChoice.SelectedIndex = typing ? 1 : 0;
         InsertionChoice.IsEnabled = idle;
         InsertionRow.Description = typing
-            ? "Types characters at a steady pace and keeps your clipboard. Slower than paste."
-            : "Replaces your clipboard with the dictated text and sends the paste shortcut. The text stays available for apps that paste later. Requests exclusion from clipboard history and cloud sync.";
+            ? "Types each character at a steady pace and leaves your clipboard alone. Slower than paste."
+            : "Copies the text and pastes it. Windows is asked to keep it out of clipboard history and sync.";
         PasteShortcutRow.Visibility = typing ? Visibility.Collapsed : Visibility.Visible;
         PasteShortcutChoice.IsEnabled = idle;
         PasteShortcutChoice.SelectedIndex = (int)_state.Settings.PasteShortcut;
@@ -239,9 +249,9 @@ public sealed partial class MainPage : Page
         _renderedCleanupSettings = settings;
         CleanupProviderChoice.SelectedIndex = (int)settings.Provider;
         CopilotCleanupModelBox.Text = settings.CopilotModel;
-        CopilotCleanupEffortChoice.SelectedItem = settings.CopilotReasoningEffort;
+        CopilotCleanupEffortChoice.SelectedIndex = Array.FindIndex(ReasoningEfforts, effort => effort.Value == settings.CopilotReasoningEffort);
         OpenAICleanupModelBox.Text = settings.OpenAIModel;
-        OpenAICleanupEffortChoice.SelectedItem = settings.OpenAIReasoningEffort;
+        OpenAICleanupEffortChoice.SelectedIndex = Array.FindIndex(ReasoningEfforts, effort => effort.Value == settings.OpenAIReasoningEffort);
         AutomaticCleanupToggle.IsOn = settings.Automatic;
         RenderCleanupProvider();
         RenderKeyStatus();
@@ -249,14 +259,23 @@ public sealed partial class MainPage : Page
 
     private void CleanupProviderChanged(object sender, SelectionChangedEventArgs args)
     {
-        if (CopilotCleanupFields is null) return;
+        if (OpenAIEffortRow is null) return;
         RenderCleanupProvider();
         if (_rendering) return;
-        // Consent names one provider, so a new provider turns automatic cleanup off until the user confirms it.
         var wasAutomatic = _session.State.Settings.MeetingCleanup.Automatic;
         if (!SaveCleanupSettings(automatic: false) || !wasAutomatic) return;
         AutomaticCleanupToggle.IsOn = false;
-        _notices.Confirm("Automatic cleanup is off. Turn it on again to send meetings to the new provider.");
+        _notices.Confirm("Automatic cleanup is off. Turn it on again to send meetings to the new service.");
+    }
+
+    private void CleanupAdvancedClicked(object sender, RoutedEventArgs args)
+    {
+        var open = CleanupAdvancedFields.Visibility != Visibility.Visible;
+        CleanupAdvancedFields.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+        CleanupAdvancedChevron.Glyph = open ? "\uE70E" : "\uE70D";
+        ToolTipService.SetToolTip(CleanupAdvancedButton, open ? "Hide advanced settings" : "Show advanced settings");
+        AutomationProperties.SetName(CleanupAdvancedButton,
+            open ? "Hide advanced cleanup settings" : "Show advanced cleanup settings");
     }
 
     private void CleanupEffortChanged(object sender, SelectionChangedEventArgs args)
@@ -279,11 +298,16 @@ public sealed partial class MainPage : Page
     private void RenderCleanupProvider()
     {
         var copilot = CleanupProviderChoice.SelectedIndex == 0;
-        CopilotCleanupFields.Visibility = copilot ? Visibility.Visible : Visibility.Collapsed;
-        OpenAICleanupFields.Visibility = copilot ? Visibility.Collapsed : Visibility.Visible;
+        var copilotVisibility = copilot ? Visibility.Visible : Visibility.Collapsed;
+        var openAIVisibility = copilot ? Visibility.Collapsed : Visibility.Visible;
+        CopilotModelRow.Visibility = copilotVisibility;
+        CopilotEffortRow.Visibility = copilotVisibility;
+        OpenAICleanupFields.Visibility = openAIVisibility;
+        OpenAIEffortRow.Visibility = openAIVisibility;
+        CleanupAdvancedRow.Description = copilot ? "Model and thinking effort." : "Thinking effort.";
         CleanupProviderRow.Description = copilot
-            ? "Uses the installed Copilot CLI and its signed-in account. Run copilot login if needed. No OpenAI API key is used. No fallback to another service or account."
-            : "Sends text directly to the OpenAI Responses API. Requires an OpenAI API model with structured outputs and separate API billing. Copilot model names are not automatically mapped. No fallback to another service or account.";
+            ? "Uses the GitHub Copilot command-line tool installed on this PC. Sign in to it with your GitHub account first. Never switches to another service or account."
+            : "Sends text to OpenAI with your API key, billed separately from ChatGPT. The model must support structured outputs. Never switches to another service or account.";
     }
 
     private void RenderKeyStatus()
@@ -292,7 +316,7 @@ public sealed partial class MainPage : Page
         {
             OpenAIKeyRow.Description = MeetingCleanupService.HasKey
                 ? "API key saved in Windows Credential Locker. It is not stored in settings or logs."
-                : "No API key saved. The key is stored in Windows Credential Locker, not settings or logs.";
+                : "No key saved yet. Keys are kept in Windows Credential Locker, never in settings or logs.";
         }
         catch (Exception) { OpenAIKeyRow.Description ="Windows Credential Locker could not be read. Save the key again or check Windows credential access."; }
     }
@@ -311,7 +335,6 @@ public sealed partial class MainPage : Page
         RenderKeyStatus();
     }
 
-    // Cleanup fields save as they change. The saved opt-in turns on only through the confirmed toggle.
     private bool SaveCleanupSettings(bool? automatic = null)
     {
         try
@@ -322,9 +345,9 @@ public sealed partial class MainPage : Page
                 Provider = (MeetingCleanupProvider)CleanupProviderChoice.SelectedIndex,
                 Automatic = automatic ?? saved.Automatic,
                 CopilotModel = CopilotCleanupModelBox.Text.Trim(),
-                CopilotReasoningEffort = (string)CopilotCleanupEffortChoice.SelectedItem,
+                CopilotReasoningEffort = SelectedEffort(CopilotCleanupEffortChoice),
                 OpenAIModel = OpenAICleanupModelBox.Text.Trim(),
-                OpenAIReasoningEffort = (string)OpenAICleanupEffortChoice.SelectedItem
+                OpenAIReasoningEffort = SelectedEffort(OpenAICleanupEffortChoice)
             };
             if (settings == saved) return true;
             settings.Validate();
@@ -337,12 +360,14 @@ public sealed partial class MainPage : Page
         catch (Exception error)
         {
             ReportError(error);
-            // Show the saved values again so the fields never claim settings that were rejected.
             _renderedCleanupSettings = null;
             Render();
             return false;
         }
     }
+
+    private static string SelectedEffort(ComboBox choice) =>
+        choice.SelectedIndex >= 0 && choice.SelectedIndex < ReasoningEfforts.Length ? ReasoningEfforts[choice.SelectedIndex].Value : "";
 
     private async void AutomaticCleanupToggled(object sender, RoutedEventArgs args)
     {
@@ -352,14 +377,13 @@ public sealed partial class MainPage : Page
             SaveCleanupSettings(automatic: false);
             return;
         }
-        // Enabling sends meeting text without another prompt, so the opt-in is saved only after this confirmation.
-        var service = CleanupProviderChoice.SelectedIndex == 0 ? "Copilot CLI" : "OpenAI API";
+        var service = CleanupProviderChoice.SelectedIndex == 0 ? "GitHub Copilot" : "OpenAI";
         var dialog = new ContentDialog
         {
             Title = $"Send each new completed meeting transcript to {service} without asking again?",
             Content = new TextBlock
             {
-                Text = "Enabling this authorizes sending each new completed meeting transcript to the selected provider without another confirmation. Applies to meetings started after saving. Saved meetings are not uploaded automatically.",
+                Text = "Enabling this authorizes sending each new completed meeting transcript to the selected service without another confirmation. Applies to meetings started after saving. Saved meetings are not uploaded automatically.",
                 TextWrapping = TextWrapping.Wrap,
             },
             PrimaryButtonText = "Turn on",
@@ -373,8 +397,6 @@ public sealed partial class MainPage : Page
             _notices.Confirm("Automatic cleanup is on for new meetings.");
             return;
         }
-        // Cancelled or not saved: the switch returns to the saved value. The Toggled event this raises finds
-        // them equal and returns at the guard above.
         AutomaticCleanupToggle.IsOn = _session.State.Settings.MeetingCleanup.Automatic;
     }
 
@@ -412,8 +434,8 @@ public sealed partial class MainPage : Page
     {
         DiagnosticsRow.Description = _diagnostics.Error ??
             (_diagnostics.DroppedEvents > 0
-                ? $"Diagnostics are saving. {_diagnostics.DroppedEvents} records were lost in this run."
-                : "Off by default. When enabled, operational metadata stays on this device. No audio or transcript text is recorded.");
+                ? $"{_diagnostics.DroppedEvents} diagnostic records were lost in this run."
+                : "Keeps a log of app events on this device for troubleshooting. No audio or transcript text is recorded.");
     }
 
     private void OverlayFollowsCaretToggled(object sender, RoutedEventArgs args)
@@ -440,7 +462,6 @@ public sealed partial class MainPage : Page
     {
         if (_rendering || PushToTalkChoice.SelectedIndex < 0) { return; }
         var pushToTalk = PushToTalkChoice.SelectedIndex == 0;
-        // Selection controls can raise SelectionChanged after Render returns; ignore echoes of the current setting.
         if (pushToTalk == _session.State.Settings.PushToTalk) { return; }
         if (!Try(() => _changeMode(pushToTalk))) Render();
     }
@@ -479,17 +500,14 @@ public sealed partial class MainPage : Page
         if (!Try(() => _session.SetMicrophoneBoost(boost))) Render();
     }
 
-    private void ChangeShortcutClicked(object sender, RoutedEventArgs args) =>
-        HotkeyCaptureBox.Focus(FocusState.Programmatic);
+    private void ChangeShortcutClicked(object sender, RoutedEventArgs args) => HotkeyField.BeginCapture();
 
-    private void ChangeRecordShortcutClicked(object sender, RoutedEventArgs args) =>
-        RecordHotkeyCaptureBox.Focus(FocusState.Programmatic);
+    private void ChangeRecordShortcutClicked(object sender, RoutedEventArgs args) => RecordHotkeyField.BeginCapture();
 
     private void ResetRecordShortcutClicked(object sender, RoutedEventArgs args) =>
         Try(() => _changeRecordHotkey(DictationShortcut.RecordDefault), "Record shortcut unavailable");
 
-    private void ChangeRecordPasteShortcutClicked(object sender, RoutedEventArgs args) =>
-        RecordPasteHotkeyCaptureBox.Focus(FocusState.Programmatic);
+    private void ChangeRecordPasteShortcutClicked(object sender, RoutedEventArgs args) => RecordPasteHotkeyField.BeginCapture();
 
     private void ResetRecordPasteShortcutClicked(object sender, RoutedEventArgs args) =>
         Try(() => _changeRecordPasteHotkey(DictationShortcut.RecordPasteDefault), "Paste capture shortcut unavailable");
@@ -512,6 +530,15 @@ public sealed partial class MainPage : Page
         if (!Try(() => _session.SetRecordToggleMode(RecordToggleModeToggle.IsOn))) Render();
     }
 
+    private static string FormatCaptureSize(long bytes)
+    {
+        if (bytes <= 0) return "No captures saved.";
+        var megabytes = bytes / (1024.0 * 1024);
+        if (megabytes >= 10) return $"{Math.Round(megabytes):N0} MB on this device.";
+        if (megabytes < 0.05) return "Less than 0.1 MB on this device.";
+        return $"{megabytes:N1} MB on this device.";
+    }
+
     private async Task RefreshCaptureSizeAsync()
     {
         DeleteCapturesButton.IsEnabled = false;
@@ -519,10 +546,11 @@ public sealed partial class MainPage : Page
         {
             await WindowsRecordTakeFactory.RefreshClipboardProtectionAsync();
             var bytes = await _captures.GetSizeAsync();
-            CaptureStorageRow.Description = $"{bytes / (1024.0 * 1024):N1} MB on this device. Oldest takes are removed after seven days or above 2 GB.";
+            _capturesSaved = bytes > 0;
+            CaptureStorageRow.Description = $"{FormatCaptureSize(bytes)} Oldest captures are removed after seven days or above 2 GB.";
         }
         catch (Exception error) { ReportError(error, "Capture storage unavailable"); }
-        finally { DeleteCapturesButton.IsEnabled = !_joining && _state.IsIdle; }
+        finally { DeleteCapturesButton.IsEnabled = _capturesSaved && !_joining && _state.IsIdle; }
     }
 
     private async void DeleteCapturesClicked(object sender, RoutedEventArgs args)
@@ -547,7 +575,7 @@ public sealed partial class MainPage : Page
                     : null, NoticeArea.Settings);
         }
         catch (Exception error) { ReportError(error, "Captures could not be deleted"); }
-        finally { DeleteCapturesButton.IsEnabled = !_joining && _state.IsIdle; }
+        finally { DeleteCapturesButton.IsEnabled = _capturesSaved && !_joining && _state.IsIdle; }
     }
 
     internal async Task JoinAsync()
@@ -564,136 +592,42 @@ public sealed partial class MainPage : Page
     private void ResetShortcutClicked(object sender, RoutedEventArgs args) =>
         Try(() => _changeHotkey(DictationShortcut.Default), "Shortcut unavailable");
 
-    private void ShortcutGotFocus(object sender, RoutedEventArgs args) => StartShortcutCapture((TextBox)sender);
-
-    // Focus, click, or Enter on the shortcut box records a new shortcut.
-    private void StartShortcutCapture(TextBox box)
+    private void ShortcutCaptureStarted(object? sender, CancelEventArgs args)
     {
-        if (_recordingShortcut || !box.IsEnabled) { return; }
-        try
+        if (HotkeyField.IsCapturing || RecordHotkeyField.IsCapturing || RecordPasteHotkeyField.IsCapturing)
         {
-            _captureShortcut(true);
-            _shortcutCaptureBox = box;
-            _recordingShortcut = true;
-            _pendingShortcut = null;
-            _shortcutPrimarySeen = false;
-            SetShortcutDisplay("Press a shortcut; Esc cancels");
+            args.Cancel = true;
+            return;
         }
-        catch (Exception error) { ReportError(error); }
+        try { _captureShortcut(true); }
+        catch (Exception error)
+        {
+            ReportError(error);
+            args.Cancel = true;
+        }
     }
 
-    private void ShortcutKeyDown(object sender, KeyRoutedEventArgs args)
+    private void ShortcutCaptureEnded(object? sender, EventArgs args)
     {
-        if (!_recordingShortcut)
-        {
-            if (args.Key == VirtualKey.Enter) { args.Handled = true; StartShortcutCapture((TextBox)sender); }
-            return;
-        }
-        // Tab is never a valid shortcut. Let it move focus; LostFocus ends the capture.
-        if (args.Key == VirtualKey.Tab) { return; }
-        args.Handled = true;
-        if (args.Key == VirtualKey.Escape) { EndShortcutCapture(); return; }
-        uint modifiers = 0;
-        if (Down(VirtualKey.Menu)) { modifiers |= 1; }
-        if (Down(VirtualKey.Control)) { modifiers |= 2; }
-        if (Down(VirtualKey.Shift)) { modifiers |= 4; }
-        if (Down(VirtualKey.LeftWindows) || Down(VirtualKey.RightWindows)) { modifiers |= 8; }
-        if (IsModifierKey(args.Key))
-        {
-            if (!_shortcutPrimarySeen)
-            {
-                var candidate = new DictationShortcut(modifiers, 0);
-                _pendingShortcut = candidate.IsModifierOnly ? candidate : null;
-                if (_pendingShortcut is { } modifierOnly)
-                    SetShortcutDisplay($"{modifierOnly.DisplayText} (release to apply)");
-            }
-            return;
-        }
-        _shortcutPrimarySeen = true;
-        _pendingShortcut = null;
-        var shortcut = new DictationShortcut(modifiers, (uint)args.Key);
-        if (!shortcut.IsValid)
-        {
-            SetShortcutDisplay("Use Ctrl + Win, Alt + Win, F1-F11, or a modified letter or digit");
-            return;
-        }
-        _pendingShortcut = shortcut;
-        SetShortcutDisplay($"{shortcut.DisplayText} (release to apply)");
-    }
-
-    private void ShortcutKeyUp(object sender, KeyRoutedEventArgs args)
-    {
-        if (!_recordingShortcut) { return; }
-        if (_pendingShortcut is not { } shortcut)
-        {
-            // An invalid chord leaves nothing pending. Releasing its primary key must end it, or a later
-            // modifier-only shortcut would never be accepted during this capture.
-            if (!IsModifierKey(args.Key)) { _shortcutPrimarySeen = false; }
-            return;
-        }
-        if (shortcut.IsModifierOnly)
-        {
-            if (!new ModifierShortcutState(shortcut.Modifiers).IsChordKey((uint)args.Key)) return;
-        }
-        else if ((uint)args.Key != shortcut.Key) { return; }
-        args.Handled = true;
-        Try(() =>
-        {
-            if (_shortcutCaptureBox == RecordPasteHotkeyCaptureBox) _changeRecordPasteHotkey(shortcut);
-            else if (_shortcutCaptureBox == RecordHotkeyCaptureBox) _changeRecordHotkey(shortcut);
-            else _changeHotkey(shortcut);
-        }, "Shortcut unavailable");
-        EndShortcutCapture();
-    }
-
-    private static bool Down(VirtualKey key) =>
-        (InputKeyboardSource.GetKeyStateForCurrentThread(key) & CoreVirtualKeyStates.Down) != 0;
-
-    private static bool IsModifierKey(VirtualKey key) =>
-        key is VirtualKey.Control or VirtualKey.LeftControl or VirtualKey.RightControl
-            or VirtualKey.Shift or VirtualKey.LeftShift or VirtualKey.RightShift
-            or VirtualKey.Menu or VirtualKey.LeftMenu or VirtualKey.RightMenu
-            or VirtualKey.LeftWindows or VirtualKey.RightWindows;
-
-    private void ShortcutLostFocus(object sender, RoutedEventArgs args) => EndShortcutCapture();
-
-    private void EndShortcutCapture()
-    {
-        if (!_recordingShortcut) { return; }
-        _recordingShortcut = false;
-        _pendingShortcut = null;
-        _shortcutPrimarySeen = false;
         try { _captureShortcut(false); }
         catch (Exception error) { ReportError(error, "Shortcut unavailable"); }
-        SetShortcutDisplay(_session.State.Settings.Shortcut.DisplayText);
-        RecordHotkeyCaptureBox.Text = _session.State.Settings.RecordShortcut.DisplayText;
-        RecordPasteHotkeyCaptureBox.Text = _session.State.Settings.RecordPasteShortcut.DisplayText;
-        _shortcutCaptureBox = null;
+        ShowShortcuts();
     }
 
-    private void SetShortcutDisplay(string text)
-    {
-        if (_recordingShortcut && _shortcutCaptureBox is { } box && box != HotkeyCaptureBox)
-        {
-            box.Text = text;
-            return;
-        }
-        HotkeyCaptureBox.Text = text;
-        if (_recordingShortcut)
-        {
-            HotkeyKeycaps.Visibility = Visibility.Collapsed;
-            HotkeyCaptureStatus.Visibility = Visibility.Visible;
-            HotkeyCaptureStatus.Text = text;
-            return;
-        }
+    private void HotkeyCaptured(DictationShortcut shortcut) =>
+        Try(() => _changeHotkey(shortcut), "Shortcut unavailable");
 
-        HotkeyCaptureStatus.Visibility = Visibility.Collapsed;
-        HotkeyKeycaps.Visibility = Visibility.Visible;
-        var parts = text.Split(" + ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var hasModifier = parts.Length > 1;
-        HotkeyModifierKeycap.Visibility = hasModifier ? Visibility.Visible : Visibility.Collapsed;
-        HotkeyPlusText.Visibility = hasModifier ? Visibility.Visible : Visibility.Collapsed;
-        HotkeyModifierText.Text = hasModifier ? string.Join(" + ", parts[..^1]) : string.Empty;
-        HotkeyPrimaryText.Text = parts.Length == 0 ? text : parts[^1];
+    private void RecordHotkeyCaptured(DictationShortcut shortcut) =>
+        Try(() => _changeRecordHotkey(shortcut), "Shortcut unavailable");
+
+    private void RecordPasteHotkeyCaptured(DictationShortcut shortcut) =>
+        Try(() => _changeRecordPasteHotkey(shortcut), "Shortcut unavailable");
+
+    private void ShowShortcuts()
+    {
+        var settings = _session.State.Settings;
+        HotkeyField.ShowShortcut(settings.Shortcut.DisplayText);
+        RecordHotkeyField.ShowShortcut(settings.RecordShortcut.DisplayText);
+        RecordPasteHotkeyField.ShowShortcut(settings.RecordPasteShortcut.DisplayText);
     }
 }

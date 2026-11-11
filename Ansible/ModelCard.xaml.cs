@@ -10,16 +10,16 @@ namespace Ansible;
 public sealed partial class ModelCard : UserControl
 {
     private ThemeSettings? _themeSettings;
-    private string? _assetName;
+    private MakerMark? _mark;
     private string _name = "";
     private Uri? _iconUri;
     private bool _iconFailureLogged;
     private ModelInstallState _state;
     private bool _removeDiscardsPartial;
     private bool _companion;
-    private string _behavior = "";
-    private const string MemoryEstimateTip = "Memory is the admission estimate used before loading, not measured usage.";
-    // Below this row width the actions move under the name so the name and chips keep readable space.
+    private const string MemoryEstimateTip = "Memory is an estimate made before loading, not measured use.";
+    private const string DictationGlyph = "\uE720";
+    private const string CompanionGlyph = "\uE716";
     private const double StackedActionsWidth = 600;
 
     public ModelCard()
@@ -30,6 +30,7 @@ public sealed partial class ModelCard : UserControl
     }
 
     public string ModelId { get; private set; } = "";
+
     public string DisplayName => _name;
 
     public event Action<string>? PrimaryRequested;
@@ -43,20 +44,23 @@ public sealed partial class ModelCard : UserControl
         _themeSettings = themeSettings;
         themeSettings.Changed += OnThemeSettingsChanged;
         ModelId = entry.Id;
-        _name = entry.DisplayName ?? entry.Id;
+        var catalogName = entry.DisplayName ?? entry.Id;
+        _name = ModelNames.Plain(entry);
         _companion = ModelSelectionPolicy.IsDiarizationTask(entry.Task);
         NameText.Text = _name;
         AutomationProperties.SetName(NameText, _name);
-        _behavior = BehaviorLabel(entry);
-        CustomWordsBadge.Visibility = entry.SupportsCustomDictionary ? Visibility.Visible : Visibility.Collapsed;
+        ToolTipService.SetToolTip(NameText, catalogName == _name ? null : catalogName);
+        SummaryText.Text = ModelCardText.Summary(entry);
+        TileGlyph.Glyph = _companion ? CompanionGlyph : DictationGlyph;
 
         DescriptionText.Text = entry.Description ?? "";
         AboutRow.Visibility = string.IsNullOrEmpty(entry.Description) ? Visibility.Collapsed : Visibility.Visible;
         LanguagesText.Text = entry.Languages ?? "Languages not specified";
         CustomWordsText.Text = entry.SupportsCustomDictionary
-            ? "Supports custom dictionary context hints."
-            : "Custom dictionary hints are not supported.";
+            ? "Uses your Dictionary words as recognition hints."
+            : "Does not use Dictionary words.";
         LicenseDetailText.Text = $"{entry.License ?? "License not specified"}\n{entry.LicenseNotes ?? ""}".TrimEnd();
+        CatalogNameText.Text = catalogName == entry.Id ? entry.Id : $"{catalogName}\n{entry.Id}";
         SourceText.Text = $"{entry.Repo}\nPinned revision {entry.Revision}\n{entry.RemoteFile}";
         ByteCountText.Text = $"{entry.Bytes:N0} bytes";
         HashText.Text = $"SHA-256 {entry.Sha256}";
@@ -65,63 +69,44 @@ public sealed partial class ModelCard : UserControl
 
         AutomationProperties.SetAutomationId(PrimaryButton, $"ModelPrimary_{entry.Id}");
         AutomationProperties.SetAutomationId(UseButton, $"ModelUse_{entry.Id}");
-        AutomationProperties.SetAutomationId(DetailsButton, $"ModelDetails_{entry.Id}");
+        AutomationProperties.SetAutomationId(MoreButton, $"ModelMore_{entry.Id}");
+        AutomationProperties.SetAutomationId(DetailsItem, $"ModelDetails_{entry.Id}");
         AutomationProperties.SetName(UseButton, $"Use {_name} for dictation");
+        AutomationProperties.SetName(MoreButton, $"More options for {_name}");
         ApplyDetailsState();
 
-        _assetName = entry.Family switch
+        _mark = entry.Family switch
         {
-            "moonshine_asr" => "moonshine",
-            "qwen3_asr" => "qwen",
-            "vibevoice_asr" or "vibevoice_asr_streaming" => "vibevoice",
-            "nemotron_asr" or "nemotron_3_diar" => "nvidia",
+            "moonshine_asr" => new("moonshine", HasDarkVariant: false),
+            "qwen3_asr" => new("qwen", HasDarkVariant: false),
+            "vibevoice_asr" or "vibevoice_asr_streaming" => new("vibevoice", HasDarkVariant: true),
             _ => null
         };
-        Monogram.Text = char.ToUpperInvariant(entry.Family[0]).ToString();
         ApplyIcon();
     }
 
-    // busyReason explains a Download or Resume that waits on another model operation.
     public void Update(ModelDownloadSnapshot snapshot, bool idle, bool managerIdle, bool managerBusy, bool active, bool canSelect,
         string busyReason = "Wait for the current model operation to finish.")
     {
-        var entry = snapshot.Model;
         var state = snapshot.State;
         _state = state;
 
-        // The group heading says In use, Installed or Available; the role chip says what an in-use model does.
-        RoleBadge.Text = active ? "Dictation" : _companion ? "Meeting companion" : "";
-        RoleBadge.Visibility = active || _companion ? Visibility.Visible : Visibility.Collapsed;
-        VisualStateManager.GoToState(this, active ? "OutlineActive" : "OutlineRest", false);
+        InUseBadge.Text = _companion ? "In use for meetings" : "In use for dictation";
+        InUseBadge.Visibility = active || _companion && snapshot.HasModelFile ? Visibility.Visible : Visibility.Collapsed;
+        var stateLabel = ModelCardText.StateLabel(snapshot.Supported, state);
+        StateBadge.Text = stateLabel ?? "";
+        StateBadge.Visibility = stateLabel is null ? Visibility.Collapsed : Visibility.Visible;
 
-        // Installed rows show behaviour and memory; other rows add the download size. A transfer replaces
-        // the sizes with its byte counts so the 160 px progress label can stay short.
-        var installed = snapshot.HasModelFile || active;
-        var memory = FormatBytes(entry.EstimatedMemoryBytes);
-        var transfer = $"{FormatBytes(snapshot.DownloadedBytes)} of {FormatBytes(entry.Bytes)}";
-        var facts = state switch
-        {
-            ModelInstallState.Downloading => snapshot.BytesPerSecond > 0
-                ? $"{transfer} · {FormatBytes((long)snapshot.BytesPerSecond)}/s" : transfer,
-            ModelInstallState.Paused => $"{transfer} downloaded",
-            _ when installed => memory,
-            _ => $"{FormatBytes(entry.Bytes)} download · {memory} memory"
-        };
-        var caption = _behavior.Length > 0 ? $"{_behavior} · {facts}" : facts;
-        var stateLabel = !snapshot.Supported ? "Unsupported" : StateLabel(state);
-        StateRun.Text = stateLabel ?? "";
-        SeparatorRun.Text = stateLabel is not null ? " · " : "";
-        CaptionRun.Text = caption;
-        ToolTipService.SetToolTip(FactsText, state is ModelInstallState.Downloading or ModelInstallState.Paused ? null : MemoryEstimateTip);
+        FootprintText.Text = ModelCardText.Footprint(snapshot, installed: snapshot.HasModelFile || active);
+        ToolTipService.SetToolTip(FootprintText, state is ModelInstallState.Downloading or ModelInstallState.Paused ? null : MemoryEstimateTip);
 
         var showProgress = state is ModelInstallState.Downloading or ModelInstallState.Paused or ModelInstallState.Verifying;
         ProgressPanel.Visibility = showProgress ? Visibility.Visible : Visibility.Collapsed;
         DownloadProgress.Value = snapshot.Progress;
-        // Verification reports no progress, so the bar shows activity rather than a fill level.
         DownloadProgress.IsIndeterminate = state == ModelInstallState.Verifying;
         ProgressText.Text = state switch
         {
-            ModelInstallState.Verifying => "Verifying checksum",
+            ModelInstallState.Verifying => "Checking the download",
             ModelInstallState.Paused => $"Paused at {snapshot.Progress:F0}%",
             _ => $"Downloading {snapshot.Progress:F0}%"
         };
@@ -133,28 +118,16 @@ public sealed partial class ModelCard : UserControl
             ErrorNotice.Show(new NoticeContent(NoticeSeverity.Error, "Model file problem", error, IsClosable: false));
         ErrorNotice.Visibility = snapshot.Error is null ? Visibility.Collapsed : Visibility.Visible;
 
-        // One primary action per row. While a transfer runs the primary action stops it; an installed
-        // file has no primary action here because Use for dictation or the In use group covers it.
         var transferring = state is ModelInstallState.Downloading or ModelInstallState.Verifying;
-        PrimaryButton.Content = state switch
-        {
-            ModelInstallState.Downloading => "Pause",
-            ModelInstallState.Verifying => "Stop",
-            ModelInstallState.ReadyToInstall => "Install verified model",
-            ModelInstallState.Paused => "Resume",
-            ModelInstallState.Failed => "Retry download",
-            _ => "Download"
-        };
+        var label = ModelCardText.PrimaryAction(state);
+        PrimaryButton.Content = label;
         PrimaryButton.IsEnabled = transferring ? managerBusy : snapshot.Supported && (state == ModelInstallState.ReadyToInstall
             ? idle
             : managerIdle && !snapshot.HasModelFile &&
               state is ModelInstallState.NotInstalled or ModelInstallState.Paused or ModelInstallState.Failed);
-        // Accent marks an enabled forward step only; Pause, Stop and disabled buttons use the default style.
-        PrimaryButton.Style = (Style)Application.Current.Resources[
-            transferring || !PrimaryButton.IsEnabled ? "DefaultButtonStyle" : "AppPrimaryButtonStyle"];
-        PrimaryHost.Visibility = !active && (transferring || !snapshot.HasModelFile) ? Visibility.Visible : Visibility.Collapsed;
-        // A disabled button shows no tooltip, so the host explains a wait on another model operation. A Border has
-        // no automation peer, so the button carries the same help text for keyboard and Narrator users.
+        var showPrimary = !active && (transferring || !snapshot.HasModelFile);
+        PrimaryHost.Visibility = showPrimary ? Visibility.Visible : Visibility.Collapsed;
+        // A Border has no automation peer, so the button carries the same help text for keyboard and Narrator users.
         var waitReason = !transferring && !PrimaryButton.IsEnabled && managerBusy && snapshot.Supported ? busyReason : null;
         ToolTipService.SetToolTip(PrimaryHost, waitReason);
         AutomationProperties.SetHelpText(PrimaryHost, waitReason ?? "");
@@ -166,22 +139,20 @@ public sealed partial class ModelCard : UserControl
         {
             ModelInstallState.Downloading => $"Pause download of {_name}",
             ModelInstallState.Verifying => $"Stop verifying {_name}",
-            _ => $"{PrimaryButton.Content} {_name}"
+            _ => $"{label} {_name}"
         });
 
-        // An installed file takes precedence; after removal a leftover partial surfaces as Discard.
-        _removeDiscardsPartial = !snapshot.HasModelFile && snapshot.HasPartial;
-        RemoveButton.Visibility = snapshot.HasModelFile || snapshot.HasPartial ? Visibility.Visible : Visibility.Collapsed;
-        RemoveButton.IsEnabled = idle;
-        ToolTipService.SetToolTip(RemoveButton, _removeDiscardsPartial ? "Discard partial download" : "Remove model");
-        AutomationProperties.SetAutomationId(RemoveButton, _removeDiscardsPartial ? $"ModelDiscard_{ModelId}" : $"ModelRemove_{ModelId}");
-        AutomationProperties.SetName(RemoveButton, _removeDiscardsPartial ? $"Discard partial download of {_name}" : $"Remove {_name}");
+        var showUse = !_companion && state == ModelInstallState.Installed && !active && snapshot.Supported && canSelect;
+        UseButton.Visibility = showUse ? Visibility.Visible : Visibility.Collapsed;
+        ActionsPanel.Visibility = showProgress || showPrimary || showUse ? Visibility.Visible : Visibility.Collapsed;
 
-        // Use for dictation appears only when it can be clicked; a disabled button cannot explain itself. A row that
-        // is still downloading or verifying offers Pause or Stop only, so selection follows a finished install.
-        // The diarization companion never offers it: it is not a dictation model.
-        UseButton.Visibility = !_companion && state == ModelInstallState.Installed && !active && snapshot.Supported && canSelect
-            ? Visibility.Visible : Visibility.Collapsed;
+        _removeDiscardsPartial = !snapshot.HasModelFile && snapshot.HasPartial;
+        var removable = snapshot.HasModelFile || snapshot.HasPartial;
+        RemoveSeparator.Visibility = RemoveItem.Visibility = removable ? Visibility.Visible : Visibility.Collapsed;
+        RemoveItem.IsEnabled = idle;
+        RemoveItem.Text = _removeDiscardsPartial ? "Discard partial download" : "Remove from this device";
+        AutomationProperties.SetAutomationId(RemoveItem, _removeDiscardsPartial ? $"ModelDiscard_{ModelId}" : $"ModelRemove_{ModelId}");
+        AutomationProperties.SetName(RemoveItem, _removeDiscardsPartial ? $"Discard partial download of {_name}" : $"Remove {_name}");
 
         LocationText.Text = snapshot.Path;
     }
@@ -189,21 +160,18 @@ public sealed partial class ModelCard : UserControl
     internal void DetachThemeEvents()
     {
         Loaded -= OnLoaded;
-        ActualThemeChanged -= OnThemeChanged;
         if (_themeSettings is { } settings) { settings.Changed -= OnThemeSettingsChanged; }
         _themeSettings = null;
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e) => ApplyIcon();
 
-    private void OnThemeChanged(FrameworkElement sender, object args) => ApplyIcon();
-
     private void RowSizeChanged(object sender, SizeChangedEventArgs args)
     {
         var stacked = args.NewSize.Width < StackedActionsWidth;
         Grid.SetRow(ActionsPanel, stacked ? 1 : 0);
         Grid.SetColumn(ActionsPanel, stacked ? 1 : 2);
-        Grid.SetColumnSpan(ActionsPanel, stacked ? 2 : 1);
+        Grid.SetColumnSpan(ActionsPanel, stacked ? 3 : 1);
         ActionsPanel.HorizontalAlignment = stacked ? HorizontalAlignment.Left : HorizontalAlignment.Stretch;
         ActionsPanel.Margin = stacked ? new Thickness(0, 12, 0, 0) : new Thickness(0);
     }
@@ -214,12 +182,8 @@ public sealed partial class ModelCard : UserControl
         ApplyDetailsState();
     }
 
-    private void ApplyDetailsState()
-    {
-        var expanded = DetailsPanel.Visibility == Visibility.Visible;
-        AutomationProperties.SetName(DetailsButton, expanded ? $"Hide details for {_name}" : $"Show details for {_name}");
-        ToolTipService.SetToolTip(DetailsButton, expanded ? "Hide details" : "Details");
-    }
+    private void ApplyDetailsState() =>
+        DetailsItem.Text = DetailsPanel.Visibility == Visibility.Visible ? "Hide details" : "Show details";
 
     private void OnThemeSettingsChanged(ThemeSettings sender, object args)
     {
@@ -230,36 +194,39 @@ public sealed partial class ModelCard : UserControl
             System.Diagnostics.Debug.WriteLine($"Ansible: high-contrast icon update for '{ModelId}' could not be dispatched.");
     }
 
+    private sealed record MakerMark(string Asset, bool HasDarkVariant);
+
     private void ApplyIcon()
     {
-        if (_assetName is null || IsHighContrast())
+        TileGlyph.Visibility = Visibility.Visible;
+        if (_mark is null || IsHighContrast())
         {
             _iconUri = null;
             IconImage.Source = null;
             IconImage.Visibility = Visibility.Collapsed;
-            Monogram.Visibility = Visibility.Visible;
             return;
         }
-        var file = ActualTheme == ElementTheme.Dark ? $"{_assetName}-dark.png" : $"{_assetName}.png";
+        var file = _mark.HasDarkVariant && ActualTheme == ElementTheme.Dark ? $"{_mark.Asset}-dark.png" : $"{_mark.Asset}.png";
         _iconUri = new Uri($"ms-appx:///Assets/ModelIcons/{file}");
         _iconFailureLogged = false;
-        Monogram.Visibility = Visibility.Visible;
         IconImage.Visibility = Visibility.Visible;
         IconImage.Source = new BitmapImage(_iconUri);
     }
 
-    private void IconOpened(object sender, RoutedEventArgs e) => Monogram.Visibility = Visibility.Collapsed;
+    private void OnThemeChanged(FrameworkElement sender, object args) => ApplyIcon();
+
+    private void IconOpened(object sender, RoutedEventArgs e) => TileGlyph.Visibility = Visibility.Collapsed;
 
     private void IconFailed(object sender, ExceptionRoutedEventArgs e)
     {
         IconImage.Visibility = Visibility.Collapsed;
         IconImage.Source = null;
-        Monogram.Visibility = Visibility.Visible;
+        TileGlyph.Visibility = Visibility.Visible;
         if (!_iconFailureLogged)
         {
             _iconFailureLogged = true;
             System.Diagnostics.Debug.WriteLine(
-                $"Ansible: model icon '{_iconUri}' for '{ModelId}' failed to load: {e.ErrorMessage}. Using monogram fallback.");
+                $"Ansible: model icon '{_iconUri}' for '{ModelId}' failed to load: {e.ErrorMessage}. Using the glyph tile.");
         }
     }
 
@@ -274,23 +241,4 @@ public sealed partial class ModelCard : UserControl
     private void RemoveClicked(object sender, RoutedEventArgs e) =>
         (_removeDiscardsPartial ? DiscardRequested : RemoveRequested)?.Invoke(ModelId);
     private void UseClicked(object sender, RoutedEventArgs e) => UseRequested?.Invoke(ModelId);
-
-    private static string BehaviorLabel(NativeModelEntry entry) =>
-        ModelSelectionPolicy.IsDiarizationTask(entry.Task) ? "Meeting speaker detection" :
-        entry.Family == "vibevoice_asr" && entry.Mode == "offline" ? "Text after you finish" :
-        entry.Mode == "offline" ? "WAV files only" :
-        entry.Preview == "live" ? "Live transcript" :
-        entry.Preview == "buffered" ? "Buffered text" :
-        "Text after you finish";
-
-    internal static string FormatBytes(long bytes) => bytes >= 1024L * 1024 * 1024 ? $"{bytes / (1024.0 * 1024 * 1024):F2} GiB" :
-        bytes >= 1024 * 1024 ? $"{bytes / (1024.0 * 1024):F1} MiB" : $"{bytes:N0} bytes";
-
-    // Exceptional states only. Installed and Not installed are the group; transfers show in the progress label.
-    private static string? StateLabel(ModelInstallState state) => state switch
-    {
-        ModelInstallState.ReadyToInstall => "Ready to install",
-        ModelInstallState.Failed => "Failed",
-        _ => null
-    };
 }

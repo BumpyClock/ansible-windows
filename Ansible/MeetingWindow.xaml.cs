@@ -1,10 +1,10 @@
 using System.Diagnostics;
-using System.Globalization;
 using Ansible.Core;
 using Microsoft.UI;
 using Microsoft.UI.System;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Windows.ApplicationModel.DataTransfer;
@@ -15,13 +15,14 @@ namespace Ansible;
 
 public sealed partial class MeetingWindow : Window
 {
+    internal bool DeleteOnClose { get; private set; }
     private readonly MeetingSession _session;
     private readonly MeetingStore _store;
     private readonly string? _diagnosticsDirectory;
-    // One notice slot: the newest error or model notice replaces the last, and starting an action clears it.
     private const string NoticeKey = "meeting";
     private readonly AppNotices _notices = new();
     private MeetingDocument? _document;
+    private string? _requestedTitle;
     private string? _shownNotice;
     private readonly bool _savedMeeting;
     private bool _closed;
@@ -68,7 +69,7 @@ public sealed partial class MeetingWindow : Window
             // A valid Teams capture process may not own the app's visible top-level window.
             if (item is null)
             {
-                item = new ComboBoxItem { Content = $"{process.ProcessName} · detected microphone activity",
+                item = new ComboBoxItem { Content = $"{process.ProcessName} · using your microphone",
                     Tag = new MeetingProcessChoice(process.Id, process.ProcessName, true, candidate.ProcessStartedUtc) };
                 ProcessChoice.Items.Add(item);
             }
@@ -86,7 +87,6 @@ public sealed partial class MeetingWindow : Window
         InitializeComponent();
         Root.RequestedTheme = theme;
         Notices.Attach(_notices);
-        // Notices float over the transcript's bottom edge; padding past them keeps the last lines reachable.
         var transcriptPadding = TranscriptRows.Padding;
         Notices.CoveredHeightChanged += (_, _) => TranscriptRows.Padding =
             transcriptPadding with { Bottom = transcriptPadding.Bottom + Notices.CoveredHeight };
@@ -99,7 +99,7 @@ public sealed partial class MeetingWindow : Window
         AudioDiagnosticsMenuItem.IsEnabled = diagnosticsDirectory is not null;
         _document = document;
         _savedMeeting = document is not null;
-        Title = document?.Title ?? "New meeting";
+        RenderTitle();
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(TitleBar);
         AppWindow.TitleBar.ButtonBackgroundColor = Colors.Transparent;
@@ -110,6 +110,7 @@ public sealed partial class MeetingWindow : Window
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
         AppWindow.Resize(new Windows.Graphics.SizeInt32(640, 900));
         RefreshProcesses();
+        Root.Loaded += (_, _) => (_savedMeeting ? (Control)TranscriptRows : StartButton).Focus(FocusState.Programmatic);
         AppWindow.Closing += ClosingRequested;
         Closed += (_, _) =>
         {
@@ -120,18 +121,35 @@ public sealed partial class MeetingWindow : Window
             _cleanupCancellation?.Dispose();
             _cleanupCancellation = null;
         };
-        if (_savedMeeting) RenderDocument();
+        if (_savedMeeting)
+        {
+            CaptureSetup.Visibility = StartButton.Visibility = Visibility.Collapsed;
+            SaveText.Text = SavedText;
+            RenderDocument();
+        }
         else
         {
             _session.StateChanged += SessionChanged;
             Render(_session.State);
         }
-        var created = (_document?.CreatedAt ?? DateTimeOffset.Now).ToLocalTime();
-        MeetingDate.Text = $"{created.ToString("dddd, MMMM d", CultureInfo.CurrentCulture)} · {created.ToString("t", CultureInfo.CurrentCulture)}";
-        CaptureSetup.Visibility = _savedMeeting ? Visibility.Collapsed : Visibility.Visible;
-        StartButton.Visibility = _savedMeeting ? Visibility.Collapsed : Visibility.Visible;
-        if (_savedMeeting) PrivacyText.Text = "Saved on this device. No audio recording is stored.";
     }
+
+    private const string SavedText = "Saved on this device";
+
+    private void RenderTitle()
+    {
+        var title = _requestedTitle ?? (_document is null
+            ? MeetingDocument.UntitledTitle
+            : MeetingText.Title(MeetingSummary.From(_document)));
+        MeetingTitle.Text = TitleBarCaption.Text = Title = title;
+        AutomationProperties.SetName(TitleButton, $"Rename meeting {title}");
+        UpdateTitleToolTip();
+    }
+
+    private void MeetingTitleTrimmedChanged(TextBlock sender, IsTextTrimmedChangedEventArgs args) => UpdateTitleToolTip();
+
+    private void UpdateTitleToolTip() =>
+        ToolTipService.SetToolTip(TitleButton, MeetingTitle.IsTextTrimmed ? MeetingTitle.Text : "Rename meeting");
 
     private void RootThemeChanged(FrameworkElement sender, object args) => RefreshTitleBarColors();
     private void ContrastThemeChanged(ThemeSettings sender, object args) => RefreshTitleBarColors();
@@ -158,8 +176,11 @@ public sealed partial class MeetingWindow : Window
 
     private void Render(MeetingSessionSnapshot state)
     {
+        if (state.Phase == MeetingSessionPhase.Completed) _notices.Set("teams-context", null);
         _version = state.Version;
         _document = state.Document;
+        if (state.Phase is not (MeetingSessionPhase.Starting or MeetingSessionPhase.Recording or MeetingSessionPhase.Paused))
+            _contextStop?.Cancel();
         var active = _session.IsActive || state.Phase is MeetingSessionPhase.Starting or MeetingSessionPhase.Recording or MeetingSessionPhase.Paused or MeetingSessionPhase.Finishing or MeetingSessionPhase.Refining;
         var preparing = state.Phase == MeetingSessionPhase.Starting;
         var finishing = state.Phase is MeetingSessionPhase.Finishing or MeetingSessionPhase.Refining;
@@ -174,20 +195,20 @@ public sealed partial class MeetingWindow : Window
         EndButton.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
         EndButton.IsEnabled = !_busy && !finishing && !preparing;
         DeleteMenuItem.IsEnabled = !active && _document is not null;
-        ElapsedText.Text = FormatTime(state.CapturedSeconds);
-        StateText.Text = state.Phase switch
+        var elapsed = FormatTime(state.CapturedSeconds);
+        ShowDetails(state.Phase switch
         {
-            MeetingSessionPhase.Starting => "Preparing",
-            MeetingSessionPhase.Recording => "Transcribing",
-            MeetingSessionPhase.Paused => "Paused",
+            MeetingSessionPhase.Starting => "Getting ready",
+            MeetingSessionPhase.Recording => $"Recording · {elapsed}",
+            MeetingSessionPhase.Paused => $"Paused · {elapsed}",
             MeetingSessionPhase.Finishing => "Finishing transcript",
-            MeetingSessionPhase.Refining => "Refining speakers",
-            MeetingSessionPhase.Completed => "Completed",
+            MeetingSessionPhase.Refining => "Identifying speakers",
+            MeetingSessionPhase.Completed when _document is not null => SavedDetails(_document),
             MeetingSessionPhase.Failed => "Stopped",
-            _ => "Ready"
-        };
+            _ => ""
+        }, recording: state.Phase == MeetingSessionPhase.Recording);
         DelayText.Visibility = state.PendingSeconds >= 10 ? Visibility.Visible : Visibility.Collapsed;
-        DelayText.Text = $"{FormatTime(state.PendingSeconds)} of captured audio awaiting transcription";
+        DelayText.Text = $"Catching up: {FormatTime(state.PendingSeconds)} of speech still to transcribe";
         var health = state.CaptureHealth;
         AudioHealthPanel.Visibility = state.Phase == MeetingSessionPhase.Recording && health is not null
             ? Visibility.Visible : Visibility.Collapsed;
@@ -207,19 +228,19 @@ public sealed partial class MeetingWindow : Window
             DiagnosticsErrorText.Text = health.DiagnosticsError ?? "";
             DiagnosticsErrorText.Visibility = health.DiagnosticsError is null ? Visibility.Collapsed : Visibility.Visible;
         }
-        SaveText.Text = "Text saves automatically";
-        (EmptyTitle.Text, EmptyDescription.Text) = state.Phase switch
+        SaveText.Text = canStart ? "" : state.Phase is MeetingSessionPhase.Completed or MeetingSessionPhase.Failed
+            ? SavedText : "Saving as you go";
+        (TranscriptEmpty.Glyph, TranscriptEmpty.Title, TranscriptEmpty.Detail) = state.Phase switch
         {
-            MeetingSessionPhase.Starting => ("Preparing local transcription", "The meeting will begin when local transcription is ready."),
-            MeetingSessionPhase.Paused => ("Meeting paused", "Capture is paused. Resume to continue this meeting."),
-            MeetingSessionPhase.Recording => ("Listening for your conversation", "Text appears as each chunk is recognized. Speaker labels may be revised."),
-            MeetingSessionPhase.Finishing or MeetingSessionPhase.Refining => ("Finishing your meeting", "Captured speech is being finalized locally. Speaker corrections preserve the recognized wording."),
-            MeetingSessionPhase.Failed when retryStart => ("Meeting needs attention", "Resolve the error above, check your microphone and speakers, then try again."),
-            MeetingSessionPhase.Failed => ("Meeting stopped", "Review the error above. Text already transcribed stays saved on this device."),
-            MeetingSessionPhase.Completed => ("No speech transcribed", "This meeting has no recognized speech. Saved text stays on this device."),
-            _ => ("Ready when you are", "Start the meeting to see speaker-labelled text here.")
+            MeetingSessionPhase.Starting => (MicrophoneGlyph, "Getting ready", "Transcription starts as soon as the speech model is loaded."),
+            MeetingSessionPhase.Paused => (PauseGlyph, "Meeting paused", "Resume to keep transcribing this meeting."),
+            MeetingSessionPhase.Recording => (MicrophoneGlyph, "Listening", "Text appears a few seconds after someone speaks. Speaker names may update."),
+            MeetingSessionPhase.Finishing or MeetingSessionPhase.Refining => (MicrophoneGlyph, "Finishing your meeting", "The last few seconds of speech are being transcribed on this device."),
+            MeetingSessionPhase.Failed when retryStart => (ErrorGlyph, "Meeting couldn't start", "Check the message below and your microphone and speakers, then try again."),
+            MeetingSessionPhase.Failed => (ErrorGlyph, "Meeting stopped", "Check the message below. Text transcribed before the stop is saved."),
+            MeetingSessionPhase.Completed => (MicrophoneGlyph, "No speech transcribed", MeetingText.EmptyExplanation(MeetingStatus.Completed)),
+            _ => (MicrophoneGlyph, "Ready when you are", "Start the meeting to see what each person says here.")
         };
-        // The notice lives for the whole meeting; open it once per text so a dismissal sticks.
         if (state.SelectionNotice != _shownNotice)
         {
             _shownNotice = state.SelectionNotice;
@@ -231,10 +252,10 @@ public sealed partial class MeetingWindow : Window
             CleanupStatusText.Visibility = Visibility.Visible;
             CleanupStatusText.Text = state.TextCleanup switch
             {
-                MeetingTextCleanupState.Running => "Cleaning up wording automatically. Original text is saved.",
-                MeetingTextCleanupState.Completed => "Wording cleaned up. Original text remains available.",
-                MeetingTextCleanupState.Cancelled => "Cleanup cancelled. Original wording remains available.",
-                MeetingTextCleanupState.Failed => "Cleanup failed. Original wording is saved. Check Settings or retry cleanup.",
+                MeetingTextCleanupState.Running => "Cleaning up wording automatically. The original wording is kept.",
+                MeetingTextCleanupState.Completed => "Wording cleaned up. The original wording is kept.",
+                MeetingTextCleanupState.Cancelled => "Cleanup cancelled. The transcript is unchanged.",
+                MeetingTextCleanupState.Failed => "Cleanup didn't finish. The transcript is unchanged.",
                 _ => ""
             };
             if (state.TextCleanupError is { } cleanupError && cleanupError != _shownCleanupError)
@@ -268,29 +289,55 @@ public sealed partial class MeetingWindow : Window
     {
         RefreshCleanupControls();
         if (_document is null) return;
-        if (MeetingTitle.FocusState == FocusState.Unfocused) MeetingTitle.Text = _document.Title;
-        Title = _document.Title;
-        EmptyState.Visibility = _document.Turns.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (_document.Title == _requestedTitle) _requestedTitle = null;
+        RenderTitle();
+        TranscriptEmpty.Visibility = _document.Turns.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         if (_savedMeeting)
         {
-            StateText.Text = _document.Status.ToString();
-            ElapsedText.Text = FormatTime(_document.Turns.LastOrDefault()?.EndSeconds ?? 0);
-            EmptyTitle.Text = "No transcript text";
-            EmptyDescription.Text = "This meeting has no saved speech. Audio was not stored.";
+            ShowDetails(SavedDetails(_document), recording: false);
+            TranscriptEmpty.Glyph = _document.Status == MeetingStatus.Failed ? ErrorGlyph : MicrophoneGlyph;
+            TranscriptEmpty.Title = "No speech transcribed";
+            TranscriptEmpty.Detail = MeetingText.EmptyExplanation(_document.Status);
+            TranscriptEmpty.Footer ??= CreateEmptyDeleteButton();
         }
         if (ReferenceEquals(_renderedTurns, _document.Turns) && ReferenceEquals(_renderedNames, _document.SpeakerNames) && ReferenceEquals(_renderedAutoNames, _document.AutoSpeakerNames)) return;
         var nearBottom = _transcriptScroll is null || _transcriptScroll.ScrollableHeight - _transcriptScroll.VerticalOffset < 60;
         _renderedTurns = _document.Turns;
         _renderedNames = _document.SpeakerNames;
         _renderedAutoNames = _document.AutoSpeakerNames;
-        if (_transcript.Reconcile(_document) && nearBottom) _followTranscriptBottom = true;
+        if (_transcript.Reconcile(_document) && nearBottom && !_savedMeeting) _followTranscriptBottom = true;
     }
 
-    public static Visibility ToVisibility(bool value) => value ? Visibility.Visible : Visibility.Collapsed;
+    private static string SavedDetails(MeetingDocument document) =>
+        MeetingText.SavedDetails(MeetingSummary.From(document), DateOnly.FromDateTime(DateTime.Today));
+
+    private void ShowDetails(string details, bool recording)
+    {
+        MeetingDetails.Text = details;
+        DetailsRow.Visibility = details.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+        RecordingDot.Visibility = recording ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private const string MicrophoneGlyph = "";
+    private const string PauseGlyph = "";
+    private const string ErrorGlyph = "";
+
+    private Button CreateEmptyDeleteButton()
+    {
+        var button = new Button { Content = "Delete meeting" };
+        button.Click += DeleteClicked;
+        return button;
+    }
+
 
     private async void SpeakerClicked(object sender, RoutedEventArgs args)
     {
         if (sender is Button { Tag: string speakerId }) await RenameSpeakerAsync(speakerId);
+    }
+
+    private void OriginalToggleClicked(object sender, RoutedEventArgs args)
+    {
+        if (sender is FrameworkElement { DataContext: MeetingTranscriptRow row }) row.IsOriginalExpanded = !row.IsOriginalExpanded;
     }
 
     private void TranscriptLoaded(object sender, RoutedEventArgs args) => _transcriptScroll = FindTranscriptScroll(TranscriptRows);
@@ -310,8 +357,6 @@ public sealed partial class MeetingWindow : Window
     {
         if (!_followTranscriptBottom || _transcriptScroll is null) return;
         _followTranscriptBottom = false;
-        // Follow only after normal layout has computed the extent. Never force layout for
-        // every transcript update, or move a reader who is reviewing earlier speech.
         _transcriptScroll.ChangeView(null, _transcriptScroll.ScrollableHeight, null, true);
     }
 
@@ -324,6 +369,8 @@ public sealed partial class MeetingWindow : Window
 
     private async Task StartMeetingAsync()
     {
+        await StopFollowingTeamsAsync();
+        _notices.Set("teams-context", null);
         var process = (ProcessChoice.SelectedItem as ComboBoxItem)?.Tag as MeetingProcessChoice;
         if (_selectedDetectedMeeting is { } detected)
         {
@@ -344,9 +391,16 @@ public sealed partial class MeetingWindow : Window
                 throw new InvalidOperationException("The detected Teams process changed or closed. Refresh the Teams selection before starting.");
             }
         }
-        var title = MeetingTitle.Text;
+        _requestedTitle ??= _document is { IsUntitled: false } failed ? failed.Title : null;
+        var title = _requestedTitle;
+        var identity = process is { IsTeams: true } ? new MeetingDetectionCandidate(process.Id, process.StartedUtc) : null;
+        var context = identity is null ? new MeetingContextObservation(MeetingCallPresence.Unknown)
+            : await _teamsContext.ReadAsync(identity, CancellationToken.None);
+        if (_closing || _closed || _shutdownPending) return;
         await _session.StartAsync(new MeetingCaptureRequest(process is { IsTeams: true } ? process.Id : null));
-        if (!string.IsNullOrWhiteSpace(title) && title != "New meeting") await _session.RenameAsync(title);
+        if (title is not null) await _session.RenameAsync(title);
+        if (identity is not null && !_shutdownPending && !_closing)
+            FollowTeamsCall(identity, context);
     }
 
     private async void PauseClicked(object sender, RoutedEventArgs args) => await RunActionAsync(() =>
@@ -381,11 +435,29 @@ public sealed partial class MeetingWindow : Window
         }
     }
 
-    private async void TitleLostFocus(object sender, RoutedEventArgs args)
+    private async void RenameTitleClicked(object sender, RoutedEventArgs args)
     {
-        if (_document is null || _busy || _closing || _shutdownPending || MeetingTitle.Text.Trim() == _document.Title) return;
-        _titleSaveTask = SaveTitleAsync(_titleSaveTask, MeetingTitle.Text);
-        await _titleSaveTask;
+        if (_busy || _closing || _closed || _shutdownPending) return;
+        var current = _requestedTitle ?? (_document is { IsUntitled: false } document ? document.Title : "");
+        var input = new TextBox { Text = current, PlaceholderText = MeetingTitle.Text, MaxLength = 200, Header = "Meeting name" };
+        var dialog = new ContentDialog { Title = "Rename meeting", Content = input, PrimaryButtonText = "Save", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Primary };
+        dialog.FollowWindowTheme(Root.XamlRoot);
+        try
+        {
+            if (await dialog.ShowAsync() != ContentDialogResult.Primary || _closing || _closed || _shutdownPending) return;
+            var title = input.Text.Trim();
+            if (title.Length == 0 || title == current) return;
+            if (_document is null)
+            {
+                _requestedTitle = title;
+                RenderTitle();
+                return;
+            }
+            _requestedTitle = null;
+            _titleSaveTask = SaveTitleAsync(_titleSaveTask, title);
+            await _titleSaveTask;
+        }
+        catch (Exception error) { ShowError(error.Message); }
     }
 
     private async Task SaveTitleAsync(Task previous, string title)
@@ -404,7 +476,8 @@ public sealed partial class MeetingWindow : Window
     {
         if (_document is null || _busy || _closing || _shutdownPending) return;
         var input = new TextBox { Text = _document.GetSpeakerName(speakerId), MaxLength = 100, Header = "Speaker name" };
-        var dialog = new ContentDialog { Title = "Rename speaker", Content = input, PrimaryButtonText = "Save", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Primary, XamlRoot = Root.XamlRoot };
+        var dialog = new ContentDialog { Title = "Rename speaker", Content = input, PrimaryButtonText = "Save", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Primary };
+        dialog.FollowWindowTheme(Root.XamlRoot);
         try
         {
             if (await dialog.ShowAsync() != ContentDialogResult.Primary || _closing || _closed || _shutdownPending) return;
@@ -448,15 +521,13 @@ public sealed partial class MeetingWindow : Window
     private async void DeleteClicked(object sender, RoutedEventArgs args)
     {
         if (_document is null || _busy || _closing || _shutdownPending || (!_savedMeeting && _session.IsActive) || _cleanupTask is { IsCompleted: false }) return;
-        var dialog = new ContentDialog { Title = "Delete this meeting?", Content = "The saved transcript will be permanently deleted.", PrimaryButtonText = "Delete", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close, XamlRoot = Root.XamlRoot };
+        var dialog = MeetingDeletion.Dialog(1, Root.XamlRoot);
         try
         {
             if (await dialog.ShowAsync() != ContentDialogResult.Primary || _closing || _closed || _shutdownPending) return;
             await RunActionAsync(async () =>
             {
-                await _session.EndAsync();
-                await _store.DeleteAsync(_document.Id);
-                await CloseAfterSavingAsync();
+                await CloseAfterSavingAsync(delete: true);
             });
         }
         catch (Exception error) { ShowError(error.Message); }
@@ -511,8 +582,9 @@ public sealed partial class MeetingWindow : Window
             Title = "End this meeting before closing?",
             Content = "Finish captured speech and save the transcript, or discard speech still awaiting transcription. Saved text is kept.",
             PrimaryButtonText = "Finish and close", SecondaryButtonText = "Discard pending speech", CloseButtonText = "Keep open",
-            DefaultButton = ContentDialogButton.Primary, XamlRoot = Root.XamlRoot
+            DefaultButton = ContentDialogButton.Primary
         };
+        dialog.FollowWindowTheme(Root.XamlRoot);
         try
         {
             var result = await dialog.ShowAsync();
@@ -528,12 +600,15 @@ public sealed partial class MeetingWindow : Window
         finally { _closing = false; }
     }
 
-    private async Task CloseAfterSavingAsync()
+    private async Task CloseAfterSavingAsync(bool delete = false)
     {
+        await StopFollowingTeamsAsync();
         await _titleSaveTask;
         await _session.DisposeAsync();
+        DeleteOnClose = delete;
         _allowClose = true;
-        Close();
+        try { Close(); }
+        catch { DeleteOnClose = false; throw; }
     }
 
     private bool CanCleanup => !_shutdownPending && _document is { Status: MeetingStatus.Completed, Turns.Count: > 0 } document &&
@@ -546,8 +621,9 @@ public sealed partial class MeetingWindow : Window
         CleanupButton.Visibility = CanCleanup && !running ? Visibility.Visible : Visibility.Collapsed;
         CleanupButton.IsEnabled = !_busy && !_closing;
         CancelCleanupButton.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
-        RevertCleanupButton.Visibility = CanCleanup && !running && _document!.Turns.Any(HasCleanup) ? Visibility.Visible : Visibility.Collapsed;
-        RevertCleanupButton.IsEnabled = !_busy && !_closing;
+        RevertCleanupMenuItem.Visibility = CanCleanup && !running && _document!.Turns.Any(HasCleanup) ? Visibility.Visible : Visibility.Collapsed;
+        RevertCleanupMenuItem.IsEnabled = !_busy && !_closing;
+        CopyMenuItem.IsEnabled = ExportMenuItem.IsEnabled = _document is { Turns.Count: > 0 };
         DeleteMenuItem.IsEnabled = !running && !_busy && !_closing && !_shutdownPending && !_session.IsActive && _document is not null;
     }
 
@@ -568,8 +644,9 @@ public sealed partial class MeetingWindow : Window
         {
             Title = "Clean up transcript wording", Content = content,
             PrimaryButtonText = "Send text and clean up", CloseButtonText = "Cancel",
-            DefaultButton = ContentDialogButton.Close, XamlRoot = Root.XamlRoot
+            DefaultButton = ContentDialogButton.Close
         };
+        dialog.FollowWindowTheme(Root.XamlRoot);
         try
         {
             _cleanupDialog = dialog;
@@ -587,7 +664,7 @@ public sealed partial class MeetingWindow : Window
     private async Task CleanWordingAsync(MeetingDocument document, MeetingCleanupOptions options, CancellationToken token)
     {
         CleanupStatusText.Visibility = Visibility.Visible;
-        CleanupStatusText.Text = "Cleaning up wording. Original text is kept until the complete result is ready.";
+        CleanupStatusText.Text = "Cleaning up wording. The transcript changes only when the whole result is ready.";
         HideNotice();
         try
         {
@@ -599,16 +676,16 @@ public sealed partial class MeetingWindow : Window
                 await _session.ApplyCleanupAsync(texts);
                 _document = _session.Document;
             }
-            CleanupStatusText.Text = "Wording cleaned up. Original text remains available.";
+            CleanupStatusText.Text = "Wording cleaned up. The original wording is kept.";
             RenderDocument();
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
-            CleanupStatusText.Text = "Cleanup cancelled. Transcript unchanged.";
+            CleanupStatusText.Text = "Cleanup cancelled. The transcript is unchanged.";
         }
         catch (Exception error)
         {
-            CleanupStatusText.Text = "Cleanup could not be completed. Original wording remains available.";
+            CleanupStatusText.Text = "Cleanup didn't finish. The transcript is unchanged.";
             ShowError(error.Message);
         }
         finally
@@ -636,8 +713,10 @@ public sealed partial class MeetingWindow : Window
     internal async Task BeginShutdownAsync()
     {
         _shutdownPending = true;
+        _contextStop?.Cancel();
         RefreshCleanupControls();
         await CancelCleanupAsync();
+        await StopFollowingTeamsAsync();
         await _titleSaveTask;
     }
 
@@ -670,7 +749,7 @@ public sealed partial class MeetingWindow : Window
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
-            CleanupStatusText.Text = "Restore cancelled.";
+            CleanupStatusText.Text = "Restore cancelled. The transcript is unchanged.";
         }
         catch (Exception error)
         {
@@ -690,8 +769,8 @@ public sealed partial class MeetingWindow : Window
         if (NamingHelpText is null) return;
         var teams = (ProcessChoice.SelectedItem as ComboBoxItem)?.Tag is MeetingProcessChoice { IsTeams: true };
         NamingHelpText.Text = teams
-            ? "Teams speaker names are applied only when confidently matched. Click any speaker label to correct it."
-            : "Automatic names require a selected Teams app. Speakers keep editable model labels when names are unavailable.";
+            ? "Uses the call's title, names speakers when it can match them, and ends when the call ends."
+            : "Choose a Teams call to use its title and speaker names and to end with the call. Otherwise, select End meeting when you're done.";
     }
     private void RefreshProcessesClicked(object sender, RoutedEventArgs args) => RefreshProcesses();
     private void RefreshProcesses()
@@ -716,7 +795,7 @@ public sealed partial class MeetingWindow : Window
         }
         _refreshingProcesses = true;
         ProcessChoice.Items.Clear();
-        ProcessChoice.Items.Add(new ComboBoxItem { Content = "None, use model speaker labels" });
+        ProcessChoice.Items.Add(new ComboBoxItem { Content = "None" });
         foreach (var choice in choices.Where(p => p.IsTeams).OrderBy(p => p.DisplayName))
         {
             var item = new ComboBoxItem { Content = choice.DisplayName, Tag = choice };

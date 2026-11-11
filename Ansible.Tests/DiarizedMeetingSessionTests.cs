@@ -198,25 +198,25 @@ public sealed class DiarizedMeetingSessionTests : IDisposable
     public async Task NativeSpeakerCorrectionsKeepTimesAndUpdateAudioSource()
     {
         var engine = new Engine([Nemotron, Diarizer]);
-        var input = Channel.CreateUnbounded<byte[]>();
+        var input = Channel.CreateUnbounded<MeetingAudioPacket>();
         var capture = new CaptureFactory { Create = () => new(input) };
         var store = new MeetingStore(_directory);
         await using var session = Create(engine, capture);
         await session.StartAsync(Request);
         Assert.Single(capture.Captures).ReportActivity(new(0, 16000, 0, 0.2));
-        await input.Writer.WriteAsync(new byte[32000]);
+        await input.Writer.WriteAsync(new(new byte[32000], new byte[32000]));
         using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
             while (engine.ReadBytes < 32000) await Task.Delay(5, timeout.Token);
         engine.Report(new("Display text is not a speaker protocol.", false, "Hello")
         {
             ProcessedSamples = 16000,
-            SpeakerTurns = [new("Unknown speaker", 0.2, 0.8, "Hello", true) { TimingQuality = MeetingTimingQuality.Aligned }]
+            SpeakerTurns = [new("Unknown speaker", 0.2, 0.8, "Hello", true) { TimingQuality = MeetingTimingQuality.Aligned, Source = MeetingAudioSource.Playback }]
         });
         Assert.Equal("Unknown speaker", Assert.Single(session.Document!.Turns).SpeakerId);
         engine.Report(new("Still not a speaker protocol.", false, "Hello")
         {
             ProcessedSamples = 16000,
-            SpeakerTurns = [new("Speaker 2", 0.2, 0.8, "Hello", true) { TimingQuality = MeetingTimingQuality.Aligned }]
+            SpeakerTurns = [new("Speaker 2", 0.2, 0.8, "Hello", true) { TimingQuality = MeetingTimingQuality.Aligned, Source = MeetingAudioSource.Playback }]
         });
         var turn = Assert.Single(session.Document!.Turns);
         Assert.Equal("Speaker 2", turn.SpeakerId);
@@ -276,13 +276,13 @@ public sealed class DiarizedMeetingSessionTests : IDisposable
             Options = options;
             return Task.CompletedTask;
         }
-        public async Task StreamMeetingAsync(AudioModel model, ChannelReader<byte[]> audio, RecognitionOptions options,
+        public async Task StreamMeetingAsync(AudioModel model, ChannelReader<MeetingAudioPacket> audio, RecognitionOptions options,
             IProgress<TranscriptUpdate> progress, CancellationToken token, Action? onReady = null)
         {
             _progress = progress;
             if (StreamFailure is not null) throw StreamFailure;
             onReady?.Invoke();
-            await foreach (var packet in audio.ReadAllAsync(token)) Interlocked.Add(ref _readBytes, packet.Length);
+            await foreach (var packet in audio.ReadAllAsync(token)) Interlocked.Add(ref _readBytes, packet.Playback.Length);
             progress.Report(_last with
             {
                 IsFinal = true,
