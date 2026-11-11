@@ -31,11 +31,10 @@
                         <!-- A finished meeting with nothing to read shows its title in the secondary colour, so
                              meetings with transcripts stand out. -->
                         <StackPanel Spacing="2">
-                            <TextBlock Text="{x:Bind Title}" Style="{StaticResource BodyStrongTextBlockStyle}"
-                                       Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                            <TextBlock Text="{x:Bind Title}" Style="{StaticResource RowTitleStyle}"
                                        TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
                                        Visibility="{x:Bind local:MeetingsPage.VisibleIf(HasReadableTitle)}"/>
-                            <TextBlock Text="{x:Bind Title}" Style="{StaticResource BodyStrongTextBlockStyle}"
+                            <TextBlock Text="{x:Bind Title}" Style="{StaticResource RowTitleStyle}"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                        TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
                                        Visibility="{x:Bind local:MeetingsPage.VisibleIf(IsEmpty)}"/>

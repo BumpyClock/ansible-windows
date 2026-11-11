@@ -83,7 +83,6 @@ public sealed partial class ModelCard : UserControl
             "moonshine_asr" => "moonshine",
             "qwen3_asr" => "qwen",
             "vibevoice_asr" or "vibevoice_asr_streaming" => "vibevoice",
-            "nemotron_asr" or "nemotron_3_diar" => "nvidia",
             _ => null
         };
         ApplyIcon();
@@ -212,23 +211,14 @@ public sealed partial class ModelCard : UserControl
             System.Diagnostics.Debug.WriteLine($"Ansible: high-contrast icon update for '{ModelId}' could not be dispatched.");
     }
 
-    // How each shipped mark is drawn. DarkVariant: a "{name}-dark.png" exists and loads in the dark theme.
-    // LightPlate: the artwork has ink that vanishes on a dark tile, so it sits on the light plate in both themes.
-    private readonly record struct MarkArt(bool DarkVariant, bool LightPlate);
-
-    private static MarkArt ArtFor(string assetName) => assetName switch
-    {
-        "nvidia" => new(DarkVariant: false, LightPlate: true),
-        "vibevoice" => new(DarkVariant: true, LightPlate: false),
-        _ => new(DarkVariant: false, LightPlate: false)
-    };
+    // A mark with a "{name}-dark.png" loads that file in the dark theme.
+    private static bool HasDarkVariant(string assetName) => assetName == "vibevoice";
 
     // The glyph shows until a maker's mark opens, and stays when there is none, High Contrast is on, or loading
-    // fails. The mark sits on the themed tile, or on the light plate when its artwork needs one.
+    // fails. The mark sits on the themed tile.
     private void ApplyIcon()
     {
         TileGlyph.Visibility = Visibility.Visible;
-        LogoPlate.Visibility = Visibility.Collapsed;
         if (_assetName is null || IsHighContrast())
         {
             _iconUri = null;
@@ -236,8 +226,7 @@ public sealed partial class ModelCard : UserControl
             IconImage.Visibility = Visibility.Collapsed;
             return;
         }
-        var art = ArtFor(_assetName);
-        var file = art.DarkVariant && ActualTheme == ElementTheme.Dark ? $"{_assetName}-dark.png" : $"{_assetName}.png";
+        var file = HasDarkVariant(_assetName) && ActualTheme == ElementTheme.Dark ? $"{_assetName}-dark.png" : $"{_assetName}.png";
         _iconUri = new Uri($"ms-appx:///Assets/ModelIcons/{file}");
         _iconFailureLogged = false;
         IconImage.Visibility = Visibility.Visible;
@@ -246,15 +235,10 @@ public sealed partial class ModelCard : UserControl
 
     private void OnThemeChanged(FrameworkElement sender, object args) => ApplyIcon();
 
-    private void IconOpened(object sender, RoutedEventArgs e)
-    {
-        LogoPlate.Visibility = _assetName is { } name && ArtFor(name).LightPlate ? Visibility.Visible : Visibility.Collapsed;
-        TileGlyph.Visibility = Visibility.Collapsed;
-    }
+    private void IconOpened(object sender, RoutedEventArgs e) => TileGlyph.Visibility = Visibility.Collapsed;
 
     private void IconFailed(object sender, ExceptionRoutedEventArgs e)
     {
-        LogoPlate.Visibility = Visibility.Collapsed;
         IconImage.Visibility = Visibility.Collapsed;
         IconImage.Source = null;
         TileGlyph.Visibility = Visibility.Visible;

@@ -8,8 +8,8 @@ namespace Ansible;
 
 public sealed partial class CustomWordsPage : Page
 {
-    // Segoe Fluent Icons: Dictionary for an empty dictionary, Search for a search with no match.
-    private const string DictionaryGlyph = "";
+    // An empty dictionary shows the sidebar's Dictionary mark (IconData in XAML), so its glyph is empty.
+    // A search with no match shows the Segoe Fluent Icons Search glyph.
     private const string SearchGlyph = "";
     private readonly DictationSession _session;
     private readonly Action _openModels;
@@ -107,7 +107,7 @@ public sealed partial class CustomWordsPage : Page
         EmptyWords.Visibility = filtered.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         if (entries.Length == 0)
         {
-            EmptyWords.Glyph = DictionaryGlyph;
+            EmptyWords.Glyph = "";
             EmptyWords.Title = "No words yet";
             EmptyWords.Detail = "Add names, acronyms, and terms the model gets wrong.";
         }

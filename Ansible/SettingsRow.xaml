@@ -5,6 +5,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:local="using:Ansible"
              mc:Ignorable="d">
     <UserControl.Content>
         <Grid x:Name="LayoutRoot"
@@ -25,10 +26,9 @@
                     MaxWidth="{StaticResource SettingsRowDescriptionMaxWidth}"
                     HorizontalAlignment="Left" VerticalAlignment="Center">
             <TextBlock Text="{x:Bind Title, Mode=OneWay}"
-                       FontWeight="Medium"
-                       Style="{StaticResource BodyTextBlockStyle}" />
+                       Style="{StaticResource RowTitleStyle}" />
             <TextBlock x:Name="DescriptionText"
-                       Text="{x:Bind Description, Mode=OneWay}"
+                       Text="{x:Bind local:TextFlow.NoWidow(Description), Mode=OneWay}"
                        Style="{StaticResource CaptionSecondaryStyle}" />
         </StackPanel>
 

@@ -306,7 +306,8 @@ public sealed partial class MainPage : Page
     {
         var open = CleanupAdvancedFields.Visibility != Visibility.Visible;
         CleanupAdvancedFields.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
-        CleanupAdvancedButton.Content = open ? "Hide" : "Show";
+        CleanupAdvancedChevron.Glyph = open ? "\uE70E" : "\uE70D";
+        ToolTipService.SetToolTip(CleanupAdvancedButton, open ? "Hide advanced settings" : "Show advanced settings");
         AutomationProperties.SetName(CleanupAdvancedButton,
             open ? "Hide advanced cleanup settings" : "Show advanced cleanup settings");
     }
@@ -593,7 +594,7 @@ public sealed partial class MainPage : Page
             await WindowsRecordTakeFactory.RefreshClipboardProtectionAsync();
             var bytes = await _captures.GetSizeAsync();
             _capturesSaved = bytes > 0;
-            CaptureStorageRow.Description = $"{FormatCaptureSize(bytes)} Oldest takes are removed after seven days or above 2 GB.";
+            CaptureStorageRow.Description = $"{FormatCaptureSize(bytes)} Oldest captures are removed after seven days or above 2 GB.";
         }
         catch (Exception error) { ReportError(error, "Capture storage unavailable"); }
         finally { DeleteCapturesButton.IsEnabled = _capturesSaved && !_joining && _state.IsIdle; }

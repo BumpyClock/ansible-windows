@@ -13,7 +13,7 @@
          model does and what it costs in plain words, offers at most one transfer or selection button, and keeps
          details and removal in the More menu. Every row has the same three text lines, so rows are the same height. -->
     <!-- Every row has the stock card stroke. The In use badge alone marks the model in use. -->
-    <Border Style="{StaticResource CardStyle}" Padding="16">
+    <Border Style="{StaticResource CardStyle}">
         <Grid x:Name="RowLayout" ColumnSpacing="12" SizeChanged="RowSizeChanged">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="40" />
@@ -29,10 +29,9 @@
             </Grid.RowDefinitions>
 
             <!-- A neutral glyph for what the model does, on a subtle fill that darkens a light card and lightens a dark
-                 one. When the app ships the maker's mark, it covers the glyph on this themed tile. Artwork drawn only
-                 for a light background sits on the light plate instead: RequestedTheme="Light" resolves the stock
-                 light fill and card stroke inside it. The plate has the tile's size, radius, and stroke, and stays
-                 collapsed until that mark opens. The image is a sibling so it loads under a visible parent. -->
+                 one. When the app ships the maker's mark, it covers the glyph on this themed tile. A mark ships only
+                 when its artwork reads on the tile in both themes. The image is a sibling so it loads under a
+                 visible parent. -->
             <Grid Width="40" Height="40" VerticalAlignment="Center" AutomationProperties.AccessibilityView="Raw">
                 <Border x:Name="GlyphTile" CornerRadius="{StaticResource ControlCornerRadius}"
                         Background="{ThemeResource SubtleFillColorSecondaryBrush}"
@@ -40,10 +39,6 @@
                         BorderThickness="{StaticResource CardBorderThickness}">
                     <FontIcon x:Name="TileGlyph" FontSize="20" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 </Border>
-                <Border x:Name="LogoPlate" RequestedTheme="Light" CornerRadius="{StaticResource ControlCornerRadius}"
-                        Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
-                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                        BorderThickness="{StaticResource CardBorderThickness}" Visibility="Collapsed" />
                 <Image x:Name="IconImage" Width="28" Height="28" Stretch="Uniform" Visibility="Collapsed"
                        ImageOpened="IconOpened" ImageFailed="IconFailed" />
             </Grid>
@@ -53,7 +48,7 @@
                      The name sits in a slot as tall as a badge, so rows with and without one are the same height. -->
                 <local:ModelRowWrapPanel HorizontalSpacing="8" VerticalSpacing="4">
                     <Grid MinHeight="28">
-                        <TextBlock x:Name="NameText" Style="{StaticResource BodyStrongTextBlockStyle}" TextWrapping="Wrap"
+                        <TextBlock x:Name="NameText" Style="{StaticResource RowTitleStyle}" TextWrapping="Wrap"
                                    VerticalAlignment="Center" />
                     </Grid>
                     <local:Badge x:Name="InUseBadge" Background="{ThemeResource AccentSoftBrush}" Visibility="Collapsed" />

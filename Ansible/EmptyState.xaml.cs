@@ -1,5 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Markup;
+using Microsoft.UI.Xaml.Media;
 
 namespace Ansible;
 
@@ -7,6 +9,9 @@ public sealed partial class EmptyState : UserControl
 {
     public static readonly DependencyProperty GlyphProperty = DependencyProperty.Register(
         nameof(Glyph), typeof(string), typeof(EmptyState), new PropertyMetadata("", Changed));
+
+    public static readonly DependencyProperty IconDataProperty = DependencyProperty.Register(
+        nameof(IconData), typeof(string), typeof(EmptyState), new PropertyMetadata("", IconDataChanged));
 
     public static readonly DependencyProperty TitleProperty = DependencyProperty.Register(
         nameof(Title), typeof(string), typeof(EmptyState), new PropertyMetadata("", Changed));
@@ -24,6 +29,13 @@ public sealed partial class EmptyState : UserControl
     {
         get => (string)GetValue(GlyphProperty);
         set => SetValue(GlyphProperty, value);
+    }
+
+    /// <summary>Path data for drawn artwork, shown in place of the glyph while <see cref="Glyph"/> is empty.</summary>
+    public string IconData
+    {
+        get => (string)GetValue(IconDataProperty);
+        set => SetValue(IconDataProperty, value);
     }
 
     public string Title
@@ -46,12 +58,24 @@ public sealed partial class EmptyState : UserControl
         set => SetValue(FooterProperty, value);
     }
 
+    private static void IconDataChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
+    {
+        var state = (EmptyState)sender;
+        state.IconPath.Data = state.IconData.Length == 0
+            ? null
+            : (Geometry)XamlBindingHelper.ConvertValue(typeof(Geometry), state.IconData);
+        Changed(sender, args);
+    }
+
     private static void Changed(DependencyObject sender, DependencyPropertyChangedEventArgs args)
     {
         var state = (EmptyState)sender;
         state.Icon.Glyph = state.Glyph;
+        var drawn = state.Glyph.Length == 0 && state.IconPath.Data is not null;
+        state.Icon.Visibility = drawn ? Visibility.Collapsed : Visibility.Visible;
+        state.IconPath.Visibility = drawn ? Visibility.Visible : Visibility.Collapsed;
         state.TitleText.Text = state.Title;
-        state.DetailText.Text = state.Detail;
+        state.DetailText.Text = TextFlow.NoWidow(state.Detail);
         state.DetailText.Visibility = string.IsNullOrWhiteSpace(state.Detail) ? Visibility.Collapsed : Visibility.Visible;
         state.FooterPresenter.Content = state.Footer;
         state.FooterPresenter.Visibility = state.Footer is null ? Visibility.Collapsed : Visibility.Visible;

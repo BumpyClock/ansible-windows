@@ -47,9 +47,11 @@ public sealed partial class NoticeBar : UserControl
         ErrorDisc.Visibility = content.Severity is NoticeSeverity.Error ? Visibility.Visible : Visibility.Collapsed;
 
         var hasMessage = !string.IsNullOrWhiteSpace(content.Message);
-        TitleRun.Text = hasMessage ? content.Title + "  " : content.Title;
-        MessageRun.Text = hasMessage ? content.Message : "";
-        TitleRun.FontWeight = isConfirmation ? Microsoft.UI.Text.FontWeights.Normal : Microsoft.UI.Text.FontWeights.SemiBold;
+        TitleText.Text = content.Title;
+        TitleText.Visibility = string.IsNullOrWhiteSpace(content.Title) ? Visibility.Collapsed : Visibility.Visible;
+        TitleText.FontWeight = isConfirmation ? Microsoft.UI.Text.FontWeights.Normal : Microsoft.UI.Text.FontWeights.SemiBold;
+        MessageText.Text = hasMessage ? content.Message : "";
+        MessageText.Visibility = hasMessage ? Visibility.Visible : Visibility.Collapsed;
 
         ActionButtons.Children.Clear();
         var actions = content.Actions ?? [];
@@ -80,45 +82,62 @@ public sealed partial class NoticeBar : UserControl
 }
 
 /// <summary>
-/// Lays a notice out as the stock InfoBar does. Its four children are, in order: the icon, the message, the action
-/// buttons, and the close button. A collapsed child takes no space. While the message fits in
-/// <see cref="InlineMessageMaxHeight"/> beside the actions, everything shares one row, centred. A longer message
-/// gets the row to itself: the actions move under it, aligned with its text, and the close button stays at the top
-/// right. The choice follows the message and the width, so a short confirmation keeps its Undo beside it in a narrow
-/// window and a long message stacks in a wide one.
+/// Lays a notice out as the stock InfoBar does. Its five children are, in order: the icon, the title, the message,
+/// the action buttons, and the close button. A collapsed child takes no space. The text never wraps raggedly:
+/// <list type="number">
+/// <item>When the title and message fit on one line beside the actions, everything shares one row, centred.</item>
+/// <item>Otherwise, when each fits on a line of its own beside the actions, the message sits under the title and
+/// the actions stay beside them.</item>
+/// <item>Otherwise the actions move under the text, aligned with it, and the close button stays at the top right.</item>
+/// <item>When the text still does not fit on one line, the message starts its own line under the title and wraps
+/// under its own start.</item>
+/// </list>
+/// The choice follows the text and the width, so a short confirmation keeps its Undo beside it in a narrow window and
+/// a long message stacks in a wide one.
 /// </summary>
 public sealed partial class NoticeBarPanel : Panel
 {
     private const double IconGap = 12;
+    private const double TitleGap = 8;
     private const double ActionsGap = 12;
     private const double CloseGap = 8;
     private const double StackedRowGap = 8;
     // Buttons on the last row need more room under them than the bar's padding gives a line of text.
     private const double StackedBottomInset = 4;
     private bool _stacked;
-
-    /// <summary>The tallest message that still sits beside the actions. The bar sets two lines of Body text.</summary>
-    public double InlineMessageMaxHeight { get; set; } = double.PositiveInfinity;
+    private bool _oneLine;
 
     protected override Size MeasureOverride(Size availableSize)
     {
-        if (Children.Count != 4)
-            throw new InvalidOperationException("A notice panel takes an icon, a message, actions, and a close button.");
-        UIElement icon = Children[0], message = Children[1], actions = Children[2], close = Children[3];
+        if (Children.Count != 5)
+            throw new InvalidOperationException("A notice panel takes an icon, a title, a message, actions, and a close button.");
+        UIElement icon = Children[0], title = Children[1], message = Children[2], actions = Children[3], close = Children[4];
         var unbounded = new Size(double.PositiveInfinity, double.PositiveInfinity);
         icon.Measure(unbounded);
         actions.Measure(unbounded);
         close.Measure(unbounded);
+        // Unbounded, each text measures to its width on one line.
+        title.Measure(unbounded);
+        message.Measure(unbounded);
         var lead = Reserved(icon, IconGap);
         var beside = Reserved(actions, ActionsGap);
         var trail = Reserved(close, CloseGap);
 
-        message.Measure(new Size(Math.Max(0, availableSize.Width - lead - beside - trail), double.PositiveInfinity));
-        _stacked = beside > 0 && message.DesiredSize.Height > InlineMessageMaxHeight;
-        if (_stacked) message.Measure(new Size(Math.Max(0, availableSize.Width - lead - trail), double.PositiveInfinity));
+        var line = title.DesiredSize.Width + TextGap(title, message) + message.DesiredSize.Width;
+        var besideWidth = Math.Max(0, availableSize.Width - lead - beside - trail);
+        var twoLinesBeside = Math.Max(title.DesiredSize.Width, message.DesiredSize.Width) <= besideWidth &&
+            title.DesiredSize.Width > 0 && message.DesiredSize.Width > 0;
+        _stacked = beside > 0 && line > besideWidth && !twoLinesBeside;
+        var textWidth = _stacked ? Math.Max(0, availableSize.Width - lead - trail) : besideWidth;
+        _oneLine = line <= textWidth;
+        if (!_oneLine)
+        {
+            title.Measure(new Size(textWidth, double.PositiveInfinity));
+            message.Measure(new Size(textWidth, double.PositiveInfinity));
+        }
 
-        var firstRow = FirstRowHeight(icon, message, close);
-        var width = lead + message.DesiredSize.Width + trail;
+        var firstRow = FirstRowHeight(icon, title, message, close);
+        var width = lead + (_oneLine ? line : Math.Max(title.DesiredSize.Width, message.DesiredSize.Width)) + trail;
         var height = Math.Max(firstRow, actions.DesiredSize.Height);
         if (_stacked)
         {
@@ -131,18 +150,32 @@ public sealed partial class NoticeBarPanel : Panel
 
     protected override Size ArrangeOverride(Size finalSize)
     {
-        UIElement icon = Children[0], message = Children[1], actions = Children[2], close = Children[3];
+        UIElement icon = Children[0], title = Children[1], message = Children[2], actions = Children[3], close = Children[4];
         var lead = Reserved(icon, IconGap);
         var beside = _stacked ? 0 : Reserved(actions, ActionsGap);
         var trail = Reserved(close, CloseGap);
-        var firstRow = _stacked ? FirstRowHeight(icon, message, close) : finalSize.Height;
+        var firstRow = _stacked ? FirstRowHeight(icon, title, message, close) : finalSize.Height;
+        var textWidth = Math.Max(0, finalSize.Width - lead - beside - trail);
 
-        var messageSize = message.DesiredSize;
-        var messageTop = Math.Max(0, (firstRow - messageSize.Height) / 2);
-        message.Arrange(new Rect(lead, messageTop, Math.Max(0, finalSize.Width - lead - beside - trail), messageSize.Height));
-        // The icon is as tall as one line of the message and shares its first line.
+        Size titleSize = title.DesiredSize, messageSize = message.DesiredSize;
+        var textHeight = TextHeight(title, message);
+        var textTop = Math.Max(0, (firstRow - textHeight) / 2);
+        if (_oneLine)
+        {
+            // The message follows the title on its line.
+            var messageLeft = lead + titleSize.Width + TextGap(title, message);
+            title.Arrange(new Rect(lead, textTop, titleSize.Width, titleSize.Height));
+            message.Arrange(new Rect(messageLeft, textTop, Math.Max(messageSize.Width, lead + textWidth - messageLeft), messageSize.Height));
+        }
+        else
+        {
+            // The message starts its own line under the title, so both wrap at the same left edge.
+            title.Arrange(new Rect(lead, textTop, textWidth, titleSize.Height));
+            message.Arrange(new Rect(lead, textTop + titleSize.Height, textWidth, messageSize.Height));
+        }
+        // The icon is as tall as one line of text and shares the first line.
         var iconSize = icon.DesiredSize;
-        icon.Arrange(new Rect(0, messageTop + (Math.Min(messageSize.Height, iconSize.Height) - iconSize.Height) / 2,
+        icon.Arrange(new Rect(0, textTop + (Math.Min(textHeight, iconSize.Height) - iconSize.Height) / 2,
             iconSize.Width, iconSize.Height));
 
         var closeSize = close.DesiredSize;
@@ -161,6 +194,13 @@ public sealed partial class NoticeBarPanel : Panel
     private static double Reserved(UIElement child, double gap) =>
         child.DesiredSize.Width > 0 ? child.DesiredSize.Width + gap : 0;
 
-    private static double FirstRowHeight(UIElement icon, UIElement message, UIElement close) =>
-        Math.Max(Math.Max(icon.DesiredSize.Height, message.DesiredSize.Height), close.DesiredSize.Height);
+    private static double TextGap(UIElement title, UIElement message) =>
+        title.DesiredSize.Width > 0 && message.DesiredSize.Width > 0 ? TitleGap : 0;
+
+    private double TextHeight(UIElement title, UIElement message) => _oneLine
+        ? Math.Max(title.DesiredSize.Height, message.DesiredSize.Height)
+        : title.DesiredSize.Height + message.DesiredSize.Height;
+
+    private double FirstRowHeight(UIElement icon, UIElement title, UIElement message, UIElement close) =>
+        Math.Max(Math.Max(icon.DesiredSize.Height, TextHeight(title, message)), close.DesiredSize.Height);
 }

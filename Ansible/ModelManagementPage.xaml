@@ -7,8 +7,10 @@
         <local:PageCanvas.HeaderActions>
             <!-- The page's task is choosing and downloading models, so the header holds only the overflow, as on
                  Meetings. Its menu holds the two utilities. Model folder opens the folder flyout attached to this
-                 button, which keeps the path, Choose folder, Verify installed files, and the backend line. -->
+                 button, which keeps the path, Choose folder, Verify installed files, and the backend line. The
+                 button takes the card inset so it sits in one column with the More options button of each row. -->
             <Button x:Name="MoreOptionsButton" Style="{StaticResource IconButtonStyle}" VerticalAlignment="Center"
+                    Margin="{StaticResource CardInsetActionMargin}"
                     ToolTipService.ToolTip="More options" AutomationProperties.Name="More options">
                 <FontIcon Glyph="&#xE712;" FontSize="16"/>
                 <Button.Flyout><MenuFlyout Placement="BottomEdgeAlignedRight">

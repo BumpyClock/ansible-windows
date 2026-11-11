@@ -173,12 +173,12 @@ public sealed partial class WelcomeScene : UserControl
     }
 
     /// <summary>
-    /// One keycap: a shadow, and a face that travels down onto it. The face's lit layer and accent label fade in
+    /// One keycap in the shared keycap style. A press nudges the cap down and fades its accent layer and label in
     /// over the resting ones, so a press reads even with reduced motion.
     /// </summary>
     private sealed class Keycap
     {
-        private const float Travel = 3;
+        private const float Travel = 2;
         private readonly Grid _face;
         private readonly Border _lit;
         private readonly TextBlock _label;
@@ -197,10 +197,7 @@ public sealed partial class WelcomeScene : UserControl
             _face.Children.Add(_label);
             _face.Children.Add(_litLabel);
             ElementCompositionPreview.SetIsTranslationEnabled(_face, true);
-            var root = new Grid { Margin = new Thickness(0, 0, 0, Travel) };
-            root.Children.Add(new Border { Style = (Style)styles["SceneCapShadowStyle"] });
-            root.Children.Add(_face);
-            Root = root;
+            Root = _face;
         }
 
         public FrameworkElement Root { get; }

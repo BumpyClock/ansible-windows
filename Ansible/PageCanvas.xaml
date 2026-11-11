@@ -21,7 +21,8 @@
                 <!-- The title and the actions share the first row. The title's line box plus its margin is 40 DIP, the
                      tallest header button, so the title sits at the same height on every page and the actions centre
                      on it; taller actions grow downward and leave the title in place. The subtitle has its own row
-                     under both. In the stacked narrow layout the actions move to the last row. -->
+                     under both. On a narrow page whose title and actions do not fit on one row, the actions move to
+                     the last row. -->
                 <Grid x:Name="HeaderLayout" Margin="{StaticResource PageSectionBottomMargin}"
                       SizeChanged="HeaderSizeChanged">
                     <Grid.RowDefinitions>
@@ -35,7 +36,15 @@
                     <TextBlock x:Name="SubtitleText" Grid.Row="1" Grid.ColumnSpan="2" Margin="0,4,0,0"
                                Text="{x:Bind Subtitle, Mode=OneWay}" Style="{StaticResource PageSubtitleStyle}" />
                     <StackPanel x:Name="HeaderActionsPanel" Grid.Column="1" Orientation="Horizontal"
-                                Spacing="8" VerticalAlignment="Center" />
+                                Spacing="8" VerticalAlignment="Center" SizeChanged="HeaderActionsSizeChanged" />
+                    <!-- Measures the title on one line, so the header can tell whether the actions fit beside it. The
+                         Canvas gives it unlimited width and takes no space; it is never drawn or announced. -->
+                    <Canvas Width="0" Height="0" HorizontalAlignment="Left" VerticalAlignment="Top"
+                            IsHitTestVisible="False" Opacity="0" AutomationProperties.AccessibilityView="Raw">
+                        <TextBlock x:Name="TitleProbe" Text="{x:Bind Title, Mode=OneWay}" TextWrapping="NoWrap"
+                                   Style="{StaticResource PageTitleStyle}" AutomationProperties.AccessibilityView="Raw"
+                                   SizeChanged="HeaderActionsSizeChanged" />
+                    </Canvas>
                 </Grid>
                 <ContentControl x:Name="BodyHost" Grid.Row="1" HorizontalContentAlignment="Stretch"
                                 VerticalContentAlignment="Stretch" IsTabStop="False" />

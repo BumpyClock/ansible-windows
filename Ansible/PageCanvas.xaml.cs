@@ -175,6 +175,14 @@ public sealed partial class PageCanvas : UserControl
         UpdateHeaderScrolledOut();
     }
 
+    // A new title or a resized action changes whether the actions fit beside the title.
+    private void HeaderActionsSizeChanged(object sender, SizeChangedEventArgs args)
+    {
+        if (args.PreviousSize.Width == args.NewSize.Width) return;
+        UpdateHeader();
+        UpdateHeaderScrolledOut();
+    }
+
     // Side by side, the title and the actions share the first row and leave together. Stacked, the title leaves first
     // and the actions, under the subtitle, leave last. A page without a title, or without actions, uses the header row
     // instead, which holds the heading and the actions in both layouts.
@@ -209,19 +217,38 @@ public sealed partial class PageCanvas : UserControl
         HeaderActionsPanel.Visibility = hasActions ? Visibility.Visible : Visibility.Collapsed;
         foreach (var action in HeaderActions.OfType<FrameworkElement>())
             action.MaxWidth = ContentWidth;
-        // Side by side, the actions sit at the right of the title's row and centre on the title. A narrow page
-        // stacks them under the subtitle, left-aligned. Without a heading they lead the row.
-        var stacked = hasHeading && hasActions && ContentWidth < (double)Application.Current.Resources["CompactPageThreshold"];
+        // Side by side, the actions sit at the right of the title's row and centre on the title. A narrow page keeps
+        // them there while the one-line title, the gap, and the actions fit in the column, and otherwise stacks them
+        // under the subtitle, left-aligned. Without a heading they lead the row.
+        var resources = Application.Current.Resources;
+        var gap = (double)resources["CardGap"];
+        var fits = TitleProbe.ActualWidth + gap + ActionsWidth() <= ContentWidth;
+        var stacked = hasHeading && hasActions && !fits && ContentWidth < (double)resources["CompactPageThreshold"];
         var beside = hasHeading && hasActions && !stacked;
-        HeaderLayout.ColumnSpacing = beside ? (double)Application.Current.Resources["CardGap"] : 0;
+        HeaderLayout.ColumnSpacing = beside ? gap : 0;
         Grid.SetColumnSpan(TitleText, beside ? 1 : 2);
         Grid.SetRow(HeaderActionsPanel, stacked ? 2 : 0);
         Grid.SetColumn(HeaderActionsPanel, beside ? 1 : 0);
         Grid.SetColumnSpan(HeaderActionsPanel, beside ? 1 : 2);
         HeaderActionsPanel.HorizontalAlignment = beside ? HorizontalAlignment.Right : HorizontalAlignment.Left;
         HeaderActionsPanel.Margin = new Thickness(0, stacked ? 12 : 0, 0, 0);
-        HeaderActionsPanel.Orientation = ContentWidth < (double)Application.Current.Resources["NarrowActionsThreshold"]
+        HeaderActionsPanel.Orientation = stacked && ContentWidth < (double)resources["NarrowActionsThreshold"]
             ? Orientation.Vertical : Orientation.Horizontal;
+    }
+
+    // The actions' width on one row. It sums the actions themselves, so it does not change with the panel's
+    // orientation or position and the layout choice cannot flip back and forth.
+    private double ActionsWidth()
+    {
+        var width = 0.0;
+        var shown = 0;
+        foreach (var action in HeaderActions)
+        {
+            if (action.Visibility != Visibility.Visible) continue;
+            width += action.DesiredSize.Width;
+            shown++;
+        }
+        return width + HeaderActionsPanel.Spacing * Math.Max(0, shown - 1);
     }
 
     private void ViewportLayoutUpdated(object? sender, object args) => UpdatePins();

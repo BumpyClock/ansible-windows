@@ -27,16 +27,5 @@ Copyright (c) 2025 Microsoft.
 Modified: the emblem is cropped from the wordmark, padded, and resized to 96 pixels.
 The light-theme variant uses dark ink with the original alpha and geometry.
 
-Nemotron
-Source: https://avatars.githubusercontent.com/u/1728152?v=4
-Official NVIDIA organization: https://github.com/NVIDIA
-Original PNG SHA-256:
-308d323d3bc3ff8c667fe8a099baf151b1f9562b382b115e903233e318c96dc9
-The official organization emblem is unmodified. It sits on a light tile in both themes.
-NVIDIA and the NVIDIA logo are registered trademarks of NVIDIA Corporation.
-The emblem identifies the provider of Nemotron; it does not imply endorsement.
-No MIT or Apache license grant is asserted for the NVIDIA trademark.
-Brand guidance: https://www.nvidia.com/en-us/about-nvidia/legal-info/logo-brand-usage/
-
-Unknown families and High Contrast
-The UI uses a neutral, semantic model initial.
+Families without artwork, and High Contrast
+The UI uses a neutral glyph for what the model does. Nemotron and Kroko ship no artwork.

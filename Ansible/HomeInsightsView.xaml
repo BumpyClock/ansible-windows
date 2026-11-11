@@ -48,49 +48,55 @@
     </UserControl.Resources>
     <!-- Two cards: all-time usage with its models, and the daily rhythm. As a rail they stack in one column and
          each keeps its natural height. As a strip after history they flow into columns and fill their row, so side
-         by side they end on one line; the usage card then keeps its models at the bottom edge and the spare height
-         falls between its two sections. The empty rhythm card always fills its row, with its message centred.
+         by side they end on one line; the usage card then spreads the spare height equally across the gaps between
+         its blocks. The empty rhythm card always fills its row, with its message centred.
          Both cards open with the same header, a title over a caption at the card's top-left, so side by side the
          two headers line up. -->
     <local:CardFlowPanel x:Name="RailCards" RowSpacing="16" ColumnSpacing="16" VerticalAlignment="Top"
           AutomationProperties.Name="Your voice, in numbers" AutomationProperties.LandmarkType="Custom"
           AutomationProperties.LocalizedLandmarkType="Your voice, in numbers">
         <Border x:Name="WordsCard" Style="{StaticResource CardStyle}" VerticalAlignment="Top">
+            <!-- Five blocks with an empty star row between each pair. At natural height the star rows are empty, so
+                 the margins alone set the gaps. Stretched, the spare height splits equally across the four gaps. -->
             <Grid>
-                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-                <StackPanel>
-                    <StackPanel Spacing="2">
-                        <TextBlock Text="Words dictated" Style="{StaticResource HomeCardTitleStyle}"
-                                   AutomationProperties.HeadingLevel="Level2" />
-                        <TextBlock Text="All time on this device" Style="{StaticResource HomeStatLabelStyle}" />
-                    </StackPanel>
-                    <TextBlock x:Name="HomeWordsText" Text="--" Margin="0,4,0,0" TextWrapping="NoWrap"
-                               Style="{StaticResource TitleLargeTextBlockStyle}" />
-                    <!-- Three stat groups reflow to fewer columns before a label would have to break. -->
-                    <local:CardFlowPanel MinColumnWidth="76" ColumnSpacing="12" RowSpacing="12" Margin="0,12,0,0">
-                        <StackPanel>
-                            <TextBlock x:Name="HomePaceText" Text="--" Style="{StaticResource HomeStatValueStyle}" />
-                            <TextBlock Text="Words / min" Style="{StaticResource HomeStatLabelStyle}" />
-                        </StackPanel>
-                        <StackPanel>
-                            <TextBlock x:Name="HomeSessionsText" Text="--" Style="{StaticResource HomeStatValueStyle}" />
-                            <TextBlock Text="Dictations" Style="{StaticResource HomeStatLabelStyle}" />
-                        </StackPanel>
-                        <StackPanel>
-                            <TextBlock x:Name="HomeMicrophoneText" Text="--" Style="{StaticResource HomeStatValueStyle}" />
-                            <TextBlock Text="Mic minutes" Style="{StaticResource HomeStatLabelStyle}" />
-                        </StackPanel>
-                    </local:CardFlowPanel>
-                    <TextBlock x:Name="HomeInsightsFootnote" Text="Usage statistics are not available yet." Margin="0,12,0,0"
-                               Style="{StaticResource HomeStatLabelStyle}" />
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" /><RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" /><RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" /><RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" /><RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <StackPanel Spacing="2">
+                    <TextBlock Text="Words dictated" Style="{StaticResource HomeCardTitleStyle}"
+                               AutomationProperties.HeadingLevel="Level2" />
+                    <TextBlock Text="All time on this device" Style="{StaticResource HomeStatLabelStyle}" />
                 </StackPanel>
+                <TextBlock x:Name="HomeWordsText" Grid.Row="2" Text="--" Margin="0,4,0,0" TextWrapping="NoWrap"
+                           Style="{StaticResource TitleLargeTextBlockStyle}" />
+                <!-- Three stat groups reflow to fewer columns before a label would have to break. -->
+                <local:CardFlowPanel Grid.Row="4" MinColumnWidth="76" ColumnSpacing="12" RowSpacing="12" Margin="0,12,0,0">
+                    <StackPanel>
+                        <TextBlock x:Name="HomePaceText" Text="--" Style="{StaticResource HomeStatValueStyle}" />
+                        <TextBlock Text="Words / min" Style="{StaticResource HomeStatLabelStyle}" />
+                    </StackPanel>
+                    <StackPanel>
+                        <TextBlock x:Name="HomeSessionsText" Text="--" Style="{StaticResource HomeStatValueStyle}" />
+                        <TextBlock Text="Dictations" Style="{StaticResource HomeStatLabelStyle}" />
+                    </StackPanel>
+                    <StackPanel>
+                        <TextBlock x:Name="HomeMicrophoneText" Text="--" Style="{StaticResource HomeStatValueStyle}" />
+                        <TextBlock Text="Mic minutes" Style="{StaticResource HomeStatLabelStyle}" />
+                    </StackPanel>
+                </local:CardFlowPanel>
+                <TextBlock x:Name="HomeInsightsFootnote" Grid.Row="6" Text="Usage statistics are not available yet." Margin="0,12,0,0"
+                           Style="{StaticResource HomeStatLabelStyle}" />
                 <!-- Which models produced those words: the same all-time usage, so it shares the card. -->
-                <Border Grid.Row="2" Margin="0,16,0,0" Padding="0,16,0,0" BorderThickness="0,1,0,0" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
+                <Border Grid.Row="8" Margin="0,16,0,0" Padding="0,16,0,0" BorderThickness="0,1,0,0" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
                     <StackPanel Spacing="{StaticResource HomeModelsCardGap}">
                         <StackPanel Spacing="2">
                             <TextBlock Text="Most-used models" Style="{StaticResource HomeCardTitleStyle}"
                                        AutomationProperties.HeadingLevel="Level2" />
-                            <TextBlock Text="Dictation and file sessions · all time" Style="{StaticResource HomeStatLabelStyle}" />
+                            <TextBlock Text="Dictations and transcribed files · all time" Style="{StaticResource HomeStatLabelStyle}" />
                         </StackPanel>
                         <muxc:ItemsRepeater x:Name="HomeModelRows" ItemTemplate="{StaticResource HomeModelTemplateSelector}">
                             <muxc:ItemsRepeater.Layout><muxc:StackLayout Spacing="{StaticResource HomeModelsCardGap}" /></muxc:ItemsRepeater.Layout>
