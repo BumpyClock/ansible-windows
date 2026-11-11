@@ -31,6 +31,8 @@ public sealed partial class HomeHistoryView : UserControl
     private HomeHistoryViewModel? _model;
     private int? _dictations;
     private string? _shortcut;
+    private PageCanvas? _pinCanvas;
+    private StickyPin? _headerPin;
 
     internal event Action? QueryChanged;
     internal event Action<HomeHistoryItem>? CopyRequested;
@@ -65,8 +67,40 @@ public sealed partial class HomeHistoryView : UserControl
     /// <summary>Where content beside history should stick so its top lines up with the stuck header's content.</summary>
     internal double StuckContentTop => HistoryHeaderGrid.Padding.Top;
 
-    /// <summary>Sticks the header row (title, count, search) to the top of the page while the rows scroll under it.</summary>
-    internal StickyPin PinHeader(PageCanvas canvas) => canvas.Pin(HistoryHeaderGrid, this, indicator: HistoryHeaderDivider);
+    /// <summary>
+    /// Sticks the header row (title, count, search) to the top of <paramref name="canvas"/> while rows scroll under it.
+    /// The header sticks only while History shows at least one row; with none it scrolls with the page, so it never
+    /// names the content below it. Render creates and disposes the pin as rows come and go.
+    /// </summary>
+    internal void PinHeader(PageCanvas canvas)
+    {
+        _pinCanvas = canvas;
+        UpdateHeaderPin();
+    }
+
+    /// <summary>Returns the header to its layout position for good.</summary>
+    internal void UnpinHeader()
+    {
+        _pinCanvas = null;
+        UpdateHeaderPin();
+    }
+
+    private void UpdateHeaderPin()
+    {
+        var pinned = _pinCanvas is not null && _model?.HasMatches == true;
+        if (pinned == (_headerPin is not null)) return;
+        if (pinned)
+        {
+            HistoryHeaderDivider.Visibility = Visibility.Visible;
+            _headerPin = _pinCanvas!.Pin(HistoryHeaderGrid, this, indicator: HistoryHeaderDivider);
+        }
+        else
+        {
+            _headerPin!.Dispose();
+            _headerPin = null;
+            HistoryHeaderDivider.Visibility = Visibility.Collapsed;
+        }
+    }
 
     // A row revealed by keyboard focus must land below the stuck header, not under it.
     private void HistoryContentBringIntoViewRequested(UIElement sender, BringIntoViewRequestedEventArgs args)
@@ -95,6 +129,7 @@ public sealed partial class HomeHistoryView : UserControl
         OversizedNotice.Text = $"A transcript over {HomeDictationHistory.MaximumCharacters:N0} characters stays in the current result and is not added to saved history.";
         OversizedNotice.Visibility = model.OversizedCurrentResult ? Visibility.Visible : Visibility.Collapsed;
         RenderEmptyState();
+        UpdateHeaderPin();
         animate &= HistoryRows.Children.Count > 0;
 
         var desired = new List<UIElement>();

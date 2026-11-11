@@ -53,6 +53,39 @@ public sealed class MeetingListProjectionTests
         Assert.False(Assert.IsType<MeetingHistoryRow>(items[2]).IsFailed);
     }
 
+    [Theory]
+    [InlineData(MeetingStatus.Failed, true, true, false, false)]
+    [InlineData(MeetingStatus.Failed, false, false, true, true)]
+    [InlineData(MeetingStatus.Interrupted, true, false, false, false)]
+    [InlineData(MeetingStatus.Interrupted, false, false, false, true)]
+    [InlineData(MeetingStatus.Completed, true, false, false, false)]
+    [InlineData(MeetingStatus.Completed, false, false, false, true)]
+    [InlineData(MeetingStatus.Recording, false, false, false, false)]
+    public void OnlyAFailureWithSavedTextIsCriticalAndOnlyFinishedMeetingsWithoutSpeechRecede(
+        MeetingStatus status, bool hasSpeech, bool critical, bool quiet, bool empty)
+    {
+        var row = new MeetingHistoryRow(Meeting(new DateTime(2026, 10, 20, 8, 0, 0), status: status,
+            duration: hasSpeech ? TimeSpan.FromMinutes(3) : null, speakers: hasSpeech ? 1 : 0));
+
+        Assert.Equal(critical, row.IsCriticalFailure);
+        Assert.Equal(quiet, row.IsQuietFailure);
+        Assert.Equal(empty, row.IsEmpty);
+        Assert.Equal(!empty, row.HasReadableTitle);
+        Assert.Equal(empty, MeetingList.Empty([row.Summary]).Count == 1);
+        if (status == MeetingStatus.Failed) Assert.Equal("Failed", row.Status);
+    }
+
+    [Fact]
+    public void EachRowShowsAtMostOneStatusBadge()
+    {
+        foreach (var status in Enum.GetValues<MeetingStatus>())
+        foreach (var duration in new TimeSpan?[] { null, TimeSpan.FromMinutes(3) })
+        {
+            var row = new MeetingHistoryRow(Meeting(new DateTime(2026, 10, 20, 8, 0, 0), status: status, duration: duration));
+            Assert.True(new[] { row.IsCriticalFailure, row.IsQuietFailure, row.HasNeutralStatus }.Count(shown => shown) <= 1);
+        }
+    }
+
     [Fact]
     public void DatesOutsideTheCurrentYearNameTheYear()
     {

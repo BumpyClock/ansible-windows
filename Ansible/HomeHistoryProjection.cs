@@ -78,8 +78,8 @@ internal static class HomeHistoryProjection
             "History storage has a problem, so saved transcripts may be missing.")
         : dictations == 0 ? new(HomeHistoryEmptyKind.FirstRun, "No dictations yet", "Your transcripts appear here after you dictate.")
         : dictations is { } count ? new(HomeHistoryEmptyKind.NothingSaved, "No saved transcripts", count == 1
-            ? "Your earlier dictation was removed or not saved, so History does not list it."
-            : $"Your {count:N0} earlier dictations were removed or not saved, so History does not list them.")
+            ? "Your earlier dictation was removed or not saved."
+            : $"{count:N0} earlier dictations were removed or not saved.")
         : new(HomeHistoryEmptyKind.NothingSaved, "No saved transcripts", "New dictations appear here.");
 
     internal static HomeHistoryViewModel Create(

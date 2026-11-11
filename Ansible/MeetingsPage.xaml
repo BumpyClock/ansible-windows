@@ -28,17 +28,32 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
+                        <!-- A finished meeting with nothing to read shows its title in the secondary colour, so
+                             meetings with transcripts stand out. -->
                         <StackPanel Spacing="2">
                             <TextBlock Text="{x:Bind Title}" Style="{StaticResource BodyStrongTextBlockStyle}"
                                        Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                                       TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
+                                       TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                       Visibility="{x:Bind local:MeetingsPage.VisibleIf(HasReadableTitle)}"/>
+                            <TextBlock Text="{x:Bind Title}" Style="{StaticResource BodyStrongTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                       Visibility="{x:Bind local:MeetingsPage.VisibleIf(IsEmpty)}"/>
                             <TextBlock Text="{x:Bind Details}" Style="{StaticResource CaptionSecondaryStyle}"
                                        TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
                         </StackPanel>
+                        <!-- Failed always says Failed. The critical icon marks only a failure that interrupted a meeting
+                             with saved text; a failure before any speech uses the secondary colour. -->
                         <local:Badge Grid.Column="1" Text="{x:Bind Status}" VerticalAlignment="Center"
-                                     Visibility="{x:Bind local:MeetingsPage.VisibleIf(IsFailed)}">
+                                     Visibility="{x:Bind local:MeetingsPage.VisibleIf(IsCriticalFailure)}">
                             <local:Badge.Icon>
                                 <FontIcon Glyph="&#xE783;" FontSize="12" Foreground="{ThemeResource SystemFillColorCriticalBrush}"/>
+                            </local:Badge.Icon>
+                        </local:Badge>
+                        <local:Badge Grid.Column="1" Text="{x:Bind Status}" VerticalAlignment="Center"
+                                     Visibility="{x:Bind local:MeetingsPage.VisibleIf(IsQuietFailure)}">
+                            <local:Badge.Icon>
+                                <FontIcon Glyph="&#xE783;" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                             </local:Badge.Icon>
                         </local:Badge>
                         <local:Badge Grid.Column="1" Text="{x:Bind Status}" VerticalAlignment="Center"
@@ -64,26 +79,34 @@
                     <TextBlock x:Name="NewMeetingLabel" Text="Start meeting" FontWeight="SemiBold"/>
                 </StackPanel>
             </Button>
+            <!-- The overflow sits after the primary action, at the far edge above the row menus. Shown only while two or more finished meetings hold no speech (MeetingList.Empty); one empty meeting
+                 is deleted from its row. -->
+            <Button x:Name="MoreOptionsButton" Style="{StaticResource IconButtonStyle}" VerticalAlignment="Center"
+                    Visibility="Collapsed" ToolTipService.ToolTip="More options" AutomationProperties.Name="More options">
+                <FontIcon Glyph="&#xE712;" FontSize="16"/>
+                <Button.Flyout><MenuFlyout Placement="BottomEdgeAlignedRight">
+                    <MenuFlyoutItem x:Name="DeleteEmptyMenuItem" Text="Delete empty meetings…" Click="DeleteEmptyClicked">
+                        <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE74D;"/></MenuFlyoutItem.Icon>
+                    </MenuFlyoutItem>
+                </MenuFlyout></Button.Flyout>
+            </Button>
         </local:PageCanvas.HeaderActions>
         <!-- The list spans the page's content width, so the row options sit under the header actions. With no
              meetings, the shared empty state centres in the space under the heading. -->
         <Grid>
-            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
             <StackPanel x:Name="UnreadableMeetings" Spacing="12" Margin="0,0,0,8" Visibility="Collapsed"/>
-            <!-- A quiet list action, shown only while two or more finished meetings hold no speech (MeetingList.Empty).
-                 It sits above the list, never inside it, and tucks into the first day header's top margin. -->
-            <HyperlinkButton x:Name="DeleteEmptyButton" Grid.Row="1" Content="Delete empty meetings…"
-                             HorizontalAlignment="Right" Margin="0,0,0,-12" Visibility="Collapsed"
-                             Click="DeleteEmptyClicked"/>
             <!-- One flat list of day headers and rows: nested x:Bind item lists do not marshal to WinRT. -->
-            <ItemsControl x:Name="MeetingGroups" Grid.Row="2" VerticalAlignment="Top" Visibility="Collapsed"
+            <ItemsControl x:Name="MeetingGroups" Grid.Row="1" VerticalAlignment="Top" Visibility="Collapsed"
                           AutomationProperties.Name="Saved meetings">
                 <ItemsControl.ItemTemplateSelector>
                     <local:MeetingListTemplateSelector DayTemplate="{StaticResource MeetingDayTemplate}"
                                                        RowTemplate="{StaticResource MeetingRowTemplate}" />
                 </ItemsControl.ItemTemplateSelector>
             </ItemsControl>
-            <local:EmptyState x:Name="NoMeetings" Grid.Row="2" Visibility="Collapsed" Glyph="&#xE8F2;"
+            <!-- Top-aligned like every page empty state: the backplate sits 64 DIP under the header. -->
+            <local:EmptyState x:Name="NoMeetings" Grid.Row="1" Visibility="Collapsed" Glyph="&#xE8F2;"
+                              VerticalAlignment="Top" Margin="0,20,0,0"
                               Title="No meetings yet"
                               Detail="Start a meeting to transcribe it on this device. When Teams starts using your microphone, Ansible offers to take notes."/>
         </Grid>

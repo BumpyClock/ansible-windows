@@ -15,15 +15,16 @@
     </Page.Resources>
 
     <!-- One section shows at a time, chosen in the section bar. Hidden sections stay loaded so their bindings and
-         handlers keep working. A section is an optional description, then its cards; a card has its own heading
-         only when the section holds more than one. -->
+         handlers keep working. A section is a stack of cards. Each card has a heading and an optional caption. -->
     <local:PageCanvas x:Name="SettingsCanvas"
                       Title="Settings"
                       Subtitle="How Ansible listens, recognizes speech, and handles your data.">
         <StackPanel x:Name="SettingsBody" Spacing="16">
             <!-- The bar sticks to the top of the page while a long section scrolls under it. Its fill repeats the
                  window's two layers, Mica under the content layer fill, so the rows it covers leave no band. The
-                 padding gives it room while stuck; matching negative margins keep the layout where it was. -->
+                 padding gives it room while stuck; matching negative margins keep the layout where it was. The
+                 bar's -12 left margin cancels the 12 DIP left padding of a selector item, so the first label
+                 lines up with the page heading. -->
             <Grid x:Name="SectionBarHost" Margin="0,-8,0,-8" Padding="0,8,0,8" Canvas.ZIndex="1">
                 <SystemBackdropElement Margin="0,-8,0,-8" IsHitTestVisible="False">
                     <SystemBackdropElement.SystemBackdrop>
@@ -32,7 +33,7 @@
                 </SystemBackdropElement>
                 <Border Margin="0,-8,0,-8" IsHitTestVisible="False"
                         Background="{ThemeResource LayerFillColorDefaultBrush}" />
-                <SelectorBar x:Name="SectionBar" HorizontalAlignment="Left"
+                <SelectorBar x:Name="SectionBar" HorizontalAlignment="Left" Margin="-12,0,0,0"
                              AutomationProperties.AutomationId="SettingsSections"
                              AutomationProperties.Name="Settings sections"
                              SelectionChanged="SectionChanged">
@@ -53,15 +54,11 @@
             </Grid>
 
             <Grid x:Name="SectionsHost">
-                <Border x:Name="DictationSection" Style="{StaticResource SettingsCardStyle}">
+                <StackPanel x:Name="DictationSection" Spacing="{StaticResource PageSectionSpacing}">
+                    <StackPanel Spacing="{StaticResource SectionHeaderGap}">
+                        <TextBlock Text="Shortcut" Style="{StaticResource SettingsCardTitleStyle}" />
+                        <Border Style="{StaticResource SettingsCardStyle}">
                     <StackPanel>
-                        <!-- Rows slide when an insertion row appears. -->
-                        <StackPanel.ChildrenTransitions>
-                            <TransitionCollection>
-                                <RepositionThemeTransition IsStaggeringEnabled="False" />
-                            </TransitionCollection>
-                        </StackPanel.ChildrenTransitions>
-
                         <local:SettingsRow Title="Activation"
                                            Description="Hold the shortcut while you speak, or press it once to start and again to stop."
                                            ShowDivider="False"
@@ -94,16 +91,37 @@
                                         Click="PracticeShortcutClicked" />
                             </StackPanel>
                         </local:SettingsRow>
+                    </StackPanel>
+                        </Border>
+                    </StackPanel>
 
-                        <local:SettingsRow Title="Show overlay at the text cursor"
-                                           Description="Otherwise, or when Windows cannot report the cursor position, the overlay sits at the bottom of the screen.">
-                            <ToggleSwitch x:Name="OverlayFollowsCaretToggle"
-                                          AutomationProperties.AutomationId="OverlayFollowsCaretToggle"
-                                          AutomationProperties.Name="Show overlay at the text cursor"
-                                          Toggled="OverlayFollowsCaretToggled" />
-                        </local:SettingsRow>
+                    <StackPanel Spacing="{StaticResource SectionHeaderGap}">
+                        <TextBlock Text="Overlay" Style="{StaticResource SettingsCardTitleStyle}" />
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <local:SettingsRow Title="Show overlay at the text cursor"
+                                               Description="Otherwise, or when Windows cannot report the cursor position, the overlay sits at the bottom of the screen."
+                                               ShowDivider="False">
+                                <ToggleSwitch x:Name="OverlayFollowsCaretToggle"
+                                              AutomationProperties.AutomationId="OverlayFollowsCaretToggle"
+                                              AutomationProperties.Name="Show overlay at the text cursor"
+                                              Toggled="OverlayFollowsCaretToggled" />
+                            </local:SettingsRow>
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel Spacing="{StaticResource SectionHeaderGap}">
+                        <TextBlock Text="Inserting text" Style="{StaticResource SettingsCardTitleStyle}" />
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                    <StackPanel>
+                        <!-- Rows slide when an insertion row appears. -->
+                        <StackPanel.ChildrenTransitions>
+                            <TransitionCollection>
+                                <RepositionThemeTransition IsStaggeringEnabled="False" />
+                            </TransitionCollection>
+                        </StackPanel.ChildrenTransitions>
 
                         <local:SettingsRow x:Name="InsertionRow" Title="Text insertion"
+                                           ShowDivider="False"
                                            ControlWidth="{StaticResource SettingsFieldWidth}">
                             <ComboBox x:Name="InsertionChoice"
                                       AutomationProperties.AutomationId="InsertionChoice"
@@ -141,58 +159,80 @@
                                        ValueChanged="TypingGapChanged" />
                         </local:SettingsRow>
                     </StackPanel>
-                </Border>
-
-                <Border x:Name="ScreenSection" Style="{StaticResource SettingsCardStyle}" Visibility="Collapsed">
-                    <StackPanel>
-                        <local:SettingsRow Title="Dictate with screen and ink" ShowDivider="False"
-                                           Description="Records the screen under the pointer as video without audio, and lets you draw on it. Clicks and scrolling are blocked on every monitor while recording. Esc discards the take.">
-                            <ToggleSwitch x:Name="RecordChordToggle" AutomationProperties.Name="Enable screen and ink recording"
-                                          Toggled="RecordChordToggled" />
-                        </local:SettingsRow>
-                        <local:SettingsRow Title="Record shortcut" Description="Records speech, screen, and ink together.">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <local:ShortcutField x:Name="RecordHotkeyField" VerticalAlignment="Center" />
-                                <Button x:Name="ChangeRecordShortcutButton" Content="Change" VerticalAlignment="Center"
-                                        AutomationProperties.Name="Change record shortcut"
-                                        Click="ChangeRecordShortcutClicked" />
-                                <Button x:Name="ResetRecordShortcutButton" Content="Reset" VerticalAlignment="Center"
-                                        AutomationProperties.Name="Reset record shortcut"
-                                        Click="ResetRecordShortcutClicked" />
-                            </StackPanel>
-                        </local:SettingsRow>
-                        <local:SettingsRow Title="Paste capture shortcut"
-                                           Description="Pastes the latest take's text, ink markers, pictures, and optional video link into the focused chat or text field.">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <local:ShortcutField x:Name="RecordPasteHotkeyField" VerticalAlignment="Center" />
-                                <Button x:Name="ChangeRecordPasteShortcutButton" Content="Change" VerticalAlignment="Center"
-                                        AutomationProperties.Name="Change paste capture shortcut"
-                                        Click="ChangeRecordPasteShortcutClicked" />
-                                <Button x:Name="ResetRecordPasteShortcutButton" Content="Reset" VerticalAlignment="Center"
-                                        AutomationProperties.Name="Reset paste capture shortcut"
-                                        Click="ResetRecordPasteShortcutClicked" />
-                            </StackPanel>
-                        </local:SettingsRow>
-                        <local:SettingsRow Title="Press once to start and stop"
-                                           Description="Lets you release the record shortcut and draw with your touchpad. Press the shortcut again to finish. Separate from the dictation Activation setting.">
-                            <ToggleSwitch x:Name="RecordToggleModeToggle"
-                                          AutomationProperties.AutomationId="RecordToggleModeToggle"
-                                          AutomationProperties.Name="Press record shortcut once to start and stop"
-                                          Toggled="RecordToggleModeToggled" />
-                        </local:SettingsRow>
-                        <local:SettingsRow Title="Include video link in pasted text"
-                                           Description="Adds a link to the video file on this device. Web and cloud apps cannot open it, and the link reveals the file's local path.">
-                            <ToggleSwitch x:Name="IncludeVideoLinkToggle" AutomationProperties.Name="Include video link in pasted text"
-                                          Toggled="IncludeVideoLinkToggled" />
-                        </local:SettingsRow>
-                        <local:SettingsRow x:Name="CaptureStorageRow" Title="Saved captures" Description="Checking size…">
-                            <Button x:Name="DeleteCapturesButton" Content="Delete all captures" Click="DeleteCapturesClicked" />
-                        </local:SettingsRow>
+                        </Border>
                     </StackPanel>
-                </Border>
+                </StackPanel>
+
+                <StackPanel x:Name="ScreenSection" Spacing="{StaticResource PageSectionSpacing}" Visibility="Collapsed">
+                    <StackPanel Spacing="{StaticResource SectionHeaderGap}">
+                        <TextBlock Text="Recording" Style="{StaticResource SettingsCardTitleStyle}" />
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <StackPanel>
+                                <local:SettingsRow Title="Dictate with screen and ink" ShowDivider="False"
+                                                   Description="Records the screen under the pointer as video without audio, and lets you draw on it. Clicks and scrolling are blocked on every monitor while recording. Esc discards the take.">
+                                    <ToggleSwitch x:Name="RecordChordToggle" AutomationProperties.Name="Enable screen and ink recording"
+                                                  Toggled="RecordChordToggled" />
+                                </local:SettingsRow>
+                                <local:SettingsRow Title="Record shortcut" Description="Records speech, screen, and ink together.">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <local:ShortcutField x:Name="RecordHotkeyField" VerticalAlignment="Center" />
+                                        <Button x:Name="ChangeRecordShortcutButton" Content="Change" VerticalAlignment="Center"
+                                                AutomationProperties.Name="Change record shortcut"
+                                                Click="ChangeRecordShortcutClicked" />
+                                        <Button x:Name="ResetRecordShortcutButton" Content="Reset" VerticalAlignment="Center"
+                                                AutomationProperties.Name="Reset record shortcut"
+                                                Click="ResetRecordShortcutClicked" />
+                                    </StackPanel>
+                                </local:SettingsRow>
+                                <local:SettingsRow Title="Press once to start and stop"
+                                                   Description="Lets you release the record shortcut and draw with your touchpad. Press the shortcut again to finish. Separate from the dictation Activation setting.">
+                                    <ToggleSwitch x:Name="RecordToggleModeToggle"
+                                                  AutomationProperties.AutomationId="RecordToggleModeToggle"
+                                                  AutomationProperties.Name="Press record shortcut once to start and stop"
+                                                  Toggled="RecordToggleModeToggled" />
+                                </local:SettingsRow>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                    <StackPanel Spacing="{StaticResource SectionHeaderGap}">
+                        <TextBlock Text="Pasting captures" Style="{StaticResource SettingsCardTitleStyle}" />
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <StackPanel>
+                                <local:SettingsRow Title="Paste capture shortcut" ShowDivider="False"
+                                                   Description="Pastes the latest take's text, ink markers, pictures, and optional video link into the focused chat or text field.">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <local:ShortcutField x:Name="RecordPasteHotkeyField" VerticalAlignment="Center" />
+                                        <Button x:Name="ChangeRecordPasteShortcutButton" Content="Change" VerticalAlignment="Center"
+                                                AutomationProperties.Name="Change paste capture shortcut"
+                                                Click="ChangeRecordPasteShortcutClicked" />
+                                        <Button x:Name="ResetRecordPasteShortcutButton" Content="Reset" VerticalAlignment="Center"
+                                                AutomationProperties.Name="Reset paste capture shortcut"
+                                                Click="ResetRecordPasteShortcutClicked" />
+                                    </StackPanel>
+                                </local:SettingsRow>
+                                <local:SettingsRow Title="Include video link in pasted text"
+                                                   Description="Adds a link to the video on this device. Web and cloud apps cannot open it, and it reveals the local path.">
+                                    <ToggleSwitch x:Name="IncludeVideoLinkToggle" AutomationProperties.Name="Include video link in pasted text"
+                                                  Toggled="IncludeVideoLinkToggled" />
+                                </local:SettingsRow>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                    <StackPanel Spacing="{StaticResource SectionHeaderGap}">
+                        <TextBlock Text="Storage" Style="{StaticResource SettingsCardTitleStyle}" />
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <local:SettingsRow x:Name="CaptureStorageRow" Title="Saved captures" Description="Checking size…" ShowDivider="False">
+                                <Button x:Name="DeleteCapturesButton" Content="Delete all captures" Click="DeleteCapturesClicked" />
+                            </local:SettingsRow>
+                        </Border>
+                    </StackPanel>
+                </StackPanel>
 
                 <StackPanel x:Name="RecognitionSection" Spacing="{StaticResource SectionHeaderGap}" Visibility="Collapsed">
-                    <TextBlock Text="Changes apply to the next dictation." Style="{StaticResource SettingsSectionDescriptionStyle}" />
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="Speech recognition" Style="{StaticResource SettingsCardTitleStyle}" />
+                        <TextBlock Text="Changes apply to the next dictation." Style="{StaticResource SettingsSectionDescriptionStyle}" />
+                    </StackPanel>
                     <Border Style="{StaticResource SettingsCardStyle}">
                         <StackPanel>
                             <StackPanel.ChildrenTransitions>
@@ -361,34 +401,45 @@
                     </StackPanel>
                 </StackPanel>
 
-                <Border x:Name="PrivacySection" Style="{StaticResource SettingsCardStyle}" Visibility="Collapsed">
-                    <StackPanel>
-                        <local:SettingsRow Title="Hide overlay and meeting windows from capture"
-                                           Description="Keeps these windows out of screenshots and screen sharing that support it. The main window stays visible, and some recorders can still capture them."
-                                           ShowDivider="False">
-                            <ToggleSwitch x:Name="HideFromCaptureToggle"
-                                          AutomationProperties.AutomationId="HideFromCaptureChoice"
-                                          AutomationProperties.Name="Hide overlay and meeting windows from capture"
-                                          Toggled="HideFromCaptureChanged" />
-                        </local:SettingsRow>
-
-                        <local:SettingsRow x:Name="UsageRow" Title="Usage statistics"
-                                           Description="Saves session dates, model, word counts, and timing on this device. Never audio or text.">
-                            <ToggleSwitch x:Name="UsageToggle"
-                                          AutomationProperties.AutomationId="UsageToggle"
-                                          AutomationProperties.Name="Usage statistics"
-                                          Toggled="UsageToggled" />
-                        </local:SettingsRow>
-
-                        <local:SettingsRow x:Name="DiagnosticsRow" Title="Local diagnostics"
-                                           Description="Keeps a log of app events on this device for troubleshooting. No audio or transcript text is recorded.">
-                            <ToggleSwitch x:Name="DiagnosticsToggle"
-                                          AutomationProperties.AutomationId="DiagnosticsToggle"
-                                          AutomationProperties.Name="Local diagnostics"
-                                          Toggled="DiagnosticsToggled" />
-                        </local:SettingsRow>
+                <StackPanel x:Name="PrivacySection" Spacing="{StaticResource PageSectionSpacing}" Visibility="Collapsed">
+                    <StackPanel Spacing="{StaticResource SectionHeaderGap}">
+                        <TextBlock Text="Screen sharing" Style="{StaticResource SettingsCardTitleStyle}" />
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <local:SettingsRow Title="Hide overlay and meeting windows from capture"
+                                               Description="Keeps these windows out of screenshots and screen sharing that support it. The main window stays visible, and some recorders can still capture them."
+                                               ShowDivider="False">
+                                <ToggleSwitch x:Name="HideFromCaptureToggle"
+                                              AutomationProperties.AutomationId="HideFromCaptureChoice"
+                                              AutomationProperties.Name="Hide overlay and meeting windows from capture"
+                                              Toggled="HideFromCaptureChanged" />
+                            </local:SettingsRow>
+                        </Border>
                     </StackPanel>
-                </Border>
+
+                    <StackPanel Spacing="{StaticResource SectionHeaderGap}">
+                        <TextBlock Text="Local data" Style="{StaticResource SettingsCardTitleStyle}" />
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <StackPanel>
+                                <local:SettingsRow x:Name="UsageRow" Title="Usage statistics"
+                                                   ShowDivider="False"
+                                                   Description="Saves session dates, model, word counts, and timing on this device. Never audio or text.">
+                                    <ToggleSwitch x:Name="UsageToggle"
+                                                  AutomationProperties.AutomationId="UsageToggle"
+                                                  AutomationProperties.Name="Usage statistics"
+                                                  Toggled="UsageToggled" />
+                                </local:SettingsRow>
+
+                                <local:SettingsRow x:Name="DiagnosticsRow" Title="Local diagnostics"
+                                                   Description="Keeps a log of app events on this device for troubleshooting. No audio or transcript text is recorded.">
+                                    <ToggleSwitch x:Name="DiagnosticsToggle"
+                                                  AutomationProperties.AutomationId="DiagnosticsToggle"
+                                                  AutomationProperties.Name="Local diagnostics"
+                                                  Toggled="DiagnosticsToggled" />
+                                </local:SettingsRow>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </StackPanel>
             </Grid>
         </StackPanel>
     </local:PageCanvas>

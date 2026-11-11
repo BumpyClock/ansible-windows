@@ -39,8 +39,7 @@ public sealed partial class DictationPage : Page
     private bool _disposed;
     // Removing the current transcript's history row must not bring it back as the separate transcript card.
     private Guid? _removedTranscriptOperationId;
-    // While the page scrolls, the history header and the wide insights rail stay on screen.
-    private readonly StickyPin _historyHeaderPin;
+    // While the page scrolls, the wide insights rail stays on screen. HistoryView pins its own header while it has rows.
     private StickyPin? _railPin;
 
     private readonly AppNotices _notices;
@@ -73,7 +72,7 @@ public sealed partial class DictationPage : Page
         HistoryView.QueryChanged += HistoryQueryChanged;
         HistoryView.CopyRequested += CopyHistoryItem;
         HistoryView.RemoveRequested += RemoveHistoryItem;
-        _historyHeaderPin = HistoryView.PinHeader(HomeViewport);
+        HistoryView.PinHeader(HomeViewport);
         HistoryChanged();
         _observer = new UiSessionObserver(session, DispatcherQueue, state =>
         {
@@ -103,7 +102,7 @@ public sealed partial class DictationPage : Page
         HistoryView.QueryChanged -= HistoryQueryChanged;
         HistoryView.CopyRequested -= CopyHistoryItem;
         HistoryView.RemoveRequested -= RemoveHistoryItem;
-        _historyHeaderPin.Dispose();
+        HistoryView.UnpinHeader();
         _railPin?.Dispose();
         _railPin = null;
         _observer?.Dispose();
@@ -289,9 +288,10 @@ public sealed partial class DictationPage : Page
         Grid.SetColumnSpan(ShortcutButtons, stackedHelper ? 2 : 1);
     }
 
-    // Wide: history beside a fixed insights rail that sticks beside the history header. Narrow: history comes first,
-    // so its header, search, and empty state are in the first viewport, and the insights cards flow into a strip
-    // after it. History takes the star row so its empty state can use the rest of the viewport.
+    // Wide: history beside a fixed insights rail that sticks at the history header's content top. History takes the
+    // star row, so it is at least as tall as the rail and the rail can travel within it. Narrow: history comes first,
+    // so its header, search, and empty state are in the first viewport, and the insights cards follow it in a strip
+    // after the normal grid gap.
     private void HomeColumnsSizeChanged(object sender, SizeChangedEventArgs args)
     {
         var stacked = args.NewSize.Width < (double)Application.Current.Resources["HomeRailStackThreshold"];
@@ -308,7 +308,7 @@ public sealed partial class DictationPage : Page
         HomeColumns.RowDefinitions.Clear();
         HomeColumns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         if (!stacked) HomeColumns.ColumnDefinitions.Add(new ColumnDefinition { Width = (GridLength)Application.Current.Resources["HomeRailColumnWidth"] });
-        HomeColumns.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        HomeColumns.RowDefinitions.Add(new RowDefinition { Height = stacked ? GridLength.Auto : new GridLength(1, GridUnitType.Star) });
         if (stacked) HomeColumns.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         Grid.SetColumn(HomeInsightsColumn, stacked ? 0 : 1);
         Grid.SetRow(HomeInsightsColumn, stacked ? 1 : 0);

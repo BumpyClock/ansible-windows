@@ -37,6 +37,15 @@ public static class DesignCapture {
     [DllImport("user32.dll")] public static extern uint GetDpiForWindow(IntPtr hwnd);
     [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
     [DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
+    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
+    [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extra);
+    // A real click on the empty title bar. It activates the window as pointer input, so no focus visuals appear.
+    public static void Click(int x, int y) {
+        SetCursorPos(x, y);
+        mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero);
+        mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);
+    }
 }
 '@
 }
@@ -62,14 +71,35 @@ function Set-WindowSize {
         $scale = [DesignCapture]::GetDpiForWindow($Handle) / 96.0
         # Park the pointer on the title bar so no control renders its hover state.
         [DesignCapture]::SetWindowPos($Handle, [IntPtr]::Zero, 0, 40, [int]($WidthDips * $scale), [int]($HeightDips * $scale), 0x0014) | Out-Null
-        [DesignCapture]::SetCursorPos([int](400 * $scale), 40 + [int](20 * $scale)) | Out-Null
+        # The title bar is empty between the page action and the caption buttons at every size.
+        $script:parkX = [int](($WidthDips - 220) * $scale)
+        $script:parkY = 40 + [int](20 * $scale)
+        [DesignCapture]::SetCursorPos($script:parkX, $script:parkY) | Out-Null
     } finally { [DesignCapture]::SetThreadDpiAwarenessContext($context) | Out-Null }
     Start-Sleep -Milliseconds 700
 }
 
 function Save-Window {
     param([IntPtr]$Handle, [string]$Name)
-    Invoke-Ui @('screenshot', '-w', "$Handle", '-o', (Join-Path $out "$Name.png"), '--json') | Out-Null
+    # An inactive window dims its title bar, so a frame counts only if the window held the foreground when it was
+    # taken. The main window is activated with one click on its empty title bar; a second click within the
+    # double-click time would maximize it. Another program can take the foreground at any moment, so retry.
+    for ($attempt = 1; $attempt -le 4; $attempt++) {
+        if ($Handle -eq $script:mainWindow -and [DesignCapture]::GetForegroundWindow() -ne $Handle) {
+            $context = [DesignCapture]::SetThreadDpiAwarenessContext([IntPtr]::new(-4))
+            try { [DesignCapture]::Click($script:parkX, $script:parkY) }
+            finally { [DesignCapture]::SetThreadDpiAwarenessContext($context) | Out-Null }
+            Start-Sleep -Milliseconds 800
+        }
+        Invoke-Ui @('screenshot', '-w', "$Handle", '-o', (Join-Path $out "$Name.png"), '--json') | Out-Null
+        $foreground = [DesignCapture]::GetForegroundWindow()
+        if ($foreground -eq $Handle) { break }
+        [uint32]$owner = 0
+        [DesignCapture]::GetWindowThreadProcessId($foreground, [ref]$owner) | Out-Null
+        $thief = (Get-Process -Id $owner -ErrorAction SilentlyContinue).ProcessName
+        if ($attempt -eq 4) { Write-Warning "$Name was captured with the window inactive (foreground: $thief)." }
+        else { Start-Sleep -Milliseconds 600 }
+    }
     Write-Output "Captured $Name"
 }
 
@@ -143,6 +173,7 @@ foreach ($mode in $Theme) {
     } until ($app.MainWindowHandle -ne [IntPtr]::Zero -or (Get-Date) -gt $deadline)
     if ($app.MainWindowHandle -eq [IntPtr]::Zero) { throw "No main window after 40 seconds ($mode)." }
     $window = $app.MainWindowHandle
+    $script:mainWindow = $window
     Wait-SessionReady $window
 
     foreach ($size in $sizes.GetEnumerator()) {
@@ -189,12 +220,17 @@ foreach ($mode in $Theme) {
     if ($rows -match '(?m)^\s+(btn-[0-9a-z-]+) Button') {
         # A real click, so the transcript window opens in pointer mode without keyboard focus visuals.
         Invoke-Ui @('click', $Matches[1], '-w', "$window", '-q') | Out-Null
-        Start-Sleep -Seconds 2
-        $handles = @((Invoke-Ui @('list-windows', '-a', "$appId") | Out-String) -split "`n" |
-            ForEach-Object { if ($_ -match 'HWND (\d+)') { [IntPtr][long]$Matches[1] } } |
-            Where-Object { $_ -ne $window })
-        if ($handles.Count -gt 0) { Save-Window $handles[0] "meeting-window-$mode-1" }
-        else { Save-Window $window "meeting-detail-$mode-wide-1" }
+        # The transcript window appears a moment after the click, later on a busy machine.
+        $deadline = (Get-Date).AddSeconds(10)
+        do {
+            Start-Sleep -Milliseconds 700
+            $handles = @((Invoke-Ui @('list-windows', '-a', "$appId") | Out-String) -split "`n" |
+                ForEach-Object { if ($_ -match 'HWND (\d+)') { [IntPtr][long]$Matches[1] } } |
+                Where-Object { $_ -ne $window })
+        } until ($handles.Count -gt 0 -or (Get-Date) -gt $deadline)
+        if ($handles.Count -eq 0) { throw "The meeting transcript window did not open ($mode)." }
+        Start-Sleep -Milliseconds 1500
+        Save-Window $handles[0] "meeting-window-$mode-1"
     } else { Write-Warning 'No saved meeting row to open.' }
 }
 

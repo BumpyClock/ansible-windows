@@ -28,7 +28,6 @@ public sealed partial class ModelCard : UserControl
     {
         InitializeComponent();
         Loaded += OnLoaded;
-        ActualThemeChanged += OnThemeChanged;
     }
 
     public string ModelId { get; private set; } = "";
@@ -103,7 +102,6 @@ public sealed partial class ModelCard : UserControl
         var stateLabel = ModelCardText.StateLabel(snapshot.Supported, state);
         StateBadge.Text = stateLabel ?? "";
         StateBadge.Visibility = stateLabel is null ? Visibility.Collapsed : Visibility.Visible;
-        VisualStateManager.GoToState(this, active ? "OutlineActive" : "OutlineRest", false);
 
         FootprintText.Text = ModelCardText.Footprint(snapshot, installed: snapshot.HasModelFile || active);
         ToolTipService.SetToolTip(FootprintText, state is ModelInstallState.Downloading or ModelInstallState.Paused ? null : MemoryEstimateTip);
@@ -178,14 +176,11 @@ public sealed partial class ModelCard : UserControl
     internal void DetachThemeEvents()
     {
         Loaded -= OnLoaded;
-        ActualThemeChanged -= OnThemeChanged;
         if (_themeSettings is { } settings) { settings.Changed -= OnThemeSettingsChanged; }
         _themeSettings = null;
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e) => ApplyIcon();
-
-    private void OnThemeChanged(FrameworkElement sender, object args) => ApplyIcon();
 
     // More keeps its corner; only the transfer and selection buttons move under the name.
     private void RowSizeChanged(object sender, SizeChangedEventArgs args)
@@ -216,32 +211,37 @@ public sealed partial class ModelCard : UserControl
             System.Diagnostics.Debug.WriteLine($"Ansible: high-contrast icon update for '{ModelId}' could not be dispatched.");
     }
 
-    // The glyph tile shows until a maker's mark opens, and stays when there is none or High Contrast is on.
+    // The glyph tile shows until a maker's mark opens, and stays when there is none or High Contrast is on. The mark
+    // always sits on the light tile, so it always uses the light-background artwork. The light tile stays in the tree
+    // at zero opacity while the image loads, because an image under a collapsed parent may never open.
     private void ApplyIcon()
     {
+        GlyphTile.Visibility = Visibility.Visible;
+        LogoTile.Opacity = 0;
         if (_assetName is null || IsHighContrast())
         {
             _iconUri = null;
             IconImage.Source = null;
-            IconImage.Visibility = Visibility.Collapsed;
-            TileGlyph.Visibility = Visibility.Visible;
+            LogoTile.Visibility = Visibility.Collapsed;
             return;
         }
-        var file = ActualTheme == ElementTheme.Dark ? $"{_assetName}-dark.png" : $"{_assetName}.png";
-        _iconUri = new Uri($"ms-appx:///Assets/ModelIcons/{file}");
+        _iconUri = new Uri($"ms-appx:///Assets/ModelIcons/{_assetName}.png");
         _iconFailureLogged = false;
-        TileGlyph.Visibility = Visibility.Visible;
-        IconImage.Visibility = Visibility.Visible;
+        LogoTile.Visibility = Visibility.Visible;
         IconImage.Source = new BitmapImage(_iconUri);
     }
 
-    private void IconOpened(object sender, RoutedEventArgs e) => TileGlyph.Visibility = Visibility.Collapsed;
+    private void IconOpened(object sender, RoutedEventArgs e)
+    {
+        LogoTile.Opacity = 1;
+        GlyphTile.Visibility = Visibility.Collapsed;
+    }
 
     private void IconFailed(object sender, ExceptionRoutedEventArgs e)
     {
-        IconImage.Visibility = Visibility.Collapsed;
+        LogoTile.Visibility = Visibility.Collapsed;
         IconImage.Source = null;
-        TileGlyph.Visibility = Visibility.Visible;
+        GlyphTile.Visibility = Visibility.Visible;
         if (!_iconFailureLogged)
         {
             _iconFailureLogged = true;

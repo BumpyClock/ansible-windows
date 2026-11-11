@@ -92,10 +92,10 @@ public sealed partial class MeetingsPage : Page
             UnreadableMeetings.Visibility = result.Failures.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
             NoMeetings.Visibility = summaries.Count == 0 && result.Failures.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
             MeetingGroups.Visibility = summaries.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
-            // One empty meeting is deleted from its row; several get one action so they never crowd the list.
+            // One empty meeting is deleted from its row; several get one header menu action.
             var empty = MeetingList.Empty(summaries).Count;
-            DeleteEmptyButton.Visibility = empty >= 2 ? Visibility.Visible : Visibility.Collapsed;
-            AutomationProperties.SetName(DeleteEmptyButton, $"Delete {empty} empty meetings");
+            MoreOptionsButton.Visibility = empty >= 2 ? Visibility.Visible : Visibility.Collapsed;
+            AutomationProperties.SetName(DeleteEmptyMenuItem, $"Delete {empty} empty meetings");
         }
         catch (OperationCanceledException) when (_shutdown.IsCancellationRequested) { }
         catch (Exception error) { ShowError(error); }

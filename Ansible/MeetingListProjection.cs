@@ -26,7 +26,14 @@ public sealed record MeetingHistoryRow(MeetingSummary Summary)
         Untitled ? null : MeetingText.Time(Local)
     }.OfType<string>());
 
+    /// <summary>A finished meeting with nothing to read. Its title recedes so meetings with transcripts stand out.</summary>
+    public bool IsEmpty => MeetingList.IsEmpty(Summary);
+    public bool HasReadableTitle => !IsEmpty;
     public bool IsFailed => Summary.Status == MeetingStatus.Failed;
+    /// <summary>A failure that interrupted a meeting with saved text. Only this failure badge uses the critical colour.</summary>
+    public bool IsCriticalFailure => IsFailed && HasSpeech;
+    /// <summary>A failure before any speech was transcribed. Its badge still says Failed, with a secondary icon.</summary>
+    public bool IsQuietFailure => IsFailed && !HasSpeech;
     public string Status => MeetingText.Status(Summary.Status) ?? "";
     public bool HasNeutralStatus => !IsFailed && MeetingText.Status(Summary.Status) is not null;
     /// <summary>A meeting still being captured belongs to its session; only a finished one can be deleted from the list.</summary>
@@ -60,7 +67,9 @@ internal static class MeetingList
     /// any transcript text is never in this set, whatever its status.
     /// </summary>
     public static IReadOnlyList<Guid> Empty(IEnumerable<MeetingSummary> summaries) =>
-        summaries.Where(summary => summary.Duration is null && IsFinished(summary.Status)).Select(summary => summary.Id).ToArray();
+        summaries.Where(IsEmpty).Select(summary => summary.Id).ToArray();
+
+    public static bool IsEmpty(MeetingSummary summary) => summary.Duration is null && IsFinished(summary.Status);
 }
 
 /// <summary>Plain-language meeting text shared by the Meetings list and the meeting window.</summary>

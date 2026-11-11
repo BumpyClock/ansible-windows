@@ -12,18 +12,8 @@
     <!-- One full-width row per model. The page's group heading carries the install state. The row says what the
          model does and what it costs in plain words, offers at most one transfer or selection button, and keeps
          details and removal in the More menu. Every row has the same three text lines, so rows are the same height. -->
-    <Border x:Name="CardBorder" Style="{StaticResource CardStyle}" Padding="16">
-        <!-- The in-use outline is a visual state with a ThemeResource setter, so it follows theme and High Contrast. -->
-        <VisualStateManager.VisualStateGroups>
-            <VisualStateGroup x:Name="OutlineStates">
-                <VisualState x:Name="OutlineRest" />
-                <VisualState x:Name="OutlineActive">
-                    <VisualState.Setters>
-                        <Setter Target="CardBorder.BorderBrush" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-                    </VisualState.Setters>
-                </VisualState>
-            </VisualStateGroup>
-        </VisualStateManager.VisualStateGroups>
+    <!-- Every row has the stock card stroke. The In use badge alone marks the model in use. -->
+    <Border Style="{StaticResource CardStyle}" Padding="16">
         <Grid x:Name="RowLayout" ColumnSpacing="12" SizeChanged="RowSizeChanged">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="40" />
@@ -38,17 +28,23 @@
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <!-- The maker's mark when the app ships one; otherwise a neutral glyph for what the model does. The subtle
-                 fill darkens a light card and lightens a dark one, so the tile shows in both themes; the control
-                 fill is the card's own white in light theme. -->
-            <Border Width="40" Height="40" CornerRadius="{StaticResource ControlCornerRadius}" Background="{ThemeResource SubtleFillColorSecondaryBrush}"
-                    VerticalAlignment="Center" AutomationProperties.AccessibilityView="Raw">
-                <Grid>
+            <!-- A neutral glyph for what the model does, on a subtle fill that darkens a light card and lightens a dark
+                 one. When the app ships the maker's mark, the mark covers it on a light tile in both themes: brand
+                 artwork is drawn for a light background, and RequestedTheme="Light" resolves the stock light fill and
+                 card stroke inside that tile. The light tile stays transparent until the mark opens. -->
+            <Grid Width="40" Height="40" VerticalAlignment="Center" AutomationProperties.AccessibilityView="Raw">
+                <Border x:Name="GlyphTile" CornerRadius="{StaticResource ControlCornerRadius}"
+                        Background="{ThemeResource SubtleFillColorSecondaryBrush}">
                     <FontIcon x:Name="TileGlyph" FontSize="20" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </Border>
+                <Border x:Name="LogoTile" RequestedTheme="Light" CornerRadius="{StaticResource ControlCornerRadius}"
+                        Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="{StaticResource CardBorderThickness}" Opacity="0" Visibility="Collapsed">
                     <Image x:Name="IconImage" Width="28" Height="28" Stretch="Uniform"
-                           Visibility="Collapsed" ImageOpened="IconOpened" ImageFailed="IconFailed" />
-                </Grid>
-            </Border>
+                           ImageOpened="IconOpened" ImageFailed="IconFailed" />
+                </Border>
+            </Grid>
 
             <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
                 <!-- Name and badges flow like text: a badge follows the name and wraps below it when the row is narrow.

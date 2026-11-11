@@ -66,14 +66,14 @@ arrived. The app never retries that uncertain input automatically. In-app
 dictations have no tag. History reloads after restart. It keeps at most 100
 successful dictations within a 500,000-character text budget. Large entries can
 make fewer than 100 fit. An entry larger than that budget stays in the
-current-result area only. Search covers every retained entry. While you scroll Home, the History header and search box stay at the top, and on wide windows the insights cards stay beside the list. WAV results stay
+current-result area only. Search covers every retained entry. While you scroll Home with saved rows, the History header and search box stay at the top, and on wide windows the insights cards stay beside the list. WAV results stay
 outside dictation history and remain in the separate transcript area. Audio is
 never saved. Prior session-only transcripts from earlier app versions cannot be
 recovered.
 
 Use **Dictate** or your configured shortcut to record. Choose the active model
 and use **Transcribe WAV file** on **Speech models**.
-With no saved rows, History shows a centred empty state instead of a list, and
+With no saved rows, History shows an empty state under its header instead of a list, and
 the count badge beside the History title is hidden. It says **No dictations
 yet** only when usage shows no dictations. When usage counts dictations that
 History does not hold, it says **No saved transcripts** and that they were
@@ -786,9 +786,12 @@ as **No speech transcribed**. A status badge appears only for a state that is
 not a normal completion, such as **Failed**. Select a row to reopen its saved
 text. The row's **More options (...)** menu holds **Open** and **Delete...**.
 **Delete...** asks for one confirmation and deletes the meeting permanently.
-A meeting still being captured cannot be deleted from the list. **Delete empty
-meetings...** appears above the list when two or more finished meetings have no
-transcribed speech. After one confirmation it deletes exactly those meetings.
+A meeting still being captured cannot be deleted from the list. A finished
+meeting with no transcribed speech shows its title in secondary text, so
+meetings you can read stand out. When two or more finished meetings have no
+transcribed speech, a **More options (...)** button appears after **Start
+meeting** and holds **Delete empty meetings...**. After one confirmation it
+deletes exactly those meetings.
 
 The meeting window heading is the title, on one line. A long title is trimmed
 and shows in full in its tooltip. Select the heading or its pencil icon to open

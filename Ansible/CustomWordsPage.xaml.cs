@@ -109,7 +109,7 @@ public sealed partial class CustomWordsPage : Page
         {
             EmptyWords.Glyph = DictionaryGlyph;
             EmptyWords.Title = "No words yet";
-            EmptyWords.Detail = "Add names, product terms, and acronyms the model gets wrong.";
+            EmptyWords.Detail = "Add names, acronyms, and terms the model gets wrong.";
         }
         else if (filtered.Length == 0)
         {

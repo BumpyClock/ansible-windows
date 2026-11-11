@@ -291,7 +291,7 @@ public sealed partial class MainPage : Page
         InsertionChoice.IsEnabled = idle;
         InsertionRow.Description = typing
             ? "Types each character at a steady pace and leaves your clipboard alone. Slower than paste."
-            : "Puts the text on your clipboard and presses the paste shortcut. The text stays on the clipboard, and Windows is asked to keep it out of clipboard history and cloud sync.";
+            : "Copies the text and pastes it. Windows is asked to keep it out of clipboard history and sync.";
         PasteShortcutRow.Visibility = typing ? Visibility.Collapsed : Visibility.Visible;
         PasteShortcutChoice.IsEnabled = idle;
         PasteShortcutChoice.SelectedIndex = (int)_state.Settings.PasteShortcut;
@@ -584,6 +584,15 @@ public sealed partial class MainPage : Page
         if (!Try(() => _session.SetRecordToggleMode(RecordToggleModeToggle.IsOn))) Render();
     }
 
+    private static string FormatCaptureSize(long bytes)
+    {
+        if (bytes <= 0) return "No captures saved.";
+        var megabytes = bytes / (1024.0 * 1024);
+        if (megabytes >= 10) return $"{Math.Round(megabytes):N0} MB on this device.";
+        if (megabytes < 0.05) return "Less than 0.1 MB on this device.";
+        return $"{megabytes:N1} MB on this device.";
+    }
+
     private async Task RefreshCaptureSizeAsync()
     {
         DeleteCapturesButton.IsEnabled = false;
@@ -591,7 +600,7 @@ public sealed partial class MainPage : Page
         {
             await WindowsRecordTakeFactory.RefreshClipboardProtectionAsync();
             var bytes = await _captures.GetSizeAsync();
-            CaptureStorageRow.Description = $"{bytes / (1024.0 * 1024):N1} MB on this device. Oldest takes are removed after seven days or above 2 GB.";
+            CaptureStorageRow.Description = $"{FormatCaptureSize(bytes)} Oldest takes are removed after seven days or above 2 GB.";
         }
         catch (Exception error) { ReportError(error, "Capture storage unavailable"); }
         finally { DeleteCapturesButton.IsEnabled = !_joining && _state.IsIdle; }

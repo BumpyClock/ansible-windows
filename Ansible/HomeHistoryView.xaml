@@ -43,18 +43,18 @@
             <Thickness x:Key="HomeHistoryGroupMargin">0,16,0,8</Thickness>
         </ResourceDictionary>
     </UserControl.Resources>
-    <!-- The page stretches History to the bottom of the viewport. The empty state takes that space, capped so it
-         stays in the upper part of a tall column instead of sinking below the fold or under a floating notice. -->
+    <!-- History is as tall as its content. Wide, the page may stretch it beside the rail; the extra space stays
+         below the content. -->
     <Grid x:Name="HistorySection" RowSpacing="{StaticResource SectionHeaderGap}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" MaxHeight="480" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <!-- Rows are built in code; this anchor supplies the hover fill resolved for this element's theme. -->
         <Border x:Name="HoverFillAnchor" Visibility="Collapsed" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
-        <!-- The header sticks to the top of the page scroller (PinHeader) and draws above the rows that scroll under
-             it. Its fill repeats the window's two layers, Mica under the content layer fill, so it hides those rows
+        <!-- While History shows rows, the header sticks to the top of the page scroller (PinHeader) and draws above
+             the rows that scroll under it. Its fill repeats the window's two layers, Mica under the content layer fill, so it hides those rows
              without a visible band. The fill reaches past the row hover fill on both sides and adds breathing room above and below
              while stuck; matching negative margins keep the layout where it was. -->
         <Grid x:Name="HistoryHeaderGrid" Style="{StaticResource HomeSectionHeaderStyle}" Margin="-12,-12,-12,-8"
@@ -92,9 +92,11 @@
                     HorizontalAlignment="Right" VerticalAlignment="Center" IsHitTestVisible="False">
                 <TextBlock Text="Ctrl K" Style="{StaticResource SearchKeycapTextStyle}" />
             </Border>
-            <!-- A hairline under the stuck header. The pin fades it in only while rows pass underneath. -->
+            <!-- A hairline under the stuck header. It exists only while the header is pinned, and the pin fades it in
+                 only while rows pass underneath. -->
             <Border x:Name="HistoryHeaderDivider" Grid.ColumnSpan="4" Grid.RowSpan="2" Margin="-12,0,-12,-8"
-                    Style="{StaticResource HistoryDividerStyle}" VerticalAlignment="Bottom" IsHitTestVisible="False" />
+                    Style="{StaticResource HistoryDividerStyle}" VerticalAlignment="Bottom" IsHitTestVisible="False"
+                    Visibility="Collapsed" />
         </Grid>
         <!-- History flows in the page scroller. No card, no fixed height, no nested scroller. -->
         <StackPanel x:Name="HistoryContent" Grid.Row="1">
@@ -111,8 +113,11 @@
             </StackPanel>
         </StackPanel>
         <!-- No rows: the app's one empty state. Nothing saved invites a dictation with the real shortcut as keycaps;
-             a search miss names the query and drops the shortcut (RenderEmptyState). -->
-        <local:EmptyState x:Name="EmptyMessage" Grid.Row="2" Glyph="&#xE720;" Visibility="Collapsed">
+             a search miss names the query and drops the shortcut (RenderEmptyState). It is top-aligned and centred,
+             with its backplate 64 DIP under the header: two 8 DIP row gaps, this 24 DIP margin, and the empty
+             state's own 24 DIP padding. -->
+        <local:EmptyState x:Name="EmptyMessage" Grid.Row="2" Glyph="&#xE720;" Visibility="Collapsed"
+                          VerticalAlignment="Top" Margin="0,24,0,0">
             <local:EmptyState.Footer>
                 <StackPanel x:Name="EmptyShortcutHint" Orientation="Horizontal" Spacing="8">
                     <TextBlock x:Name="EmptyShortcutLead" Style="{StaticResource SecondaryTextStyle}" VerticalAlignment="Center" />

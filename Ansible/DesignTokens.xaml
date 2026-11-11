@@ -206,7 +206,7 @@
     <x:Double x:Key="MotionNormalMilliseconds">200</x:Double>
 
     <!-- Type. The ramp is WinUI's own, used by name and never redefined: CaptionTextBlockStyle 12/16,
-         BodyTextBlockStyle 14/20, BodyStrongTextBlockStyle, BodyLargeTextBlockStyle 18/24 for transcript reading text,
+         BodyTextBlockStyle 14/20, BodyStrongTextBlockStyle, BodyLargeTextBlockStyle 18/24 for the dictation result,
          SubtitleTextBlockStyle 20/28, TitleTextBlockStyle 28/36,
          TitleLargeTextBlockStyle 40/52. The sizes below repeat that ramp for controls that take a FontSize. A style
          in this file adds a role (colour, wrapping) to a ramp step; none introduces a size. -->

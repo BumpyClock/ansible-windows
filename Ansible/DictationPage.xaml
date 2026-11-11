@@ -59,7 +59,8 @@
             </StackPanel>
         </local:PageCanvas.HeaderActions>
         <!-- PageCanvas gives its content at least the viewport height. The history row takes what the cards above leave,
-             so an empty history fills the column; the PageCanvas scroller stays the only vertical scroller. -->
+             so in the wide layout the rail has a column to travel in; the PageCanvas scroller stays the only vertical
+             scroller. -->
         <Grid>
             <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
             <Border x:Name="RetainedCaptureCard" Margin="{StaticResource PageSectionBottomMargin}" Style="{StaticResource CardStyle}" Visibility="Collapsed">
