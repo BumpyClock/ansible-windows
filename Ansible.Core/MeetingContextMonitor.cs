@@ -7,7 +7,7 @@ public static class MeetingContextMonitor
 {
     public static async Task FollowAsync(IMeetingContextReader reader, MeetingDetectionCandidate identity,
         MeetingContextObservation initial, Func<string, Task> adoptTitle, Func<Task> endMeeting,
-        CancellationToken token)
+        Action<bool> reportMonitoringAvailability, CancellationToken token)
     {
         var tracker = new MeetingCallEndTracker();
         var started = Stopwatch.GetTimestamp();
@@ -16,6 +16,7 @@ public static class MeetingContextMonitor
         while (true)
         {
             token.ThrowIfCancellationRequested();
+            reportMonitoringAvailability(observation.Presence != MeetingCallPresence.Unknown);
             if (observation.Presence == MeetingCallPresence.Active && observation.Title is { } title && title != adoptedTitle)
             {
                 await adoptTitle(title).ConfigureAwait(false);

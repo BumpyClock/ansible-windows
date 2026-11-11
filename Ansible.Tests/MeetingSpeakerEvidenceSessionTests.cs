@@ -36,7 +36,7 @@ public sealed class MeetingSpeakerEvidenceSessionTests : IDisposable
         var ends = 0;
         await MeetingContextMonitor.FollowAsync(new EndedCall(), new(42, DateTime.UtcNow),
             new(MeetingCallPresence.Active, "Design review"), session.AdoptTeamsTitleAsync,
-            async () => { ends++; await session.EndAsync(); }, default).WaitAsync(TimeSpan.FromSeconds(12));
+            async () => { ends++; await session.EndAsync(); }, _ => { }, default).WaitAsync(TimeSpan.FromSeconds(12));
         Assert.Equal(1, ends);
         Assert.Equal(MeetingSessionPhase.Completed, session.State.Phase);
         Assert.Equal(MeetingStatus.Completed, session.Document!.Status);

@@ -664,7 +664,9 @@ list both read **Meeting at** the start time. That generated name is never saved
 enter is kept. After observing an active call, Ansible finishes captured speech and saves
 the transcript when the call is confirmed absent for at least five seconds over
 multiple checks. Silence, Teams mute, minimization, and unreadable accessibility
-state do not end your notes. Unsupported call layouts may require you to use
+state do not end your notes. While call monitoring is unreadable, a persistent
+warning asks you to use **End meeting** manually. It clears when monitoring recovers.
+Unsupported call layouts may require you to use
 **End meeting** manually. Without a selected Teams call, stopping remains manual.
 
 While recording, the window header shows a **Microphone** line and a **Speakers

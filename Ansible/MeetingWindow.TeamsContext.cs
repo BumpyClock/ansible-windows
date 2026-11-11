@@ -18,21 +18,28 @@ public sealed partial class MeetingWindow
             try
             {
                 await MeetingContextMonitor.FollowAsync(_teamsContext, identity, initial,
-                    _session.AdoptTeamsTitleAsync, _session.EndAsync, cancellation.Token).ConfigureAwait(false);
+                    _session.AdoptTeamsTitleAsync, _session.EndAsync,
+                    ReportTeamsMonitoringAvailability, cancellation.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
             catch (Exception error)
             {
                 // Optional context must not interrupt local capture or lose its transcript.
                 System.Diagnostics.Trace.TraceWarning("Ansible: Teams call monitoring unavailable. HRESULT: {0:X8}.", error.HResult);
-                DispatcherQueue.TryEnqueue(() =>
-                {
-                    if (!_closed && _session.IsActive)
-                        _notices.Set("teams-context", new NoticeContent(NoticeSeverity.Warning,
-                            "Teams call could not be followed", "Use End to finish this transcript when the call ends."));
-                });
+                ReportTeamsMonitoringAvailability(false);
             }
         }
+    }
+
+    private void ReportTeamsMonitoringAvailability(bool available)
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (!_closed && _session.IsActive)
+                _notices.Set("teams-context", available ? null : new NoticeContent(NoticeSeverity.Warning,
+                    "Teams call could not be followed", "Use End meeting to finish this transcript when the call ends.",
+                    IsClosable: false));
+        });
     }
 
     private async Task StopFollowingTeamsAsync()
