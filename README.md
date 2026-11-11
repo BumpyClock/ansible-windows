@@ -16,14 +16,14 @@ model downloads, custom vocabulary for supported models, and local usage insight
 Microphone permission is checked at launch. Ansible requests missing consent
 before recording and offers Windows Settings guidance when access is blocked.
 
-Enable **Record chord** in Settings to dictate with screen context. Hold
+Enable **Dictate with screen and ink** in Settings to dictate with screen context. Hold
 **Alt + Win** to capture the pointer's monitor, draw with the left mouse button,
 then release. The result includes numbered ink markers, up to eight pictures,
 and a local link to a silent MP4. Nothing is pasted automatically. After
 recognition finishes, focus the destination field and press **Alt + Shift + W**
 to paste the latest capture. Change **Paste capture shortcut** in Settings to use
 another chord, such as **Ctrl + Shift + V**. Enable **Press once to start and stop**
-under **Record chord** to release the keys while drawing, then press again to
+under **Screen and ink** to release the keys while drawing, then press again to
 finish. This setting is independent of voice dictation's activation mode. See the
 [record chord workflow](docs/user-guide.md#record-chord).
 

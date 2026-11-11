@@ -223,12 +223,34 @@ Windows font is retained.
 `NavigationStyles.xaml` owns shared sidebar button and icon styles. Its selected
 button template keeps the current page visible during hover and press.
 
+Size, shape, and spacing follow one scale, and `tools\Test-DesignTokens.ps1`
+enforces it across every XAML file except `AppMark.xaml`, which is exact brand
+geometry.
+
+- Text uses the WinUI type ramp through its `TextBlock` styles: Caption 12, Body
+  14, BodyLarge 18, Subtitle 20, Title 28, and TitleLarge 40. A control that takes
+  a `FontSize` uses the matching ramp token. Only a `FontIcon` may set a literal
+  `FontSize`, and only 12, 16, 20, 24, 32, or 48.
+- Corners use WinUI's `ControlCornerRadius` and `OverlayCornerRadius`. The token
+  dictionary defines no radius of its own. A fully round shape is the one literal
+  exception, and its `CornerRadius` must be half its own literal `Height`.
+- Spacing (`Margin`, `Padding`, `Spacing`, `RowSpacing`, `ColumnSpacing`) and the
+  gap, spacing, and inset tokens sit on the 4 DIP grid, as do thickness tokens
+  other than border and divider thickness. The values 0, 1, and 2 are allowed for
+  hairlines and optical nudges.
+- Every `StaticResource` key a view names must be defined in the app's XAML or be
+  a known WinUI resource. XAML compiles an unknown key and then fails when the page
+  loads, so an undefined key fails the check.
+- A token that no XAML resource reference or quoted C# key uses is dead and fails
+  the check. Remove it.
+
 Every page renders into `PageCanvas`. This component owns the shared title,
-subtitle, responsive header actions, content width, padding, scroll bounds, and
-bottom space. Pages supply `Title`, `Subtitle`, `HeaderActions`, and body content;
-they do not implement their own header grids or heading breakpoints. Pages with virtualized
-lists use its bounded mode and let the list own scrolling. The design check
-rejects page roots that bypass the shared canvas. `DeviceComparisonView` renders
+subtitle, responsive header actions, content width, padding, the page's only
+vertical scroller, and bottom space. Pages supply `Title`, `Subtitle`,
+`HeaderActions`, and body content; they do not implement their own header grids,
+heading breakpoints, or nested scrollers. Content that must stay visible while the
+page scrolls uses `PageCanvas.Pin`. The design check rejects page roots that
+bypass the shared canvas. `DeviceComparisonView` renders
 structured benchmark snapshots without parsing presentation text.
 
 The shell and meeting window follow Microsoft's two-layer model. Mica is the base
@@ -292,10 +314,11 @@ disk work never delays that completion or final insertion. Shutdown drains and
 joins the writer. `UsageError` is shown in Insights after a failed or overflowed
 write. Session notices display only undismissed warnings and errors, scoped by
 area; capture-privacy failures are app-wide. Routine success and cancel notices
-are not shown. Bounded `PageCanvas` layouts retain a finite minimum
-height and allow outer overflow in short windows, so warnings cannot collapse their lists.
-`SettingsRow` owns the shared adaptive setting
+are not shown. `SettingsRow` owns the shared adaptive setting
 layout; pages provide labels, descriptions, and controls.
+`ShortcutField` renders a shortcut as keycaps and owns the capture box for
+recording a new one. `ModelCardText` builds the plain-language text on a model
+row, and the row's **Show details** panel holds the exact technical details.
 `Badge` sizes to its label up to 240 effective pixels, trims overflow, and uses
 the WinUI control corner radius with a 28px minimum height.
 

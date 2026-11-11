@@ -14,7 +14,8 @@ Requires the winapp CLI and Windows Developer Mode. Replaces the running develop
 param(
     [Parameter(Mandatory)][string]$Round,
     [ValidateSet('light', 'dark')][string[]]$Theme = @('light', 'dark'),
-    # Limits the run to some pages for a quick local probe. Review rounds use the full matrix.
+    # Limits the run to some pages, or to 'extras' (welcome lesson and meeting window), for a quick local probe.
+    # Review rounds use the full matrix.
     [string[]]$Only,
     [switch]$SkipBuild
 )
@@ -160,7 +161,7 @@ foreach ($mode in $Theme) {
         }
     }
 
-    if ($Only) { continue }
+    if ($Only -and 'extras' -notin $Only) { continue }
     # Extras at the wide size: the welcome lesson and a saved meeting transcript window.
     Set-WindowSize $window $sizes.wide[0] $sizes.wide[1]
     Invoke-Ui @('invoke', 'SettingsNav', '-w', "$window", '-q') | Out-Null
@@ -176,7 +177,8 @@ foreach ($mode in $Theme) {
     Start-Sleep -Milliseconds 900
     $rows = Invoke-Ui @('inspect', 'MeetingGroups', '-w', "$window", '-d', '2') -Optional | Out-String
     if ($rows -match '(?m)^\s+(btn-[0-9a-z-]+) Button') {
-        Invoke-Ui @('invoke', $Matches[1], '-w', "$window", '-q') | Out-Null
+        # A real click, so the transcript window opens in pointer mode without keyboard focus visuals.
+        Invoke-Ui @('click', $Matches[1], '-w', "$window", '-q') | Out-Null
         Start-Sleep -Seconds 2
         $handles = @((Invoke-Ui @('list-windows', '-a', "$appId") | Out-String) -split "`n" |
             ForEach-Object { if ($_ -match 'HWND (\d+)') { [IntPtr][long]$Matches[1] } } |
